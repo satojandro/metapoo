@@ -1,0 +1,16 @@
+[package]
+name = "metapoo-board"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Holding contract for the Meta Poo board. It describes the canvas and rejects every draw."
+
+[lib]
+# cdylib is the WASM bundle NEAR would run. rlib lets `cargo test` call the code on this computer.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5.29.1"
+
+[dev-dependencies]
+serde_json = "1"

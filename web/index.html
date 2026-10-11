@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Meta Poo</title>
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>Meta Poo</h1>
+        <p class="lede">
+          A shared pixel wall. You can look without a wallet. Drawing does not
+          send a transaction in this build.
+        </p>
+      </div>
+    </header>
+
+    <p id="evidence" class="evidence"></p>
+
+    <div class="layout">
+      <main>
+        <div
+          id="board-focus"
+          class="board-focus"
+          tabindex="0"
+          aria-describedby="board-help selection-summary"
+        >
+          <canvas id="board" width="512" height="512">
+            A 128 by 128 pixel board. Use the selection text if the picture
+            does not load.
+          </canvas>
+          <div id="selection-ring" hidden></div>
+        </div>
+        <p id="board-help" class="help">
+          Click a square, or focus the board and use the arrow keys. Press
+          Enter to try a draw.
+        </p>
+        <p id="selection-summary" class="summary" aria-live="polite"></p>
+
+        <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
+
+        <button id="draw-button" class="action" type="button">
+          Try to draw this pixel
+        </button>
+        <section id="result" class="result" aria-live="assertive"></section>
+      </main>
+
+      <aside class="side">
+        <section>
+          <h2>Rules on this page</h2>
+          <div id="rules"></div>
+        </section>
+        <section>
+          <h2>Wallet</h2>
+          <p id="wallet-summary"></p>
+          <p id="network-summary"></p>
+          <button id="connect-button" class="action" type="button">
+            Connect NEAR wallet
+          </button>
+          <p id="wallet-error" class="result" role="status"></p>
+        </section>
+        <section>
+          <h2>Fees and sponsorship</h2>
+          <p id="sponsor-note"></p>
+        </section>
+      </aside>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
