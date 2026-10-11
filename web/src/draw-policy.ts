@@ -1,12 +1,11 @@
 import { reasonDrawIsBlocked } from "@shared/board-rules.ts";
 import board from "@shared/board.json";
 import type { NetworkId, OverwritePolicy } from "@shared/types.ts";
-import { CONTRACT_ID } from "./config";
 
 /**
  * The result of pressing "draw" before a wallet signing prompt.
  * This helper never marks a chain success. Success needs an observed
- * transaction and a fresh read elsewhere.
+ * transaction and a fresh read elsewhere (`submit-draw.ts`).
  */
 export type DrawResult =
   | {
@@ -42,6 +41,8 @@ export interface DrawAttempt {
   accountId: string | null;
   sessionNetworkId: NetworkId;
   boardNetworkId: NetworkId;
+  /** Injected so tests can pretend a contract is configured. */
+  contractId: string;
 }
 
 function blocked(
@@ -118,11 +119,11 @@ export function prepareDraw(attempt: DrawAttempt): DrawResult {
     return blocked("OverwriteRuleNotChosen", "Drawing was not sent", error.message);
   }
 
-  if (!CONTRACT_ID) {
+  if (!attempt.contractId) {
     return blocked(
       "ContractNotConfigured",
       "Open wall is accepted, but no contract is configured",
-      "Any connected wallet may paint any pixel under the Open wall rule. This page still has an empty contract id, so it will not open a signing prompt or pretend a transaction succeeded.",
+      "Any connected wallet may paint any pixel under the Open wall rule. This page still has an empty contract id, so it will not open a signing prompt or pretend a transaction succeeded. Set VITE_CONTRACT_ID in web/.env after you deploy.",
     );
   }
 
@@ -131,7 +132,7 @@ export function prepareDraw(attempt: DrawAttempt): DrawResult {
     code: "ReadyToSign",
     title: "Ready to ask the wallet",
     message:
-      "Client checks passed under Open wall. The next step is a wallet signature against the configured contract. This helper does not send that transaction by itself.",
+      "Client checks passed under Open wall. Next, your wallet will ask you to approve one draw call. Success is only shown after the transaction id exists and a fresh board read matches.",
     transactionHash: null,
     explorerUrl: null,
   };

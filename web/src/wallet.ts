@@ -1,5 +1,5 @@
 import { NearConnector } from "@hot-labs/near-connect";
-import { PAGE_NETWORK } from "./config";
+import { WALLET_NETWORK } from "./config";
 
 /**
  * A connected wallet session. This is identity for the page only.
@@ -36,7 +36,7 @@ function ensureConnector(): NearConnector {
   }
 
   connector = new NearConnector({
-    network: PAGE_NETWORK,
+    network: WALLET_NETWORK,
     features: {
       signInWithoutAddKey: true,
       signAndSendTransaction: true,
@@ -61,7 +61,7 @@ function ensureConnector(): NearConnector {
  */
 function readSession(payload: unknown): WalletSession {
   if (!payload || typeof payload !== "object") {
-    return { accountId: null, networkId: PAGE_NETWORK };
+    return { accountId: null, networkId: WALLET_NETWORK };
   }
   const record = payload as Record<string, unknown>;
   const accountId = firstString(
@@ -69,7 +69,7 @@ function readSession(payload: unknown): WalletSession {
     record.account_id,
     nestedAccount(record.accounts),
   );
-  const networkId = firstString(record.network, record.networkId) ?? PAGE_NETWORK;
+  const networkId = firstString(record.network, record.networkId) ?? WALLET_NETWORK;
   return { accountId, networkId };
 }
 
@@ -103,7 +103,7 @@ export async function connectWallet(): Promise<void> {
     const wallet = await current.wallet();
     const accountId = accountFromWallet(wallet);
     if (accountId) {
-      session = { accountId, networkId: PAGE_NETWORK };
+      session = { accountId, networkId: WALLET_NETWORK };
       emit();
     }
   } catch {
@@ -120,6 +120,44 @@ export async function disconnectWallet(): Promise<void> {
   await connector.disconnect();
   session = { accountId: null, networkId: null };
   emit();
+}
+
+export interface DrawCallArgs {
+  contractId: string;
+  x: number;
+  y: number;
+  /** Palette index 0–7. On chain the argument name is `color`. */
+  color: number;
+  gas: string;
+  deposit: string;
+}
+
+/**
+ * Ask the connected wallet to sign and send one `draw` function call.
+ * Returns the wallet's execution outcome (hash + status), or throws if the
+ * user rejects / the wallet errors. This function does not update the picture.
+ */
+export async function signAndSendDraw(args: DrawCallArgs): Promise<unknown> {
+  const current = ensureConnector();
+  const wallet = await current.wallet();
+  return wallet.signAndSendTransaction({
+    receiverId: args.contractId,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: {
+          methodName: "draw",
+          args: {
+            x: args.x,
+            y: args.y,
+            color: args.color,
+          },
+          gas: args.gas,
+          deposit: args.deposit,
+        },
+      },
+    ],
+  });
 }
 
 function accountFromWallet(wallet: unknown): string | null {

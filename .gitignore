@@ -8,5 +8,7 @@
 # Local secrets. This project should not have any yet.
 .env
 .env.*
+!.env.example
+!web/.env.example
 *.key
 *.pem

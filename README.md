@@ -45,7 +45,7 @@ Runnable pieces:
 - `shared/board.json` — board size, palette, and `overwrite_rule: "open_wall"`
 - `shared/` — TypeScript checks and types shared with the page
 - `contracts/board` — Rust contract: sparse pixels, Open wall `draw`, local unit tests
-- `web` — local page: empty board mock, wallet connect/disconnect on testnet, explains Open wall and blocks send while contract id is empty
+- `web` — Vite page: read-only board without a wallet, connect/disconnect on testnet, palette + keyboard selection, `draw` via wallet when `VITE_CONTRACT_ID` is set, success only after tx id + `get_pixel`
 
 ### Local checks
 
@@ -60,14 +60,14 @@ cd web && npm install && npm test && npm run build
 cd contracts/board && cargo test
 ```
 
-Nothing here has been deployed. The token accounts named above are not used by this code.
+Point the page at a deploy: copy `web/.env.example` → `web/.env` and set `VITE_CONTRACT_ID` (see `web/README.md`). Nothing here has been deployed by default. The token accounts named above are not used by this code.
 
 ## Next agents
 
 | Agent | Role | Status |
 |---|---|---|
 | **05 Contract** | Smart contract logic, tests, example calls, deploy docs | **Done in-repo** (local tests). See `contracts/board/`. Testnet deploy is a human step via `contracts/board/DEPLOY.md`. |
-| **06 Frontend** | Wire wallet + board UI to a configured contract | Ready to start. Read `contracts/board/FRONTEND_HANDOFF.md` first. |
+| **06 Frontend** | Wire wallet + board UI to a configured contract | **Done in-repo** (mock/unit + build). Live testnet draw needs your `VITE_CONTRACT_ID`. See `web/README.md`. |
 | **07 Research** | Chain-abstraction memo only | Ready anytime; no MVP code edits. |
 
 Contract logic lives under `contracts/board/`. Frontend work is separate under `web/`.

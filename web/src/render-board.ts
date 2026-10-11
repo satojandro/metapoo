@@ -1,4 +1,5 @@
-import { BOARD_HEIGHT, BOARD_WIDTH } from "@shared/types.ts";
+import { paletteColor } from "@shared/palette.ts";
+import { BOARD_HEIGHT, BOARD_WIDTH, type PixelView } from "@shared/types.ts";
 
 /** Bitmap size of one square before CSS stretches the canvas. */
 const CELL = 4;
@@ -7,12 +8,19 @@ const EMPTY_A = "#e7e1d6";
 const EMPTY_B = "#ddd6c8";
 
 /**
- * Draw the empty local board. This does not read a contract.
- * The checker is only a background so squares are visible. It is not paint,
- * and it is not one of the eight palette colors.
- * The selection ring is an HTML overlay, so this bitmap stays unpainted.
+ * Draw the board background, then any painted cells we have confirmed.
+ *
+ * The checker is only a background so empty squares are visible. It is not
+ * paint, and it is not one of the eight palette colors.
+ *
+ * Painted colors come from `pixels` — a sparse list filled only after
+ * authoritative reads. Clicking a square must not invent an entry here.
+ * The selection ring is an HTML overlay, separate from this bitmap.
  */
-export function renderBoard(canvas: HTMLCanvasElement): void {
+export function renderBoard(
+  canvas: HTMLCanvasElement,
+  pixels: readonly PixelView[] = [],
+): void {
   const context = canvas.getContext("2d");
   if (!context) {
     return;
@@ -27,9 +35,21 @@ export function renderBoard(canvas: HTMLCanvasElement): void {
       context.fillRect(x * CELL, y * CELL, CELL, CELL);
     }
   }
+
+  for (const pixel of pixels) {
+    if (pixel.colorIndex === null) {
+      continue;
+    }
+    const swatch = paletteColor(pixel.colorIndex);
+    if (!swatch) {
+      continue;
+    }
+    context.fillStyle = swatch.hex;
+    context.fillRect(pixel.x * CELL, pixel.y * CELL, CELL, CELL);
+  }
 }
 
-/** Read one bitmap pixel. Tests and the browser check use this to see that draws did not paint. */
+/** Read one bitmap pixel. Used to spot unexpected local paints in checks. */
 export function bitmapHex(
   canvas: HTMLCanvasElement,
   x: number,

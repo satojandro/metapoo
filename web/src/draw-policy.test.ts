@@ -6,6 +6,7 @@ const base = {
   accountId: "learner.testnet",
   sessionNetworkId: "testnet" as const,
   boardNetworkId: "testnet" as const,
+  contractId: "",
 };
 
 describe("prepareDraw", () => {
@@ -51,5 +52,18 @@ describe("prepareDraw", () => {
     expect(result.code).toBe("ContractNotConfigured");
     expect(result.transactionHash).toBeNull();
     expect(result.message).toMatch(/Open wall/i);
+  });
+
+  it("is ready to sign when checks pass and a contract id is set", () => {
+    const result = prepareDraw({
+      ...base,
+      contractId: "board.example.testnet",
+      x: 3,
+      y: 4,
+      color: 2,
+    });
+    expect(result.outcome).toBe("ready");
+    expect(result.code).toBe("ReadyToSign");
+    expect(result.transactionHash).toBeNull();
   });
 });
