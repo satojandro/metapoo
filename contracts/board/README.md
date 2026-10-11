@@ -1,25 +1,22 @@
 # Board contract (Open wall)
 
-This folder is a NEAR contract written in Rust. Schema version 1. It describes a 128 by 128 board, stores painted cells sparsely, and lets any caller paint any in-range cell.
+Rust NEAR contract, schema version 1. Sparse 128×128 board, 8-color palette, Open wall `draw`.
 
-Do not deploy it until an explicit review. Local `cargo test` is not a testnet or mainnet result.
+Local `cargo test` is not a testnet or mainnet result. Do not deploy to mainnet from this repo’s docs.
+
+## Read these next
+
+1. `FRONTEND_HANDOFF.md` — method args/results for agent **06**
+2. `DEPLOY.md` — WASM build and **testnet** deploy steps (no keys in git)
+3. `STORAGE_AND_GAS.md` — beginner storage/gas and limitations
+4. `../../contract/DESIGN.md` — longer design context
 
 ## Words that matter
 
 - A **view method** (`get_board`, `get_pixel`) reads data. It is not a transaction.
 - A **change method** (`draw`) is what a wallet sends as a transaction.
-- **Open wall** means the predecessor account may paint any cell. The latest writer is the current artist.
-- **Storage** is data the contract keeps. Empty squares are not stored. They are the default answer from `get_pixel`.
-
-## Checks
-
-From this folder:
-
-```bash
-cargo test
-```
-
-That runs on your computer. It does not start a NEAR node and it does not prove the WASM build. The crate enables the `unit-testing` feature so host tests can compile. A real deploy later needs `cargo near build` (or the `wasm32-unknown-unknown` target).
+- **Open wall** means any predecessor may paint any cell. The latest writer is the current artist.
+- **Storage** holds only painted cells. Empty squares are missing records.
 
 ## Methods
 
@@ -30,6 +27,25 @@ That runs on your computer. It does not start a NEAR node and it does not prove 
 | `get_pixel` | view | One cell, or empty nulls |
 | `draw` | call | Store color, predecessor as artist, block timestamp |
 
+## Local checks
+
+```bash
+cargo test
+```
+
+Host tests use the `unit-testing` feature of `near-sdk`. A real on-chain binary needs `cargo near build` / `wasm32-unknown-unknown` (see `DEPLOY.md`).
+
+## Agent 05 status
+
+| Deliverable | Status |
+|---|---|
+| Design note | Done (`DESIGN.md` + this folder) |
+| Implementation + focused tests | Done (local) |
+| Example calls for frontend | Done (`FRONTEND_HANDOFF.md`) |
+| Storage/gas in plain language | Done (`STORAGE_AND_GAS.md`) |
+| Local/testnet deploy instructions | Done (`DEPLOY.md`) — not executed in-repo |
+| Mainnet deploy | Out of scope |
+
 ## Not in this crate
 
-No token transfers, fees, treasury, sponsor keys, admin account, pause switch, or pixel history paging.
+No token transfers, fees, treasury, sponsor keys, admin pause, or pixel history paging.

@@ -117,9 +117,9 @@ There is no payment method and no sponsor method.
 | `docs/00-shared-decisions.md` | Coordinator | Overwrite rule is accepted; further product changes land here first |
 | `docs/threat-sketch.md` | Coordinator | Update when sponsor design appears |
 | `shared/**` | Coordinator | Agents propose changes; they do not edit this in parallel |
-| `contracts/board/**` | Contract agent | Open-wall implementation; local tests; no silent mainnet deploy |
+| `contracts/board/**` | Contract agent (05) | Open-wall implementation + handoff/deploy docs; no silent mainnet deploy |
 | `contract/DESIGN.md` | Contract agent / coordinator | Broader design notes |
-| `web/**` | Frontend agent | Wire reads/writes to a configured contract; no fake success |
+| `web/**` | Frontend agent (06) | Wire reads/writes using `contracts/board/FRONTEND_HANDOFF.md`; no fake success |
 | `docs/research/**` | Chain-abstraction agent | Memo only, no MVP code |
 | `01`–`09` markdown pack | Coordinator | Leave the briefs intact |
 

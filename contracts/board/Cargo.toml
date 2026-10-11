@@ -3,7 +3,7 @@ name = "metapoo-board"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Holding contract for the Meta Poo board. It describes the canvas and rejects every draw."
+description = "Meta Poo Open wall board contract. Sparse pixels; any caller may draw in-range cells."
 
 [lib]
 # cdylib is the WASM bundle NEAR would run. rlib lets `cargo test` call the code on this computer.

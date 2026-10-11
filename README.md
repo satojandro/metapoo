@@ -64,4 +64,10 @@ Nothing here has been deployed. The token accounts named above are not used by t
 
 ## Next agents
 
-The overwrite rule is accepted, so the **frontend agent** (`06`) can wire reads/writes to a configured test contract without inventing a different ownership rule. The **contract agent** (`05`) can harden tests, WASM build notes, and local deploy instructions. The chain-abstraction research brief (`07`) remains memo-only.
+| Agent | Role | Status |
+|---|---|---|
+| **05 Contract** | Smart contract logic, tests, example calls, deploy docs | **Done in-repo** (local tests). See `contracts/board/`. Testnet deploy is a human step via `contracts/board/DEPLOY.md`. |
+| **06 Frontend** | Wire wallet + board UI to a configured contract | Ready to start. Read `contracts/board/FRONTEND_HANDOFF.md` first. |
+| **07 Research** | Chain-abstraction memo only | Ready anytime; no MVP code edits. |
+
+Contract logic lives under `contracts/board/`. Frontend work is separate under `web/`.
