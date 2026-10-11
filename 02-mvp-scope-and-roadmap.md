@@ -43,3 +43,14 @@ A Sunday MVP is a scope constraint, not a promise of mainnet launch. If the shar
 
 Pixel semantics and contract state shape precede frontend write integration. The chain-abstraction agent works independently as a research spike and does not block the free board. The contract and frontend agents agree on an interface before parallel implementation. Token and treasury phases begin only after the MVP has been demonstrated and the relevant facts are verified.
 
+## Next product todos (queued)
+
+These are **not** done yet. The current page still uses: pick color → select pixel → press Draw → approve each wallet prompt.
+
+| ID | Todo | Notes |
+|---|---|---|
+| UX-1 | **One-click draw** | With a color chosen and wallet connected (and contract configured), clicking a pixel both selects that cell **and** starts the `draw` transaction. Still only paint the canvas after an observed tx + board read — no fake local paint. |
+| UX-2 | **Pre-approved drawing (Berry Club–style)** | Use NEAR **function-call access keys** (limited allowance / methods on the board contract) so the user pre-approves a budget of gas once, then pixel clicks can submit `draw` without a full wallet popup every time. Must explain the allowance in plain language, show remaining budget, and make revoke/disconnect clear. Does **not** add MPOO payments or sponsorship by itself. |
+
+Suggested order: ship **UX-1** first (smaller), then **UX-2** (needs careful key permissions, allowance UX, and threat review).
+
