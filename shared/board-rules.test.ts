@@ -12,15 +12,15 @@ const connectedMock: WalletSession = {
   networkId: "mock",
 };
 
-test("board.json matches the TypeScript board size and palette", () => {
+test("board.json matches the TypeScript board size, palette, and open_wall rule", () => {
   const path = fileURLToPath(new URL("./board.json", import.meta.url));
   const board = JSON.parse(readFileSync(path, "utf8"));
 
-  assert.equal(board.schema_version, 0);
+  assert.equal(board.schema_version, 1);
   assert.equal(board.width, BOARD_WIDTH);
   assert.equal(board.height, BOARD_HEIGHT);
   assert.equal(board.origin, "top-left");
-  assert.equal(board.overwrite_rule, "unresolved");
+  assert.equal(board.overwrite_rule, "open_wall");
   assert.equal(board.sponsorship_enabled, false);
   assert.equal(board.palette.length, PALETTE.length);
 
@@ -43,12 +43,12 @@ test("fractional pixels are rejected", () => {
   assert.equal(isInsideBoard(1.5, 2), false);
 });
 
-test("a bad column is reported before the ownership rule", () => {
+test("a bad column is reported before session checks", () => {
   const error = reasonDrawIsBlocked(
     { x: 200, y: 1, colorIndex: 0 },
     connectedMock,
     "mock",
-    "unresolved",
+    "open_wall",
   );
   assert.equal(error?.code, "COORDINATE_OUT_OF_RANGE");
 });
@@ -58,12 +58,22 @@ test("a bad color is rejected", () => {
     { x: 1, y: 1, colorIndex: 8 },
     connectedMock,
     "mock",
-    "unresolved",
+    "open_wall",
   );
   assert.equal(error?.code, "COLOR_OUT_OF_RANGE");
 });
 
-test("a valid pixel still cannot be drawn while the rule is unresolved", () => {
+test("open wall allows a valid connected session through client checks", () => {
+  const error = reasonDrawIsBlocked(
+    { x: 3, y: 4, colorIndex: 2 },
+    connectedMock,
+    "mock",
+    "open_wall",
+  );
+  assert.equal(error, null);
+});
+
+test("unresolved policy still blocks even with a good session", () => {
   const error = reasonDrawIsBlocked(
     { x: 3, y: 4, colorIndex: 2 },
     connectedMock,
@@ -71,7 +81,6 @@ test("a valid pixel still cannot be drawn while the rule is unresolved", () => {
     "unresolved",
   );
   assert.equal(error?.code, "OWNERSHIP_RULE_UNRESOLVED");
-  assert.match(error?.message ?? "", /no transaction was sent/i);
 });
 
 test("a disconnected session is its own error", () => {

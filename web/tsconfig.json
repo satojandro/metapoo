@@ -5,12 +5,14 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noEmit": true,
+    "skipLibCheck": true,
     "resolveJsonModule": true,
-    "lib": ["ES2022", "DOM"],
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
     "paths": {
       "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "../shared/**/*.ts"]
 }

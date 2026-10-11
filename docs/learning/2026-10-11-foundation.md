@@ -2,10 +2,10 @@
 
 - Date: 11 October 2026
 - Learner: foundation pass (agent), for the maintainer to reread
-- Agent or task: Stage 0, shared decisions and mock board
+- Agent or task: Stage 0, shared decisions and holding board
 - Goal in one sentence: Show a free pixel wall and stop draws until overwrite rules are chosen.
-- Environment: mock for the page, local for the tests and the production build
-- Files or contract methods explored: the agent pack `01` through `09`; new `shared/` checks; no contract methods exist yet
+- Environment: local empty board picture; wallet connector aimed at testnet for identity only; local Node and `cargo test`
+- Files or contract methods explored: pack `01` through `09`; `shared/`; `web/`; holding methods `get_board`, `get_pixel`, `draw` in `contracts/board`
 
 ## Before starting
 
@@ -15,17 +15,17 @@
 
 ## What I did
 
-1. Read the pack. Confirmed there was no package, contract, or wallet code.
+1. Read the pack. Confirmed there was no package, contract, or wallet code at the start.
 2. Wrote the overwrite options in `docs/00-shared-decisions.md` and left the choice open.
-3. Added shared checks, a mock page, and local tests. Did not add a Rust crate.
+3. Merged two partial scaffolds into one holding build: Ink palette, `overwrite_rule: "unresolved"`, `shared/`, `web/`, `contracts/board`.
+4. Wired the page draw button through `prepareDraw`, which never opens a signing prompt for paint.
 
 ## What I observed
 
-- Expected result: valid pixels are still rejected with `OWNERSHIP_RULE_UNRESOLVED`.
-- Actual result: see the test run recorded in the handoff. The page shows that same sentence when Draw is pressed.
-- Evidence: `node --test` on `shared/board-rules.test.ts`, `npm run build` in `frontend/`, and a browser pass on the local dev server.
-- What this evidence proves: the mock page and the local checks agree, and the TypeScript builds.
-- What it does not prove: no testnet transaction, no mainnet read, no live wallet, no measured storage cost.
+- Expected result: valid pixels are still rejected with the unresolved-rule block.
+- Actual result: shared tests, web tests/build, and `cargo test` in `contracts/board` (see handoff after cleanup).
+- What this evidence proves: the local checks agree, and the TypeScript builds.
+- What it does not prove: no testnet draw transaction, no mainnet read, no measured storage cost, no WASM deploy.
 
 ## What I learned
 
@@ -35,11 +35,11 @@
 
 ## Problems and decisions
 
-- Error or confusing behavior: the milestone wants a drawing action, and the brief forbids inventing who may overwrite.
-- Likely cause: those two instructions meet at the contract method.
-- How I narrowed it down: the contract brief says to recommend and stop when the coordinator has not chosen.
-- Decision made and why: ship a read-only mock with one draw button that explains the block. The action is visible, and it cannot lie about a transaction.
-- Open question for the coordinator: which overwrite option should be accepted?
+- Error or confusing behavior: two scaffolds disagreed on palette names and on `undecided` vs `unresolved`.
+- Likely cause: parallel drafts before a single source of truth was locked.
+- How I narrowed it down: compared `shared/board.json`, `shared/palette.ts`, `web/`, and `contracts/board`.
+- Decision made and why: one Ink palette, one `unresolved` marker, holding contract that rejects every draw, page that explains the block.
+- Decision made later the same day: **Open wall** accepted. Contract stores sparse pixels; page still blocks send until a contract id is set.
 
 ## Next small practice
 

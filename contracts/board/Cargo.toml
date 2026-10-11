@@ -10,7 +10,9 @@ description = "Holding contract for the Meta Poo board. It describes the canvas 
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-near-sdk = "5.29.1"
+# unit-testing lets `cargo test` run on this computer. A real WASM deploy later
+# should use `cargo near build` / the wasm32 target, not this host test path.
+near-sdk = { version = "5.29.1", features = ["unit-testing"] }
 
 [dev-dependencies]
 serde_json = "1"

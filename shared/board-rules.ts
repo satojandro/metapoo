@@ -14,7 +14,7 @@ import {
  * Client-side checks for one draw.
  *
  * The page uses these so a visitor gets a clear message quickly.
- * A future contract must repeat the same checks. The browser is not the
+ * The contract must repeat the same checks. The browser is not the
  * authority: a person can skip the page and talk to the contract directly.
  */
 
@@ -56,7 +56,7 @@ export function validateSession(
     return {
       code: "WALLET_NOT_CONNECTED",
       message:
-        "Connect a wallet before drawing. This practice page can use a pretend session only.",
+        "Connect a wallet before drawing. Looking at the board does not need a wallet.",
     };
   }
 
@@ -71,9 +71,10 @@ export function validateSession(
 }
 
 /**
- * The single user-facing reason a draw must stop.
- * Bounds and palette come first, then the missing ownership rule,
- * then wallet and network. Visitors should hear the real blocker.
+ * The user-facing reason a draw must stop before a wallet signing prompt.
+ * Bounds and palette come first, then an unresolved policy (legacy),
+ * then wallet and network. Open wall does not block overwrites here;
+ * the contract enforces the same open rule on chain.
  */
 export function reasonDrawIsBlocked(
   request: DrawRequest,
@@ -94,6 +95,7 @@ export function reasonDrawIsBlocked(
     };
   }
 
+  // open_wall: any connected account on the matching network may paint any cell.
   return validateSession(session, boardNetworkId);
 }
 

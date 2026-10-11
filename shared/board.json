@@ -1,9 +1,9 @@
 {
-  "schema_version": 0,
+  "schema_version": 1,
   "width": 128,
   "height": 128,
   "origin": "top-left",
-  "overwrite_rule": "unresolved",
+  "overwrite_rule": "open_wall",
   "sponsorship_enabled": false,
   "palette": [
     { "index": 0, "name": "Ink", "hex": "#1c1917" },

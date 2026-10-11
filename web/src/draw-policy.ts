@@ -1,27 +1,38 @@
 import { reasonDrawIsBlocked } from "@shared/board-rules.ts";
 import board from "@shared/board.json";
-import type { NetworkId } from "@shared/types.ts";
+import type { NetworkId, OverwritePolicy } from "@shared/types.ts";
+import { CONTRACT_ID } from "./config";
 
 /**
- * The result of pressing "draw" in this build.
- * `outcome` is only "blocked". There is no success value, so a click cannot
- * be reported as a confirmed transaction by accident.
+ * The result of pressing "draw" before a wallet signing prompt.
+ * This helper never marks a chain success. Success needs an observed
+ * transaction and a fresh read elsewhere.
  */
-export interface DrawResult {
-  outcome: "blocked";
-  code:
-    | "PixelNotChosen"
-    | "ColorNotChosen"
-    | "CoordinateOutOfRange"
-    | "ColorOutOfRange"
-    | "OverwriteRuleNotChosen"
-    | "WalletNotConnected"
-    | "NetworkMismatch";
-  title: string;
-  message: string;
-  transactionHash: null;
-  explorerUrl: null;
-}
+export type DrawResult =
+  | {
+      outcome: "blocked";
+      code:
+        | "PixelNotChosen"
+        | "ColorNotChosen"
+        | "CoordinateOutOfRange"
+        | "ColorOutOfRange"
+        | "OverwriteRuleNotChosen"
+        | "WalletNotConnected"
+        | "NetworkMismatch"
+        | "ContractNotConfigured";
+      title: string;
+      message: string;
+      transactionHash: null;
+      explorerUrl: null;
+    }
+  | {
+      outcome: "ready";
+      code: "ReadyToSign";
+      title: string;
+      message: string;
+      transactionHash: null;
+      explorerUrl: null;
+    };
 
 export interface DrawAttempt {
   x: number | null;
@@ -34,7 +45,7 @@ export interface DrawAttempt {
 }
 
 function blocked(
-  code: DrawResult["code"],
+  code: Extract<DrawResult, { outcome: "blocked" }>["code"],
   title: string,
   message: string,
 ): DrawResult {
@@ -48,10 +59,13 @@ function blocked(
   };
 }
 
+function policyFromBoard(): OverwritePolicy {
+  return board.overwrite_rule === "open_wall" ? "open_wall" : "unresolved";
+}
+
 /**
- * Decide what a draw attempt means. This function never calls a wallet.
- * Shared checks cover bounds, palette, the unresolved overwrite rule,
- * wallet connection, and network match. The page adds "not chosen yet".
+ * Decide what a draw attempt means before any wallet prompt.
+ * Shared checks cover bounds, palette, overwrite policy, wallet, and network.
  */
 export function prepareDraw(attempt: DrawAttempt): DrawResult {
   if (attempt.x === null || attempt.y === null) {
@@ -78,32 +92,47 @@ export function prepareDraw(attempt: DrawAttempt): DrawResult {
       networkId: attempt.sessionNetworkId,
     },
     attempt.boardNetworkId,
-    "unresolved",
+    policyFromBoard(),
   );
 
-  if (!error) {
-    return blocked(
-      "OverwriteRuleNotChosen",
-      "Drawing was not sent",
-      `Who may paint over a pixel is not decided (marker: ${board.overwrite_rule}). Nothing was sent to the network.`,
-    );
-  }
-
-  if (error.code === "COORDINATE_OUT_OF_RANGE") {
+  if (error?.code === "COORDINATE_OUT_OF_RANGE") {
     return blocked("CoordinateOutOfRange", "That pixel is off the board", error.message);
   }
-  if (error.code === "COLOR_OUT_OF_RANGE") {
+  if (error?.code === "COLOR_OUT_OF_RANGE") {
     return blocked("ColorOutOfRange", "That color is not in the palette", error.message);
   }
-  if (error.code === "OWNERSHIP_RULE_UNRESOLVED") {
+  if (error?.code === "OWNERSHIP_RULE_UNRESOLVED") {
     return blocked(
       "OverwriteRuleNotChosen",
       "Drawing is waiting on a product decision",
       error.message,
     );
   }
-  if (error.code === "WALLET_NOT_CONNECTED") {
+  if (error?.code === "WALLET_NOT_CONNECTED") {
     return blocked("WalletNotConnected", "Connect a wallet first", error.message);
   }
-  return blocked("NetworkMismatch", "Wallet network does not match", error.message);
+  if (error?.code === "NETWORK_MISMATCH") {
+    return blocked("NetworkMismatch", "Wallet network does not match", error.message);
+  }
+  if (error) {
+    return blocked("OverwriteRuleNotChosen", "Drawing was not sent", error.message);
+  }
+
+  if (!CONTRACT_ID) {
+    return blocked(
+      "ContractNotConfigured",
+      "Open wall is accepted, but no contract is configured",
+      "Any connected wallet may paint any pixel under the Open wall rule. This page still has an empty contract id, so it will not open a signing prompt or pretend a transaction succeeded.",
+    );
+  }
+
+  return {
+    outcome: "ready",
+    code: "ReadyToSign",
+    title: "Ready to ask the wallet",
+    message:
+      "Client checks passed under Open wall. The next step is a wallet signature against the configured contract. This helper does not send that transaction by itself.",
+    transactionHash: null,
+    explorerUrl: null,
+  };
 }

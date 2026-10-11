@@ -1,18 +1,17 @@
-//! Holding contract for the Meta Poo pixel board.
+//! Meta Poo pixel board contract (Open wall).
 //!
 //! A smart contract is a program that a blockchain runs. People call its
-//! methods with signed transactions. This build is intentionally incomplete:
-//! it can describe the board, and it rejects every draw.
+//! change methods with signed transactions. This crate:
+//! - describes a 128 by 128 board and an 8-color palette
+//! - stores only painted cells (sparse storage)
+//! - lets any caller paint any in-range cell (Open wall)
 //!
-//! Why reject draws? The product owner has not decided who may paint over an
-//! existing pixel. Encoding that rule here before the decision would force
-//! the frontend to copy a guess. `shared/board.json` is the shared description
-//! of size, palette, and the "undecided" marker. A unit test checks that this
-//! file and those constants still match.
-//!
-//! Do not deploy this crate. Schema version 0 means "holding build".
+//! `shared/board.json` must stay in sync with the constants below.
+//! Do not deploy until an explicit review. Local `cargo test` is not a
+//! testnet or mainnet result.
 
-use near_sdk::near;
+use near_sdk::store::LookupMap;
+use near_sdk::{env, near, AccountId, PanicOnDefault};
 
 /// Board width in pixels. Coordinate x must be 0 through 127.
 const WIDTH: u32 = 128;
@@ -20,8 +19,10 @@ const WIDTH: u32 = 128;
 const HEIGHT: u32 = 128;
 /// (0, 0) is the top-left square. x grows to the right. y grows downward.
 const ORIGIN: &str = "top-left";
-/// No overwrite policy has been accepted. The page calls this "unresolved".
-const OVERWRITE_RULE: &str = "unresolved";
+/// Accepted product rule: any account may paint any cell.
+const OVERWRITE_RULE: &str = "open_wall";
+/// Schema 1 means Open wall storage is live in this crate.
+const SCHEMA_VERSION: u32 = 1;
 
 /// Index 0 is Ink, a real paint color. An unpainted square is not index 0.
 /// Names and hex values match `shared/palette.ts`. Change both together.
@@ -47,7 +48,6 @@ pub struct PaletteColor {
 /// What `get_board` returns. Field names stay snake_case, matching NEAR's usual JSON.
 #[near(serializers = [json])]
 pub struct BoardView {
-    /// 0 means this build only describes the board. It cannot paint.
     pub schema_version: u32,
     pub width: u32,
     pub height: u32,
@@ -64,25 +64,44 @@ pub struct PixelView {
     pub x: u32,
     pub y: u32,
     pub color: Option<u32>,
-    /// Attribution only. This build does not treat the artist as an access right.
+    /// Attribution only. Open wall does not treat artist as an access right.
     pub artist: Option<String>,
-    /// Nanoseconds, the unit NEAR uses for block time. Unused while draws are rejected.
+    /// Nanoseconds, the unit NEAR uses for block time.
     pub written_at_ns: Option<u64>,
+}
+
+/// One painted cell in contract storage.
+#[near(serializers = [borsh])]
+pub struct PixelRecord {
+    color: u32,
+    artist: AccountId,
+    written_at_ns: u64,
 }
 
 /// On-chain state. NEAR saves this between calls.
 ///
-/// The only field is a version number. Empty pixels are not saved one by one.
-/// Saving all 16,384 squares up front would spend storage before anyone paints.
+/// Empty pixels are not saved one by one. Saving all 16,384 squares up front
+/// would spend storage before anyone paints.
 #[near(contract_state)]
-#[derive(Default)]
+#[derive(PanicOnDefault)]
 pub struct Board {
     schema_version: u32,
+    /// Key is `y * WIDTH + x`. Only painted cells appear here.
+    pixels: LookupMap<u32, PixelRecord>,
 }
 
 #[near]
 impl Board {
-    /// Read the board description. A view method does not change state and is not a transaction.
+    /// Create an empty board. Call this once when the contract account is initialized.
+    #[init]
+    pub fn new() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            pixels: LookupMap::new(b"p"),
+        }
+    }
+
+    /// Read the board description. A view method does not change state.
     pub fn get_board(&self) -> BoardView {
         BoardView {
             schema_version: self.schema_version,
@@ -103,42 +122,67 @@ impl Board {
         }
     }
 
-    /// Read one square. In-range squares are empty because this build stores none.
+    /// Read one square. Missing storage means the square is unpainted.
     pub fn get_pixel(&self, x: u32, y: u32) -> PixelView {
-        // Same bound check the draw path uses, so the page and the contract agree.
         if let Err(code) = check_coordinate(x, y) {
             reject(code);
         }
-        PixelView {
-            x,
-            y,
-            color: None,
-            artist: None,
-            written_at_ns: None,
+        match self.pixels.get(&pixel_key(x, y)) {
+            Some(record) => PixelView {
+                x,
+                y,
+                color: Some(record.color),
+                artist: Some(record.artist.to_string()),
+                written_at_ns: Some(record.written_at_ns),
+            },
+            None => PixelView {
+                x,
+                y,
+                color: None,
+                artist: None,
+                written_at_ns: None,
+            },
         }
     }
 
-    /// The future painting method. It is a change method (`&mut self`) so a wallet
-    /// would submit it as a transaction, but every path panics before writing.
+    /// Paint one cell. Any predecessor may overwrite any cell (Open wall).
     ///
-    /// On NEAR, a panic cancels the whole transaction. State from that call is discarded.
-    /// The caller can still pay a little gas. This page does not send the call.
+    /// On NEAR, a panic cancels the whole transaction. A successful return
+    /// means the cell was stored for this call.
     pub fn draw(&mut self, x: u32, y: u32, color: u32) {
-        if let Err(code) = reject_draw(x, y, color) {
+        if let Err(code) = validate_draw_args(x, y, color) {
             reject(code);
         }
+
+        let artist = env::predecessor_account_id();
+        let written_at_ns = env::block_timestamp();
+        let key = pixel_key(x, y);
+        self.pixels.insert(
+            key,
+            PixelRecord {
+                color,
+                artist: artist.clone(),
+                written_at_ns,
+            },
+        );
+
+        // Simple log for indexers / debugging. Not a full NEP event schema yet.
+        env::log_str(&format!(
+            "EVENT_JSON:{{\"standard\":\"mpoo_board\",\"version\":\"1.0.0\",\"event\":\"draw\",\"data\":[{{\"x\":{x},\"y\":{y},\"color\":{color},\"artist\":\"{artist}\",\"written_at_ns\":{written_at_ns}}}]}}"
+        ));
     }
 }
 
-/// Pure checks used by the contract method and by unit tests.
-/// `Ok(())` would mean "the numbers are legal and a rule allowed the write".
-/// This function never returns `Ok`, because no rule has been chosen.
-fn reject_draw(x: u32, y: u32, color: u32) -> Result<(), &'static str> {
+fn pixel_key(x: u32, y: u32) -> u32 {
+    y * WIDTH + x
+}
+
+fn validate_draw_args(x: u32, y: u32, color: u32) -> Result<(), &'static str> {
     check_coordinate(x, y)?;
     if color >= PALETTE.len() as u32 {
         return Err("ColorOutOfRange");
     }
-    Err("OverwriteRuleNotChosen")
+    Ok(())
 }
 
 fn check_coordinate(x: u32, y: u32) -> Result<(), &'static str> {
@@ -150,7 +194,7 @@ fn check_coordinate(x: u32, y: u32) -> Result<(), &'static str> {
 
 /// Stop the call with a stable code first, then a short explanation.
 fn reject(code: &str) -> ! {
-    near_sdk::env::panic_str(&format!(
+    env::panic_str(&format!(
         "{code}: draw was rejected and no pixel was stored"
     ));
 }
@@ -158,26 +202,31 @@ fn reject(code: &str) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::test_utils::VMContextBuilder;
-    use near_sdk::testing_env;
+    use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::{testing_env, AccountId};
+
+    fn context(predecessor: AccountId, block_timestamp: u64) {
+        let context = VMContextBuilder::new()
+            .predecessor_account_id(predecessor)
+            .block_timestamp(block_timestamp)
+            .build();
+        testing_env!(context);
+    }
 
     fn setup() -> Board {
-        // Unit tests are not a blockchain. This builds a pretend call environment
-        // so `env::panic_str` has somewhere to run.
-        let context = VMContextBuilder::new().build();
-        testing_env!(context);
-        Board::default()
+        context(accounts(0), 1_000);
+        Board::new()
     }
 
     #[test]
     fn board_view_matches_the_shared_description() {
         let board = setup();
         let view = board.get_board();
-        assert_eq!(view.schema_version, 0);
+        assert_eq!(view.schema_version, 1);
         assert_eq!(view.width, 128);
         assert_eq!(view.height, 128);
         assert_eq!(view.origin, "top-left");
-        assert_eq!(view.overwrite_rule, "unresolved");
+        assert_eq!(view.overwrite_rule, "open_wall");
         assert!(!view.sponsorship_enabled);
         assert_eq!(view.palette.len(), 8);
         assert_eq!(view.palette[0].name, "Ink");
@@ -192,7 +241,7 @@ mod tests {
         assert_eq!(shared["origin"], ORIGIN);
         assert_eq!(shared["overwrite_rule"], OVERWRITE_RULE);
         assert_eq!(shared["sponsorship_enabled"], false);
-        assert_eq!(shared["schema_version"], 0);
+        assert_eq!(shared["schema_version"], SCHEMA_VERSION);
         let palette = shared["palette"].as_array().expect("palette array");
         assert_eq!(palette.len(), PALETTE.len());
         for (entry, (name, hex)) in palette.iter().zip(PALETTE) {
@@ -202,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn in_range_pixel_is_empty() {
+    fn in_range_pixel_starts_empty() {
         let board = setup();
         let pixel = board.get_pixel(0, 0);
         assert!(pixel.color.is_none());
@@ -220,15 +269,6 @@ mod tests {
     }
 
     #[test]
-    fn every_draw_is_rejected_and_ok_is_unreachable() {
-        // Includes the last valid square, the first invalid square, and bad colors.
-        let samples = [(0, 0, 0), (127, 127, 7), (128, 0, 0), (0, 0, 8)];
-        for (x, y, color) in samples {
-            assert!(reject_draw(x, y, color).is_err());
-        }
-    }
-
-    #[test]
     #[should_panic(expected = "ColorOutOfRange")]
     fn invalid_color_is_named() {
         let mut board = setup();
@@ -236,21 +276,53 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "OverwriteRuleNotChosen")]
-    fn a_legal_color_still_does_not_draw() {
+    #[should_panic(expected = "CoordinateOutOfRange")]
+    fn draw_outside_the_board_is_rejected() {
         let mut board = setup();
-        board.draw(3, 4, 2);
+        board.draw(128, 0, 0);
     }
 
     #[test]
-    fn a_rejected_draw_leaves_the_pixel_empty() {
+    fn first_paint_stores_color_artist_and_time() {
         let mut board = setup();
-        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            board.draw(3, 4, 2);
-        }));
-        assert!(caught.is_err());
+        board.draw(3, 4, 2);
         let pixel = board.get_pixel(3, 4);
-        assert!(pixel.color.is_none());
-        assert!(pixel.artist.is_none());
+        assert_eq!(pixel.color, Some(2));
+        assert_eq!(pixel.artist.as_deref(), Some(accounts(0).as_str()));
+        assert_eq!(pixel.written_at_ns, Some(1_000));
+    }
+
+    #[test]
+    fn another_account_may_overwrite_under_open_wall() {
+        let mut board = setup();
+        board.draw(3, 4, 2);
+
+        context(accounts(1), 2_000);
+        board.draw(3, 4, 5);
+
+        let pixel = board.get_pixel(3, 4);
+        assert_eq!(pixel.color, Some(5));
+        assert_eq!(pixel.artist.as_deref(), Some(accounts(1).as_str()));
+        assert_eq!(pixel.written_at_ns, Some(2_000));
+    }
+
+    #[test]
+    fn same_account_may_recolor() {
+        let mut board = setup();
+        board.draw(0, 0, 1);
+        context(accounts(0), 3_000);
+        board.draw(0, 0, 7);
+        let pixel = board.get_pixel(0, 0);
+        assert_eq!(pixel.color, Some(7));
+        assert_eq!(pixel.artist.as_deref(), Some(accounts(0).as_str()));
+        assert_eq!(pixel.written_at_ns, Some(3_000));
+    }
+
+    #[test]
+    fn painting_one_cell_does_not_create_neighbors() {
+        let mut board = setup();
+        board.draw(10, 10, 3);
+        assert!(board.get_pixel(10, 11).color.is_none());
+        assert!(board.get_pixel(11, 10).color.is_none());
     }
 }

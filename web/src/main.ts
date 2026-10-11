@@ -13,39 +13,28 @@ import { connectWallet, disconnectWallet, onWalletSession } from "./wallet";
  * this file would be a lie, because no transaction has been confirmed.
  */
 
-const canvas = document.querySelector<HTMLCanvasElement>("#board");
-const selectionRing = document.querySelector<HTMLElement>("#selection-ring");
-const boardFocus = document.querySelector<HTMLElement>("#board-focus");
-const selectionSummary = document.querySelector<HTMLElement>("#selection-summary");
-const palette = document.querySelector<HTMLElement>("#palette");
-const drawButton = document.querySelector<HTMLButtonElement>("#draw-button");
-const result = document.querySelector<HTMLElement>("#result");
-const rules = document.querySelector<HTMLElement>("#rules");
-const walletSummary = document.querySelector<HTMLElement>("#wallet-summary");
-const networkSummary = document.querySelector<HTMLElement>("#network-summary");
-const connectButton = document.querySelector<HTMLButtonElement>("#connect-button");
-const walletError = document.querySelector<HTMLElement>("#wallet-error");
-const sponsorNote = document.querySelector<HTMLElement>("#sponsor-note");
-const evidence = document.querySelector<HTMLElement>("#evidence");
-
-if (
-  !canvas ||
-  !selectionRing ||
-  !boardFocus ||
-  !selectionSummary ||
-  !palette ||
-  !drawButton ||
-  !result ||
-  !rules ||
-  !walletSummary ||
-  !networkSummary ||
-  !connectButton ||
-  !walletError ||
-  !sponsorNote ||
-  !evidence
-) {
-  throw new Error("The page is missing a required element.");
+function mustFind<T extends Element>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) {
+    throw new Error(`The page is missing required element ${selector}.`);
+  }
+  return element;
 }
+
+const canvas = mustFind<HTMLCanvasElement>("#board");
+const selectionRing = mustFind<HTMLElement>("#selection-ring");
+const boardFocus = mustFind<HTMLElement>("#board-focus");
+const selectionSummary = mustFind<HTMLElement>("#selection-summary");
+const palette = mustFind<HTMLElement>("#palette");
+const drawButton = mustFind<HTMLButtonElement>("#draw-button");
+const result = mustFind<HTMLElement>("#result");
+const rules = mustFind<HTMLElement>("#rules");
+const walletSummary = mustFind<HTMLElement>("#wallet-summary");
+const networkSummary = mustFind<HTMLElement>("#network-summary");
+const connectButton = mustFind<HTMLButtonElement>("#connect-button");
+const walletError = mustFind<HTMLElement>("#wallet-error");
+const sponsorNote = mustFind<HTMLElement>("#sponsor-note");
+const evidence = mustFind<HTMLElement>("#evidence");
 
 let selected: Cell | null = null;
 let selectedColor: number | null = null;
@@ -57,7 +46,7 @@ evidence.textContent =
 
 sponsorNote.textContent = SPONSORSHIP_ENABLED
   ? "Sponsorship flag is on. That is unexpected in this build."
-  : "Gas sponsorship is off. No sponsor key is in this project. The game does not charge an MPOO or NEAR application fee. A later draw would still need your wallet to pay network gas, and only after the overwrite rule is chosen.";
+  : "Gas sponsorship is off. No sponsor key is in this project. The game does not charge an MPOO or NEAR application fee. A later draw would still need your wallet to pay network gas once a contract id is configured.";
 
 fillRules();
 buildPalette();
@@ -214,9 +203,9 @@ function fillRules(): void {
     `The board is ${BOARD_WIDTH} by ${BOARD_HEIGHT} squares.`,
     "Square (0, 0) is the top-left. x counts to the right. y counts downward.",
     "An unpainted square is not a color. It has no stored artist. Palette index 0 is Ink, a real paint color.",
-    "Who may paint over a pixel is not decided (marker: unresolved).",
-    "The current artist, once writes exist, would be attribution of the latest successful write. That is not a legal claim on the artwork.",
-    "No transaction reference is available, because this page does not send one.",
+    "Overwrite rule: Open wall. Any connected account may paint any pixel, including one someone else painted. Vandalism is possible.",
+    "The current artist is credit for the latest successful write. That is not a legal claim on the artwork.",
+    "This page still has no game contract id configured, so it will not open a draw signature or claim a chain success.",
   ];
   const list = document.createElement("ul");
   for (const line of lines) {

@@ -1,13 +1,14 @@
-# Board contract (holding build)
+# Board contract (Open wall)
 
-This folder is a NEAR contract written in Rust. It is schema version 0. It can describe a 128 by 128 board and a palette of 8 colors. Every `draw` call stops with an error. No pixel is stored.
+This folder is a NEAR contract written in Rust. Schema version 1. It describes a 128 by 128 board, stores painted cells sparsely, and lets any caller paint any in-range cell.
 
-Do not deploy it. The overwrite rule is not chosen, and this build has not been run on testnet or mainnet.
+Do not deploy it until an explicit review. Local `cargo test` is not a testnet or mainnet result.
 
 ## Words that matter
 
 - A **view method** (`get_board`, `get_pixel`) reads data. It is not a transaction.
-- A **change method** (`draw`) is what a wallet would send as a transaction. Here it always panics, and a panic rolls the call back.
+- A **change method** (`draw`) is what a wallet sends as a transaction.
+- **Open wall** means the predecessor account may paint any cell. The latest writer is the current artist.
 - **Storage** is data the contract keeps. Empty squares are not stored. They are the default answer from `get_pixel`.
 
 ## Checks
@@ -18,8 +19,17 @@ From this folder:
 cargo test
 ```
 
-That runs on your computer. It does not start a NEAR node and it does not prove the WASM build. Building WASM needs the extra Rust target `wasm32-unknown-unknown`, which this scaffold did not install.
+That runs on your computer. It does not start a NEAR node and it does not prove the WASM build. The crate enables the `unit-testing` feature so host tests can compile. A real deploy later needs `cargo near build` (or the `wasm32-unknown-unknown` target).
+
+## Methods
+
+| Method | Kind | Behavior |
+|---|---|---|
+| `new` | init | Empty board, schema 1 |
+| `get_board` | view | Size, palette, `overwrite_rule: "open_wall"` |
+| `get_pixel` | view | One cell, or empty nulls |
+| `draw` | call | Store color, predecessor as artist, block timestamp |
 
 ## Not in this crate
 
-No token transfers, fees, treasury, sponsor keys, admin account, pause switch, or pixel history.
+No token transfers, fees, treasury, sponsor keys, admin account, pause switch, or pixel history paging.

@@ -32,20 +32,20 @@ The conversation supplies MPOO contract account mpoo.nearlytrade.near, deployer 
 
 ## Code in this repository
 
-The files above are the product pack. The runnable scaffold is a **holding build**: it does not choose who may overwrite a pixel, and it does not send drawing transactions.
+The files above are the product pack. The overwrite rule is **accepted: Open wall**. The contract can paint in local tests. The page still will not send a draw until a contract account id is configured.
 
 Start here:
 
-1. `docs/00-shared-decisions.md` — board size, palette, open overwrite options, proposed interface
+1. `docs/00-shared-decisions.md` — accepted Open wall rule, ride-along choices, interface
 2. `docs/threat-sketch.md` — what this scaffold protects against
-3. `contract/DESIGN.md` — proposed full contract after the overwrite rule is chosen
+3. `contract/DESIGN.md` — broader contract notes
 
 Runnable pieces:
 
-- `shared/board.json` — board size, palette, and `overwrite_rule: "unresolved"`
+- `shared/board.json` — board size, palette, and `overwrite_rule: "open_wall"`
 - `shared/` — TypeScript checks and types shared with the page
-- `contracts/board` — Rust holding contract that describes the board and rejects every draw
-- `web` — local page: empty board, wallet connect/disconnect on testnet, blocked draw with a plain-language reason
+- `contracts/board` — Rust contract: sparse pixels, Open wall `draw`, local unit tests
+- `web` — local page: empty board mock, wallet connect/disconnect on testnet, explains Open wall and blocks send while contract id is empty
 
 ### Local checks
 
@@ -62,6 +62,6 @@ cd contracts/board && cargo test
 
 Nothing here has been deployed. The token accounts named above are not used by this code.
 
-## Before starting the next agents
+## Next agents
 
-Do **not** start the contract or frontend implementation agents until the overwrite rule is accepted in `docs/00-shared-decisions.md`. The chain-abstraction research brief (`07`) may run as a memo-only lane.
+The overwrite rule is accepted, so the **frontend agent** (`06`) can wire reads/writes to a configured test contract without inventing a different ownership rule. The **contract agent** (`05`) can harden tests, WASM build notes, and local deploy instructions. The chain-abstraction research brief (`07`) remains memo-only.

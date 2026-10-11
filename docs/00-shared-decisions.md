@@ -2,82 +2,60 @@
 
 Date: 11 October 2026
 
-This file is the integration record. Contract and frontend work stay on the mock until the overwrite section below changes from **open** to **accepted** and names one rule.
+This file is the integration record. The overwrite rule below is **accepted**.
 
 ## Repository at the start of this work
 
-The repository was not empty. It contained the agent pack (`README.md` and `01` through `09`) and no package manifest, contract, wallet setup, tests, or frontend. Those notes are the starter. This scaffold builds on them.
+The repository began with the agent pack (`README.md` and `01` through `09`) and no package manifest, contract, wallet setup, tests, or frontend. The scaffold below builds on that pack.
 
 ## Stack
 
 | Piece | Choice | Why |
 |---|---|---|
-| Page | Vite and TypeScript, no React yet | A small dev server and one language. The first page has no runtime dependencies. |
-| Shared checks | TypeScript in `shared/` | The same rules run in the page and in Node tests. |
-| Future contract | Rust and `near-sdk`, not created yet | NEAR contracts compile to WebAssembly. Rust is the usual tool, and it is already installed. Creating the crate now would force an overwrite rule into code. |
-| Wallet | Practice session only | A real NEAR wallet is a later adapter behind the same session shape. This page does not open one. |
-| Dev network | `mock` | Practice data in the browser. |
+| Page | Vite and TypeScript in `web/` | A small local server and one language for the first board. |
+| Shared checks | TypeScript in `shared/` | The same bounds, palette, and overwrite checks run in Node tests and in the page. |
+| Game contract | Rust and `near-sdk` in `contracts/board` | Open-wall `draw` with sparse pixel storage. Local tests only so far. Do not deploy until an explicit review. |
+| Design note | `contract/DESIGN.md` | Longer-term shape and storage notes. |
+| Wallet | `@hot-labs/near-connect` on **testnet** | Connect and disconnect work. A draw is only sent after a contract account is configured. |
+| Board picture today | Local empty mock until a contract id is set | Not chain state until reads are wired to a deployment. |
 | Public rehearsal | testnet, later | Required by the pack before any mainnet use. |
 | Intended public network | mainnet | Supplied context. Nothing here is deployed there. |
 
-## Design assumptions used by the mock
-
-These are provisional so the page can render. They are easy to change before a contract exists. They are not the overwrite rule.
+## Design assumptions
 
 - The wall is 128 by 128 cells.
 - Column 0 is the left edge. Row 0 is the top edge. Numbers increase to the right and downward.
-- Colors are palette indices 0 through 7, named in `shared/palette.ts`. The contract would store the index. The hex value is for the browser.
+- Colors are palette indices 0 through 7, named in `shared/palette.ts` and `shared/board.json`. The contract stores the index. The hex value is for the browser.
+- Palette index 0 is **Ink**, a real paint color. An unpainted cell is the absence of a record, not color 0.
 - An empty cell has no stored record.
-- The page shows the latest artist as credit, not as legal ownership of the picture.
-- Gas sponsorship is off. The type in `shared/types.ts` allows only `false`.
-- The ordinary path, later, is a normal wallet transaction. The player may still pay network gas. The game adds no fee.
+- The latest successful writer is shown as credit (current artist), not as legal ownership of the picture.
+- Gas sponsorship is off.
+- The ordinary path is a normal wallet transaction. The player may still pay network gas. The game adds no fee.
 - One drawing action paints one cell with one palette color.
 
-## Open: who may overwrite a pixel
+## Accepted: who may overwrite a pixel
 
-The product owner has not decided. Do not encode a rule in the contract or in the page's success path.
-
-Three options:
-
-### 1. Open wall
+**Status: accepted — Open wall** (`overwrite_rule: "open_wall"`).
 
 Any connected account may paint any cell, including a cell someone else painted. The latest successful writer is the current artist. The same account may recolor their cell.
 
-- Fits a public graffiti wall and is the smallest rule to explain and test.
-- Vandalism is easy. A person can cover the whole wall.
-- A later tenure interval would end when a different account successfully writes.
+Known tradeoff: vandalism is easy; someone can cover the whole wall. That risk is accepted for the smallest Sunday loop and must be stated in the rules panel.
 
-### 2. First claim sticks
+Rejected for now:
 
-The first successful writer is the only account who may change that cell. Nobody else can overwrite it. The owner may recolor.
+- **First claim sticks** — can permanently freeze the wall.
+- **Claim with expiry** — too many clock details for this milestone.
 
-- Easy to say: "you keep what you claim."
-- The wall can fill up and freeze. A griefer can claim every cell and leave it.
-- Needs a later takeover or expiry rule, or the board stops being a shared wall.
+### Ride-along choices (accepted with Open wall)
 
-### 3. Claim with expiry
-
-The writer controls the cell until a time limit. After expiry, another account may claim it. The owner may recolor during the window.
-
-- Leaves room for new painters without letting every passersby overwrite live work.
-- Too many details for a first Sunday loop: how long is the window, does recolor reset it, whose clock (use the block timestamp), and what the page says while a claim is active.
-
-**Recommendation, not a decision.** If the goal is the smallest Sunday loop, pick option 1 and say the vandalism risk in the rules panel. If keeping a painting matters more than shipping the loop, pick option 3 and expect a longer contract. Option 2 feels like ownership and can permanently lock the wall.
-
-This scaffold follows none of the three. `reasonDrawIsBlocked` returns `OWNERSHIP_RULE_UNRESOLVED` for a valid cell, and the page does not ask a wallet to sign.
-
-### Choices that ride along with the rule
-
-Answer these in the same decision, or the contract and the page will guess differently:
-
-- May the current artist recolor? Recommendation: yes, under every option above.
-- What does the stored time mean? Recommendation for the MVP: time of the latest successful write. Do not also store a tenure start unless a tenure display is requested.
-- Same-artist recolor and a future tenure clock: the pack's later idea is that a recolor by the same artist does not restart that clock. Do not implement the clock now.
-- What ends a claim? Option 1: another account's successful write. Option 2: nothing, unless you add a new rule. Option 3: the expiry time, or a successful claim after expiry.
+- Current artist may recolor: **yes**.
+- Stored time: **block time of the latest successful write** (`written_at_ns` / `last_write_timestamp_ns`). No separate tenure-start field.
+- Tenure / reward clock: **not implemented**. Do not add payout logic.
+- What ends a claim under Open wall: **another account’s successful write** (or the same account’s recolor, which updates artist credit and timestamp).
 
 ## Tenure and payments
 
-No token payout, no points payout, and no tenure score in this scaffold. A later tenure experiment has to define the interval start, the interval end, recolor behavior, per-pixel and per-account and season caps, the reward asset, and the funding source before any payout code.
+No token payout, no points payout, and no tenure score in this scaffold.
 
 Supplied context, not checked against chain state, and not used by this code:
 
@@ -88,43 +66,47 @@ Supplied context, not checked against chain state, and not used by this code:
 
 Those identifiers are not the game contract. Do not point the pixel contract at the token account.
 
-## Proposed interface
+## Interface (accepted for Open wall)
 
-TypeScript shapes live in `shared/types.ts`. A future Rust contract should match this behavior.
+TypeScript shapes live in `shared/types.ts`. The Rust contract in `contracts/board` implements the first version.
 
 Reads:
 
-- `get_metadata()` → width, height, palette size, network, contract id or none, `sponsorshipEnabled: false`, `overwritePolicy`
-- `get_pixel(x, y)` → `PixelView`, with nulls when the cell has never been successfully written
-- `get_pixels` → painted cells only, paged if needed
+- `get_board()` → width, height, origin, `overwrite_rule: "open_wall"`, sponsorship false, palette, schema version
+- `get_pixel(x, y)` → color / artist / written time, or nulls when never written
 
 Write:
 
-- `draw({ x, y, colorIndex })` → a `DrawResult`
-- `rejected` means nothing was submitted
-- `pending` means a transaction exists and is not confirmed yet
-- `success` is allowed only after the transaction result is observed, followed by a fresh read
-- `failed` means a transaction was observed and did not succeed, or the receipt failed
+- `draw(x, y, color)` → signed change method; any predecessor may write any in-range cell with a valid palette index
 
-Example future arguments:
+Page-side `DrawResult` statuses after a real submit path exists:
+
+- `rejected` — client checks failed; nothing submitted
+- `pending` — transaction exists and is not confirmed yet
+- `success` — only after an observed transaction result and a fresh read
+- `failed` — transaction observed and did not succeed
+
+Example arguments:
 
 ```json
-{ "x": 3, "y": 4, "color_index": 2 }
+{ "x": 3, "y": 4, "color": 2 }
 ```
 
-Example of a cell after a real success (not produced by this scaffold):
+(`color` is the palette index. The page types may still say `colorIndex`.)
+
+Example cell after a real success:
 
 ```json
 {
   "x": 3,
   "y": 4,
-  "color_index": 2,
-  "artist_account_id": "alice.testnet",
-  "last_write_timestamp_ns": "1700000000000000000"
+  "color": 2,
+  "artist": "alice.testnet",
+  "written_at_ns": 1700000000000000000
 }
 ```
 
-`getPixelHistory` is deferred. The current artist and last write time are enough for the first demo.
+`get_pixels` / history paging is deferred.
 
 There is no payment method and no sponsor method.
 
@@ -132,19 +114,19 @@ There is no payment method and no sponsor method.
 
 | Path | Who may edit | Note |
 |---|---|---|
-| `docs/00-shared-decisions.md` | Coordinator | Accept the overwrite rule here before coding it |
-| `docs/threat-sketch.md` | Coordinator | Update when a rule or a sponsor design appears |
+| `docs/00-shared-decisions.md` | Coordinator | Overwrite rule is accepted; further product changes land here first |
+| `docs/threat-sketch.md` | Coordinator | Update when sponsor design appears |
 | `shared/**` | Coordinator | Agents propose changes; they do not edit this in parallel |
-| `contract/**` | Contract agent | After the rule is accepted. `DESIGN.md` is the proposal |
-| `frontend/**` | Frontend agent | After the interface is accepted. Today it is a mock |
-| `docs/research/**` | Chain-abstraction agent | Not created. Memo only, no MVP code |
+| `contracts/board/**` | Contract agent | Open-wall implementation; local tests; no silent mainnet deploy |
+| `contract/DESIGN.md` | Contract agent / coordinator | Broader design notes |
+| `web/**` | Frontend agent | Wire reads/writes to a configured contract; no fake success |
+| `docs/research/**` | Chain-abstraction agent | Memo only, no MVP code |
 | `01`–`09` markdown pack | Coordinator | Leave the briefs intact |
 
-## Definition of done for this foundation
+## Definition of done for this decision
 
-- The overwrite choice is written down as open, with options and a recommendation.
-- The page can show the wall, a palette, a practice session, and a blocked draw with a readable reason.
-- Local tests cover bounds, palette, the unresolved rule, a disconnected session, and a network mismatch.
-- No transaction is sent. Sponsorship stays off. No token code.
-
-The Sunday loop (a real wallet and a confirmed on-chain paint) starts after the overwrite rule is accepted.
+- Open wall is written as accepted, with ride-along choices.
+- `shared/board.json`, TypeScript, the page rules text, and the contract all say `open_wall`.
+- Contract unit tests cover first paint, overwrite by another account, recolor, and rejects for bad coordinates/colors.
+- The page still does not claim a chain success without a configured contract and an observed transaction.
+- Sponsorship stays off. No token code. No deploy in this step.

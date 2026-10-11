@@ -1,9 +1,7 @@
 /**
- * Proposed seam between the page and a future NEAR game contract.
+ * Seam between the page and the NEAR game contract.
  *
- * Status: proposed, not accepted. The product owner has not chosen who may
- * overwrite a pixel, so this file allows only the "unresolved" policy.
- * A later change to that policy belongs in docs/00-shared-decisions.md first.
+ * Overwrite policy: Open wall (accepted in docs/00-shared-decisions.md).
  */
 
 /** How wide the wall is, in pixels. Column 0 is the left edge. */
@@ -27,12 +25,12 @@ export const NETWORK_LABEL: Record<NetworkId, string> = {
 
 /**
  * Who is allowed to paint over a pixel.
- * Only "unresolved" exists until the product owner chooses.
- * Keeping it a one-value type means the program cannot quietly pick a rule.
+ * `open_wall` is the accepted product rule.
+ * `unresolved` remains only so old blockers can still be named in tests.
  */
-export type OverwritePolicy = "unresolved";
+export type OverwritePolicy = "open_wall" | "unresolved";
 
-/** One named paint color. The contract would store `index`, not the hex. */
+/** One named paint color. The contract stores `index`, not the hex. */
 export interface PaletteColor {
   index: number;
   name: string;
@@ -45,7 +43,7 @@ export interface PixelView {
   x: number;
   y: number;
   colorIndex: number | null;
-  /** Latest successful writer. This is credit on the wall, not legal ownership of art. */
+  /** Latest successful writer. Credit on the wall, not legal ownership of art. */
   artistAccountId: string | null;
   /**
    * NEAR block time in nanoseconds, as digits in a string.
@@ -81,7 +79,8 @@ export type DrawErrorCode =
   | "COLOR_OUT_OF_RANGE"
   | "OWNERSHIP_RULE_UNRESOLVED"
   | "WALLET_NOT_CONNECTED"
-  | "NETWORK_MISMATCH";
+  | "NETWORK_MISMATCH"
+  | "CONTRACT_NOT_CONFIGURED";
 
 /** A problem explained in a sentence a visitor can read. */
 export interface DrawError {
@@ -90,8 +89,8 @@ export interface DrawError {
 }
 
 /**
- * Future results of a real draw. This scaffold never builds a "success"
- * result, because success requires an observed transaction.
+ * Results of a draw attempt. `success` requires an observed transaction
+ * and a fresh board read. Do not invent a success in the browser alone.
  */
 export type DrawResult =
   | { status: "rejected"; error: DrawError; transactionId: null }

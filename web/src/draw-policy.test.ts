@@ -33,12 +33,23 @@ describe("prepareDraw", () => {
     );
   });
 
-  it("does not send a transaction for a complete, legal selection", () => {
+  it("requires a wallet under open wall", () => {
+    const result = prepareDraw({
+      ...base,
+      connected: false,
+      accountId: null,
+      x: 0,
+      y: 0,
+      color: 0,
+    });
+    expect(result.code).toBe("WalletNotConnected");
+  });
+
+  it("does not fake a transaction when the contract id is empty", () => {
     const result = prepareDraw({ ...base, x: 0, y: 0, color: 0 });
     expect(result.outcome).toBe("blocked");
-    expect(result.code).toBe("OverwriteRuleNotChosen");
+    expect(result.code).toBe("ContractNotConfigured");
     expect(result.transactionHash).toBeNull();
-    expect(result.explorerUrl).toBeNull();
-    expect(result.message).toMatch(/no transaction was sent/i);
+    expect(result.message).toMatch(/Open wall/i);
   });
 });

@@ -1,16 +1,14 @@
 # Game contract design note
 
-Status: proposal only. There is no Rust crate and no compiled contract in this repository.
+Status: Open wall is **accepted** in `docs/00-shared-decisions.md`. The live implementation is `contracts/board` (schema version 1). It must not be deployed until an explicit review.
 
-The overwrite rule is unresolved. Encoding `draw` before that choice would freeze a product decision into code. This note is the shape the contract agent should implement after the product owner picks a rule in `docs/00-shared-decisions.md`.
+This note keeps the longer-term design context (storage costs, future paging, pause questions).
 
 ## Language choice
 
-Use Rust and the official NEAR SDK (`near-sdk`) when implementation starts.
+Use Rust and the official NEAR SDK (`near-sdk`).
 
-NEAR contracts are small programs compiled to WebAssembly. Rust is the usual way to write them, and this computer already has `cargo` and `rustc`. The page is TypeScript, so the shared checks in `shared/` are the browser's copy of the rules. The contract must repeat those checks. The browser cannot be trusted: anyone can skip the page and call the contract.
-
-The crate is not created yet, so there is no method that accidentally allows or denies overwrites.
+NEAR contracts are small programs compiled to WebAssembly. Rust is the usual way to write them. The page is TypeScript, so the shared checks in `shared/` are the browser's copy of the rules. The contract must repeat those checks. The browser cannot be trusted: anyone can skip the page and call the contract.
 
 ## What one pixel means
 
@@ -18,14 +16,26 @@ A pixel is one cell on a 128 by 128 wall.
 
 - Column `x` starts at 0 on the left and ends at 127.
 - Row `y` starts at 0 on the top and ends at 127.
-- A color is a palette index from 0 through 7, matching `shared/palette.ts`.
+- A color is a palette index from 0 through 7, matching `shared/palette.ts` and `shared/board.json`.
+- Palette index 0 is Ink. An unpainted cell is not color 0; it is the absence of a record.
 - The account that last succeeded at writing the pixel is the current artist. That is credit on the wall. It is not a claim of legal ownership or copyright.
 
 Empty cells are the absence of a record. The contract should not create 16,384 pixel records at deployment. A read of a missing cell returns "empty": no color, no artist, no write time.
 
-## Suggested state
+## Implemented today (`contracts/board`)
 
-After the rule is chosen, a painted pixel can store:
+| Method | Kind | Behavior |
+|---|---|---|
+| `new` | init | Empty board, schema 1 |
+| `get_board` | view | Width, height, origin, `overwrite_rule: "open_wall"`, sponsorship false, palette |
+| `get_pixel` | view | Painted cell or empty nulls; out-of-range panics |
+| `draw` | call | Any predecessor may write any in-range cell with a valid color |
+
+Local check: `cargo test` inside `contracts/board`.
+
+## Stored state for a painted cell
+
+A painted pixel can store:
 
 | Field | Plain meaning |
 |---|---|
@@ -38,13 +48,13 @@ Do not store a tenure balance, a points balance, or a token amount.
 
 `env::block_timestamp()` is the clock to use. It is the block time, not the player's computer clock.
 
-## Suggested methods
+## Suggested methods after the rule is chosen
 
 Names can be adjusted to the SDK's style. The behavior should stay this small.
 
 | Method | Kind | Behavior |
 |---|---|---|
-| `get_metadata` | view (free read) | Width, height, palette size, policy name, sponsorship flag (false) |
+| `get_board` / `get_metadata` | view (free read) | Width, height, palette, policy name, sponsorship flag (false) |
 | `get_pixel` | view | One cell, or an explicit empty result |
 | `get_pixels` | view | Painted cells only, paged if a full list gets large |
 | `draw` | call (signed transaction) | One cell and one palette index, after the agreed rule |
@@ -61,7 +71,7 @@ The page may refresh by calling `get_pixel` after the transaction succeeds. The 
 
 ## What `draw` must reject
 
-- `x` or `y` outside 0..127, including values that are not integers
+- `x` or `y` outside 0..127
 - `color_index` outside 0..7
 - A caller who is not allowed by the chosen overwrite rule
 - Anything other than one cell per call
@@ -85,7 +95,7 @@ Once a rule exists, test at least:
 - First paint on an empty cell
 - A second paint that the rule allows
 - A second paint that the rule rejects
-- Column 128, row -1, and color 8
+- Column 128 and color 8
 - The stored artist and timestamp match the event
 - A call does not mint, transfer, or require MPOO or extra NEAR
 
