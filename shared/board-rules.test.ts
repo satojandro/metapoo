@@ -16,7 +16,7 @@ test("board.json matches the TypeScript board size, palette, and open_wall rule"
   const path = fileURLToPath(new URL("./board.json", import.meta.url));
   const board = JSON.parse(readFileSync(path, "utf8"));
 
-  assert.equal(board.schema_version, 1);
+  assert.equal(board.schema_version, 2);
   assert.equal(board.width, BOARD_WIDTH);
   assert.equal(board.height, BOARD_HEIGHT);
   assert.equal(board.origin, "top-left");

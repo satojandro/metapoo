@@ -3,11 +3,8 @@ import type { PixelView } from "@shared/types.ts";
 /**
  * Sparse in-memory picture of painted cells.
  *
- * The contract does not ship a "get every pixel" method yet, so the page
- * cannot download the whole wall in one shot. We keep cells we have actually
- * read (after a successful draw, or when the user selects a square).
- *
- * Important: clicking never writes here. Only a confirmed chain read does.
+ * On open (and on refresh), the page fills this from paginated `get_pixels`
+ * reads. Clicks never write here — only authoritative chain reads do.
  */
 
 export type PixelCache = Map<string, PixelView>;
@@ -28,6 +25,18 @@ export function rememberPixel(cache: PixelCache, pixel: PixelView): void {
     return;
   }
   cache.set(key, pixel);
+}
+
+/**
+ * Replace the whole cache from a full `get_pixels` walk.
+ * Cleared first so cells that were wiped on chain (if that ever happens)
+ * do not linger locally. Today the contract only overwrites, never deletes.
+ */
+export function replaceCache(cache: PixelCache, pixels: readonly PixelView[]): void {
+  cache.clear();
+  for (const pixel of pixels) {
+    rememberPixel(cache, pixel);
+  }
 }
 
 export function getCachedPixel(

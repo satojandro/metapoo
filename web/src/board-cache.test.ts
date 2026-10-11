@@ -4,6 +4,7 @@ import {
   getCachedPixel,
   paintedPixels,
   rememberPixel,
+  replaceCache,
 } from "./board-cache";
 
 describe("board-cache", () => {
@@ -28,5 +29,27 @@ describe("board-cache", () => {
     });
     expect(getCachedPixel(cache, 1, 2)).toBeUndefined();
     expect(paintedPixels(cache)).toHaveLength(0);
+  });
+
+  it("replaceCache rebuilds from a full get_pixels walk", () => {
+    const cache = createPixelCache();
+    rememberPixel(cache, {
+      x: 0,
+      y: 0,
+      colorIndex: 1,
+      artistAccountId: "old.testnet",
+      lastWriteTimestampNs: "1",
+    });
+    replaceCache(cache, [
+      {
+        x: 3,
+        y: 4,
+        colorIndex: 2,
+        artistAccountId: "alice.testnet",
+        lastWriteTimestampNs: "2",
+      },
+    ]);
+    expect(getCachedPixel(cache, 0, 0)).toBeUndefined();
+    expect(getCachedPixel(cache, 3, 4)?.artistAccountId).toBe("alice.testnet");
   });
 });

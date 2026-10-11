@@ -1,5 +1,6 @@
-import type { PixelView } from "@shared/types.ts";
+import type { PixelView, PixelsPageView } from "@shared/types.ts";
 import { CONTRACT_ID, RPC_URL } from "./config";
+import { loadAllPaintedPixels } from "./load-board";
 
 /**
  * Talks to the game contract with free "view" calls (reads) over JSON-RPC.
@@ -8,6 +9,9 @@ import { CONTRACT_ID, RPC_URL } from "./config";
  * or one pixel. Change methods like `draw` go through the wallet instead
  * (see `submit-draw.ts`).
  */
+
+/** Default page size for `get_pixels`. The contract clamps at 256. */
+export const PIXELS_PAGE_LIMIT = 256;
 
 /** Raw JSON shape returned by the Rust contract's `get_board`. */
 export interface ChainBoardView {
@@ -33,6 +37,24 @@ export interface ChainPixelView {
   written_at_ns: number | string | null;
 }
 
+/** One painted cell from `get_pixels` (color/artist are always present). */
+export interface ChainPaintedPixelView {
+  x: number;
+  y: number;
+  color: number;
+  artist: string;
+  written_at_ns: number | string;
+}
+
+/** Raw JSON page from `get_pixels`. */
+export interface ChainPixelsPage {
+  pixels: ChainPaintedPixelView[];
+  from_index: number;
+  limit: number;
+  total: number;
+  next_from_index: number | null;
+}
+
 export function isContractConfigured(): boolean {
   return CONTRACT_ID.length > 0;
 }
@@ -51,6 +73,27 @@ export function mapChainPixel(raw: ChainPixelView): PixelView {
       raw.written_at_ns === null || raw.written_at_ns === undefined
         ? null
         : String(raw.written_at_ns),
+  };
+}
+
+/** Map a painted cell from `get_pixels` (non-null fields on chain). */
+export function mapPaintedPixel(raw: ChainPaintedPixelView): PixelView {
+  return {
+    x: raw.x,
+    y: raw.y,
+    colorIndex: raw.color,
+    artistAccountId: raw.artist,
+    lastWriteTimestampNs: String(raw.written_at_ns),
+  };
+}
+
+export function mapPixelsPage(raw: ChainPixelsPage): PixelsPageView {
+  return {
+    pixels: raw.pixels.map(mapPaintedPixel),
+    fromIndex: raw.from_index,
+    limit: raw.limit,
+    total: raw.total,
+    nextFromIndex: raw.next_from_index,
   };
 }
 
@@ -135,6 +178,27 @@ export async function getBoard(): Promise<ChainBoardView> {
 export async function getPixel(x: number, y: number): Promise<PixelView> {
   const raw = await viewFunction<ChainPixelView>("get_pixel", { x, y });
   return mapChainPixel(raw);
+}
+
+export async function getPixelsPage(
+  fromIndex: number,
+  limit: number = PIXELS_PAGE_LIMIT,
+): Promise<PixelsPageView> {
+  const raw = await viewFunction<ChainPixelsPage>("get_pixels", {
+    from_index: fromIndex,
+    limit,
+  });
+  return mapPixelsPage(raw);
+}
+
+/** Download every painted cell by following `next_from_index` until null. */
+export async function fetchAllPaintedPixels(
+  pageLimit: number = PIXELS_PAGE_LIMIT,
+): Promise<PixelView[]> {
+  return loadAllPaintedPixels(
+    (fromIndex, limit) => getPixelsPage(fromIndex, limit),
+    pageLimit,
+  );
 }
 
 /**

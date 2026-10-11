@@ -16,9 +16,12 @@ This note is for agent **06**. The Open wall rule is already accepted. Do not in
 | `new` | init (deploy only) | none | empty board |
 | `get_board` | view | none | board metadata + palette |
 | `get_pixel` | view | `{"x":3,"y":4}` | one cell |
+| `get_pixels` | view | `{"from_index":0,"limit":256}` | one page of currently painted cells |
 | `draw` | call (signed) | `{"x":3,"y":4,"color":2}` | stores cell; panics on bad args |
 
 Argument name on chain is `color` (palette index 0–7), not `color_index`.
+
+`get_pixels` returns each currently painted cell **exactly once**, with the latest color and artist after overwrites. Unpainted cells are omitted. `limit` is clamped to 256. Follow `next_from_index` until it is `null`. Schema version is **2** (iterable sparse storage).
 
 ## Example: read board (view)
 
@@ -35,7 +38,7 @@ Example shape (fields may appear in any order):
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "width": 128,
   "height": 128,
   "origin": "top-left",
@@ -85,6 +88,37 @@ Map into page types (`shared/types.ts`) roughly as:
 - `color` → `colorIndex`
 - `artist` → `artistAccountId`
 - `written_at_ns` → `lastWriteTimestampNs` **as a string** (JS numbers are not safe for every nanosecond value)
+
+## Example: page painted cells (view)
+
+```bash
+near contract call-function as-read-only BOARD_CONTRACT.testnet get_pixels \
+  json-args '{"from_index":0,"limit":256}' \
+  network-config testnet \
+  now
+```
+
+Example shape:
+
+```json
+{
+  "pixels": [
+    {
+      "x": 3,
+      "y": 4,
+      "color": 2,
+      "artist": "alice.testnet",
+      "written_at_ns": 1700000000000000000
+    }
+  ],
+  "from_index": 0,
+  "limit": 256,
+  "total": 1,
+  "next_from_index": null
+}
+```
+
+The page should call this on open and on Refresh, walking pages until `next_from_index` is null. Do not invent cells from clicks.
 
 ## Example: draw (change / signed)
 

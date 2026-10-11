@@ -17,7 +17,7 @@ The repository began with the agent pack (`README.md` and `01` through `09`) and
 | Game contract | Rust and `near-sdk` in `contracts/board` | Open-wall `draw` with sparse pixel storage. Local tests only so far. Do not deploy until an explicit review. |
 | Design note | `contract/DESIGN.md` | Longer-term shape and storage notes. |
 | Wallet | `@hot-labs/near-connect` on **testnet** | Connect and disconnect work. A draw is only sent after a contract account is configured. |
-| Board picture today | Local empty mock until a contract id is set | Not chain state until reads are wired to a deployment. |
+| Board picture today | Paginated `get_pixels` when `VITE_CONTRACT_ID` is set; empty mock otherwise | Refresh reloads every painted cell. |
 | Public rehearsal | testnet, later | Required by the pack before any mainnet use. |
 | Intended public network | mainnet | Supplied context. Nothing here is deployed there. |
 
@@ -74,6 +74,7 @@ Reads:
 
 - `get_board()` → width, height, origin, `overwrite_rule: "open_wall"`, sponsorship false, palette, schema version
 - `get_pixel(x, y)` → color / artist / written time, or nulls when never written
+- `get_pixels(from_index, limit)` → one page of currently painted cells (latest color/artist after overwrites; each cell at most once). Cap `limit` on chain. Call again with `next_from_index` until null.
 
 Write:
 
@@ -106,7 +107,7 @@ Example cell after a real success:
 }
 ```
 
-`get_pixels` / history paging is deferred.
+History paging (past colors / past artists) is still deferred. `get_pixels` only returns the current painted set.
 
 There is no payment method and no sponsor method.
 

@@ -5,12 +5,13 @@
 //! - describes a 128 by 128 board and an 8-color palette
 //! - stores only painted cells (sparse storage)
 //! - lets any caller paint any in-range cell (Open wall)
+//! - pages every currently painted cell for readers (`get_pixels`)
 //!
 //! `shared/board.json` must stay in sync with the constants below.
 //! Do not deploy until an explicit review. Local `cargo test` is not a
 //! testnet or mainnet result.
 
-use near_sdk::store::LookupMap;
+use near_sdk::store::IterableMap;
 use near_sdk::{env, near, AccountId, PanicOnDefault};
 
 /// Board width in pixels. Coordinate x must be 0 through 127.
@@ -21,8 +22,10 @@ const HEIGHT: u32 = 128;
 const ORIGIN: &str = "top-left";
 /// Accepted product rule: any account may paint any cell.
 const OVERWRITE_RULE: &str = "open_wall";
-/// Schema 1 means Open wall storage is live in this crate.
-const SCHEMA_VERSION: u32 = 1;
+/// Schema 2 adds iterable sparse storage and paginated `get_pixels`.
+const SCHEMA_VERSION: u32 = 2;
+/// Hard cap so one view call cannot try to return the whole wall at once.
+const MAX_PIXELS_PAGE: u32 = 256;
 
 /// Index 0 is Ink, a real paint color. An unpainted square is not index 0.
 /// Names and hex values match `shared/palette.ts`. Change both together.
@@ -70,6 +73,31 @@ pub struct PixelView {
     pub written_at_ns: Option<u64>,
 }
 
+/// One currently painted cell. Only cells with a stored record appear here.
+/// After an overwrite, this is the latest color and artist (still one entry).
+#[near(serializers = [json])]
+pub struct PaintedPixelView {
+    pub x: u32,
+    pub y: u32,
+    pub color: u32,
+    pub artist: String,
+    pub written_at_ns: u64,
+}
+
+/// One page of painted pixels from `get_pixels`.
+#[near(serializers = [json])]
+pub struct PixelsPage {
+    pub pixels: Vec<PaintedPixelView>,
+    /// Index into the painted-cell list where this page started.
+    pub from_index: u32,
+    /// Limit after clamping to `MAX_PIXELS_PAGE`.
+    pub limit: u32,
+    /// How many painted cells exist right now (not board width×height).
+    pub total: u32,
+    /// Next `from_index` to request, or `None` when this page finished the list.
+    pub next_from_index: Option<u32>,
+}
+
 /// One painted cell in contract storage.
 #[near(serializers = [borsh])]
 pub struct PixelRecord {
@@ -82,12 +110,15 @@ pub struct PixelRecord {
 ///
 /// Empty pixels are not saved one by one. Saving all 16,384 squares up front
 /// would spend storage before anyone paints.
+///
+/// `IterableMap` (not `LookupMap`) keeps keys so `get_pixels` can walk every
+/// painted cell exactly once.
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Board {
     schema_version: u32,
     /// Key is `y * WIDTH + x`. Only painted cells appear here.
-    pixels: LookupMap<u32, PixelRecord>,
+    pixels: IterableMap<u32, PixelRecord>,
 }
 
 #[near]
@@ -97,7 +128,7 @@ impl Board {
     pub fn new() -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
-            pixels: LookupMap::new(b"p"),
+            pixels: IterableMap::new(b"p"),
         }
     }
 
@@ -142,6 +173,52 @@ impl Board {
                 artist: None,
                 written_at_ns: None,
             },
+        }
+    }
+
+    /// Page through every currently painted cell exactly once.
+    ///
+    /// Overwrites replace the same map entry, so a cell never appears twice
+    /// and the listed color/artist are always the latest successful write.
+    /// Unpainted cells are omitted (they have no storage record).
+    ///
+    /// Call again with `next_from_index` until it is `null`.
+    pub fn get_pixels(&self, from_index: u32, limit: u32) -> PixelsPage {
+        let total = self.pixels.len() as u32;
+        let limit = limit.min(MAX_PIXELS_PAGE);
+
+        let mut pixels = Vec::new();
+        for (key, record) in self
+            .pixels
+            .iter()
+            .skip(from_index as usize)
+            .take(limit as usize)
+        {
+            let key = *key;
+            let x = key % WIDTH;
+            let y = key / WIDTH;
+            pixels.push(PaintedPixelView {
+                x,
+                y,
+                color: record.color,
+                artist: record.artist.to_string(),
+                written_at_ns: record.written_at_ns,
+            });
+        }
+
+        let consumed = from_index.saturating_add(pixels.len() as u32);
+        let next_from_index = if consumed < total {
+            Some(consumed)
+        } else {
+            None
+        };
+
+        PixelsPage {
+            pixels,
+            from_index,
+            limit,
+            total,
+            next_from_index,
         }
     }
 
@@ -204,6 +281,7 @@ mod tests {
     use super::*;
     use near_sdk::test_utils::{accounts, VMContextBuilder};
     use near_sdk::{testing_env, AccountId};
+    use std::collections::HashSet;
 
     fn context(predecessor: AccountId, block_timestamp: u64) {
         let context = VMContextBuilder::new()
@@ -222,7 +300,7 @@ mod tests {
     fn board_view_matches_the_shared_description() {
         let board = setup();
         let view = board.get_board();
-        assert_eq!(view.schema_version, 1);
+        assert_eq!(view.schema_version, 2);
         assert_eq!(view.width, 128);
         assert_eq!(view.height, 128);
         assert_eq!(view.origin, "top-left");
@@ -324,5 +402,105 @@ mod tests {
         board.draw(10, 10, 3);
         assert!(board.get_pixel(10, 11).color.is_none());
         assert!(board.get_pixel(11, 10).color.is_none());
+    }
+
+    #[test]
+    fn get_pixels_is_empty_on_a_fresh_board() {
+        let board = setup();
+        let page = board.get_pixels(0, 10);
+        assert_eq!(page.total, 0);
+        assert!(page.pixels.is_empty());
+        assert!(page.next_from_index.is_none());
+    }
+
+    #[test]
+    fn get_pixels_returns_each_painted_cell_exactly_once_after_overwrite() {
+        let mut board = setup();
+        board.draw(3, 4, 2);
+        board.draw(5, 6, 1);
+        context(accounts(1), 2_000);
+        board.draw(3, 4, 5);
+
+        let page = board.get_pixels(0, 256);
+        assert_eq!(page.total, 2);
+        assert_eq!(page.pixels.len(), 2);
+        assert!(page.next_from_index.is_none());
+
+        let keys: HashSet<(u32, u32)> = page.pixels.iter().map(|p| (p.x, p.y)).collect();
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&(3, 4)));
+        assert!(keys.contains(&(5, 6)));
+
+        let overwritten = page
+            .pixels
+            .iter()
+            .find(|p| p.x == 3 && p.y == 4)
+            .expect("overwritten cell");
+        assert_eq!(overwritten.color, 5);
+        assert_eq!(overwritten.artist, accounts(1).as_str());
+        assert_eq!(overwritten.written_at_ns, 2_000);
+    }
+
+    #[test]
+    fn get_pixels_pages_without_duplicates_across_pages() {
+        let mut board = setup();
+        for i in 0..5 {
+            board.draw(i, 0, 2);
+        }
+
+        let first = board.get_pixels(0, 2);
+        assert_eq!(first.pixels.len(), 2);
+        assert_eq!(first.total, 5);
+        assert_eq!(first.next_from_index, Some(2));
+
+        let second = board.get_pixels(first.next_from_index.unwrap(), 2);
+        assert_eq!(second.pixels.len(), 2);
+        assert_eq!(second.next_from_index, Some(4));
+
+        let third = board.get_pixels(second.next_from_index.unwrap(), 2);
+        assert_eq!(third.pixels.len(), 1);
+        assert!(third.next_from_index.is_none());
+
+        let mut seen = HashSet::new();
+        for page in [&first, &second, &third] {
+            for pixel in &page.pixels {
+                assert!(
+                    seen.insert((pixel.x, pixel.y)),
+                    "duplicate cell in paging"
+                );
+            }
+        }
+        assert_eq!(seen.len(), 5);
+    }
+
+    #[test]
+    fn second_client_sees_pixel_painted_by_first_via_get_pixels() {
+        // Client A (accounts(0)) paints.
+        let mut board = setup();
+        board.draw(3, 4, 2);
+
+        // Client B is a different account that only reads. Open wall does not
+        // require B to have painted; the wall is shared state.
+        context(accounts(1), 2_000);
+        let page = board.get_pixels(0, 10);
+        assert_eq!(page.total, 1);
+        assert_eq!(page.pixels.len(), 1);
+        assert_eq!(page.pixels[0].x, 3);
+        assert_eq!(page.pixels[0].y, 4);
+        assert_eq!(page.pixels[0].color, 2);
+        assert_eq!(page.pixels[0].artist, accounts(0).as_str());
+
+        let single = board.get_pixel(3, 4);
+        assert_eq!(single.color, Some(2));
+        assert_eq!(single.artist.as_deref(), Some(accounts(0).as_str()));
+    }
+
+    #[test]
+    fn get_pixels_clamps_limit_to_max_page() {
+        let mut board = setup();
+        board.draw(0, 0, 1);
+        let page = board.get_pixels(0, 10_000);
+        assert_eq!(page.limit, MAX_PIXELS_PAGE);
+        assert_eq!(page.pixels.len(), 1);
     }
 }

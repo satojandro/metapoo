@@ -1,6 +1,6 @@
 # Board contract (Open wall)
 
-Rust NEAR contract, schema version 1. Sparse 128×128 board, 8-color palette, Open wall `draw`.
+Rust NEAR contract, schema version 2. Sparse 128×128 board, 8-color palette, Open wall `draw`, paginated `get_pixels`.
 
 Local `cargo test` is not a testnet or mainnet result. Do not deploy to mainnet from this repo’s docs.
 
@@ -13,18 +13,20 @@ Local `cargo test` is not a testnet or mainnet result. Do not deploy to mainnet 
 
 ## Words that matter
 
-- A **view method** (`get_board`, `get_pixel`) reads data. It is not a transaction.
+- A **view method** (`get_board`, `get_pixel`, `get_pixels`) reads data. It is not a transaction.
 - A **change method** (`draw`) is what a wallet sends as a transaction.
 - **Open wall** means any predecessor may paint any cell. The latest writer is the current artist.
 - **Storage** holds only painted cells. Empty squares are missing records.
+- **`get_pixels`** pages that sparse set. Each painted cell appears once with its latest color and artist.
 
 ## Methods
 
 | Method | Kind | Behavior |
 |---|---|---|
-| `new` | init | Empty board, schema 1 |
+| `new` | init | Empty board, schema 2 |
 | `get_board` | view | Size, palette, `overwrite_rule: "open_wall"` |
 | `get_pixel` | view | One cell, or empty nulls |
+| `get_pixels` | view | Page of painted cells (`from_index`, `limit` ≤ 256) |
 | `draw` | call | Store color, predecessor as artist, block timestamp |
 
 ## Local checks
@@ -40,7 +42,7 @@ Host tests use the `unit-testing` feature of `near-sdk`. A real on-chain binary 
 | Deliverable | Status |
 |---|---|
 | Design note | Done (`DESIGN.md` + this folder) |
-| Implementation + focused tests | Done (local) |
+| Implementation + focused tests | Done (local), including `get_pixels` |
 | Example calls for frontend | Done (`FRONTEND_HANDOFF.md`) |
 | Storage/gas in plain language | Done (`STORAGE_AND_GAS.md`) |
 | Local/testnet deploy instructions | Done (`DEPLOY.md`) — not executed in-repo |
@@ -48,4 +50,4 @@ Host tests use the `unit-testing` feature of `near-sdk`. A real on-chain binary 
 
 ## Not in this crate
 
-No token transfers, fees, treasury, sponsor keys, admin pause, or pixel history paging.
+No token transfers, fees, treasury, sponsor keys, admin pause, or past-color history paging.

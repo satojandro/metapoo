@@ -45,7 +45,7 @@ Runnable pieces:
 - `shared/board.json` — board size, palette, and `overwrite_rule: "open_wall"`
 - `shared/` — TypeScript checks and types shared with the page
 - `contracts/board` — Rust contract: sparse pixels, Open wall `draw`, local unit tests
-- `web` — Vite page: read-only board without a wallet, connect/disconnect on testnet, palette + keyboard selection, `draw` via wallet when `VITE_CONTRACT_ID` is set, success only after tx id + `get_pixel`
+- `web` — Vite page: read-only board without a wallet, paginated `get_pixels` load/refresh, connect/disconnect on testnet, palette + keyboard selection, `draw` via wallet when `VITE_CONTRACT_ID` is set, success only after tx id + `get_pixel`
 
 ### Local checks
 

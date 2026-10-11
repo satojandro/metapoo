@@ -52,6 +52,19 @@ export interface PixelView {
   lastWriteTimestampNs: string | null;
 }
 
+/**
+ * One page from the contract `get_pixels` view (after mapping to page types).
+ * Only currently painted cells appear; overwrites keep a single latest entry.
+ */
+export interface PixelsPageView {
+  pixels: PixelView[];
+  fromIndex: number;
+  limit: number;
+  total: number;
+  /** Next `from_index` for the contract, or null when finished. */
+  nextFromIndex: number | null;
+}
+
 export interface BoardMetadata {
   width: number;
   height: number;

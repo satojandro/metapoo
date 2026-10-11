@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapChainPixel, pixelMatchesDraw } from "./contract";
+import { mapChainPixel, mapPixelsPage, pixelMatchesDraw } from "./contract";
 
 describe("mapChainPixel", () => {
   it("maps chain field names into page types and stringifies timestamps", () => {
@@ -45,5 +45,33 @@ describe("pixelMatchesDraw", () => {
     expect(pixelMatchesDraw(pixel, 3, 4, 2, "alice.testnet")).toBe(true);
     expect(pixelMatchesDraw(pixel, 3, 4, 2, "bob.testnet")).toBe(false);
     expect(pixelMatchesDraw(pixel, 3, 4, 1, "alice.testnet")).toBe(false);
+  });
+});
+
+describe("mapPixelsPage", () => {
+  it("maps snake_case page fields and painted cells", () => {
+    const page = mapPixelsPage({
+      pixels: [
+        {
+          x: 3,
+          y: 4,
+          color: 2,
+          artist: "alice.testnet",
+          written_at_ns: 1700000000000000000,
+        },
+      ],
+      from_index: 0,
+      limit: 256,
+      total: 1,
+      next_from_index: null,
+    });
+    expect(page.nextFromIndex).toBeNull();
+    expect(page.pixels[0]).toEqual({
+      x: 3,
+      y: 4,
+      colorIndex: 2,
+      artistAccountId: "alice.testnet",
+      lastWriteTimestampNs: "1700000000000000000",
+    });
   });
 });

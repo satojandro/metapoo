@@ -66,8 +66,8 @@ ordinary wallet path is used. `payment-provider.ts` is an unused stub.
 
 ## Known limitations
 
-- No `get_pixels` / full-board download yet. The picture is a sparse cache of
-  cells read after selection or after a confirmed draw.
+- Full-board load uses paginated `get_pixels` (max 256 cells per page). History
+  of past colors is not available — only the current painted set.
 - Without `VITE_CONTRACT_ID`, the board is a local empty mock (not chain state).
 - Gas sponsorship is not implemented.
 - No MPOO/NEAR checkout, balances, treasury, Intents, or rage quit.
@@ -100,7 +100,8 @@ Automated suite: `cd web && npm test` (**mock** / unit). Production build:
 | `src/main.ts` | Wires the page: selection, wallet, draw button, status strip |
 | `src/draw-policy.ts` | Client checks before any wallet prompt |
 | `src/submit-draw.ts` | Wallet prompt → pending → confirm with `get_pixel` |
-| `src/contract.ts` | Free RPC view calls (`get_board`, `get_pixel`) |
+| `src/contract.ts` | Free RPC view calls (`get_board`, `get_pixel`, `get_pixels`) |
+| `src/load-board.ts` | Walk every `get_pixels` page into one list |
 | `src/wallet.ts` | Connect / disconnect / `signAndSendDraw` |
 | `src/board-cache.ts` | Sparse painted cells from confirmed reads only |
 | `src/sponsorship.ts` | Feature flag + ordinary-wallet fallback |

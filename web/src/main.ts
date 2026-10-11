@@ -6,9 +6,15 @@ import {
   getCachedPixel,
   paintedPixels,
   rememberPixel,
+  replaceCache,
 } from "./board-cache";
 import { CONTRACT_ID, PAGE_NETWORK } from "./config";
-import { getBoard, getPixel, isContractConfigured } from "./contract";
+import {
+  fetchAllPaintedPixels,
+  getBoard,
+  getPixel,
+  isContractConfigured,
+} from "./contract";
 import { prepareDraw } from "./draw-policy";
 import { describeNetwork } from "./network";
 import { renderBoard } from "./render-board";
@@ -51,6 +57,8 @@ const sponsorNote = mustFind<HTMLElement>("#sponsor-note");
 const evidence = mustFind<HTMLElement>("#evidence");
 const flowState = mustFind<HTMLElement>("#flow-state");
 const lede = mustFind<HTMLElement>("#lede");
+const refreshButton = mustFind<HTMLButtonElement>("#refresh-board");
+const boardLoadStatus = mustFind<HTMLElement>("#board-load-status");
 
 const pixelCache = createPixelCache();
 
@@ -59,6 +67,7 @@ let selectedColor: number | null = null;
 let walletAccount: string | null = null;
 let walletNetwork: string | null = null;
 let drawInFlight = false;
+let boardLoadInFlight = false;
 /** High-level UI phase for the status strip. */
 let uiPhase:
   | "disconnected"
@@ -91,6 +100,15 @@ drawButton.addEventListener("click", () => {
 connectButton.addEventListener("click", () => {
   void onConnectClick();
 });
+
+refreshButton.addEventListener("click", () => {
+  void refreshBoardFromContract();
+});
+
+refreshButton.disabled = !isContractConfigured();
+refreshButton.title = isContractConfigured()
+  ? "Reload every painted cell from the contract"
+  : "Configure VITE_CONTRACT_ID to load chain state";
 
 canvas.addEventListener("click", (event) => {
   const rect = canvas.getBoundingClientRect();
@@ -155,20 +173,51 @@ async function bootstrapBoard(): Promise<void> {
   if (!isContractConfigured()) {
     evidence.textContent =
       "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
+    boardLoadStatus.textContent =
+      "Board load: mock only (no contract id). Refresh stays disabled.";
     return;
   }
 
-  evidence.textContent = `Evidence: reading contract ${CONTRACT_ID} on ${PAGE_NETWORK} via ${"RPC"}. Painted cells appear only after a successful get_pixel read — not when you click.`;
+  evidence.textContent = `Evidence: reading contract ${CONTRACT_ID} on ${PAGE_NETWORK}. Loading painted cells via paginated get_pixels…`;
   try {
     const board = await getBoard();
-    evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK}. Board ${board.width}×${board.height}, rule ${board.overwrite_rule}, sponsorship_enabled=${board.sponsorship_enabled}. Sparse cells load when you select them or after a confirmed draw.`;
     if (board.sponsorship_enabled && !sponsorship.flagEnabled) {
-      // Contract claimed sponsorship; page flag still controls what we advertise.
       sponsorNote.textContent = `${sponsorship.message} (Contract reported sponsorship_enabled=true; this page still does not offer a sponsored submit path.)`;
     }
+    evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK}. Board ${board.width}×${board.height}, rule ${board.overwrite_rule}, schema ${board.schema_version}, sponsorship_enabled=${board.sponsorship_enabled}.`;
+    await refreshBoardFromContract();
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown read error";
-    evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but get_board failed: ${detail}. You can still look at the local empty picture.`;
+    evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but the initial board read failed: ${detail}. You can still look at the local empty picture and try Refresh.`;
+    boardLoadStatus.textContent = `Board load failed: ${detail}`;
+  }
+}
+
+/**
+ * Replace the local picture from a full paginated walk of `get_pixels`.
+ * Safe to call without a wallet. Does not invent pixels from clicks.
+ */
+async function refreshBoardFromContract(): Promise<void> {
+  if (!isContractConfigured() || boardLoadInFlight) {
+    return;
+  }
+  boardLoadInFlight = true;
+  refreshButton.disabled = true;
+  boardLoadStatus.textContent = "Board load: fetching painted pages…";
+  try {
+    const pixels = await fetchAllPaintedPixels();
+    replaceCache(pixelCache, pixels);
+    render();
+    showSelection();
+    boardLoadStatus.textContent = `Board load: ${pixels.length} painted cell${
+      pixels.length === 1 ? "" : "s"
+    } from get_pixels. Open wall — latest writer is credit only.`;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown read error";
+    boardLoadStatus.textContent = `Board load failed: ${detail}`;
+  } finally {
+    boardLoadInFlight = false;
+    refreshButton.disabled = !isContractConfigured();
   }
 }
 
@@ -263,6 +312,8 @@ async function attemptDraw(): Promise<void> {
         submitResult.explorerUrl,
       );
       showSelection();
+      // Pull a fresh full page walk so this tab also sees anyone else's paints.
+      void refreshBoardFromContract();
       return;
     }
 
@@ -399,7 +450,7 @@ function fillRules(): void {
     "Overwrite rule: Open wall. Any connected account may paint any pixel, including one someone else painted. Vandalism is possible.",
     "The current artist is credit for the latest successful write. That is not a legal claim on the artwork.",
     isContractConfigured()
-      ? `Game contract: ${CONTRACT_ID} on ${PAGE_NETWORK}. Success requires a transaction id and a matching get_pixel read.`
+      ? `Game contract: ${CONTRACT_ID} on ${PAGE_NETWORK}. On open (and Refresh), the page loads every painted cell via paginated get_pixels. Success still requires a transaction id and a matching get_pixel read.`
       : "No game contract id is configured yet (VITE_CONTRACT_ID empty), so this page will not open a draw signature or claim a chain success.",
     sponsorship.flagEnabled
       ? "Sponsorship flag is on, but the submit path stays ordinary wallet until a sponsor service exists."
