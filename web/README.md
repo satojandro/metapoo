@@ -64,18 +64,24 @@ Sponsorship stays behind `VITE_SPONSORSHIP_ENABLED`. When off (default), the UI
 does not claim a sponsored or cross-chain flow. When on but unavailable, the
 ordinary wallet path is used. `payment-provider.ts` is an unused stub.
 
-## Board viewport (12 October 2026)
+## Board viewport and stall (12 October 2026)
 
-The wall sits in a stall frame with a zoomable viewport (`src/viewport.ts`):
+The shared board sits on the **back wall of a CSS 3D stall** (entrance viewpoint,
+side walls, toilet beneath). The editable surface stays flat for targeting.
+Zoomable camera: `src/viewport.ts`.
 
 - **Fit wall** shows the full 128×128 board.
 - **Paint zoom** targets ~20 screen pixels per cell for precise placement.
 - Drag to pan; scroll / pinch to zoom. Pan and pinch never submit paint.
 - Selection uses an **external** ring so the cell interior stays visible.
-- Palette + **Place paint** stay in a dock under the board (sticky on narrow screens).
+- Hover coordinates appear while moving over the board.
+- Palette + **Place paint** (and session-gated **Direct paint**) stay in a dock
+  under the board (sticky on narrow screens).
 - Contract / schema / long rules live under **About** in the side panel.
 
-See `docs/2026-10-12-viewport-and-interaction-brief.md`.
+See `docs/2026-10-12-viewport-and-interaction-brief.md` and
+`docs/2026-10-12-stall-visual-references.md`. Saturated palette change is only
+proposed in `docs/2026-10-12-palette-proposal.md` (not applied).
 
 ## Known limitations
 
@@ -146,11 +152,14 @@ Automated suite: `cd web && npm test` (**mock** / unit). Production build:
 | `src/viewport.ts` | Camera math: fit, zoom, pan, hit-testing, selection ring box |
 | `src/board-sync.ts` | Load generations, stale guards, poll cadence, freshness copy |
 | `src/pending-paint.ts` | Client-only pending paint layer (not confirmed cache) |
+| `src/paint-queue.ts` | Serialized queue for session-gated direct paint |
+| `src/contract-meta.ts` | Reject incompatible `get_board` before enabling draw |
+| `src/local-draw.ts` | FC-key local sign + broadcast (no wallet popup path) |
 | `src/draw-policy.ts` | Client checks before any wallet prompt |
-| `src/submit-draw.ts` | Wallet prompt → pending → confirm with `get_pixel` |
+| `src/submit-draw.ts` | Local session or wallet → pending → confirm with `get_pixel` |
 | `src/contract.ts` | Free RPC view calls (`get_board`, `get_pixel`, `get_pixels`) |
 | `src/load-board.ts` | Walk every `get_pixels` page into one list |
-| `src/wallet.ts` | Connect / disconnect / `signAndSendDraw` (optional FC key on connect) |
+| `src/wallet.ts` | Connect / disconnect / draw / on-chain session revoke |
 | `src/drawing-session.ts` | Experimental FC-key session helpers + localStorage |
 | `src/board-cache.ts` | Sparse painted cells from confirmed reads only |
 | `src/sponsorship.ts` | Feature flag + ordinary-wallet fallback |

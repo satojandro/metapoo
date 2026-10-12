@@ -4,7 +4,13 @@ This pack gives a small team a shared product brief, technical boundaries, stage
 
 The project starts in a newly created clean repository; it is not a Berry Club fork or a copy of its code or presentation. Berry Club / NEAR Place is a technical reference for communal board patterns (batching, refresh, drawing sessions) as well as product inspiration. Reddit r/place is the primary interaction reference for zoom, pan, and precise placement. The kickoff prompt instructs Cursor to scaffold from scratch if the repository is empty and to inspect any starter files before building on them.
 
-Current interaction brief: `docs/2026-10-12-viewport-and-interaction-brief.md`. Board assessment and ordered next steps: `docs/2026-10-12-board-review-and-next-steps.md`.
+October 2026 board work (viewport, shared updates, drawing session, 3D stall):
+
+- Assessment / plan: `docs/2026-10-12-board-review-and-next-steps.md`
+- Interaction brief: `docs/2026-10-12-viewport-and-interaction-brief.md`
+- Stall visual references: `docs/2026-10-12-stall-visual-references.md`
+- Saturated palette proposal (not shipped): `docs/2026-10-12-palette-proposal.md`
+- Frontend how-to and known limits: `web/README.md`
 
 ## Read in this order
 
