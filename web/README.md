@@ -81,8 +81,11 @@ See `docs/2026-10-12-viewport-and-interaction-brief.md`.
 
 - Full-board load uses paginated `get_pixels` (max 256 cells per page). History
   of past colors is not available — only the current painted set.
-- Board refresh is still manual / after own success — bounded polling and
-  stale-response guards are not done yet (board-review step 3).
+- Full board loads pin every `get_pixels` page to one block height. Visible-tab
+  polling (~4s, backoff on errors) plus reconnect/visibility refresh keep the
+  wall shared. Pending paint is a striped client overlay — not confirmed art.
+  Wallet success with a delayed or overwritten read is not labeled a failed tx
+  and is not auto-resubmitted.
 - Without `VITE_CONTRACT_ID`, the board is a local empty mock (not chain state).
 - Gas sponsorship is not implemented.
 - No MPOO/NEAR checkout, balances, treasury, Intents, or rage quit.
@@ -143,6 +146,8 @@ Automated suite: `cd web && npm test` (**mock** / unit). Production build:
 |---|---|
 | `src/main.ts` | Wires the page: viewport gestures, selection, wallet, Place paint, status |
 | `src/viewport.ts` | Camera math: fit, zoom, pan, hit-testing, selection ring box |
+| `src/board-sync.ts` | Load generations, stale guards, poll cadence, freshness copy |
+| `src/pending-paint.ts` | Client-only pending paint layer (not confirmed cache) |
 | `src/draw-policy.ts` | Client checks before any wallet prompt |
 | `src/submit-draw.ts` | Wallet prompt → pending → confirm with `get_pixel` |
 | `src/contract.ts` | Free RPC view calls (`get_board`, `get_pixel`, `get_pixels`) |

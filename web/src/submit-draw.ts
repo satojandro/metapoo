@@ -17,16 +17,16 @@ import { signAndSendDraw } from "./wallet";
 /**
  * Full draw path after client checks have already passed (`prepareDraw`).
  *
- * Status meanings (same words as `shared/types.ts`):
+ * Status meanings:
  * - rejected — client / config stopped us; nothing submitted
- * - pending — reported while we wait (UI may show this briefly)
- * - success — wallet status is a recognized success AND `get_pixel` matches
- * - failed — user rejected, wallet error, on-chain failure, unclear status,
- *   or confirm mismatch
+ * - pending — reported while we wait (UI progress only)
+ * - success — wallet recognized success AND `get_pixel` matches
+ * - confirmation_delayed — wallet recognized success, board read not matched yet
+ * - overwritten — wallet recognized success, another artist already credits the cell
+ * - failed — user rejected, wallet error, on-chain failure, or unclear status
  *
- * A bare transaction id with an unrecognized status is never enough for
- * success, even if the pixel already shows the attempted color (it might
- * have been painted earlier).
+ * An uncertain / delayed outcome must not be auto-resubmitted.
+ * A bare transaction id with an unrecognized status is never enough for success.
  */
 
 export type DrawProgress =
@@ -53,6 +53,22 @@ export type SubmitDrawResult =
     }
   | {
       status: "success";
+      title: string;
+      message: string;
+      transactionId: string;
+      explorerUrl: string | null;
+      pixel: PixelView;
+    }
+  | {
+      status: "confirmation_delayed";
+      title: string;
+      message: string;
+      transactionId: string;
+      explorerUrl: string | null;
+      pixel: PixelView | null;
+    }
+  | {
+      status: "overwritten";
       title: string;
       message: string;
       transactionId: string;
@@ -186,47 +202,58 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
     explorer: link,
   });
 
-  let pixel: PixelView | null = null;
   try {
-    pixel = await confirmPixelAfterDraw({
+    const confirm = await confirmPixelAfterDraw({
       x: input.x,
       y: input.y,
       colorIndex: input.colorIndex,
       artistAccountId: input.accountId,
     });
+
+    if (confirm.kind === "confirmed" && confirm.pixel) {
+      return {
+        status: "success",
+        title: "Pixel painted",
+        message:
+          "The wallet reported a successful transaction and a fresh board read shows your color on that square.",
+        transactionId,
+        explorerUrl: link,
+        pixel: confirm.pixel,
+      };
+    }
+
+    if (confirm.kind === "overwritten" && confirm.pixel) {
+      return {
+        status: "overwritten",
+        title: "Paint landed, then the wall moved on",
+        message:
+          "Your transaction succeeded, but the cell now credits a different artist under the Open wall rule. That is not a failed transaction — someone else painted over it (or beat the read). Check the explorer link; do not resubmit the same paint automatically.",
+        transactionId,
+        explorerUrl: link,
+        pixel: confirm.pixel,
+      };
+    }
+
+    return {
+      status: "confirmation_delayed",
+      title: "Submitted — confirmation delayed",
+      message:
+        "The wallet reported success, but a later board read does not yet show your color and account on that cell. The page will keep a pending preview and will not claim failure or resubmit. Open the explorer link and wait for the next board refresh.",
+      transactionId,
+      explorerUrl: link,
+      pixel: confirm.pixel,
+    };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Read failed";
     return {
-      status: "failed",
-      title: "Could not confirm on chain",
-      message: `The wallet reported success, but the page could not re-read the pixel to confirm. ${detail}`,
+      status: "confirmation_delayed",
+      title: "Submitted — could not re-read yet",
+      message: `The wallet reported success, but the page could not re-read the pixel yet (${detail}). This is not treated as a failed transaction. Wait for a board refresh; do not resubmit automatically.`,
       transactionId,
       explorerUrl: link,
       pixel: null,
     };
   }
-
-  if (!pixel) {
-    return {
-      status: "failed",
-      title: "Read did not match yet",
-      message:
-        "The wallet reported success, but a later board read did not yet show your color and account on that cell. Open the explorer link and try Refresh board. The picture was not updated from a click alone.",
-      transactionId,
-      explorerUrl: link,
-      pixel: null,
-    };
-  }
-
-  return {
-    status: "success",
-    title: "Pixel painted",
-    message:
-      "The wallet reported a successful transaction and a fresh board read shows your color on that square.",
-    transactionId,
-    explorerUrl: link,
-    pixel,
-  };
 }
 
 function walletPromptExplanation(

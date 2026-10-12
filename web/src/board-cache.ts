@@ -1,4 +1,5 @@
 import type { PixelView } from "@shared/types.ts";
+import { isWriteAtLeastAsNew } from "./board-sync";
 
 /**
  * Sparse in-memory picture of painted cells.
@@ -25,6 +26,29 @@ export function rememberPixel(cache: PixelCache, pixel: PixelView): void {
     return;
   }
   cache.set(key, pixel);
+}
+
+/**
+ * Apply a single-cell read only when it is at least as new as the cached write.
+ * Prevents a slow selected-cell response from overwriting a newer full refresh.
+ * Returns true when the cache changed.
+ */
+export function rememberPixelIfNewer(
+  cache: PixelCache,
+  pixel: PixelView,
+): boolean {
+  const existing = cache.get(cellKey(pixel.x, pixel.y));
+  if (
+    existing &&
+    !isWriteAtLeastAsNew(
+      pixel.lastWriteTimestampNs,
+      existing.lastWriteTimestampNs,
+    )
+  ) {
+    return false;
+  }
+  rememberPixel(cache, pixel);
+  return true;
 }
 
 /**

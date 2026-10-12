@@ -1,5 +1,6 @@
 import { paletteColor } from "@shared/palette.ts";
 import { BOARD_HEIGHT, BOARD_WIDTH, type PixelView } from "@shared/types.ts";
+import type { PendingPaint } from "./pending-paint";
 
 /** Bitmap size of one square before CSS stretches the canvas. */
 const CELL = 4;
@@ -8,18 +9,19 @@ const EMPTY_A = "#e7e1d6";
 const EMPTY_B = "#ddd6c8";
 
 /**
- * Draw the board background, then any painted cells we have confirmed.
+ * Draw the board background, confirmed paints, then pending previews on top.
  *
  * The checker is only a background so empty squares are visible. It is not
  * paint, and it is not one of the eight palette colors.
  *
- * Painted colors come from `pixels` — a sparse list filled only after
- * authoritative reads. Clicking a square must not invent an entry here.
- * The selection ring is an HTML overlay, separate from this bitmap.
+ * Confirmed colors come from `pixels` — sparse list after authoritative reads.
+ * Pending paints are a separate client layer (striped) and must not be confused
+ * with confirmed art. Clicking a square must not invent a confirmed entry.
  */
 export function renderBoard(
   canvas: HTMLCanvasElement,
   pixels: readonly PixelView[] = [],
+  pending: readonly PendingPaint[] = [],
 ): void {
   const context = canvas.getContext("2d");
   if (!context) {
@@ -47,6 +49,41 @@ export function renderBoard(
     context.fillStyle = swatch.hex;
     context.fillRect(pixel.x * CELL, pixel.y * CELL, CELL, CELL);
   }
+
+  for (const paint of pending) {
+    const swatch = paletteColor(paint.colorIndex);
+    if (!swatch) {
+      continue;
+    }
+    drawPendingCell(context, paint.x, paint.y, swatch.hex);
+  }
+}
+
+/** Striped overlay so pending paint is visibly different from confirmed art. */
+function drawPendingCell(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  hex: string,
+): void {
+  const left = x * CELL;
+  const top = y * CELL;
+  context.save();
+  context.globalAlpha = 0.55;
+  context.fillStyle = hex;
+  context.fillRect(left, top, CELL, CELL);
+  context.globalAlpha = 0.9;
+  context.strokeStyle = "#111111";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(left, top + CELL);
+  context.lineTo(left + CELL, top);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(left, top + CELL / 2);
+  context.lineTo(left + CELL / 2, top);
+  context.stroke();
+  context.restore();
 }
 
 /** Read one bitmap pixel. Used to spot unexpected local paints in checks. */

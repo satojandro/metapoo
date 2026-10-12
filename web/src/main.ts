@@ -6,8 +6,19 @@ import {
   getCachedPixel,
   paintedPixels,
   rememberPixel,
+  rememberPixelIfNewer,
   replaceCache,
 } from "./board-cache";
+import {
+  beginBoardLoad,
+  createBoardSyncState,
+  formatFreshness,
+  markBoardLoadApplied,
+  markBoardLoadFailed,
+  nextPollDelayMs,
+  shouldApplyBoardLoad,
+  shouldPollNow,
+} from "./board-sync";
 import { CONTRACT_ID, PAGE_NETWORK } from "./config";
 import {
   fetchAllPaintedPixels,
@@ -16,7 +27,19 @@ import {
   isContractConfigured,
 } from "./contract";
 import { prepareDraw } from "./draw-policy";
+import {
+  describeDrawingSession,
+  forgetDrawingSessionLocally,
+  loadDrawingSessionRecord,
+} from "./drawing-session";
 import { describeNetwork } from "./network";
+import {
+  createPendingPaintMap,
+  listPendingPaints,
+  reconcilePendingWithConfirmed,
+  setPendingPaint,
+  clearPendingPaint,
+} from "./pending-paint";
 import { renderBoard } from "./render-board";
 import { moveSelection, type Cell } from "./selection";
 import { describeSponsorship } from "./sponsorship";
@@ -34,11 +57,6 @@ import {
   type Camera,
   type ViewportSize,
 } from "./viewport";
-import {
-  describeDrawingSession,
-  forgetDrawingSessionLocally,
-  loadDrawingSessionRecord,
-} from "./drawing-session";
 import { connectWallet, disconnectWallet, onWalletSession } from "./wallet";
 
 /**
@@ -47,8 +65,9 @@ import { connectWallet, disconnectWallet, onWalletSession } from "./wallet";
  * State flow (also documented in web/README.md):
  * disconnected → connected → editing → wallet prompt → pending → success | error
  *
- * The picture only changes after a confirmed chain read, never on click alone.
- * Pan / pinch / scroll-zoom never submit paint — only Place paint / Enter do.
+ * Confirmed pixels come only from chain reads. Pending paint is a separate
+ * client layer. Pan / pinch / scroll-zoom never submit paint — only Place /
+ * Enter do. Uncertain outcomes are not auto-resubmitted.
  */
 
 function mustFind<T extends Element>(selector: string): T {
@@ -98,6 +117,8 @@ const forgetSessionButton = mustFind<HTMLButtonElement>(
 );
 
 const pixelCache = createPixelCache();
+const pendingPaints = createPendingPaintMap();
+const boardSync = createBoardSyncState();
 
 let selected: Cell | null = null;
 let selectedColor: number | null = null;
@@ -105,6 +126,7 @@ let walletAccount: string | null = null;
 let walletNetwork: string | null = null;
 let drawInFlight = false;
 let boardLoadInFlight = false;
+let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let camera: Camera = { cellSize: 4, panX: 0, panY: 0 };
 /** High-level UI phase for the status strip. */
 let uiPhase:
@@ -132,6 +154,21 @@ showSelection();
 showWallet();
 showDrawingSession();
 void bootstrapBoard();
+scheduleBoardPoll();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    void refreshBoardFromContract({ reason: "visible" });
+    scheduleBoardPoll();
+  } else {
+    clearBoardPoll();
+  }
+});
+
+window.addEventListener("online", () => {
+  void refreshBoardFromContract({ reason: "reconnect" });
+  scheduleBoardPoll();
+});
 
 const resizeObserver = new ResizeObserver(() => {
   camera = clampToViewport(camera);
@@ -294,31 +331,44 @@ async function bootstrapBoard(): Promise<void> {
 }
 
 /**
- * Replace the local picture from a full paginated walk of `get_pixels`.
- * Safe to call without a wallet. Does not invent pixels from clicks.
+ * Replace the local picture from a full paginated walk of `get_pixels`,
+ * pinned to one block. Safe without a wallet. Does not invent pixels from clicks.
+ * Older snapshots are ignored so a slow refresh cannot overwrite a newer one.
  */
-async function refreshBoardFromContract(): Promise<void> {
+async function refreshBoardFromContract(options?: {
+  reason?: "manual" | "poll" | "visible" | "reconnect" | "after_draw";
+}): Promise<void> {
   if (!isContractConfigured() || boardLoadInFlight) {
     return;
   }
+  const loadId = beginBoardLoad(boardSync);
   boardLoadInFlight = true;
   refreshButton.disabled = true;
-  boardLoadStatus.textContent = "Board load: fetching painted pages…";
+  const reason = options?.reason ?? "manual";
+  boardLoadStatus.textContent = `Board load (${reason}): fetching painted pages at one block…`;
   try {
-    const pixels = await fetchAllPaintedPixels();
-    replaceCache(pixelCache, pixels);
+    const snapshot = await fetchAllPaintedPixels();
+    if (!shouldApplyBoardLoad(boardSync, loadId, snapshot.blockHeight)) {
+      boardLoadStatus.textContent = `Board load skipped stale snapshot (block ${snapshot.blockHeight}). ${formatFreshness(boardSync, Date.now())}`;
+      return;
+    }
+    replaceCache(pixelCache, snapshot.pixels);
+    reconcilePendingWithConfirmed(pendingPaints, snapshot.pixels);
+    markBoardLoadApplied(boardSync, loadId, snapshot.blockHeight, Date.now());
     render();
     showSelection();
-    boardLoadStatus.textContent = `Board load: ${pixels.length} painted cell${
-      pixels.length === 1 ? "" : "s"
-    } from get_pixels. Open wall — latest writer is credit only.`;
+    boardLoadStatus.textContent = `Board load: ${snapshot.pixels.length} painted cell${
+      snapshot.pixels.length === 1 ? "" : "s"
+    } at block ${snapshot.blockHeight}. ${formatFreshness(boardSync, Date.now())}`;
   } catch (error) {
+    markBoardLoadFailed(boardSync);
     const detail = error instanceof Error ? error.message : "Unknown read error";
-    boardLoadStatus.textContent = `Board load failed: ${detail}`;
+    boardLoadStatus.textContent = `Board load failed: ${detail}. ${formatFreshness(boardSync, Date.now())}`;
   } finally {
     boardLoadInFlight = false;
     refreshButton.disabled = !isContractConfigured();
     updateCompactStatus();
+    scheduleBoardPoll();
   }
 }
 
@@ -329,13 +379,46 @@ async function refreshSelectedPixel(): Promise<void> {
   }
   try {
     const pixel = await getPixel(selected.x, selected.y);
-    rememberPixel(pixelCache, pixel);
+    rememberPixelIfNewer(pixelCache, pixel);
+    reconcilePendingWithConfirmed(pendingPaints, [pixel]);
     render();
     showSelection();
   } catch {
     // Keep the last cached view; selection text still works offline.
     showSelection();
   }
+}
+
+function clearBoardPoll(): void {
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function scheduleBoardPoll(): void {
+  clearBoardPoll();
+  if (!isContractConfigured()) {
+    return;
+  }
+  const delay = nextPollDelayMs(boardSync.consecutiveFailures);
+  pollTimer = setTimeout(() => {
+    void runBoardPoll();
+  }, delay);
+}
+
+async function runBoardPoll(): Promise<void> {
+  if (
+    !shouldPollNow({
+      contractConfigured: isContractConfigured(),
+      documentHidden: document.visibilityState === "hidden",
+      loadInFlight: boardLoadInFlight,
+    })
+  ) {
+    scheduleBoardPoll();
+    return;
+  }
+  await refreshBoardFromContract({ reason: "poll" });
 }
 
 async function attemptDraw(): Promise<void> {
@@ -367,6 +450,15 @@ async function attemptDraw(): Promise<void> {
   drawInFlight = true;
   drawButton.disabled = true;
   setFlow("wallet_prompt");
+  setPendingPaint(pendingPaints, {
+    x: selected.x,
+    y: selected.y,
+    colorIndex: selectedColor,
+    accountId: walletAccount,
+    transactionId: null,
+    phase: "submitted",
+  });
+  render();
   fillBlock(
     result,
     "Waiting for your wallet",
@@ -390,6 +482,17 @@ async function attemptDraw(): Promise<void> {
           fillBlock(result, "Waiting for your wallet", progress.detail);
         } else if (progress.phase === "pending" || progress.phase === "confirming") {
           setFlow("pending");
+          if (selected && selectedColor !== null && walletAccount) {
+            setPendingPaint(pendingPaints, {
+              x: selected.x,
+              y: selected.y,
+              colorIndex: selectedColor,
+              accountId: walletAccount,
+              transactionId: progress.transactionId,
+              phase: "submitted",
+            });
+            render();
+          }
           fillResultWithLink(
             "Transaction pending",
             progress.phase === "pending"
@@ -404,6 +507,7 @@ async function attemptDraw(): Promise<void> {
 
     if (submitResult.status === "success" && submitResult.pixel) {
       rememberPixel(pixelCache, submitResult.pixel);
+      clearPendingPaint(pendingPaints, selected.x, selected.y);
       render();
       setFlow("success");
       fillResultWithLink(
@@ -413,11 +517,50 @@ async function attemptDraw(): Promise<void> {
         submitResult.explorerUrl,
       );
       showSelection();
-      // Pull a fresh full page walk so this tab also sees anyone else's paints.
-      void refreshBoardFromContract();
+      void refreshBoardFromContract({ reason: "after_draw" });
       return;
     }
 
+    if (submitResult.status === "confirmation_delayed") {
+      setPendingPaint(pendingPaints, {
+        x: selected.x,
+        y: selected.y,
+        colorIndex: selectedColor,
+        accountId: walletAccount,
+        transactionId: submitResult.transactionId,
+        phase: "confirmation_delayed",
+      });
+      render();
+      setFlow("pending");
+      fillResultWithLink(
+        submitResult.title,
+        submitResult.message,
+        submitResult.transactionId,
+        submitResult.explorerUrl,
+      );
+      showSelection();
+      // Do not auto-resubmit. Polling / refresh will reconcile.
+      return;
+    }
+
+    if (submitResult.status === "overwritten" && submitResult.pixel) {
+      rememberPixelIfNewer(pixelCache, submitResult.pixel);
+      clearPendingPaint(pendingPaints, selected.x, selected.y);
+      render();
+      setFlow("success");
+      fillResultWithLink(
+        submitResult.title,
+        submitResult.message,
+        submitResult.transactionId,
+        submitResult.explorerUrl,
+      );
+      showSelection();
+      void refreshBoardFromContract({ reason: "after_draw" });
+      return;
+    }
+
+    clearPendingPaint(pendingPaints, selected.x, selected.y);
+    render();
     setFlow("error");
     fillResultWithLink(
       submitResult.title,
@@ -497,7 +640,7 @@ async function onAuthorizeSessionClick(): Promise<void> {
 }
 
 function render(): void {
-  renderBoard(canvas, paintedPixels(pixelCache));
+  renderBoard(canvas, paintedPixels(pixelCache), listPendingPaints(pendingPaints));
   positionSelection();
   updateCompactStatus();
 }
@@ -793,7 +936,14 @@ function updateCompactStatus(): void {
   const network = isContractConfigured() ? PAGE_NETWORK : "mock";
   const account = walletAccount ? walletAccount : "not connected";
   const zoom = `~${camera.cellSize.toFixed(1)} px/cell`;
-  compactStatus.textContent = `${network} · ${account} · ${zoom} · no app fee`;
+  const pendingCount = listPendingPaints(pendingPaints).length;
+  const pendingLabel =
+    pendingCount > 0 ? ` · ${pendingCount} pending` : "";
+  const fresh =
+    boardSync.lastAppliedAtMs === null
+      ? ""
+      : ` · ${formatFreshness(boardSync, Date.now()).replace(/^Board freshness: /, "")}`;
+  compactStatus.textContent = `${network} · ${account} · ${zoom}${pendingLabel}${fresh} · no app fee`;
 }
 
 function fillRules(): void {

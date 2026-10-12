@@ -113,6 +113,16 @@ export function pixelMatchesDraw(
   );
 }
 
+/** Where to read chain state from. Prefer one block for a multi-page walk. */
+export type ViewBlockRef =
+  | { kind: "finality"; finality: "optimistic" | "near-final" | "final" }
+  | { kind: "block"; blockId: number | string };
+
+export const DEFAULT_VIEW_BLOCK: ViewBlockRef = {
+  kind: "finality",
+  finality: "optimistic",
+};
+
 /**
  * Call a view method on the configured contract.
  * `args` becomes JSON, then base64, which is what NEAR's RPC expects.
@@ -120,6 +130,7 @@ export function pixelMatchesDraw(
 export async function viewFunction<T>(
   methodName: string,
   args: Record<string, unknown> = {},
+  block: ViewBlockRef = DEFAULT_VIEW_BLOCK,
 ): Promise<T> {
   if (!isContractConfigured()) {
     throw new Error(
@@ -131,6 +142,11 @@ export async function viewFunction<T>(
     new TextEncoder().encode(JSON.stringify(args)),
   );
 
+  const blockParams =
+    block.kind === "block"
+      ? { block_id: block.blockId }
+      : { finality: block.finality };
+
   const response = await fetch(RPC_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -140,7 +156,7 @@ export async function viewFunction<T>(
       method: "query",
       params: {
         request_type: "call_function",
-        finality: "optimistic",
+        ...blockParams,
         account_id: CONTRACT_ID,
         method_name: methodName,
         args_base64: argsBase64,
@@ -171,40 +187,108 @@ export async function viewFunction<T>(
   return JSON.parse(text) as T;
 }
 
-export async function getBoard(): Promise<ChainBoardView> {
-  return viewFunction<ChainBoardView>("get_board", {});
+/**
+ * Latest optimistic block height from the configured RPC.
+ * Used so every page of a full board load shares one block_id.
+ */
+export async function fetchLatestBlockHeight(): Promise<number> {
+  const response = await fetch(RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "metapoo-block",
+      method: "block",
+      params: { finality: "optimistic" },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`RPC HTTP ${response.status} while reading block height.`);
+  }
+
+  const body = (await response.json()) as {
+    result?: { header?: { height?: number } };
+    error?: { message?: string };
+  };
+
+  if (body.error?.message) {
+    throw new Error(body.error.message);
+  }
+  const height = body.result?.header?.height;
+  if (typeof height !== "number" || !Number.isFinite(height)) {
+    throw new Error("RPC block response did not include a numeric height.");
+  }
+  return height;
 }
 
-export async function getPixel(x: number, y: number): Promise<PixelView> {
-  const raw = await viewFunction<ChainPixelView>("get_pixel", { x, y });
+export async function getBoard(
+  block: ViewBlockRef = DEFAULT_VIEW_BLOCK,
+): Promise<ChainBoardView> {
+  return viewFunction<ChainBoardView>("get_board", {}, block);
+}
+
+export async function getPixel(
+  x: number,
+  y: number,
+  block: ViewBlockRef = DEFAULT_VIEW_BLOCK,
+): Promise<PixelView> {
+  const raw = await viewFunction<ChainPixelView>("get_pixel", { x, y }, block);
   return mapChainPixel(raw);
 }
 
 export async function getPixelsPage(
   fromIndex: number,
   limit: number = PIXELS_PAGE_LIMIT,
+  block: ViewBlockRef = DEFAULT_VIEW_BLOCK,
 ): Promise<PixelsPageView> {
-  const raw = await viewFunction<ChainPixelsPage>("get_pixels", {
-    from_index: fromIndex,
-    limit,
-  });
+  const raw = await viewFunction<ChainPixelsPage>(
+    "get_pixels",
+    {
+      from_index: fromIndex,
+      limit,
+    },
+    block,
+  );
   return mapPixelsPage(raw);
 }
 
-/** Download every painted cell by following `next_from_index` until null. */
-export async function fetchAllPaintedPixels(
-  pageLimit: number = PIXELS_PAGE_LIMIT,
-): Promise<PixelView[]> {
-  return loadAllPaintedPixels(
-    (fromIndex, limit) => getPixelsPage(fromIndex, limit),
-    pageLimit,
-  );
+export interface PaintedBoardSnapshot {
+  pixels: PixelView[];
+  blockHeight: number;
 }
 
 /**
- * After a successful transaction, re-read the cell until it matches or we
- * give up. Confirmation for the UI means "the chain view shows the new cell",
- * not only "the wallet returned a hash".
+ * Download every painted cell pinned to one block height so pages do not mix
+ * optimistic tip changes mid-walk.
+ */
+export async function fetchAllPaintedPixels(
+  pageLimit: number = PIXELS_PAGE_LIMIT,
+): Promise<PaintedBoardSnapshot> {
+  const blockHeight = await fetchLatestBlockHeight();
+  const block: ViewBlockRef = { kind: "block", blockId: blockHeight };
+  const pixels = await loadAllPaintedPixels(
+    (fromIndex, limit) => getPixelsPage(fromIndex, limit, block),
+    pageLimit,
+  );
+  return { pixels, blockHeight };
+}
+
+export type PixelConfirmKind =
+  | "confirmed"
+  | "confirmation_delayed"
+  | "overwritten";
+
+export interface PixelConfirmResult {
+  kind: PixelConfirmKind;
+  /** Latest read of the cell (may be empty on delay). */
+  pixel: PixelView | null;
+}
+
+/**
+ * After a successful transaction, re-read the cell until it matches, shows a
+ * different artist (Open wall overwrite), or we time out as delayed.
+ * Wallet success is tracked separately — a mismatch is not automatic failure.
  */
 export async function confirmPixelAfterDraw(options: {
   x: number;
@@ -213,12 +297,14 @@ export async function confirmPixelAfterDraw(options: {
   artistAccountId: string;
   attempts?: number;
   delayMs?: number;
-}): Promise<PixelView | null> {
+}): Promise<PixelConfirmResult> {
   const attempts = options.attempts ?? 5;
   const delayMs = options.delayMs ?? 400;
+  let last: PixelView | null = null;
 
   for (let i = 0; i < attempts; i += 1) {
     const pixel = await getPixel(options.x, options.y);
+    last = pixel;
     if (
       pixelMatchesDraw(
         pixel,
@@ -228,13 +314,22 @@ export async function confirmPixelAfterDraw(options: {
         options.artistAccountId,
       )
     ) {
-      return pixel;
+      return { kind: "confirmed", pixel };
+    }
+    if (
+      pixel.colorIndex !== null &&
+      pixel.artistAccountId !== null &&
+      pixel.artistAccountId !== options.artistAccountId
+    ) {
+      // Another account already credits this cell — treat as overwritten,
+      // not as a failed transaction.
+      return { kind: "overwritten", pixel };
     }
     if (i < attempts - 1) {
       await sleep(delayMs);
     }
   }
-  return null;
+  return { kind: "confirmation_delayed", pixel: last };
 }
 
 function sleep(ms: number): Promise<void> {
