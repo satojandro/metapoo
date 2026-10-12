@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "base_cost": "10",
+  "max_cost": "50",
+  "heat_cap": "400",
+  "heat_increment": "10",
+  "decay_per_second": "1",
+  "surcharge_numerator": "1",
+  "surcharge_denominator": "10",
+  "effective_at": "0",
+  "board": {
+    "width": 128,
+    "height": 128,
+    "region_size": 8,
+    "region_columns": 16,
+    "region_rows": 16,
+    "region_count": 256
+  },
+  "unit": "TOILET",
+  "notes": "Prototype fixture only — not production economics. Decimal strings are integer TOILET units."
+}

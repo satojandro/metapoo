@@ -1,0 +1,10 @@
+{
+  "name": "fixed-price-control",
+  "description": "Control note: if every placement cost exactly base_cost (10), quiet-artist spend would equal successful_placements * 10. Contested scenarios diverge upward.",
+  "base_cost": "10",
+  "compare_scenarios": [
+    "quiet-artist",
+    "two-crews",
+    "wealthy-warmer"
+  ]
+}

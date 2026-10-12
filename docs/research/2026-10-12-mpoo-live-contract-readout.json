@@ -1,0 +1,118 @@
+{
+  "review_date": "2026-10-12",
+  "network": "NEAR mainnet",
+  "rpc_url": "https://rpc.mainnet.near.org",
+  "token_account": "mpoo.nearlytrade.near",
+  "scope": "Read-only public RPC queries; no transfers, swaps or signed transactions. No full source-code audit.",
+  "reads": {
+    "tax": {
+      "account_id": "mpoo.nearlytrade.near",
+      "method": "get_tax",
+      "args": {},
+      "block_height": 219617778,
+      "block_hash": "5nVwhUCGJBatm9Mio3MpmHbVrzxx1kznE3fBeeyBgHDZ",
+      "value": {
+        "tax": {
+          "buy_bps": 200,
+          "sell_bps": 300,
+          "pairs": [
+            "dclv2.ref-labs.near"
+          ],
+          "admin": "nearlytrade.near",
+          "exempt": [
+            "lock_6.nearlytrade.near",
+            "feeswap.near"
+          ]
+        },
+        "pending": "7021291864979143318999"
+      }
+    },
+    "rules": {
+      "account_id": "mpoo.nearlytrade.near",
+      "method": "get_rules",
+      "args": {},
+      "block_height": 219617772,
+      "block_hash": "Cbnzi49ahG5SmYZCViDQnJRG62AV8UqmPCL3XpEesZiA",
+      "value": null
+    },
+    "launch": {
+      "account_id": "nearlytrade.near",
+      "method": "get_launch_by_token",
+      "args": {
+        "token": "mpoo.nearlytrade.near"
+      },
+      "block_height": 219617790,
+      "block_hash": "3UmjvFm1DXWCqReBhSbvL64FbYNehBunhn3bbdMbpbxh",
+      "value": {
+        "id": 2311,
+        "token": "mpoo.nearlytrade.near",
+        "creator": "meta-poo-shitcoin.near",
+        "name": "Meta Poo",
+        "symbol": "MPOO",
+        "icon": null,
+        "description": "Liquid (Staking) Diarrhea. Solid results\ud83d\udca9",
+        "links": {
+          "website": null,
+          "twitter": null,
+          "telegram": null
+        },
+        "created_at_ms": 1790946760071,
+        "total_supply": "1000000000000000000000000000",
+        "pool_id": "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000",
+        "token_is_x": false,
+        "init_point": 50000,
+        "left_point": -400000,
+        "right_point": 49800,
+        "lpt_id": "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000#17973",
+        "step": "Done",
+        "inflight": false,
+        "dev_buy_near": "0",
+        "dev_buy_exact": false,
+        "dev_buy_tokens": "0",
+        "dev_buy_held": "0",
+        "claims": 102,
+        "fees_near_total": "0",
+        "fees_token_total": "13434473124320077802419513",
+        "creator_token_fees": "0",
+        "protocol_token_fees": "1322999775380308125015",
+        "quote": "diarhea.nearlytrade.near",
+        "fees_quote_total": "612394330810274224979341",
+        "creator_quote_fees": "0",
+        "protocol_quote_fees": "0"
+      }
+    },
+    "code": {
+      "account_id": "mpoo.nearlytrade.near",
+      "method": "view_code",
+      "args": {},
+      "block_height": 219617784,
+      "block_hash": "6u7FAoT4T7KnntYtGpavPzq3Z6qgXH7QeSovQFy35Y9A",
+      "code_hash": "HS4R2isPS7hnnY8k2QbxnLHUx9Z9v9mNZnLsrGqwhChh"
+    },
+    "factory_tax": {
+      "account_id": "nearlytrade.near",
+      "method": "get_tax",
+      "args": {
+        "launch_id": "2311"
+      },
+      "block_height": 219621014,
+      "block_hash": "GHz4cyajPaz25Hhu1qpJdPueQe1Xd46J1baxQc4Tqk5K",
+      "value": {
+        "buy_bps": 200,
+        "sell_bps": 300,
+        "creator_bps": 3300,
+        "burn_bps": 3300,
+        "holders_bps": 3400,
+        "platform_bps": 3000,
+        "pending": "0",
+        "holders_bucket": "11513646259603886658924",
+        "burned": "23363719010099963092603408",
+        "paid_creator": "817146386607254331154410",
+        "paid_holders": "830394752063021787864096",
+        "paid_platform": "1061229073515914715784971",
+        "selling": "0",
+        "floor": "0"
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "args": {
+    "x": 0,
+    "y": 0,
+    "color": 2,
+    "maxCost": "10",
+    "pricingVersion": "pressure-v1-fixture",
+    "expiresAtNs": "100000000000",
+    "actionNonce": "1",
+    "sessionId": "session-1"
+  },
+  "executionTimeNs": "100000000001",
+  "error": {
+    "code": "QUOTE_EXPIRED",
+    "message": "This price quote expired before the paint settled. Review the new cost before trying again."
+  },
+  "chargedCost": null,
+  "heatUnchanged": true
+}

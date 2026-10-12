@@ -52,7 +52,7 @@ The app sets `slippageTolerance` in basis points. Examples use 100 (1%). Documen
 
 **MPOO is not claimed as supported.** On 11 October 2026, `GET /v0/tokens` returned 204 tokens. None had `mpoo` or `nearlytrade` in the symbol, asset id, or contract address. The account name was not treated as evidence. A different asset is listed: `mpDAO` at `nep141:mpdao-token.near`. That listing is not MPOO.
 
-The deposit page says any NEP-141 can be deposited. That is a rule about the standard, not proof this token implements it, and not membership in the swap list. Before either claim, read the token contract (metadata, storage, transfer behavior, and any fee inside the transfer). The reported 2% / 3% tax is still unread supplied context. A transfer fee changes what arrives and what a refund means. Swap support would also need an exact `assetId` on a fresh token list. A direct deposit trial would be small-amount mainnet, which this memo does not do.
+The deposit page says any NEP-141 can be deposited. That is a rule about the standard, not proof of transfer compatibility or membership in the swap list. **12 October update:** the [MPOO readout](2026-10-12-mpoo-live-contract-readout.json) verifies metadata and configured 2% / 3% trading tax with venue and allocation settings. Actual transfers, refunds and Intents deposit compatibility still need trials. Swap support also requires an exact `assetId` on a fresh token list; this historical listing observation does not establish present support. Current on-NEAR payment scope is in the [economy plan](../2026-10-12-paint-economy-and-swap-plan.md).
 
 ## Simpler path on NEAR
 

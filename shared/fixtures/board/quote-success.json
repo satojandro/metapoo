@@ -1,0 +1,18 @@
+{
+  "request": {
+    "x": 0,
+    "y": 0,
+    "color": 2,
+    "accountId": "alice.testnet"
+  },
+  "quote": {
+    "cost": "10",
+    "regionId": 0,
+    "cooledHeat": "0",
+    "pricingVersion": "pressure-v1-fixture",
+    "observedAtNs": "100000000000",
+    "expiresAtNs": "130000000000",
+    "balance": "100",
+    "revision": "0"
+  }
+}

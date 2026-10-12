@@ -16,6 +16,10 @@ export default defineConfig({
       allow: [path.resolve(here, "..")],
     },
   },
+  // Deep links (/wall, /bounties/:id, …) fall back to index.html in preview too.
+  preview: {
+    // Vite preview already serves SPA fallback for non-file routes.
+  },
   test: {
     environment: "node",
   },

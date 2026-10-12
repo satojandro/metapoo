@@ -1,0 +1,22 @@
+{
+  "demoLabel": "Demo data — no funds or NFTs",
+  "bounty": {
+    "id": "1",
+    "networkId": "testnet",
+    "escrowAccountId": "bounties.mpoo.testnet",
+    "sponsor": "sponsor.testnet",
+    "boardId": "board.mpoo.testnet:epoch-1",
+    "crop": { "x": 16, "y": 16, "width": 32, "height": 32 },
+    "briefUri": "ipfs://bafy-demo-brief",
+    "briefHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "awardAmount": "1000000000000000000000000",
+    "termsVersion": "bounty-terms-v1",
+    "createdAtNs": "1000000000000",
+    "fundByNs": "2000000000000",
+    "submitByNs": "3000000000000",
+    "reviewByNs": "4000000000000",
+    "status": "ACTIVE",
+    "fundedAtNs": "1500000000000",
+    "winningSubmissionId": null
+  }
+}

@@ -83,6 +83,27 @@ See `docs/2026-10-12-viewport-and-interaction-brief.md` and
 `docs/2026-10-12-stall-visual-references.md`. Saturated palette change is only
 proposed in `docs/2026-10-12-palette-proposal.md` (not applied).
 
+## Routing (Wave 0 shell)
+
+History API routes (deep-link host must serve `index.html` for unknown paths):
+
+| Path | Page |
+|---|---|
+| `/` | Stall entrance overview (links to `/wall`; not a second board) |
+| `/wall` | Live pixel wall (`mountWall` → `dispose()`) |
+| `/bounties`, `/bounties/new`, `/bounties/:id` | Art Bounties (Worker G via `registerPageMount`) |
+| `/history`, `/prints/:id`, `/account` | Stubs / Worker H |
+
+Global wallet chrome + operations recovery live on the shell and survive
+navigation. Leaving `/wall` cancels board polls and listeners but does **not**
+drop broadcast operations recorded in `services.operations`.
+
+Worker G registers bounty mounts with:
+
+```ts
+import { registerPageMount } from "./app/page-registry";
+```
+
 ## Known limitations
 
 - Full-board load uses paginated `get_pixels` (max 256 cells per page). History

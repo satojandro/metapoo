@@ -1,0 +1,101 @@
+{
+  "name": "documented-examples",
+  "description": "Canonical numeric vectors from pressure-and-paint.md fixture config.",
+  "config": {
+    "version": 1,
+    "base_cost": "10",
+    "max_cost": "50",
+    "heat_cap": "400",
+    "heat_increment": "10",
+    "decay_per_second": "1",
+    "surcharge_numerator": "1",
+    "surcharge_denominator": "10",
+    "effective_at": "0"
+  },
+  "geometry": {
+    "width": 128,
+    "height": 128,
+    "region_size": 8
+  },
+  "cases": [
+    {
+      "id": "cold_region_at_t100",
+      "region": {
+        "heat": "0",
+        "updated_at_seconds": "0"
+      },
+      "t": "100",
+      "expect": {
+        "elapsed": "100",
+        "cooled_heat": "0",
+        "cost": "10"
+      }
+    },
+    {
+      "id": "second_placement_same_second",
+      "region": {
+        "heat": "10",
+        "updated_at_seconds": "100"
+      },
+      "t": "100",
+      "expect": {
+        "elapsed": "0",
+        "cooled_heat": "10",
+        "cost": "11",
+        "heat_after_success": "20"
+      }
+    },
+    {
+      "id": "after_10s_heat20_cools_to_10",
+      "region": {
+        "heat": "20",
+        "updated_at_seconds": "100"
+      },
+      "t": "110",
+      "expect": {
+        "elapsed": "10",
+        "cooled_heat": "10",
+        "cost": "11"
+      }
+    },
+    {
+      "id": "heat_cap_cost_is_max",
+      "region": {
+        "heat": "400",
+        "updated_at_seconds": "50"
+      },
+      "t": "50",
+      "expect": {
+        "elapsed": "0",
+        "cooled_heat": "400",
+        "cost": "50"
+      }
+    },
+    {
+      "id": "long_inactivity_fully_cools",
+      "region": {
+        "heat": "20",
+        "updated_at_seconds": "100"
+      },
+      "t": "10020",
+      "expect": {
+        "elapsed": "9920",
+        "cooled_heat": "0",
+        "cost": "10"
+      }
+    },
+    {
+      "id": "overflow_safe_decay_bounds_elapsed",
+      "region": {
+        "heat": "5",
+        "updated_at_seconds": "0"
+      },
+      "t": "999999999999",
+      "expect": {
+        "elapsed": "999999999999",
+        "cooled_heat": "0",
+        "cost": "10"
+      }
+    }
+  ]
+}

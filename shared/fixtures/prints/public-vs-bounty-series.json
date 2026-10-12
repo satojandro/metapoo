@@ -1,0 +1,14 @@
+{
+  "printId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "publicSeries": {
+    "seriesId": "public-v1",
+    "cap": 100,
+    "issued": 0,
+    "remaining": 100
+  },
+  "bountySeriesExample": {
+    "seriesIdPrefix": "bounty-",
+    "note": "series_id = bounty- + sha256 hex of MPOO_BOUNTY_SERIES_V1 domain binding; public mint must not consume this entitlement."
+  },
+  "tokenIdExample": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd:public-v1:1"
+}

@@ -1,8 +1,19 @@
-# Meta Poo Agent-Ready Pack
+# Meta Poo
 
 This pack gives a small team a shared product brief, technical boundaries, staged plan, parallel Cursor workflow, focused agent assignments, and learning record. The first milestone is a working, free pixel-graffiti board on NEAR with wallet connection and transparent transaction status.
 
-The project starts in a newly created clean repository; it is not a Berry Club fork or a copy of its code or presentation. Berry Club / NEAR Place is a technical reference for communal board patterns (batching, refresh, drawing sessions) as well as product inspiration. Reddit r/place is the primary interaction reference for zoom, pan, and precise placement. The kickoff prompt instructs Cursor to scaffold from scratch if the repository is empty and to inspect any starter files before building on them.
+The project was scaffolded from the original agent pack. Berry Club / NEAR Place is a technical reference for communal board patterns (batching, refresh, drawing sessions) as well as product inspiration. Reddit r/place is the primary interaction reference for zoom, pan, and precise placement.
+
+## Current reading path
+
+Start with the [core pixel-board handoff](docs/implementation/core-board.md): established rules, implemented modules, remaining live checks, and what agents must preserve. Then read the [full product PRD](docs/2026-10-12-product-prd.md) for **pressure-priced painting, historical prints and Art Bounties**, and the [agent delivery plan](docs/implementation/delivery-plan.md). These specifications include user journeys, magic moments, the missing-feature inventory, domain interfaces and implementation handoffs. They describe the next product, not shipped features; mystery cards are excluded.
+
+1. [Shared decisions](docs/00-shared-decisions.md) — implemented Open wall rules and confirmed next-phase economy decisions.
+2. [Frontend guide](web/README.md) and [board contract guide](contracts/board/README.md) — running code, interfaces and verification limits.
+3. [Economy plan](docs/2026-10-12-paint-economy-and-swap-plan.md) — the single current plan for MPOO-only paint purchases, TOILET longevity/burn, MPOO staking/payouts and the optional inventory shop.
+4. [MPOO mainnet evidence](docs/research/2026-10-12-mpoo-live-contract-readout.json) — exact observed settings and block references; no transfer trial.
+
+The implemented board is free. The economy above is planned, not enabled. Its latest decisions replace the original pack's optional NEAR payment and earlier NEAR payout proposals. Update the economy plan in place rather than creating another overlapping proposal.
 
 October 2026 board work (viewport, shared updates, drawing session, 3D stall):
 
@@ -12,18 +23,19 @@ October 2026 board work (viewport, shared updates, drawing session, 3D stall):
 - Saturated palette proposal (not shipped): `docs/2026-10-12-palette-proposal.md`
 - Frontend how-to and known limits: `web/README.md`
 
-## Read in this order
+## Original agent pack
 
-1. 01 Product requirements
-2. 02 MVP scope and roadmap
-3. 03 Architecture and contracts
-4. 04 Cursor orchestration
-5. 05 Contract agent brief
-6. 06 Frontend agent brief
-7. 07 Chain abstraction research brief
-8. 08 Acceptance security and QA
-9. 09 Learning journal
-10. 10 Cursor kickoff prompt
+These files preserve the original free-MVP scope, assignments and longer-term ideas. For current decisions and economy scope, use the reading path above.
+
+1. [Product requirements](01-product-requirements.md)
+2. [MVP scope and roadmap](02-mvp-scope-and-roadmap.md)
+3. [Architecture and contracts](03-architecture-and-contract-seams.md)
+4. [Cursor orchestration](04-cursor-parallel-agent-orchestration.md)
+5. [Contract agent brief](05-agent-brief-contract.md)
+6. [Frontend agent brief](06-agent-brief-frontend.md)
+7. [Chain abstraction research brief](07-agent-brief-chain-abstraction-research.md)
+8. [Acceptance security and QA](08-acceptance-security-and-qa.md)
+9. [Learning journal](09-learning-journal.md)
 
 ## Evidence labels
 
@@ -34,9 +46,9 @@ October 2026 board work (viewport, shared updates, drawing session, 3D stall):
 
 ## Important boundary
 
-Pixel takeover and any time-based reward are unresolved product decisions. The pack proposes a no-payout MVP and asks the team to choose who may overwrite a pixel before implementation.
+Pixel takeover is accepted as **Open wall**. Continuous tenure, payments and rewards are next-phase work, with rules and unset parameters in the economy plan. The implemented contract records the latest write time, not a separate continuous-tenure clock.
 
-The conversation supplies MPOO contract account mpoo.nearlytrade.near, deployer account meta-poo-shitcoin.near, NEAR mainnet as the intended network, and a reported 2% buy / 3% sell tax. Treat these as unverified inputs. Do not claim the token contract, tax behavior, ownership, or mainnet deployment has been independently verified. Token transfers are outside the MVP.
+Read-only mainnet queries identified MPOO at `mpoo.nearlytrade.near`, its launch creator `meta-poo-shitcoin.near`, 18 decimals and configured 2% buy / 3% sell tax. The linked readout records exact blocks and tax allocations. Transfer/refund/burn behavior has not been trialled, and no live game deployment is established by that token inspection. Token transfers remain outside the implemented free MVP.
 
 ## Code in this repository
 

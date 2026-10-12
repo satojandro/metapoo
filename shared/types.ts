@@ -2,6 +2,10 @@
  * Seam between the page and the NEAR game contract.
  *
  * Overwrite policy: Open wall (accepted in docs/00-shared-decisions.md).
+ *
+ * Compatibility layer for the free board schema. Paid board, bounties,
+ * history, prints, and operation recovery types live in `shared/protocol/`.
+ * Do not invent alternate monetary types outside that freeze.
  */
 
 /** How wide the wall is, in pixels. Column 0 is the left edge. */

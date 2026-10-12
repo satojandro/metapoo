@@ -1,0 +1,108 @@
+{
+  "name": "same-second-ordering",
+  "description": "Same-second placements: order determines intermediate heat each payer sees.",
+  "config": {
+    "version": 1,
+    "base_cost": "10",
+    "max_cost": "50",
+    "heat_cap": "400",
+    "heat_increment": "10",
+    "decay_per_second": "1",
+    "surcharge_numerator": "1",
+    "surcharge_denominator": "10",
+    "effective_at": "0"
+  },
+  "geometry": {
+    "width": 128,
+    "height": 128,
+    "region_size": 8
+  },
+  "price_threshold": "11",
+  "steps": [
+    {
+      "t": "200",
+      "account": "alice.near",
+      "operator": "alice",
+      "x": 8,
+      "y": 8,
+      "color": 1,
+      "expect": {
+        "ok": true,
+        "region_id": 17,
+        "cost": "10",
+        "cooled_heat": "0",
+        "heat_after": "10",
+        "updated_at_seconds": "200"
+      }
+    },
+    {
+      "t": "200",
+      "account": "bob.near",
+      "operator": "bob",
+      "x": 9,
+      "y": 8,
+      "color": 2,
+      "expect": {
+        "ok": true,
+        "region_id": 17,
+        "cost": "11",
+        "cooled_heat": "10",
+        "heat_after": "20",
+        "updated_at_seconds": "200"
+      }
+    },
+    {
+      "t": "200",
+      "account": "carol.near",
+      "operator": "carol",
+      "x": 10,
+      "y": 8,
+      "color": 3,
+      "expect": {
+        "ok": true,
+        "region_id": 17,
+        "cost": "12",
+        "cooled_heat": "20",
+        "heat_after": "30",
+        "updated_at_seconds": "200"
+      }
+    }
+  ],
+  "expect_report": {
+    "spend": "33",
+    "successful_placements": 3,
+    "rejected_placements": 0,
+    "restoration_cost": "0",
+    "time_above_threshold_seconds": "0",
+    "price_threshold": "11",
+    "concentration_by_operator": {
+      "alice": {
+        "spend": "10",
+        "placements": 1
+      },
+      "bob": {
+        "spend": "11",
+        "placements": 1
+      },
+      "carol": {
+        "spend": "12",
+        "placements": 1
+      }
+    },
+    "concentration_by_account": {
+      "alice.near": {
+        "spend": "10",
+        "placements": 1
+      },
+      "bob.near": {
+        "spend": "11",
+        "placements": 1
+      },
+      "carol.near": {
+        "spend": "12",
+        "placements": 1
+      }
+    }
+  },
+  "markdown_summary": "# Pressure simulation: same-second-ordering\n\n- **Spend:** 33 TOILET\n- **Successful placements:** 3\n- **Rejected placements:** 0\n- **Restoration cost:** 0 TOILET\n- **Time at/above price threshold (11):** 0 s\n\nConcentration by operator:\n  - alice: spend 10 TOILET across 1 placements\n  - bob: spend 11 TOILET across 1 placements\n  - carol: spend 12 TOILET across 1 placements\n\nConcentration by account:\n  - alice.near: spend 10 TOILET across 1 placements\n  - bob.near: spend 11 TOILET across 1 placements\n  - carol.near: spend 12 TOILET across 1 placements\n\n_Simulated outcomes are not measured player retention._"
+}

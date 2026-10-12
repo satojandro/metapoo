@@ -1,5 +1,7 @@
 # Stall visual references — 12 October 2026
 
+For a new agent, start with the [fresh visual redesign brief](2026-10-12-visual-redesign-agent-brief.md). The user rejected the current frontend's sparse artwork and flat toilet; that implementation is not an approved visual reference.
+
 ## User direction
 
 The user supplied four photographs taken around Sydney as references for art they like and want on the toilet stall. The surrounding brickwork also informs the atmosphere. These references supplement the r/place interaction direction; they do not replace the need for a precise shared pixel canvas.
@@ -53,4 +55,4 @@ The existing muted eight-color palette is an implementation baseline, not the fi
 
 Produce desktop and 390 px mobile views showing the 3D stall overview and a zoomed painting state. The overview must show the back-wall board, toilet beneath, and side walls extending toward the viewer. Check that surroundings and proposed palette share the reference's color energy while the editable board, selected cell, and placement action remain immediately recognizable. At painting zoom, preserve precise targeting and full-square color.
 
-Use the supplied photos as references for composition, materials, and atmosphere. Direct use of the exact artwork would be a separate asset decision; an original composition can convey this direction.
+Use the supplied photos as references for composition, materials, and atmosphere. The user has explicitly chosen original artwork conveying this vibe, rather than using the photographed artwork itself.

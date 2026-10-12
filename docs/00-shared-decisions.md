@@ -1,8 +1,14 @@
 # Shared decisions
 
-Date: 11 October 2026
+Created: 11 October 2026. Updated: 12 October 2026.
 
-This file is the integration record. The overwrite rule below is **accepted**.
+This file is the integration record. The overwrite rule below is **accepted and implemented locally**. The economy decisions below describe the next phase, not live contract behavior.
+
+## Product expansion: approved direction, proposed mechanics
+
+The user selected three product pillars: demand-sensitive placement pricing, chosen historical NFT prints, and funded **Art Bounties** that communities rally around. Mystery cards are explicitly excluded. Audience order is mPOO/NEAR communities, other crypto communities, then broader pixel-art audiences. Creation builds attachment; defence supports return visits. Creative freedom remains compatible with mPOO's cheeky rivalry with Meta Pool.
+
+The [full PRD](2026-10-12-product-prd.md) and [agent delivery plan](implementation/delivery-plan.md) now own the expansion scope. Regional pressure parameters, numbered print policies, sponsor-judged escrow mechanics and service trust choices are **proposed prototype defaults**, not separately confirmed mainnet settings. R1 stages the existing economy: paint purchase/spending first, with longevity/staking/shop implementation deferred rather than cancelled. No new product capability is enabled by this documentation update.
 
 ## Repository at the start of this work
 
@@ -50,21 +56,31 @@ Rejected for now:
 
 - Current artist may recolor: **yes**.
 - Stored time: **block time of the latest successful write** (`written_at_ns` / `last_write_timestamp_ns`). No separate tenure-start field.
-- Tenure / reward clock: **not implemented**. Do not add payout logic.
+- Tenure / reward clock: **not implemented** in the free milestone. Next-phase changes are specified in the economy plan.
 - What ends a claim under Open wall: **another account’s successful write** (or the same account’s recolor, which updates artist credit and timestamp).
 
 ## Tenure and payments
 
 No token payout, no points payout, and no tenure score in this scaffold.
 
-Supplied context, not checked against chain state, and not used by this code:
+Read-only mainnet observations, not used by the current board code:
 
 - MPOO account: `mpoo.nearlytrade.near`
-- Deployer account: `meta-poo-shitcoin.near`
+- MPOO launch creator: `meta-poo-shitcoin.near` (not proof of the game deployer)
 - Intended network: NEAR mainnet
-- Reported tax: 2% buy / 3% sell
+- Configured tax: 2% buy / 3% sell; burn and holder allocations recorded in the [MPOO evidence](research/2026-10-12-mpoo-live-contract-readout.json). Actual transfers/refunds/burns have not been trialled.
 
 Those identifiers are not the game contract. Do not point the pixel contract at the token account.
+
+### Confirmed next-phase direction
+
+- Paid paint purchases use **MPOO only**, replacing the earlier NEAR/MPOO choice and its 20% price comparison.
+- Pixels earn bounded **TOILET**, which is spent/burned as paint. No third independent paint-credit currency is planned.
+- Users stake **MPOO**, explicitly confirmed by the user, and receive net game revenue **in MPOO** after a disclosed operating reserve and liabilities. This replaces earlier TOILET staking and NEAR-only payout proposals.
+- Competitive repeated painting should consume more paint units than pixels issue. The economy must also have explicit reward caps for quiet/cooperative/bot-dominated play.
+- A separate NEAR-to-MPOO premium inventory shop and bounded replenishment executor are under investigation. NEAR buys MPOO there; it does not directly buy game paint. No premium, budget or live execution configuration is chosen.
+
+The [economy plan](2026-10-12-paint-economy-and-swap-plan.md) is the single implementation-planning document. It contains contract boundaries, interfaces to specify, migration, failure recovery, tests and unset economics. Updating these product decisions does not enable payments in the current free contract.
 
 ## Interface (accepted for Open wall)
 

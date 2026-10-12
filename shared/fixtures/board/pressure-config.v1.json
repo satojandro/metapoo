@@ -1,0 +1,13 @@
+{
+  "version": "pressure-v1-fixture",
+  "regionSize": 8,
+  "baseCost": "10",
+  "maxCost": "50",
+  "heatCap": "400",
+  "heatIncrement": "10",
+  "decayPerSecond": "1",
+  "surchargeNumerator": "1",
+  "surchargeDenominator": "10",
+  "effectiveAtSeconds": "0",
+  "quoteTtlNs": "30000000000"
+}

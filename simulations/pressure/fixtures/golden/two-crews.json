@@ -1,0 +1,188 @@
+{
+  "name": "two-crews",
+  "description": "Two crews alternate in one contested region, raising local pressure.",
+  "config": {
+    "version": 1,
+    "base_cost": "10",
+    "max_cost": "50",
+    "heat_cap": "400",
+    "heat_increment": "10",
+    "decay_per_second": "1",
+    "surcharge_numerator": "1",
+    "surcharge_denominator": "10",
+    "effective_at": "0"
+  },
+  "geometry": {
+    "width": 128,
+    "height": 128,
+    "region_size": 8
+  },
+  "price_threshold": "11",
+  "steps": [
+    {
+      "t": "100",
+      "account": "crew-a-1.near",
+      "operator": "crew-a",
+      "x": 40,
+      "y": 40,
+      "color": 1,
+      "expect": {
+        "ok": true,
+        "region_id": 85,
+        "cost": "10",
+        "cooled_heat": "0",
+        "heat_after": "10",
+        "updated_at_seconds": "100"
+      }
+    },
+    {
+      "t": "100",
+      "account": "crew-b-1.near",
+      "operator": "crew-b",
+      "x": 41,
+      "y": 40,
+      "color": 2,
+      "expect": {
+        "ok": true,
+        "region_id": 85,
+        "cost": "11",
+        "cooled_heat": "10",
+        "heat_after": "20",
+        "updated_at_seconds": "100"
+      }
+    },
+    {
+      "t": "101",
+      "account": "crew-a-2.near",
+      "operator": "crew-a",
+      "x": 42,
+      "y": 40,
+      "color": 3,
+      "expect": {
+        "ok": true,
+        "region_id": 85,
+        "cost": "11",
+        "cooled_heat": "19",
+        "heat_after": "29",
+        "updated_at_seconds": "101"
+      }
+    },
+    {
+      "t": "101",
+      "account": "crew-b-2.near",
+      "operator": "crew-b",
+      "x": 43,
+      "y": 40,
+      "color": 4,
+      "expect": {
+        "ok": true,
+        "region_id": 85,
+        "cost": "12",
+        "cooled_heat": "29",
+        "heat_after": "39",
+        "updated_at_seconds": "101"
+      }
+    },
+    {
+      "t": "102",
+      "account": "crew-a-1.near",
+      "operator": "crew-a",
+      "x": 44,
+      "y": 40,
+      "color": 5,
+      "expect": {
+        "ok": true,
+        "region_id": 85,
+        "cost": "13",
+        "cooled_heat": "38",
+        "heat_after": "48",
+        "updated_at_seconds": "102"
+      }
+    },
+    {
+      "t": "102",
+      "account": "crew-b-1.near",
+      "operator": "crew-b",
+      "x": 45,
+      "y": 40,
+      "color": 6,
+      "expect": {
+        "ok": true,
+        "region_id": 85,
+        "cost": "14",
+        "cooled_heat": "48",
+        "heat_after": "58",
+        "updated_at_seconds": "102"
+      }
+    },
+    {
+      "t": "103",
+      "account": "crew-a-2.near",
+      "operator": "crew-a",
+      "x": 40,
+      "y": 41,
+      "color": 7,
+      "expect": {
+        "ok": true,
+        "region_id": 85,
+        "cost": "15",
+        "cooled_heat": "57",
+        "heat_after": "67",
+        "updated_at_seconds": "103"
+      }
+    },
+    {
+      "t": "103",
+      "account": "crew-b-2.near",
+      "operator": "crew-b",
+      "x": 41,
+      "y": 41,
+      "color": 1,
+      "expect": {
+        "ok": true,
+        "region_id": 85,
+        "cost": "16",
+        "cooled_heat": "67",
+        "heat_after": "77",
+        "updated_at_seconds": "103"
+      }
+    }
+  ],
+  "expect_report": {
+    "spend": "102",
+    "successful_placements": 8,
+    "rejected_placements": 0,
+    "restoration_cost": "0",
+    "time_above_threshold_seconds": "3",
+    "price_threshold": "11",
+    "concentration_by_operator": {
+      "crew-a": {
+        "spend": "49",
+        "placements": 4
+      },
+      "crew-b": {
+        "spend": "53",
+        "placements": 4
+      }
+    },
+    "concentration_by_account": {
+      "crew-a-1.near": {
+        "spend": "23",
+        "placements": 2
+      },
+      "crew-a-2.near": {
+        "spend": "26",
+        "placements": 2
+      },
+      "crew-b-1.near": {
+        "spend": "25",
+        "placements": 2
+      },
+      "crew-b-2.near": {
+        "spend": "28",
+        "placements": 2
+      }
+    }
+  },
+  "markdown_summary": "# Pressure simulation: two-crews\n\n- **Spend:** 102 TOILET\n- **Successful placements:** 8\n- **Rejected placements:** 0\n- **Restoration cost:** 0 TOILET\n- **Time at/above price threshold (11):** 3 s\n\nConcentration by operator:\n  - crew-a: spend 49 TOILET across 4 placements\n  - crew-b: spend 53 TOILET across 4 placements\n\nConcentration by account:\n  - crew-a-1.near: spend 23 TOILET across 2 placements\n  - crew-a-2.near: spend 26 TOILET across 2 placements\n  - crew-b-1.near: spend 25 TOILET across 2 placements\n  - crew-b-2.near: spend 28 TOILET across 2 placements\n\n_Simulated outcomes are not measured player retention._"
+}
