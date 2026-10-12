@@ -1,5 +1,12 @@
 import { NearConnector } from "@hot-labs/near-connect";
-import { WALLET_NETWORK } from "./config";
+import { CONTRACT_ID, WALLET_NETWORK } from "./config";
+import {
+  buildAddFunctionCallKeyParams,
+  createDrawingSessionKeypair,
+  DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+  makeAuthorizedSessionRecord,
+  saveDrawingSessionRecord,
+} from "./drawing-session";
 
 /**
  * A connected wallet session. This is identity for the page only.
@@ -8,6 +15,15 @@ import { WALLET_NETWORK } from "./config";
 export interface WalletSession {
   accountId: string | null;
   networkId: string | null;
+}
+
+export interface ConnectWalletOptions {
+  /**
+   * When true (and a contract id is configured), ask the wallet to add a
+   * limited function-call key for `draw` during sign-in.
+   * Default / ordinary Connect leaves this off (fallback path).
+   */
+  authorizeDrawingSession?: boolean;
 }
 
 type Listener = (session: WalletSession) => void;
@@ -35,6 +51,9 @@ function ensureConnector(): NearConnector {
     return connector;
   }
 
+  // Default features keep ordinary sign-in without an FC key.
+  // connect({ addFunctionCallKey }) further filters for wallets that support
+  // signInWithFunctionCallKey when the user opts into a drawing session.
   connector = new NearConnector({
     network: WALLET_NETWORK,
     features: {
@@ -96,8 +115,61 @@ function firstString(...values: unknown[]): string | null {
   return null;
 }
 
-export async function connectWallet(): Promise<void> {
+/**
+ * Ordinary Connect (default): sign in without requesting an FC key.
+ * Opt-in: pass `{ authorizeDrawingSession: true }` when a contract id is set.
+ */
+export async function connectWallet(
+  options: ConnectWalletOptions = {},
+): Promise<void> {
   const current = ensureConnector();
+  const wantSession =
+    options.authorizeDrawingSession === true && CONTRACT_ID.length > 0;
+
+  if (wantSession) {
+    const keypair = await createDrawingSessionKeypair();
+    const addFunctionCallKey = buildAddFunctionCallKeyParams(
+      CONTRACT_ID,
+      keypair.publicKey,
+      DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+    );
+    await current.connect({ addFunctionCallKey });
+    try {
+      const wallet = await current.wallet();
+      const accountId = accountFromWallet(wallet);
+      if (accountId) {
+        session = { accountId, networkId: WALLET_NETWORK };
+        saveDrawingSessionRecord(
+          makeAuthorizedSessionRecord({
+            accountId,
+            networkId: WALLET_NETWORK,
+            contractId: CONTRACT_ID,
+            publicKey: keypair.publicKey,
+            secretKeyHex: keypair.secretKeyHex,
+            gasAllowanceYocto: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+          }),
+        );
+        emit();
+      }
+    } catch {
+      // connect() may already have updated the session through the sign-in event.
+      // If we have an account from the event, still try to persist the keypair.
+      if (session.accountId) {
+        saveDrawingSessionRecord(
+          makeAuthorizedSessionRecord({
+            accountId: session.accountId,
+            networkId: session.networkId ?? WALLET_NETWORK,
+            contractId: CONTRACT_ID,
+            publicKey: keypair.publicKey,
+            secretKeyHex: keypair.secretKeyHex,
+            gasAllowanceYocto: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+          }),
+        );
+      }
+    }
+    return;
+  }
+
   await current.connect();
   try {
     const wallet = await current.wallet();
@@ -136,6 +208,9 @@ export interface DrawCallArgs {
  * Ask the connected wallet to sign and send one `draw` function call.
  * Returns the wallet's execution outcome (hash + status), or throws if the
  * user rejects / the wallet errors. This function does not update the picture.
+ *
+ * Even when an experimental drawing session FC key was requested at connect,
+ * this path still uses the wallet popup API until local signing is proven.
  */
 export async function signAndSendDraw(args: DrawCallArgs): Promise<unknown> {
   const current = ensureConnector();

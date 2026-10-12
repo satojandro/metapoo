@@ -10,40 +10,65 @@
       <div>
         <h1>Meta Poo</h1>
         <p id="lede" class="lede">
-          A shared pixel wall. You can look without a wallet.
+          A live communal pixel wall inside a toilet stall. Explore, zoom, choose
+          a color, and place paint precisely.
         </p>
+      </div>
+      <div class="status-strip" aria-live="polite">
+        <p id="flow-state" class="flow-state"></p>
+        <p id="compact-status" class="compact-status"></p>
       </div>
     </header>
 
-    <p id="evidence" class="evidence"></p>
-    <p id="flow-state" class="flow-state" aria-live="polite"></p>
-    <div class="board-toolbar">
-      <button id="refresh-board" class="action secondary" type="button">
-        Refresh board
-      </button>
-      <p id="board-load-status" class="board-load-status" aria-live="polite"></p>
-    </div>
-
     <div class="layout">
       <main>
-        <div
-          id="board-focus"
-          class="board-focus"
-          tabindex="0"
-          role="application"
-          aria-label="Pixel board"
-          aria-describedby="board-help selection-summary"
-        >
-          <canvas id="board" width="512" height="512">
-            A 128 by 128 pixel board. Use the selection text if the picture
-            does not load.
-          </canvas>
-          <div id="selection-ring" hidden></div>
+        <section class="stall" aria-label="Toilet stall wall">
+          <div class="stall-frame">
+            <div class="stall-latch" aria-hidden="true"></div>
+            <div
+              id="board-focus"
+              class="board-focus"
+              tabindex="0"
+              role="application"
+              aria-label="Pixel board"
+              aria-describedby="board-help selection-summary"
+            >
+              <div id="board-viewport" class="board-viewport">
+                <div id="board-stage" class="board-stage">
+                  <canvas id="board" width="512" height="512">
+                    A 128 by 128 pixel board. Use the selection text if the
+                    picture does not load.
+                  </canvas>
+                  <div id="selection-ring" hidden></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="board-toolbar" role="toolbar" aria-label="Board view">
+          <button id="zoom-out" class="action secondary" type="button">
+            Zoom out
+          </button>
+          <button id="zoom-in" class="action secondary" type="button">
+            Zoom in
+          </button>
+          <button id="zoom-fit" class="action secondary" type="button">
+            Fit wall
+          </button>
+          <button id="zoom-paint" class="action secondary" type="button">
+            Paint zoom
+          </button>
+          <button id="refresh-board" class="action secondary" type="button">
+            Refresh board
+          </button>
+          <p id="board-load-status" class="board-load-status" aria-live="polite"></p>
         </div>
+
         <p id="board-help" class="help">
-          Click a square, or focus the board and use the arrow keys. Press
-          Enter to try a draw. Selection is shown with a ring and coordinates,
-          not by color alone.
+          Drag to pan. Scroll or pinch to zoom. Tap a square to select it. Pan
+          and pinch never paint — use Place paint. Arrow keys move the
+          selection; Enter places when ready.
         </p>
         <p id="selection-summary" class="summary" aria-live="polite"></p>
         <div
@@ -52,19 +77,16 @@
           aria-live="polite"
         ></div>
 
-        <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
-
-        <button id="draw-button" class="action" type="button">
-          Draw this pixel
-        </button>
+        <div class="paint-dock">
+          <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
+          <button id="draw-button" class="action place" type="button">
+            Place paint
+          </button>
+        </div>
         <section id="result" class="result" aria-live="assertive"></section>
       </main>
 
       <aside class="side">
-        <section>
-          <h2>Rules on this page</h2>
-          <div id="rules"></div>
-        </section>
         <section>
           <h2>Wallet</h2>
           <p id="wallet-summary"></p>
@@ -74,10 +96,47 @@
           </button>
           <p id="wallet-error" class="result" role="status"></p>
         </section>
+        <section class="drawing-session" aria-labelledby="drawing-session-heading">
+          <h2 id="drawing-session-heading">Drawing session (experimental)</h2>
+          <p id="drawing-session-status"></p>
+          <label class="drawing-session-opt-in" for="authorize-drawing-session">
+            <input
+              id="authorize-drawing-session"
+              type="checkbox"
+              disabled
+            />
+            Authorize drawing session on connect
+          </label>
+          <div class="drawing-session-actions">
+            <button
+              id="authorize-session-button"
+              class="action secondary"
+              type="button"
+              disabled
+            >
+              Authorize drawing session
+            </button>
+            <button
+              id="forget-session-button"
+              class="action secondary"
+              type="button"
+              disabled
+            >
+              Forget session in this browser
+            </button>
+          </div>
+          <p id="drawing-session-note" class="help"></p>
+        </section>
         <section>
-          <h2>Fees and sponsorship</h2>
+          <h2>Fees</h2>
           <p id="sponsor-note"></p>
         </section>
+        <details class="about">
+          <summary>About, rules, and contract detail</summary>
+          <p id="evidence" class="evidence"></p>
+          <h3>Rules on this page</h3>
+          <div id="rules"></div>
+        </details>
       </aside>
     </div>
 

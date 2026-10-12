@@ -18,9 +18,27 @@ import {
 import { prepareDraw } from "./draw-policy";
 import { describeNetwork } from "./network";
 import { renderBoard } from "./render-board";
-import { cellFromOffset, moveSelection, type Cell } from "./selection";
+import { moveSelection, type Cell } from "./selection";
 import { describeSponsorship } from "./sponsorship";
 import { submitDraw } from "./submit-draw";
+import {
+  cellFromViewportPoint,
+  fitCamera,
+  isPanGesture,
+  paintZoomCamera,
+  panBy,
+  selectionRingStyle,
+  stageSizeStyle,
+  stageTransform,
+  zoomAt,
+  type Camera,
+  type ViewportSize,
+} from "./viewport";
+import {
+  describeDrawingSession,
+  forgetDrawingSessionLocally,
+  loadDrawingSessionRecord,
+} from "./drawing-session";
 import { connectWallet, disconnectWallet, onWalletSession } from "./wallet";
 
 /**
@@ -30,6 +48,7 @@ import { connectWallet, disconnectWallet, onWalletSession } from "./wallet";
  * disconnected → connected → editing → wallet prompt → pending → success | error
  *
  * The picture only changes after a confirmed chain read, never on click alone.
+ * Pan / pinch / scroll-zoom never submit paint — only Place paint / Enter do.
  */
 
 function mustFind<T extends Element>(selector: string): T {
@@ -43,6 +62,8 @@ function mustFind<T extends Element>(selector: string): T {
 const canvas = mustFind<HTMLCanvasElement>("#board");
 const selectionRing = mustFind<HTMLElement>("#selection-ring");
 const boardFocus = mustFind<HTMLElement>("#board-focus");
+const boardViewport = mustFind<HTMLElement>("#board-viewport");
+const boardStage = mustFind<HTMLElement>("#board-stage");
 const selectionSummary = mustFind<HTMLElement>("#selection-summary");
 const preview = mustFind<HTMLElement>("#selection-preview");
 const palette = mustFind<HTMLElement>("#palette");
@@ -56,9 +77,25 @@ const walletError = mustFind<HTMLElement>("#wallet-error");
 const sponsorNote = mustFind<HTMLElement>("#sponsor-note");
 const evidence = mustFind<HTMLElement>("#evidence");
 const flowState = mustFind<HTMLElement>("#flow-state");
+const compactStatus = mustFind<HTMLElement>("#compact-status");
 const lede = mustFind<HTMLElement>("#lede");
 const refreshButton = mustFind<HTMLButtonElement>("#refresh-board");
 const boardLoadStatus = mustFind<HTMLElement>("#board-load-status");
+const zoomInButton = mustFind<HTMLButtonElement>("#zoom-in");
+const zoomOutButton = mustFind<HTMLButtonElement>("#zoom-out");
+const zoomFitButton = mustFind<HTMLButtonElement>("#zoom-fit");
+const zoomPaintButton = mustFind<HTMLButtonElement>("#zoom-paint");
+const drawingSessionStatus = mustFind<HTMLElement>("#drawing-session-status");
+const drawingSessionNote = mustFind<HTMLElement>("#drawing-session-note");
+const authorizeDrawingSession = mustFind<HTMLInputElement>(
+  "#authorize-drawing-session",
+);
+const authorizeSessionButton = mustFind<HTMLButtonElement>(
+  "#authorize-session-button",
+);
+const forgetSessionButton = mustFind<HTMLButtonElement>(
+  "#forget-session-button",
+);
 
 const pixelCache = createPixelCache();
 
@@ -68,6 +105,7 @@ let walletAccount: string | null = null;
 let walletNetwork: string | null = null;
 let drawInFlight = false;
 let boardLoadInFlight = false;
+let camera: Camera = { cellSize: 4, panX: 0, panY: 0 };
 /** High-level UI phase for the status strip. */
 let uiPhase:
   | "disconnected"
@@ -82,16 +120,25 @@ const sponsorship = describeSponsorship();
 sponsorNote.textContent = sponsorship.message;
 
 lede.textContent = isContractConfigured()
-  ? "A shared pixel wall on NEAR. You can look without a wallet. Drawing asks your wallet to approve one on-chain paint."
-  : "A shared pixel wall. You can look without a wallet. Drawing stays blocked until a game contract id is configured.";
+  ? "A live communal pixel wall on NEAR. Explore freely. Drawing asks your wallet to approve one on-chain paint."
+  : "A live communal pixel wall. Explore freely. Drawing stays blocked until a game contract id is configured.";
 
 fillRules();
 buildPalette();
 setFlow("disconnected");
+applyCamera(fitCamera(readViewportSize()));
 render();
 showSelection();
 showWallet();
+showDrawingSession();
 void bootstrapBoard();
+
+const resizeObserver = new ResizeObserver(() => {
+  camera = clampToViewport(camera);
+  applyCamera(camera);
+  positionSelection();
+});
+resizeObserver.observe(boardViewport);
 
 drawButton.addEventListener("click", () => {
   void attemptDraw();
@@ -101,8 +148,35 @@ connectButton.addEventListener("click", () => {
   void onConnectClick();
 });
 
+authorizeSessionButton.addEventListener("click", () => {
+  void onAuthorizeSessionClick();
+});
+
+forgetSessionButton.addEventListener("click", () => {
+  forgetDrawingSessionLocally();
+  showDrawingSession();
+});
+
 refreshButton.addEventListener("click", () => {
   void refreshBoardFromContract();
+});
+
+zoomInButton.addEventListener("click", () => {
+  zoomFromCenter(1.25);
+});
+zoomOutButton.addEventListener("click", () => {
+  zoomFromCenter(1 / 1.25);
+});
+zoomFitButton.addEventListener("click", () => {
+  applyCamera(fitCamera(readViewportSize()));
+  positionSelection();
+  updateCompactStatus();
+});
+zoomPaintButton.addEventListener("click", () => {
+  const focus = selected ?? { x: Math.floor(BOARD_WIDTH / 2), y: Math.floor(BOARD_HEIGHT / 2) };
+  applyCamera(paintZoomCamera(readViewportSize(), focus));
+  positionSelection();
+  updateCompactStatus();
 });
 
 refreshButton.disabled = !isContractConfigured();
@@ -110,31 +184,50 @@ refreshButton.title = isContractConfigured()
   ? "Reload every painted cell from the contract"
   : "Configure VITE_CONTRACT_ID to load chain state";
 
-canvas.addEventListener("click", (event) => {
-  const rect = canvas.getBoundingClientRect();
-  const next = cellFromOffset(
-    event.clientX - rect.left,
-    event.clientY - rect.top,
-    rect.width,
-    rect.height,
-  );
-  if (!next) {
-    return;
-  }
-  selected = next;
-  if (walletAccount) {
-    setFlow("editing");
-  }
-  render();
-  showSelection();
-  boardFocus.focus();
-  void refreshSelectedPixel();
-});
+wirePointerGestures();
+
+boardViewport.addEventListener(
+  "wheel",
+  (event) => {
+    event.preventDefault();
+    const rect = boardViewport.getBoundingClientRect();
+    const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+    applyCamera(
+      zoomAt(
+        camera,
+        readViewportSize(),
+        factor,
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+      ),
+    );
+    positionSelection();
+    updateCompactStatus();
+  },
+  { passive: false },
+);
 
 boardFocus.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
     void attemptDraw();
+    return;
+  }
+  if (event.key === "+" || event.key === "=") {
+    event.preventDefault();
+    zoomFromCenter(1.25);
+    return;
+  }
+  if (event.key === "-" || event.key === "_") {
+    event.preventDefault();
+    zoomFromCenter(1 / 1.25);
+    return;
+  }
+  if (event.key === "0") {
+    event.preventDefault();
+    applyCamera(fitCamera(readViewportSize()));
+    positionSelection();
+    updateCompactStatus();
     return;
   }
   const next = moveSelection(selected, event.key);
@@ -152,6 +245,10 @@ boardFocus.addEventListener("keydown", (event) => {
     if (walletAccount) {
       setFlow("editing");
     }
+    // Keep the selected cell in view when stepping with keys while zoomed.
+    if (selected) {
+      applyCamera(paintZoomCamera(readViewportSize(), selected, camera.cellSize));
+    }
     render();
     showSelection();
     void refreshSelectedPixel();
@@ -167,6 +264,7 @@ onWalletSession((session) => {
     setFlow(selected ? "editing" : "connected");
   }
   showWallet();
+  showDrawingSession();
 });
 
 async function bootstrapBoard(): Promise<void> {
@@ -175,6 +273,7 @@ async function bootstrapBoard(): Promise<void> {
       "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
     boardLoadStatus.textContent =
       "Board load: mock only (no contract id). Refresh stays disabled.";
+    updateCompactStatus();
     return;
   }
 
@@ -190,6 +289,7 @@ async function bootstrapBoard(): Promise<void> {
     const detail = error instanceof Error ? error.message : "Unknown read error";
     evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but the initial board read failed: ${detail}. You can still look at the local empty picture and try Refresh.`;
     boardLoadStatus.textContent = `Board load failed: ${detail}`;
+    updateCompactStatus();
   }
 }
 
@@ -218,6 +318,7 @@ async function refreshBoardFromContract(): Promise<void> {
   } finally {
     boardLoadInFlight = false;
     refreshButton.disabled = !isContractConfigured();
+    updateCompactStatus();
   }
 }
 
@@ -328,18 +429,22 @@ async function attemptDraw(): Promise<void> {
     drawInFlight = false;
     drawButton.disabled = false;
     showWallet();
+    showDrawingSession();
   }
 }
 
 async function onConnectClick(): Promise<void> {
   clearBlock(walletError);
   connectButton.disabled = true;
+  authorizeSessionButton.disabled = true;
   try {
     if (walletAccount) {
       await disconnectWallet();
       setFlow("disconnected");
     } else {
-      await connectWallet();
+      const wantSession =
+        authorizeDrawingSession.checked && isContractConfigured();
+      await connectWallet({ authorizeDrawingSession: wantSession });
       setFlow(selected ? "editing" : "connected");
     }
   } catch (error) {
@@ -353,25 +458,235 @@ async function onConnectClick(): Promise<void> {
   } finally {
     connectButton.disabled = false;
     showWallet();
+    showDrawingSession();
+  }
+}
+
+/**
+ * Re-run connect with addFunctionCallKey while already signed in (or when the
+ * checkbox path was skipped). Ordinary Connect remains available as fallback.
+ */
+async function onAuthorizeSessionClick(): Promise<void> {
+  clearBlock(walletError);
+  if (!isContractConfigured()) {
+    fillBlock(
+      walletError,
+      "Drawing session unavailable",
+      "Set VITE_CONTRACT_ID before authorizing a drawing session.",
+    );
+    return;
+  }
+  authorizeSessionButton.disabled = true;
+  connectButton.disabled = true;
+  try {
+    await connectWallet({ authorizeDrawingSession: true });
+    setFlow(selected ? "editing" : "connected");
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown wallet error";
+    setFlow("error");
+    fillBlock(
+      walletError,
+      "Drawing session was not authorized",
+      `Ordinary wallet approval still works for each draw. ${detail}`,
+    );
+  } finally {
+    connectButton.disabled = false;
+    showWallet();
+    showDrawingSession();
   }
 }
 
 function render(): void {
   renderBoard(canvas, paintedPixels(pixelCache));
+  positionSelection();
+  updateCompactStatus();
+}
+
+function positionSelection(): void {
   if (!selected) {
     selectionRing.hidden = true;
     return;
   }
-  const widthPercent = 100 / BOARD_WIDTH;
-  const heightPercent = 100 / BOARD_HEIGHT;
+  const style = selectionRingStyle(selected);
   selectionRing.hidden = false;
-  selectionRing.style.left = `${selected.x * widthPercent}%`;
-  selectionRing.style.top = `${selected.y * heightPercent}%`;
-  selectionRing.style.width = `${widthPercent}%`;
-  selectionRing.style.height = `${heightPercent}%`;
-  // Preview outline uses a second border color when a palette color is chosen,
-  // so selection is not color-only (ring + coordinates text remain primary).
+  selectionRing.style.left = style.left;
+  selectionRing.style.top = style.top;
+  selectionRing.style.width = style.width;
+  selectionRing.style.height = style.height;
   selectionRing.dataset.hasColor = selectedColor !== null ? "true" : "false";
+}
+
+function applyCamera(next: Camera): void {
+  camera = next;
+  const size = stageSizeStyle(camera);
+  boardStage.style.width = size.width;
+  boardStage.style.height = size.height;
+  boardStage.style.transform = stageTransform(camera);
+}
+
+function clampToViewport(current: Camera): Camera {
+  const viewport = readViewportSize();
+  // Re-fit if we were essentially in overview; otherwise keep zoom and reclamps.
+  if (current.cellSize <= fitCamera(viewport).cellSize * 1.05) {
+    return fitCamera(viewport);
+  }
+  return panBy(current, viewport, 0, 0);
+}
+
+function readViewportSize(): ViewportSize {
+  const rect = boardViewport.getBoundingClientRect();
+  return {
+    width: Math.max(1, rect.width),
+    height: Math.max(1, rect.height),
+  };
+}
+
+function zoomFromCenter(factor: number): void {
+  const viewport = readViewportSize();
+  applyCamera(zoomAt(camera, viewport, factor, viewport.width / 2, viewport.height / 2));
+  positionSelection();
+  updateCompactStatus();
+}
+
+/**
+ * Pointer rules:
+ * - one finger / mouse drag past threshold → pan (never paint)
+ * - release without much movement → select cell
+ * - two pointers → pinch zoom (never paint)
+ */
+function wirePointerGestures(): void {
+  const pointers = new Map<number, { x: number; y: number }>();
+  let primaryId: number | null = null;
+  let startX = 0;
+  let startY = 0;
+  let lastX = 0;
+  let lastY = 0;
+  let panning = false;
+  let pinchStartDistance = 0;
+  let pinchStartCellSize = 0;
+
+  boardViewport.addEventListener("pointerdown", (event) => {
+    boardViewport.setPointerCapture(event.pointerId);
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointers.size === 1) {
+      primaryId = event.pointerId;
+      startX = event.clientX;
+      startY = event.clientY;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      panning = false;
+    } else if (pointers.size === 2) {
+      panning = true;
+      const pts = [...pointers.values()];
+      pinchStartDistance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      pinchStartCellSize = camera.cellSize;
+      boardViewport.classList.add("is-panning");
+    }
+  });
+
+  boardViewport.addEventListener("pointermove", (event) => {
+    if (!pointers.has(event.pointerId)) {
+      return;
+    }
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (pointers.size >= 2) {
+      const pts = [...pointers.values()];
+      const distance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (pinchStartDistance > 0) {
+        const rect = boardViewport.getBoundingClientRect();
+        const midX = (pts[0].x + pts[1].x) / 2 - rect.left;
+        const midY = (pts[0].y + pts[1].y) / 2 - rect.top;
+        const factor = distance / pinchStartDistance;
+        applyCamera(
+          zoomAt(
+            { ...camera, cellSize: pinchStartCellSize },
+            readViewportSize(),
+            factor,
+            midX,
+            midY,
+          ),
+        );
+        positionSelection();
+        updateCompactStatus();
+      }
+      return;
+    }
+
+    if (event.pointerId !== primaryId) {
+      return;
+    }
+
+    const dx = event.clientX - startX;
+    const dy = event.clientY - startY;
+    if (!panning && isPanGesture(dx, dy)) {
+      panning = true;
+      boardViewport.classList.add("is-panning");
+    }
+    if (panning) {
+      applyCamera(
+        panBy(camera, readViewportSize(), event.clientX - lastX, event.clientY - lastY),
+      );
+      positionSelection();
+      lastX = event.clientX;
+      lastY = event.clientY;
+    }
+  });
+
+  const endPointer = (event: PointerEvent): void => {
+    if (!pointers.has(event.pointerId)) {
+      return;
+    }
+    pointers.delete(event.pointerId);
+
+    if (pointers.size < 2) {
+      pinchStartDistance = 0;
+    }
+
+    if (event.pointerId === primaryId && pointers.size === 0) {
+      const wasPan = panning;
+      boardViewport.classList.remove("is-panning");
+      primaryId = null;
+      panning = false;
+
+      if (!wasPan) {
+        selectAtClientPoint(event.clientX, event.clientY);
+      } else {
+        updateCompactStatus();
+      }
+      return;
+    }
+
+    if (pointers.size === 1) {
+      const remaining = [...pointers.entries()][0];
+      primaryId = remaining[0];
+      startX = remaining[1].x;
+      startY = remaining[1].y;
+      lastX = remaining[1].x;
+      lastY = remaining[1].y;
+      panning = true;
+    }
+  };
+
+  boardViewport.addEventListener("pointerup", endPointer);
+  boardViewport.addEventListener("pointercancel", endPointer);
+}
+
+function selectAtClientPoint(clientX: number, clientY: number): void {
+  const rect = boardViewport.getBoundingClientRect();
+  const next = cellFromViewportPoint(clientX - rect.left, clientY - rect.top, camera);
+  if (!next) {
+    return;
+  }
+  selected = next;
+  if (walletAccount) {
+    setFlow("editing");
+  }
+  render();
+  showSelection();
+  boardFocus.focus();
+  void refreshSelectedPixel();
 }
 
 function showSelection(): void {
@@ -379,6 +694,7 @@ function showSelection(): void {
     selectedColor === null ? "none yet" : `${colorName(selectedColor)} (index ${selectedColor})`;
 
   updatePreview();
+  positionSelection();
 
   if (!selected) {
     selectionSummary.textContent = `No square selected. Chosen paint: ${colorLabel}. Unpainted squares have no artist.`;
@@ -440,6 +756,44 @@ function showWallet(): void {
   }
   const notice = describeNetwork(walletAccount ? walletNetwork : null);
   networkSummary.textContent = notice.message;
+  updateCompactStatus();
+}
+
+/**
+ * Experimental drawing-session panel. Uses textContent only.
+ * Does not claim no-popup drawing until local signing is proven.
+ */
+function showDrawingSession(): void {
+  const status = describeDrawingSession({
+    contractId: CONTRACT_ID,
+    accountId: walletAccount,
+    networkId: walletNetwork,
+    record: loadDrawingSessionRecord(),
+  });
+  drawingSessionStatus.textContent = `${status.title}. ${status.message}`;
+  drawingSessionNote.textContent = [
+    `Configured allowance for a new session: ${status.allowanceLabel}.`,
+    "Renewal: authorize again to request a new limited key (old on-chain keys are not auto-removed).",
+    "Revoke: “Forget session” only clears this browser — clearing storage is not on-chain key deletion.",
+  ].join(" ");
+
+  const canUseContract = isContractConfigured();
+  authorizeDrawingSession.disabled = !canUseContract || walletAccount !== null;
+  authorizeDrawingSession.title = canUseContract
+    ? "Ask the wallet for a draw-only function-call key during Connect"
+    : "Configure VITE_CONTRACT_ID first";
+
+  const sessionActive = status.phase === "active";
+  authorizeSessionButton.disabled = !canUseContract || sessionActive;
+  forgetSessionButton.disabled =
+    status.record === null || status.phase === "forgotten_locally";
+}
+
+function updateCompactStatus(): void {
+  const network = isContractConfigured() ? PAGE_NETWORK : "mock";
+  const account = walletAccount ? walletAccount : "not connected";
+  const zoom = `~${camera.cellSize.toFixed(1)} px/cell`;
+  compactStatus.textContent = `${network} · ${account} · ${zoom} · no app fee`;
 }
 
 function fillRules(): void {
@@ -449,6 +803,7 @@ function fillRules(): void {
     "An unpainted square is not a color. It has no stored artist. Palette index 0 is Ink, a real paint color.",
     "Overwrite rule: Open wall. Any connected account may paint any pixel, including one someone else painted. Vandalism is possible.",
     "The current artist is credit for the latest successful write. That is not a legal claim on the artwork.",
+    "Explore with pan and zoom. Only Place paint (or Enter) submits a draw — drag and pinch never paint.",
     isContractConfigured()
       ? `Game contract: ${CONTRACT_ID} on ${PAGE_NETWORK}. On open (and Refresh), the page loads every painted cell via paginated get_pixels. Success still requires a transaction id and a matching get_pixel read.`
       : "No game contract id is configured yet (VITE_CONTRACT_ID empty), so this page will not open a draw signature or claim a chain success.",
@@ -502,7 +857,7 @@ function setFlow(phase: typeof uiPhase): void {
   const labels: Record<typeof uiPhase, string> = {
     disconnected: "State: disconnected — look freely; draw needs a wallet.",
     connected: "State: connected — pick a square and a named color.",
-    editing: "State: editing — review the pixel rule, then try to draw.",
+    editing: "State: editing — review the pixel rule, then Place paint.",
     wallet_prompt: "State: wallet prompt — approve or reject in your wallet.",
     pending: "State: pending — waiting for transaction confirmation + board read.",
     success: "State: success — chain read matched your draw.",

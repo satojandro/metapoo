@@ -2,9 +2,11 @@
 
 ## Product summary
 
-Meta Poo is a playful public toilet wall where people connect a NEAR wallet and leave pixel graffiti on a shared board. Berry Club is an inspiration for communal pixel ownership and creative competition. The implementation should be a modern, original product, not a direct fork or a copy of its code, assets, or distinctive presentation.
+Meta Poo is a playful public toilet wall where people connect a NEAR wallet and leave pixel graffiti on a shared board. The stall is the setting; the wall is a precise, flat communal canvas. Berry Club / NEAR Place is a technical reference for board engineering patterns (refresh, pending paint, function-call drawing sessions) and inspiration for communal pixel competition. Reddit r/place is the primary interaction reference for zoom, pan, and screen-sized paint targets. The implementation should be a modern, original product, not a direct fork or a copy of Berry Club's code, assets, or distinctive presentation.
 
-The MVP should prove the basic loop: view the wall, connect a wallet, choose a pixel, submit a drawing action, receive a clear result, and see the updated wall. Keep the first release achievable on a Sunday by limiting the board to a provisional 128 by 128 pixels, using a small palette, and postponing payments and cross-chain features. Free means no in-game fee; an unsponsored NEAR transaction may still require the user's wallet to pay network gas.
+The MVP should prove the basic loop: explore the wall (zoom and pan), connect a wallet, choose a pixel and color, place paint with clear status, receive a clear result, and see others' confirmed work update automatically. Keep the first release achievable by limiting the board to a provisional 128 by 128 pixels, using a small palette, and postponing payments and cross-chain features. Free means no in-game fee; an unsponsored NEAR transaction may still require the user's wallet to pay network gas.
+
+See `docs/2026-10-12-viewport-and-interaction-brief.md` for the current viewport and placement brief.
 
 ## Goals
 

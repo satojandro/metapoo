@@ -64,15 +64,59 @@ Sponsorship stays behind `VITE_SPONSORSHIP_ENABLED`. When off (default), the UI
 does not claim a sponsored or cross-chain flow. When on but unavailable, the
 ordinary wallet path is used. `payment-provider.ts` is an unused stub.
 
+## Board viewport (12 October 2026)
+
+The wall sits in a stall frame with a zoomable viewport (`src/viewport.ts`):
+
+- **Fit wall** shows the full 128×128 board.
+- **Paint zoom** targets ~20 screen pixels per cell for precise placement.
+- Drag to pan; scroll / pinch to zoom. Pan and pinch never submit paint.
+- Selection uses an **external** ring so the cell interior stays visible.
+- Palette + **Place paint** stay in a dock under the board (sticky on narrow screens).
+- Contract / schema / long rules live under **About** in the side panel.
+
+See `docs/2026-10-12-viewport-and-interaction-brief.md`.
+
 ## Known limitations
 
 - Full-board load uses paginated `get_pixels` (max 256 cells per page). History
   of past colors is not available — only the current painted set.
+- Board refresh is still manual / after own success — bounded polling and
+  stale-response guards are not done yet (board-review step 3).
 - Without `VITE_CONTRACT_ID`, the board is a local empty mock (not chain state).
 - Gas sponsorship is not implemented.
 - No MPOO/NEAR checkout, balances, treasury, Intents, or rage quit.
 - Success confirmation polls `get_pixel` a few times; slow RPC may show a
   “read did not match yet” failure even when the explorer later shows success.
+
+### Experimental drawing session (function-call key)
+
+A narrow scaffold can optionally call near-connect `connect({ addFunctionCallKey })`
+so the wallet is asked to add a **limited** access key for this board’s `draw`
+method only, with a small explicit gas allowance (0.05 NEAR lifetime).
+
+**What works in code today**
+
+- Default Connect stays ordinary sign-in (`signInWithoutAddKey`) — no FC key.
+- Opt-in checkbox / “Authorize drawing session” builds `addFunctionCallKey` with
+  `allowMethods: { anyMethod: false, methodNames: ["draw"] }` and a limited
+  `gasAllowance`.
+- An ed25519 keypair is generated (Web Crypto) and stored in `localStorage`
+  under `metapoo.experimental.drawingSession.v1` (labeled experimental).
+- Plain-language status covers inactive / active / forgotten / mismatch, plus
+  renewal and “forget in this browser” copy.
+
+**Still unverified on testnet**
+
+- Whether your chosen wallet actually supports `signInWithFunctionCallKey`.
+- That the key appears on chain with the expected receiver/methods/allowance.
+- Remaining allowance reads, exhaustion handling, and real on-chain revocation.
+- **No-popup drawing:** paint still uses `wallet.signAndSendTransaction`. Having
+  requested an FC key at sign-in does **not** yet mean local signing without a
+  wallet popup. Do not treat multiple paints without popups as proven.
+
+**Important:** clearing browser storage or clicking “Forget session” only removes
+local key material. It does **not** delete the access key on the NEAR account.
 
 ## Manual checks (and environment used)
 
@@ -97,12 +141,14 @@ Automated suite: `cd web && npm test` (**mock** / unit). Production build:
 
 | File | Role |
 |---|---|
-| `src/main.ts` | Wires the page: selection, wallet, draw button, status strip |
+| `src/main.ts` | Wires the page: viewport gestures, selection, wallet, Place paint, status |
+| `src/viewport.ts` | Camera math: fit, zoom, pan, hit-testing, selection ring box |
 | `src/draw-policy.ts` | Client checks before any wallet prompt |
 | `src/submit-draw.ts` | Wallet prompt → pending → confirm with `get_pixel` |
 | `src/contract.ts` | Free RPC view calls (`get_board`, `get_pixel`, `get_pixels`) |
 | `src/load-board.ts` | Walk every `get_pixels` page into one list |
-| `src/wallet.ts` | Connect / disconnect / `signAndSendDraw` |
+| `src/wallet.ts` | Connect / disconnect / `signAndSendDraw` (optional FC key on connect) |
+| `src/drawing-session.ts` | Experimental FC-key session helpers + localStorage |
 | `src/board-cache.ts` | Sparse painted cells from confirmed reads only |
 | `src/sponsorship.ts` | Feature flag + ordinary-wallet fallback |
 | `src/payment-provider.ts` | Unused future checkout interface |

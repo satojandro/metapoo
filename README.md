@@ -2,7 +2,9 @@
 
 This pack gives a small team a shared product brief, technical boundaries, staged plan, parallel Cursor workflow, focused agent assignments, and learning record. The first milestone is a working, free pixel-graffiti board on NEAR with wallet connection and transparent transaction status.
 
-The project starts in a newly created clean repository; it is not a Berry Club fork. Berry Club is inspiration for the product concept only. The kickoff prompt instructs Cursor to scaffold from scratch if the repository is empty and to inspect any starter files before building on them.
+The project starts in a newly created clean repository; it is not a Berry Club fork or a copy of its code or presentation. Berry Club / NEAR Place is a technical reference for communal board patterns (batching, refresh, drawing sessions) as well as product inspiration. Reddit r/place is the primary interaction reference for zoom, pan, and precise placement. The kickoff prompt instructs Cursor to scaffold from scratch if the repository is empty and to inspect any starter files before building on them.
+
+Current interaction brief: `docs/2026-10-12-viewport-and-interaction-brief.md`. Board assessment and ordered next steps: `docs/2026-10-12-board-review-and-next-steps.md`.
 
 ## Read in this order
 

@@ -52,5 +52,5 @@ These are **not** done yet. The current page still uses: pick color → select p
 | UX-1 | **One-click draw** | With a color chosen and wallet connected (and contract configured), clicking a pixel both selects that cell **and** starts the `draw` transaction. Still only paint the canvas after an observed tx + board read — no fake local paint. |
 | UX-2 | **Pre-approved drawing (Berry Club–style)** | Use NEAR **function-call access keys** (limited allowance / methods on the board contract) so the user pre-approves a budget of gas once, then pixel clicks can submit `draw` without a full wallet popup every time. Must explain the allowance in plain language, show remaining budget, and make revoke/disconnect clear. Does **not** add MPOO payments or sponsorship by itself. |
 
-Suggested order: ship **UX-1** first (smaller), then **UX-2** (needs careful key permissions, allowance UX, and threat review).
+Suggested order after the 12 October 2026 board review: ship **viewport zoom/pan + Place paint** first (see `docs/2026-10-12-viewport-and-interaction-brief.md`), then a narrow **UX-2** drawing-session experiment, then consider **UX-1** one-click / direct-paint only after authorized sessions work. Continuous brush strokes stay later.
 
