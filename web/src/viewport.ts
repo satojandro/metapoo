@@ -17,7 +17,10 @@ export interface Camera {
 
 /** Comfortable paint target from the board-review brief. */
 export const PAINT_CELL_PX = 20;
+/** Floor for interactive zoom (not for fit-to-wall overview). */
 export const MIN_CELL_PX = 2;
+/** Absolute floor so fit can shrink below painting minimum on tiny viewports. */
+export const FIT_MIN_CELL_PX = 0.25;
 export const MAX_CELL_PX = 48;
 
 /** Movement past this many screen pixels counts as a pan, not a tap. */
@@ -42,11 +45,12 @@ export function boardScreenSize(camera: Camera): { width: number; height: number
  */
 export function fitCamera(viewport: ViewportSize, margin = 8): Camera {
   if (viewport.width <= 0 || viewport.height <= 0) {
-    return { cellSize: MIN_CELL_PX, panX: 0, panY: 0 };
+    return { cellSize: FIT_MIN_CELL_PX, panX: 0, panY: 0 };
   }
   const usableW = Math.max(1, viewport.width - margin * 2);
   const usableH = Math.max(1, viewport.height - margin * 2);
-  const cellSize = clampCellSize(
+  // Overview may go below MIN_CELL_PX so small viewports still show the whole wall.
+  const cellSize = clampFitCellSize(
     Math.min(usableW / BOARD_WIDTH, usableH / BOARD_HEIGHT),
   );
   const board = boardScreenSize({ cellSize, panX: 0, panY: 0 });
@@ -76,12 +80,24 @@ export function clampCellSize(cellSize: number): number {
   return Math.min(MAX_CELL_PX, Math.max(MIN_CELL_PX, cellSize));
 }
 
+/** Allow overview scales smaller than the painting zoom floor. */
+export function clampFitCellSize(cellSize: number): number {
+  if (!Number.isFinite(cellSize)) {
+    return FIT_MIN_CELL_PX;
+  }
+  return Math.min(MAX_CELL_PX, Math.max(FIT_MIN_CELL_PX, cellSize));
+}
+
 /**
  * Keep some of the board visible. When zoomed out past the viewport, center.
  * When zoomed in, allow panning but do not lose the wall entirely.
+ * Preserves sub-MIN overview scales from fitCamera.
  */
 export function clampPan(camera: Camera, viewport: ViewportSize): Camera {
-  const cellSize = clampCellSize(camera.cellSize);
+  const cellSize =
+    camera.cellSize < MIN_CELL_PX
+      ? clampFitCellSize(camera.cellSize)
+      : clampCellSize(camera.cellSize);
   const board = boardScreenSize({ cellSize, panX: 0, panY: 0 });
   const panX = clampAxis(camera.panX, viewport.width, board.width);
   const panY = clampAxis(camera.panY, viewport.height, board.height);

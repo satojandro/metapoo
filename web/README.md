@@ -117,6 +117,18 @@ with `@near-js` first; ordinary wallet approval remains the fallback.
 - Contract `get_board` must match shared schema/size/rule/palette or drawing
   stays disabled (RPC calls use a 20s timeout).
 
+**Review fixes (12 October 2026)**
+
+- Session auth uses `getAccounts()` and verifies the FC key on chain before
+  marking the session active.
+- Local RPC errors after a possible broadcast do **not** fall through to a
+  second wallet submission.
+- Each draw captures an immutable request (cell, color, account, network).
+- Cache merges use observed block height so a slow full refresh cannot wipe a
+  newer single-cell observation.
+- Fit-to-wall may scale below the painting zoom floor on tiny viewports.
+- Stall side walls are clipped inside the scene.
+
 **Still unverified on your testnet wallet**
 
 - End-to-end authorize → multi-paint without popups on your chosen wallet.

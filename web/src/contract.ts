@@ -172,7 +172,12 @@ export async function viewFunction<T>(
   }
 
   const body = (await response.json()) as {
-    result?: { result?: number[]; error?: string; logs?: string[] };
+    result?: {
+      result?: number[];
+      error?: string;
+      logs?: string[];
+      block_height?: number;
+    };
     error?: { message?: string };
   };
 
@@ -188,6 +193,84 @@ export async function viewFunction<T>(
 
   const text = new TextDecoder().decode(Uint8Array.from(body.result.result));
   return JSON.parse(text) as T;
+}
+
+export interface ViewResult<T> {
+  data: T;
+  /** Block height reported by the RPC query result, when present. */
+  blockHeight: number | null;
+}
+
+/** Like viewFunction, but also returns the RPC block_height when available. */
+export async function viewFunctionWithMeta<T>(
+  methodName: string,
+  args: Record<string, unknown> = {},
+  block: ViewBlockRef = DEFAULT_VIEW_BLOCK,
+): Promise<ViewResult<T>> {
+  if (!isContractConfigured()) {
+    throw new Error(
+      "No contract id is configured. Set VITE_CONTRACT_ID in web/.env.",
+    );
+  }
+
+  const argsBase64 = bytesToBase64(
+    new TextEncoder().encode(JSON.stringify(args)),
+  );
+
+  const blockParams =
+    block.kind === "block"
+      ? { block_id: block.blockId }
+      : { finality: block.finality };
+
+  const response = await fetchWithTimeout(RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "metapoo-view",
+      method: "query",
+      params: {
+        request_type: "call_function",
+        ...blockParams,
+        account_id: CONTRACT_ID,
+        method_name: methodName,
+        args_base64: argsBase64,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`RPC HTTP ${response.status} while calling ${methodName}.`);
+  }
+
+  const body = (await response.json()) as {
+    result?: {
+      result?: number[];
+      error?: string;
+      logs?: string[];
+      block_height?: number;
+    };
+    error?: { message?: string };
+  };
+
+  if (body.error?.message) {
+    throw new Error(body.error.message);
+  }
+  if (body.result?.error) {
+    throw new Error(String(body.result.error));
+  }
+  if (!body.result?.result) {
+    throw new Error(`Empty RPC result for ${methodName}.`);
+  }
+
+  const text = new TextDecoder().decode(Uint8Array.from(body.result.result));
+  const blockHeight =
+    typeof body.result.block_height === "number"
+      ? body.result.block_height
+      : block.kind === "block" && typeof block.blockId === "number"
+        ? block.blockId
+        : null;
+  return { data: JSON.parse(text) as T, blockHeight };
 }
 
 /**
@@ -238,6 +321,25 @@ export async function getPixel(
 ): Promise<PixelView> {
   const raw = await viewFunction<ChainPixelView>("get_pixel", { x, y }, block);
   return mapChainPixel(raw);
+}
+
+/** get_pixel plus the RPC block height used for cache freshness. */
+export async function getPixelWithBlock(
+  x: number,
+  y: number,
+  block: ViewBlockRef = DEFAULT_VIEW_BLOCK,
+): Promise<{ pixel: PixelView; blockHeight: number }> {
+  const meta = await viewFunctionWithMeta<ChainPixelView>(
+    "get_pixel",
+    { x, y },
+    block,
+  );
+  const blockHeight =
+    meta.blockHeight ??
+    (block.kind === "block" && typeof block.blockId === "number"
+      ? block.blockId
+      : await fetchLatestBlockHeight());
+  return { pixel: mapChainPixel(meta.data), blockHeight };
 }
 
 export async function getPixelsPage(

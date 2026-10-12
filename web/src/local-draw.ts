@@ -24,14 +24,21 @@ export class LocalDrawError extends Error {
     | "key_missing"
     | "allowance_exhausted"
     | "rpc";
+  /**
+   * True when a signed transaction may already have been broadcast.
+   * Callers must NOT fall back to a second submission path.
+   */
+  readonly mayHaveBroadcast: boolean;
 
   constructor(
     code: LocalDrawError["code"],
     message: string,
+    mayHaveBroadcast = false,
   ) {
     super(message);
     this.name = "LocalDrawError";
     this.code = code;
+    this.mayHaveBroadcast = mayHaveBroadcast;
   }
 }
 
@@ -169,6 +176,8 @@ export async function signAndSendDrawLocally(
   const signer = signerFromRecord(record);
   const account = new Account(args.accountId, provider(), signer);
 
+  // Once callFunctionRaw starts, a lost RPC response may still mean the tx
+  // landed. Treat any error from this call as possibly-broadcast.
   try {
     return await account.callFunctionRaw({
       contractId: CONTRACT_ID,
@@ -184,9 +193,14 @@ export async function signAndSendDrawLocally(
       throw new LocalDrawError(
         "allowance_exhausted",
         `Drawing-session allowance or balance blocked the call. ${detail}`,
+        true,
       );
     }
-    throw new LocalDrawError("rpc", detail);
+    throw new LocalDrawError(
+      "rpc",
+      detail,
+      true,
+    );
   }
 }
 

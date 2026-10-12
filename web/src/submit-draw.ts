@@ -68,7 +68,8 @@ export type SubmitDrawResult =
       status: "confirmation_delayed";
       title: string;
       message: string;
-      transactionId: string;
+      /** May be null when broadcast is uncertain and no hash was observed. */
+      transactionId: string | null;
       explorerUrl: string | null;
       pixel: PixelView | null;
     }
@@ -134,25 +135,53 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
       });
       usedLocalSession = true;
     } catch (error) {
-      if (error instanceof LocalDrawError && error.code === "allowance_exhausted") {
-        return {
-          status: "failed",
-          title: "Drawing session allowance exhausted",
-          message: `${error.message} Nothing was auto-resubmitted. Renew the session or use ordinary wallet approval.`,
-          transactionId: null,
-          explorerUrl: null,
-          pixel: null,
-        };
+      if (error instanceof LocalDrawError) {
+        if (error.code === "allowance_exhausted") {
+          return {
+            status: "failed",
+            title: "Drawing session allowance exhausted",
+            message: `${error.message} Nothing was auto-resubmitted. Renew the session or use ordinary wallet approval.`,
+            transactionId: null,
+            explorerUrl: null,
+            pixel: null,
+          };
+        }
+        // If the signed tx may already be on the network, never open a second
+        // wallet submission for the same paint.
+        if (error.mayHaveBroadcast) {
+          return {
+            status: "confirmation_delayed",
+            title: "Submission uncertain — not retried",
+            message: [
+              "The local drawing-session send failed after signing may have started.",
+              error.message,
+              "This page will not open a second wallet transaction for the same paint (that could spend gas twice or overwrite intervening art).",
+              "Refresh the board and check your account activity / explorer before trying again.",
+            ].join(" "),
+            transactionId: null,
+            explorerUrl: null,
+            pixel: null,
+          };
+        }
+        // Definitely never broadcast — safe to offer ordinary wallet fallback.
+        input.onProgress?.({
+          phase: "wallet_prompt",
+          detail: [
+            "Local drawing session could not start this paint.",
+            error.message,
+            walletPromptExplanation(input, sponsorship.message),
+          ].join(" "),
+        });
+      } else {
+        input.onProgress?.({
+          phase: "wallet_prompt",
+          detail: [
+            "Local drawing session could not start this paint.",
+            error instanceof Error ? error.message : "Unknown local-sign error.",
+            walletPromptExplanation(input, sponsorship.message),
+          ].join(" "),
+        });
       }
-      // Fall through to ordinary wallet approval for other local failures.
-      input.onProgress?.({
-        phase: "wallet_prompt",
-        detail: [
-          "Local drawing session could not send this paint.",
-          error instanceof Error ? error.message : "Unknown local-sign error.",
-          walletPromptExplanation(input, sponsorship.message),
-        ].join(" "),
-      });
     }
   }
 

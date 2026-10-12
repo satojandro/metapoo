@@ -4,11 +4,16 @@ import { isWriteAtLeastAsNew } from "./board-sync";
 /**
  * Sparse in-memory picture of painted cells.
  *
- * On open (and on refresh), the page fills this from paginated `get_pixels`
- * reads. Clicks never write here — only authoritative chain reads do.
+ * Each entry records the block height at which we observed it, so a slow full
+ * refresh cannot replace a newer single-cell read or draw confirmation.
  */
 
-export type PixelCache = Map<string, PixelView>;
+export interface CachedPixel extends PixelView {
+  /** NEAR block height when this cell evidence was applied. */
+  observedBlockHeight: number;
+}
+
+export type PixelCache = Map<string, CachedPixel>;
 
 export function cellKey(x: number, y: number): string {
   return `${x},${y}`;
@@ -18,59 +23,106 @@ export function createPixelCache(): PixelCache {
   return new Map();
 }
 
-/** Store or clear one cell from an authoritative read. */
-export function rememberPixel(cache: PixelCache, pixel: PixelView): void {
-  const key = cellKey(pixel.x, pixel.y);
-  if (pixel.colorIndex === null) {
-    cache.delete(key);
-    return;
-  }
-  cache.set(key, pixel);
+function toCached(pixel: PixelView, observedBlockHeight: number): CachedPixel {
+  return { ...pixel, observedBlockHeight };
 }
 
 /**
- * Apply a single-cell read only when it is at least as new as the cached write.
- * Prevents a slow selected-cell response from overwriting a newer full refresh.
- * Returns true when the cache changed.
+ * Apply a cell observed at `blockHeight` when it is at least as fresh as the
+ * cache entry (by block, then by write timestamp).
  */
+export function rememberPixelAtBlock(
+  cache: PixelCache,
+  pixel: PixelView,
+  blockHeight: number,
+): boolean {
+  const key = cellKey(pixel.x, pixel.y);
+  const existing = cache.get(key);
+
+  if (existing) {
+    if (blockHeight < existing.observedBlockHeight) {
+      return false;
+    }
+    if (
+      blockHeight === existing.observedBlockHeight &&
+      !isWriteAtLeastAsNew(
+        pixel.lastWriteTimestampNs,
+        existing.lastWriteTimestampNs,
+      )
+    ) {
+      return false;
+    }
+  }
+
+  if (pixel.colorIndex === null) {
+    // Empty at this block: only clear if we are not wiping newer evidence.
+    if (existing && existing.observedBlockHeight > blockHeight) {
+      return false;
+    }
+    cache.delete(key);
+    return true;
+  }
+
+  cache.set(key, toCached(pixel, blockHeight));
+  return true;
+}
+
+/** @deprecated Prefer rememberPixelAtBlock with an explicit block height. */
+export function rememberPixel(cache: PixelCache, pixel: PixelView): void {
+  rememberPixelAtBlock(cache, pixel, Number.MAX_SAFE_INTEGER);
+}
+
+/** @deprecated Prefer rememberPixelAtBlock. */
 export function rememberPixelIfNewer(
   cache: PixelCache,
   pixel: PixelView,
 ): boolean {
-  const existing = cache.get(cellKey(pixel.x, pixel.y));
-  if (
-    existing &&
-    !isWriteAtLeastAsNew(
-      pixel.lastWriteTimestampNs,
-      existing.lastWriteTimestampNs,
-    )
-  ) {
-    return false;
-  }
-  rememberPixel(cache, pixel);
-  return true;
+  return rememberPixelAtBlock(cache, pixel, Number.MAX_SAFE_INTEGER);
 }
 
 /**
- * Replace the whole cache from a full `get_pixels` walk.
- * Cleared first so cells that were wiped on chain (if that ever happens)
- * do not linger locally. Today the contract only overwrites, never deletes.
+ * Apply a full board snapshot from one pinned block.
+ * Keeps any cache cells observed at a strictly newer block than this snapshot.
  */
-export function replaceCache(cache: PixelCache, pixels: readonly PixelView[]): void {
-  cache.clear();
-  for (const pixel of pixels) {
-    rememberPixel(cache, pixel);
+export function replaceCacheAtBlock(
+  cache: PixelCache,
+  pixels: readonly PixelView[],
+  blockHeight: number,
+): void {
+  const newer = new Map<string, CachedPixel>();
+  for (const [key, value] of cache) {
+    if (value.observedBlockHeight > blockHeight) {
+      newer.set(key, value);
+    }
   }
+
+  cache.clear();
+  for (const [key, value] of newer) {
+    cache.set(key, value);
+  }
+  for (const pixel of pixels) {
+    rememberPixelAtBlock(cache, pixel, blockHeight);
+  }
+}
+
+/** @deprecated Prefer replaceCacheAtBlock. */
+export function replaceCache(
+  cache: PixelCache,
+  pixels: readonly PixelView[],
+): void {
+  replaceCacheAtBlock(cache, pixels, 0);
 }
 
 export function getCachedPixel(
   cache: PixelCache,
   x: number,
   y: number,
-): PixelView | undefined {
+): CachedPixel | undefined {
   return cache.get(cellKey(x, y));
 }
 
 export function paintedPixels(cache: PixelCache): PixelView[] {
-  return [...cache.values()];
+  return [...cache.values()].map(
+    ({ observedBlockHeight: _b, ...pixel }) => pixel,
+  );
 }

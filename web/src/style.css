@@ -157,6 +157,9 @@ h3 {
   background: #120e0c;
   perspective: 920px;
   perspective-origin: 50% 38%;
+  /* Contain projected walls so they never cover header / controls. */
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .stall-room {
@@ -164,6 +167,7 @@ h3 {
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
+  overflow: hidden;
 }
 
 .stall-ceiling {
@@ -183,12 +187,12 @@ h3 {
   pointer-events: none;
 }
 
-/* Side walls: hinge at the back edge, near edge swings toward the viewer */
+/* Side walls: hinge at the back edge; keep projection inside the scene. */
 .stall-wall {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 34%;
+  top: 8%;
+  bottom: 10%;
+  width: 18%;
   z-index: 2;
   pointer-events: none;
 }
@@ -196,13 +200,13 @@ h3 {
 .stall-wall-left {
   left: 0;
   transform-origin: right center;
-  transform: rotateY(64deg);
+  transform: rotateY(48deg) translateZ(0);
 }
 
 .stall-wall-right {
   right: 0;
   transform-origin: left center;
-  transform: rotateY(-64deg);
+  transform: rotateY(-48deg) translateZ(0);
 }
 
 .wall-skin {
@@ -776,15 +780,15 @@ canvas {
   }
 
   .stall-wall {
-    width: 38%;
+    width: 16%;
   }
 
   .stall-wall-left {
-    transform: rotateY(58deg);
+    transform: rotateY(44deg);
   }
 
   .stall-wall-right {
-    transform: rotateY(-58deg);
+    transform: rotateY(-44deg);
   }
 
   .stall-back {
@@ -838,7 +842,7 @@ canvas {
   }
 
   .stall-wall {
-    width: 42%;
+    width: 14%;
   }
 
   .stall-back {

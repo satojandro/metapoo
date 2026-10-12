@@ -19,6 +19,13 @@ describe("viewport camera", () => {
     expect(camera.panY).toBeCloseTo(0, 5);
   });
 
+  it("fits small viewports below the painting cell-size floor", () => {
+    const camera = fitCamera({ width: 230, height: 190 }, 0);
+    expect(camera.cellSize).toBeLessThan(2);
+    expect(camera.cellSize * 128).toBeLessThanOrEqual(230 + 0.001);
+    expect(camera.cellSize * 128).toBeLessThanOrEqual(190 + 0.001);
+  });
+
   it("maps viewport corners and center after fit", () => {
     const camera = fitCamera({ width: 256, height: 256 }, 0);
     expect(cellFromViewportPoint(0, 0, camera)).toEqual({ x: 0, y: 0 });

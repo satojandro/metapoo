@@ -1,11 +1,14 @@
 import { NearConnector } from "@hot-labs/near-connect";
-import { CONTRACT_ID, WALLET_NETWORK } from "./config";
+import { Account as NearAccount } from "@near-js/accounts";
+import { JsonRpcProvider } from "@near-js/providers";
+import { CONTRACT_ID, RPC_URL, WALLET_NETWORK } from "./config";
 import {
   buildAddFunctionCallKeyParams,
   createDrawingSessionKeypair,
   DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
   makeAuthorizedSessionRecord,
   saveDrawingSessionRecord,
+  wipeDrawingSessionStorage,
 } from "./drawing-session";
 
 /**
@@ -116,6 +119,55 @@ function firstString(...values: unknown[]): string | null {
 }
 
 /**
+ * Resolve the signed-in account id from a near-connect wallet.
+ * Prefer `getAccounts()` — many wallets omit top-level `accountId`.
+ */
+export async function accountIdFromWallet(wallet: unknown): Promise<string | null> {
+  if (!wallet || typeof wallet !== "object") {
+    return null;
+  }
+  const record = wallet as Record<string, unknown>;
+
+  if (typeof record.getAccounts === "function") {
+    try {
+      const accounts = (await (
+        record.getAccounts as () => Promise<unknown>
+      )()) as unknown;
+      const fromList = nestedAccount(accounts);
+      if (typeof fromList === "string" && fromList.length > 0) {
+        return fromList;
+      }
+    } catch {
+      // Fall through to property reads.
+    }
+  }
+
+  return firstString(record.accountId, record.account_id);
+}
+
+/** True when the public key exists on the account (on-chain check). */
+export async function verifyAccessKeyOnAccount(
+  accountId: string,
+  publicKey: string,
+): Promise<boolean> {
+  const account = new NearAccount(
+    accountId,
+    new JsonRpcProvider({ url: RPC_URL }),
+  );
+  try {
+    await account.getAccessKey(publicKey);
+    return true;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "";
+    if (/does not exist|doesn't exist|not found/i.test(detail)) {
+      return false;
+    }
+    // RPC ambiguity: do not mark the session active.
+    return false;
+  }
+}
+
+/**
  * Ordinary Connect (default): sign in without requesting an FC key.
  * Opt-in: pass `{ authorizeDrawingSession: true }` when a contract id is set.
  */
@@ -134,46 +186,48 @@ export async function connectWallet(
       DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
     );
     await current.connect({ addFunctionCallKey });
-    try {
-      const wallet = await current.wallet();
-      const accountId = accountFromWallet(wallet);
-      if (accountId) {
-        session = { accountId, networkId: WALLET_NETWORK };
-        saveDrawingSessionRecord(
-          makeAuthorizedSessionRecord({
-            accountId,
-            networkId: WALLET_NETWORK,
-            contractId: CONTRACT_ID,
-            publicKey: keypair.publicKey,
-            secretKey: keypair.secretKey,
-            gasAllowanceYocto: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
-          }),
-        );
-        emit();
-      }
-    } catch {
-      // connect() may already have updated the session through the sign-in event.
-      // If we have an account from the event, still try to persist the keypair.
-      if (session.accountId) {
-        saveDrawingSessionRecord(
-          makeAuthorizedSessionRecord({
-            accountId: session.accountId,
-            networkId: session.networkId ?? WALLET_NETWORK,
-            contractId: CONTRACT_ID,
-            publicKey: keypair.publicKey,
-            secretKey: keypair.secretKey,
-            gasAllowanceYocto: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
-          }),
-        );
-      }
+
+    const wallet = await current.wallet();
+    const accountId =
+      (await accountIdFromWallet(wallet)) ?? session.accountId;
+    if (!accountId) {
+      wipeDrawingSessionStorage();
+      throw new Error(
+        "Wallet signed in but did not return an account id via getAccounts(). Drawing session was not saved.",
+      );
     }
+
+    session = { accountId, networkId: WALLET_NETWORK };
+    emit();
+
+    const keyPresent = await verifyAccessKeyOnAccount(
+      accountId,
+      keypair.publicKey,
+    );
+    if (!keyPresent) {
+      wipeDrawingSessionStorage();
+      throw new Error(
+        "Wallet signed in, but the draw-only access key was not found on the account yet. Drawing session was not marked active. Try Authorize again, or use ordinary wallet approval.",
+      );
+    }
+
+    saveDrawingSessionRecord(
+      makeAuthorizedSessionRecord({
+        accountId,
+        networkId: WALLET_NETWORK,
+        contractId: CONTRACT_ID,
+        publicKey: keypair.publicKey,
+        secretKey: keypair.secretKey,
+        gasAllowanceYocto: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+      }),
+    );
     return;
   }
 
   await current.connect();
   try {
     const wallet = await current.wallet();
-    const accountId = accountFromWallet(wallet);
+    const accountId = await accountIdFromWallet(wallet);
     if (accountId) {
       session = { accountId, networkId: WALLET_NETWORK };
       emit();
@@ -242,7 +296,8 @@ export async function signAndSendDraw(args: DrawCallArgs): Promise<unknown> {
 export async function revokeDrawingSessionKeyOnChain(publicKey: string): Promise<unknown> {
   const current = ensureConnector();
   const wallet = await current.wallet();
-  const accountId = accountFromWallet(wallet) ?? session.accountId;
+  const accountId =
+    (await accountIdFromWallet(wallet)) ?? session.accountId;
   if (!accountId) {
     throw new Error("Connect a wallet before revoking the drawing-session key on chain.");
   }
@@ -255,12 +310,4 @@ export async function revokeDrawingSessionKeyOnChain(publicKey: string): Promise
       },
     ],
   });
-}
-
-function accountFromWallet(wallet: unknown): string | null {
-  if (!wallet || typeof wallet !== "object") {
-    return null;
-  }
-  const record = wallet as Record<string, unknown>;
-  return firstString(record.accountId, record.account_id);
 }

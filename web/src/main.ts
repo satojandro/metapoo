@@ -5,10 +5,10 @@ import {
   createPixelCache,
   getCachedPixel,
   paintedPixels,
-  rememberPixel,
-  rememberPixelIfNewer,
-  replaceCache,
+  rememberPixelAtBlock,
+  replaceCacheAtBlock,
 } from "./board-cache";
+import { createDrawRequest, type DrawRequest } from "./draw-request";
 import {
   beginBoardLoad,
   createBoardSyncState,
@@ -22,8 +22,9 @@ import {
 import { CONTRACT_ID, PAGE_NETWORK } from "./config";
 import {
   fetchAllPaintedPixels,
+  fetchLatestBlockHeight,
   getBoard,
-  getPixel,
+  getPixelWithBlock,
   isContractConfigured,
 } from "./contract";
 import { validateContractMetadata } from "./contract-meta";
@@ -400,7 +401,7 @@ async function refreshBoardFromContract(options?: {
       boardLoadStatus.textContent = `Board load skipped stale snapshot (block ${snapshot.blockHeight}). ${formatFreshness(boardSync, Date.now())}`;
       return;
     }
-    replaceCache(pixelCache, snapshot.pixels);
+    replaceCacheAtBlock(pixelCache, snapshot.pixels, snapshot.blockHeight);
     reconcilePendingWithConfirmed(pendingPaints, snapshot.pixels);
     markBoardLoadApplied(boardSync, loadId, snapshot.blockHeight, Date.now());
     render();
@@ -426,8 +427,8 @@ async function refreshSelectedPixel(): Promise<void> {
     return;
   }
   try {
-    const pixel = await getPixel(selected.x, selected.y);
-    rememberPixelIfNewer(pixelCache, pixel);
+    const { pixel, blockHeight } = await getPixelWithBlock(selected.x, selected.y);
+    rememberPixelAtBlock(pixelCache, pixel, blockHeight);
     reconcilePendingWithConfirmed(pendingPaints, [pixel]);
     render();
     showSelection();
@@ -469,19 +470,30 @@ async function runBoardPoll(): Promise<void> {
   await refreshBoardFromContract({ reason: "poll" });
 }
 
-async function attemptDraw(target?: Cell): Promise<void> {
+async function attemptDraw(request?: DrawRequest): Promise<void> {
   if (drawInFlight) {
     return;
   }
 
-  const cell = target ?? selected;
+  const frozen =
+    request ??
+    (selected && selectedColor !== null && walletAccount
+      ? createDrawRequest({
+          x: selected.x,
+          y: selected.y,
+          colorIndex: selectedColor,
+          accountId: walletAccount,
+          networkId: walletNetworkId(),
+        })
+      : null);
+
   const decision = prepareDraw({
-    x: cell?.x ?? null,
-    y: cell?.y ?? null,
-    color: selectedColor,
-    connected: walletAccount !== null,
-    accountId: walletAccount,
-    sessionNetworkId: walletNetworkId(),
+    x: frozen?.x ?? null,
+    y: frozen?.y ?? null,
+    color: frozen?.colorIndex ?? null,
+    connected: frozen !== null || walletAccount !== null,
+    accountId: frozen?.accountId ?? walletAccount,
+    sessionNetworkId: frozen?.networkId ?? walletNetworkId(),
     boardNetworkId: PAGE_NETWORK,
     contractId: CONTRACT_ID,
   });
@@ -502,19 +514,22 @@ async function attemptDraw(target?: Cell): Promise<void> {
     return;
   }
 
-  if (!cell || selectedColor === null || !walletAccount) {
+  if (!frozen) {
     return;
   }
-  selected = cell;
+
+  // Keep UI selection in sync with the request, but never re-read color/account
+  // from live UI state while this request is in flight.
+  selected = { x: frozen.x, y: frozen.y };
 
   drawInFlight = true;
   drawButton.disabled = true;
   setFlow("wallet_prompt");
   setPendingPaint(pendingPaints, {
-    x: selected.x,
-    y: selected.y,
-    colorIndex: selectedColor,
-    accountId: walletAccount,
+    x: frozen.x,
+    y: frozen.y,
+    colorIndex: frozen.colorIndex,
+    accountId: frozen.accountId,
     transactionId: null,
     phase: "submitted",
   });
@@ -523,7 +538,7 @@ async function attemptDraw(target?: Cell): Promise<void> {
     result,
     "Waiting for your wallet",
     [
-      `Approve draw at x=${selected.x}, y=${selected.y}, color=${selectedColor} (${colorName(selectedColor)}).`,
+      `Approve draw at x=${frozen.x}, y=${frozen.y}, color=${frozen.colorIndex} (${colorName(frozen.colorIndex)}).`,
       "Your wallet may ask you to pay a small network gas fee. The game adds no application fee.",
       sponsorship.message,
     ].join(" "),
@@ -531,28 +546,26 @@ async function attemptDraw(target?: Cell): Promise<void> {
 
   try {
     const submitResult = await submitDraw({
-      x: selected.x,
-      y: selected.y,
-      colorIndex: selectedColor,
-      accountId: walletAccount,
-      networkId: walletNetworkId(),
+      x: frozen.x,
+      y: frozen.y,
+      colorIndex: frozen.colorIndex,
+      accountId: frozen.accountId,
+      networkId: frozen.networkId,
       onProgress: (progress) => {
         if (progress.phase === "wallet_prompt") {
           setFlow("wallet_prompt");
           fillBlock(result, "Waiting for your wallet", progress.detail);
         } else if (progress.phase === "pending" || progress.phase === "confirming") {
           setFlow("pending");
-          if (selected && selectedColor !== null && walletAccount) {
-            setPendingPaint(pendingPaints, {
-              x: selected.x,
-              y: selected.y,
-              colorIndex: selectedColor,
-              accountId: walletAccount,
-              transactionId: progress.transactionId,
-              phase: "submitted",
-            });
-            render();
-          }
+          setPendingPaint(pendingPaints, {
+            x: frozen.x,
+            y: frozen.y,
+            colorIndex: frozen.colorIndex,
+            accountId: frozen.accountId,
+            transactionId: progress.transactionId,
+            phase: "submitted",
+          });
+          render();
           fillResultWithLink(
             "Transaction pending",
             progress.phase === "pending"
@@ -566,8 +579,9 @@ async function attemptDraw(target?: Cell): Promise<void> {
     });
 
     if (submitResult.status === "success" && submitResult.pixel) {
-      rememberPixel(pixelCache, submitResult.pixel);
-      clearPendingPaint(pendingPaints, selected.x, selected.y);
+      const tip = await latestBlockOrFallback();
+      rememberPixelAtBlock(pixelCache, submitResult.pixel, tip);
+      clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       render();
       setFlow("success");
       fillResultWithLink(
@@ -583,10 +597,10 @@ async function attemptDraw(target?: Cell): Promise<void> {
 
     if (submitResult.status === "confirmation_delayed") {
       setPendingPaint(pendingPaints, {
-        x: selected.x,
-        y: selected.y,
-        colorIndex: selectedColor,
-        accountId: walletAccount,
+        x: frozen.x,
+        y: frozen.y,
+        colorIndex: frozen.colorIndex,
+        accountId: frozen.accountId,
         transactionId: submitResult.transactionId,
         phase: "confirmation_delayed",
       });
@@ -604,8 +618,9 @@ async function attemptDraw(target?: Cell): Promise<void> {
     }
 
     if (submitResult.status === "overwritten" && submitResult.pixel) {
-      rememberPixelIfNewer(pixelCache, submitResult.pixel);
-      clearPendingPaint(pendingPaints, selected.x, selected.y);
+      const tip = await latestBlockOrFallback();
+      rememberPixelAtBlock(pixelCache, submitResult.pixel, tip);
+      clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       render();
       setFlow("success");
       fillResultWithLink(
@@ -619,7 +634,7 @@ async function attemptDraw(target?: Cell): Promise<void> {
       return;
     }
 
-    clearPendingPaint(pendingPaints, selected.x, selected.y);
+    clearPendingPaint(pendingPaints, frozen.x, frozen.y);
     render();
     setFlow("error");
     fillResultWithLink(
@@ -897,18 +912,22 @@ function selectAtClientPoint(clientX: number, clientY: number): void {
     directPaintToggle.checked &&
     canUseLocalDrawingSession(walletAccount, walletNetwork) &&
     selectedColor !== null &&
+    walletAccount &&
     contractMetaOk
   ) {
-    enqueuePaint(paintQueue, {
+    const queued = createDrawRequest({
       x: next.x,
       y: next.y,
       colorIndex: selectedColor,
+      accountId: walletAccount,
+      networkId: walletNetworkId(),
     });
+    enqueuePaint(paintQueue, queued);
     setPendingPaint(pendingPaints, {
-      x: next.x,
-      y: next.y,
-      colorIndex: selectedColor,
-      accountId: walletAccount!,
+      x: queued.x,
+      y: queued.y,
+      colorIndex: queued.colorIndex,
+      accountId: queued.accountId,
       transactionId: null,
       phase: "submitted",
     });
@@ -955,6 +974,14 @@ async function drainPaintQueue(): Promise<void> {
     if (paintQueueLength(paintQueue) > 0) {
       void drainPaintQueue();
     }
+  }
+}
+
+async function latestBlockOrFallback(): Promise<number> {
+  try {
+    return await fetchLatestBlockHeight();
+  } catch {
+    return Math.max(boardSync.appliedBlockHeight, 1);
   }
 }
 

@@ -1,17 +1,13 @@
+import type { DrawRequest } from "./draw-request";
+
 /**
  * Serialized paint queue for session-gated direct-paint mode.
- * One in-flight draw at a time; duplicate cells keep the latest color only.
- * Does not invent confirmed art — callers still run submitDraw / chain reads.
+ * One in-flight draw at a time; duplicate cells keep the latest request only.
+ * Each entry is an immutable DrawRequest (coords, color, account, network).
  */
 
-export interface QueuedPaint {
-  x: number;
-  y: number;
-  colorIndex: number;
-}
-
 export interface PaintQueue {
-  items: QueuedPaint[];
+  items: DrawRequest[];
   inFlight: boolean;
 }
 
@@ -23,18 +19,20 @@ function cellKey(x: number, y: number): string {
   return `${x},${y}`;
 }
 
-/** Enqueue a cell. A later paint for the same cell replaces an earlier one. */
-export function enqueuePaint(queue: PaintQueue, paint: QueuedPaint): void {
-  const key = cellKey(paint.x, paint.y);
-  queue.items = queue.items.filter((item) => cellKey(item.x, item.y) !== key);
-  queue.items.push({ ...paint });
+/** Enqueue a request. A later paint for the same cell replaces an earlier one. */
+export function enqueuePaint(queue: PaintQueue, request: DrawRequest): void {
+  const key = cellKey(request.x, request.y);
+  queue.items = queue.items.filter(
+    (item) => cellKey(item.x, item.y) !== key,
+  );
+  queue.items.push(request);
 }
 
-export function peekPaint(queue: PaintQueue): QueuedPaint | null {
+export function peekPaint(queue: PaintQueue): DrawRequest | null {
   return queue.items[0] ?? null;
 }
 
-export function shiftPaint(queue: PaintQueue): QueuedPaint | null {
+export function shiftPaint(queue: PaintQueue): DrawRequest | null {
   return queue.items.shift() ?? null;
 }
 
