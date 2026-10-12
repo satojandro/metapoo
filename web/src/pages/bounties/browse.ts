@@ -1,8 +1,8 @@
-import { createDemoBanner } from "./demo-banner";
+import { createDefaultBountyAdapter } from "./adapter";
 import { escapeAndClamp, escapeHtml } from "./escape";
-import { createFixtureBountyAdapter } from "./fixture-adapter";
 import { formatAmountString, formatCrop, formatTimestampNs } from "./format";
 import { fundingDisplay } from "./funded";
+import { createModeBanner } from "./mode-banner";
 import { parseListSearch } from "./route";
 import type {
   BountyAdapter,
@@ -26,7 +26,7 @@ export function mountBrowse(
   services: BountyPageServices = {},
 ): DisposeFn {
   const adapter: BountyAdapter =
-    services.bounties ?? createFixtureBountyAdapter();
+    services.bounties ?? createDefaultBountyAdapter();
   const navigate = services.navigate ?? defaultNavigate;
   const search =
     services.search ??
@@ -37,7 +37,7 @@ export function mountBrowse(
   shell.className = "mpoo-bounties";
   shell.setAttribute("aria-labelledby", "mpoo-bounties-heading");
 
-  shell.append(createDemoBanner());
+  shell.append(createModeBanner(adapter.mode));
 
   const header = document.createElement("header");
   header.className = "mpoo-bounties__header";
@@ -102,20 +102,57 @@ export function mountBrowse(
   header.querySelector("h1")?.focus();
 
   let cancelled = false;
+  let accumulated: BountySummary[] = [];
+  let nextFromIndex: number | null = null;
+  let listTruncated = false;
+
+  const renderResults = (): void => {
+    results.replaceChildren();
+
+    if (listTruncated) {
+      results.append(
+        renderPartialNotice(accumulated.length === 0, () => {
+          void loadMore();
+        }),
+      );
+    }
+
+    if (accumulated.length === 0) {
+      if (!listTruncated) {
+        const box = document.createElement("div");
+        box.className = "mpoo-bounties__state";
+        box.textContent =
+          "No bounties match these filters. Clear search or widen the lifecycle filter.";
+        results.append(box);
+      }
+      return;
+    }
+
+    const list = document.createElement("ul");
+    list.className = "mpoo-bounties__list";
+    for (const bounty of accumulated) {
+      list.append(renderCard(bounty, navigate));
+    }
+    results.append(list);
+  };
+
+  const currentFilters = (): BountyListFilters => ({
+    query: qInput.value.trim(),
+    status: statusSelect.value as BountyListFilters["status"],
+    fundedOnly: fundedSelect.value !== "0",
+  });
 
   const load = async (): Promise<void> => {
-    const filters: BountyListFilters = {
-      query: qInput.value.trim(),
-      status: statusSelect.value as BountyListFilters["status"],
-      fundedOnly: fundedSelect.value !== "0",
-    };
+    accumulated = [];
+    nextFromIndex = null;
+    listTruncated = false;
     results.replaceChildren();
     const loading = document.createElement("p");
     loading.className = "mpoo-bounties__state";
     loading.textContent = "Loading bounties…";
     results.append(loading);
 
-    const result = await adapter.listBounties(filters);
+    const result = await adapter.listBounties(currentFilters());
     if (cancelled) {
       return;
     }
@@ -126,7 +163,10 @@ export function mountBrowse(
       box.className = "mpoo-bounties__state mpoo-bounties__state--error";
       if (result.error === "SERVICE_UNAVAILABLE") {
         box.textContent =
-          "Bounty service unavailable. Demo fixtures could not be read. No live escrow was queried.";
+          result.message ??
+          (adapter.mode === "live"
+            ? "Bounty escrow views unavailable. Check VITE_BOUNTY_CONTRACT_ID and RPC."
+            : "Bounty service unavailable. Demo fixtures could not be read. No live escrow was queried.");
       } else if (result.error === "EMPTY") {
         box.textContent =
           "No funded bounties yet. You can still browse disconnectedly and create a draft.";
@@ -138,12 +178,58 @@ export function mountBrowse(
       return;
     }
 
-    const list = document.createElement("ul");
-    list.className = "mpoo-bounties__list";
-    for (const bounty of result.items) {
-      list.append(renderCard(bounty, navigate));
+    accumulated = result.items;
+    listTruncated = Boolean(result.truncated);
+    nextFromIndex =
+      result.truncated && result.nextFromIndex != null
+        ? result.nextFromIndex
+        : null;
+    renderResults();
+  };
+
+  const loadMore = async (): Promise<void> => {
+    if (nextFromIndex == null) {
+      return;
     }
-    results.append(list);
+    const fromIndex = nextFromIndex;
+    const loading = document.createElement("p");
+    loading.className = "mpoo-bounties__state";
+    loading.textContent = "Loading more bounties…";
+    results.append(loading);
+
+    const result = await adapter.listBounties({
+      ...currentFilters(),
+      fromIndex,
+    });
+    if (cancelled) {
+      return;
+    }
+    if (!result.ok) {
+      // Exhausted final pages with no matches is normal completion, not a failure.
+      if (result.error === "NO_MATCHES" || result.error === "EMPTY") {
+        listTruncated = false;
+        nextFromIndex = null;
+        renderResults();
+        return;
+      }
+      loading.className = "mpoo-bounties__state mpoo-bounties__state--error";
+      loading.textContent =
+        result.message ?? "Could not load more bounties from escrow.";
+      return;
+    }
+    const seen = new Set(accumulated.map((b) => b.id));
+    for (const item of result.items) {
+      if (!seen.has(item.id)) {
+        accumulated.push(item);
+        seen.add(item.id);
+      }
+    }
+    listTruncated = Boolean(result.truncated);
+    nextFromIndex =
+      result.truncated && result.nextFromIndex != null
+        ? result.nextFromIndex
+        : null;
+    renderResults();
   };
 
   const onSubmit = (event: Event): void => {
@@ -169,6 +255,27 @@ export function mountBrowse(
       ?.removeEventListener("click", onCreate);
     root.replaceChildren();
   };
+}
+
+function renderPartialNotice(
+  emptyMatches: boolean,
+  onContinue: () => void,
+): HTMLElement {
+  const box = document.createElement("div");
+  box.className = "mpoo-bounties__callout mpoo-bounties__callout--partial";
+  box.setAttribute("role", "status");
+  const text = document.createElement("p");
+  text.textContent = emptyMatches
+    ? "No matches in the pages loaded so far. Results are partial — later bounties were not searched yet."
+    : "Showing a partial list. More bounties exist beyond this page; filters only applied to loaded pages.";
+  box.append(text);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "mpoo-bounties__btn mpoo-bounties__btn--secondary";
+  btn.textContent = "Load more";
+  btn.addEventListener("click", onContinue);
+  box.append(btn);
+  return box;
 }
 
 function renderCard(

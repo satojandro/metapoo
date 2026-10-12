@@ -35,6 +35,12 @@
   font-weight: 600;
 }
 
+.mpoo-bounties__demo--live {
+  background: #e8f2f6;
+  border-color: #8eb7c9;
+  color: #1a4458;
+}
+
 .mpoo-bounties__header {
   margin-bottom: 1rem;
 }
@@ -220,6 +226,22 @@
 .mpoo-bounties__dl dd {
   margin: 0;
   word-break: break-word;
+}
+
+.mpoo-bounties__callout--partial {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 0.85rem;
+  border-left: 3px solid #b08900;
+  background: #fbf6e8;
+}
+
+.mpoo-bounties__callout--partial p {
+  margin: 0;
+  flex: 1 1 12rem;
 }
 
 .mpoo-bounties__callout {

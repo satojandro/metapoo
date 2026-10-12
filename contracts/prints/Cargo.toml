@@ -1,0 +1,20 @@
+[package]
+name = "metapoo-prints"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Meta Poo snapshot registry and numbered historical print NFT issuance."
+
+[lib]
+# cdylib is the WASM bundle NEAR would run. rlib lets `cargo test` call the code on this computer.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# unit-testing lets `cargo test` run on this computer. A real WASM deploy later
+# should use `cargo near build` / the wasm32 target, not this host test path.
+# Version mirrors contracts/board and contracts/bounties (near-sdk 5.29.1).
+near-sdk = { version = "5.29.1", features = ["unit-testing"] }
+hex = "0.4"
+
+[dev-dependencies]
+serde_json = "1"

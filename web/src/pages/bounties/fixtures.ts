@@ -137,15 +137,44 @@ const details: Record<string, BountyDetail> = Object.fromEntries(
       winningSubmissionId: summary.status === "AWARDED" ? "sub-9" : null,
       nearStorageDeposit: "0.05",
       nearGasBudget: "0.01",
+      escrowAccountId: null,
+      escrowHeld: summary.escrowConfirmed ? summary.awardAmount : "0",
+      claims:
+        summary.id === "4"
+          ? [
+              {
+                id: "claim-1",
+                bountyId: "4",
+                beneficiaryAccountId: "winner.testnet",
+                amount: "1000000000000000000000000",
+                kind: "AWARD",
+                status: "AVAILABLE",
+              },
+              {
+                id: "claim-2",
+                bountyId: "4",
+                beneficiaryAccountId: "helper.testnet",
+                amount: "1000000000000000000000000",
+                kind: "AWARD",
+                status: "PENDING",
+              },
+            ]
+          : [],
       submissions:
         summary.id === "1"
           ? [
               {
                 id: "sub-1",
                 proposerAccountId: "artist.one.testnet",
-                state: "PROPOSED",
+                state: "OPEN",
                 snapshotId: null,
                 recipientCount: 2,
+                recipients: [
+                  { accountId: "artist.one.testnet", shareBps: 7000 },
+                  { accountId: "helper.testnet", shareBps: 3000 },
+                ],
+                consentDigest: "sha256:fixture-consent-sub-1",
+                approvedAccounts: ["artist.one.testnet"],
               },
             ]
           : summary.id === "2"
@@ -156,6 +185,13 @@ const details: Record<string, BountyDetail> = Object.fromEntries(
                   state: "FINALIZED",
                   snapshotId: "snap-400",
                   recipientCount: 3,
+                  recipients: [
+                    { accountId: "a.testnet", shareBps: 4000 },
+                    { accountId: "b.testnet", shareBps: 3000 },
+                    { accountId: "c.testnet", shareBps: 3000 },
+                  ],
+                  consentDigest: "sha256:fixture-consent-sub-4",
+                  approvedAccounts: ["a.testnet", "b.testnet", "c.testnet"],
                 },
                 {
                   id: "sub-5",
@@ -163,6 +199,11 @@ const details: Record<string, BountyDetail> = Object.fromEntries(
                   state: "FINALIZED",
                   snapshotId: "snap-401",
                   recipientCount: 1,
+                  recipients: [
+                    { accountId: "solo.testnet", shareBps: 10000 },
+                  ],
+                  consentDigest: "sha256:fixture-consent-sub-5",
+                  approvedAccounts: ["solo.testnet"],
                 },
               ]
             : summary.id === "4"
@@ -173,6 +214,12 @@ const details: Record<string, BountyDetail> = Object.fromEntries(
                     state: "FINALIZED",
                     snapshotId: "snap-900",
                     recipientCount: 2,
+                    recipients: [
+                      { accountId: "winner.testnet", shareBps: 5000 },
+                      { accountId: "helper.testnet", shareBps: 5000 },
+                    ],
+                    consentDigest: "sha256:fixture-consent-sub-9",
+                    approvedAccounts: ["winner.testnet", "helper.testnet"],
                   },
                 ]
               : [],

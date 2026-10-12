@@ -1,0 +1,76 @@
+{
+  "title": "Overwrite reconstruction scenario",
+  "note": "alice paints (0,0) Brick at rev 1; bob overwrites same cell with Moss at rev 2. Reconstructing rev 1 must restore alice/Brick. Fixture-only.",
+  "records": [
+    {
+      "chain": "testnet",
+      "boardAccountId": "board.mpoo.testnet",
+      "blockHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "blockHeight": "1101",
+      "blockTimestampNs": "1700000101000000000",
+      "receiptId": "ow-receipt-1",
+      "executionOutcome": "SuccessValue",
+      "logIndex": 0,
+      "log": {
+        "standard": "mpoo_board",
+        "version": "2.0.0",
+        "event": "draw",
+        "data": {
+          "boardEpoch": "1",
+          "revision": "1",
+          "x": 0,
+          "y": 0,
+          "color": 2,
+          "artist": "alice.testnet",
+          "writtenAtNs": "1700000101000000001",
+          "paletteVersion": "palette-v2",
+          "costToilet": "10",
+          "pricingVersion": "pressure-v1",
+          "actionNonce": "1"
+        }
+      }
+    },
+    {
+      "chain": "testnet",
+      "boardAccountId": "board.mpoo.testnet",
+      "blockHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "blockHeight": "1102",
+      "blockTimestampNs": "1700000102000000000",
+      "receiptId": "ow-receipt-2",
+      "executionOutcome": "SuccessValue",
+      "logIndex": 0,
+      "log": {
+        "standard": "mpoo_board",
+        "version": "2.0.0",
+        "event": "draw",
+        "data": {
+          "boardEpoch": "1",
+          "revision": "2",
+          "x": 0,
+          "y": 0,
+          "color": 4,
+          "artist": "bob.testnet",
+          "writtenAtNs": "1700000102000000001",
+          "paletteVersion": "palette-v2",
+          "costToilet": "15",
+          "pricingVersion": "pressure-v1",
+          "actionNonce": "1"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "atRevision1": {
+      "x": 0,
+      "y": 0,
+      "color": 2,
+      "artist": "alice.testnet"
+    },
+    "atRevision2": {
+      "x": 0,
+      "y": 0,
+      "color": 4,
+      "artist": "bob.testnet"
+    }
+  }
+}

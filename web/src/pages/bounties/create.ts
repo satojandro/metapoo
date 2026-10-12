@@ -1,7 +1,12 @@
-import { createDemoBanner } from "./demo-banner";
+import { createDefaultBountyAdapter } from "./adapter";
 import { escapeHtml } from "./escape";
 import { formatAmountString, formatNearCost } from "./format";
-import type { BountyPageServices, DisposeFn } from "./types";
+import {
+  BOUNTY_NEAR_GAS_HINT,
+  BOUNTY_NEAR_STORAGE_HINT,
+} from "./funding-gate";
+import { createModeBanner } from "./mode-banner";
+import type { BountyAdapter, BountyPageServices, DisposeFn } from "./types";
 import "./styles.css";
 
 type CreateStep = "terms" | "funding_review";
@@ -18,12 +23,9 @@ interface DraftTerms {
   fundByLocal: string;
   submitByLocal: string;
   reviewByLocal: string;
-  /** Fixture-only: whether the local draft is marked ready to fund. */
+  /** Whether the local draft is marked ready to fund (review step). */
   readyToFund: boolean;
 }
-
-const NEAR_STORAGE = "0.05";
-const NEAR_GAS = "0.01";
 
 function defaultNavigate(path: string): void {
   window.location.assign(path);
@@ -31,13 +33,17 @@ function defaultNavigate(path: string): void {
 
 /**
  * Mount `/bounties/new` — terms → funding review.
- * Fixture-backed only: no wallet transfer is sent from this page.
+ * Live mode still does not broadcast funding from this page (shell owns wallet).
+ * Fund CTA stays disabled unless `VITE_BOUNTY_FUNDING_ENABLED=true`.
  */
 export function mountCreate(
   root: HTMLElement,
   services: BountyPageServices = {},
 ): DisposeFn {
+  const adapter: BountyAdapter =
+    services.bounties ?? createDefaultBountyAdapter();
   const navigate = services.navigate ?? defaultNavigate;
+  const gate = adapter.getFundingGate();
   let step: CreateStep = "terms";
   let draft: DraftTerms = {
     title: "",
@@ -60,15 +66,20 @@ export function mountCreate(
 
   const render = (): void => {
     shell.replaceChildren();
-    shell.append(createDemoBanner());
+    shell.append(createModeBanner(adapter.mode));
 
     const header = document.createElement("header");
     header.className = "mpoo-bounties__header";
+    const liveHint =
+      adapter.mode === "live"
+        ? " Live views are configured; create/fund still require wallet ops from the shell and a gated CTA."
+        : " This demo never moves funds or NFTs.";
     header.innerHTML = `
       <h1 id="mpoo-bounty-create-heading" tabindex="-1">Create Art Bounty</h1>
       <p class="mpoo-bounties__lede">
-        Set immutable terms, then review funding. NEAR storage and gas are separate
-        from the MPOO award. This demo never moves funds or NFTs.
+        Set immutable terms, then review funding. NEAR storage deposit is required
+        for create writes and is separate from the MPOO award (escrow liability, not
+        paint revenue).${liveHint}
       </p>
     `;
     shell.append(header);
@@ -141,8 +152,9 @@ export function mountCreate(
         <input id="bq-review-by" name="reviewBy" type="datetime-local" required />
       </div>
       <p class="mpoo-bounties__lede">
-        Approver is the connected sponsor account (fixed in v1). Token is MPOO (test).
+        Approver is the connected sponsor account (fixed in v1). Token is MPOO.
         Subjective acceptance is the named approver’s decision — painting does not guarantee payment.
+        Create requires a NEAR storage deposit covering new escrow records.
       </p>
       <div class="mpoo-bounties__actions">
         <button type="button" class="mpoo-bounties__btn mpoo-bounties__btn--ghost" data-action="back">Cancel</button>
@@ -208,9 +220,17 @@ export function mountCreate(
   const renderFundingReview = (): HTMLElement => {
     const panel = document.createElement("div");
     const fundingLabel = draft.readyToFund
-      ? "Ready to fund (fixture review only)"
+      ? gate.enabled
+        ? "Ready to fund (confirmation required)"
+        : "Ready to fund (CTA gated)"
       : "Unfunded draft";
-    const fundingClass = draft.readyToFund ? "funded" : "draft";
+    const fundingClass = draft.readyToFund && gate.enabled ? "funded" : "draft";
+    const fundEnabled = draft.readyToFund && gate.enabled;
+    const fundButtonLabel = gate.enabled
+      ? adapter.mode === "live"
+        ? "Confirm & sign funding"
+        : "Sign funding (fixture — no transfer)"
+      : "Funding gated (disabled)";
 
     panel.innerHTML = `
       <p>
@@ -230,21 +250,25 @@ export function mountCreate(
       </dl>
       <div class="mpoo-bounties__costs">
         <div class="mpoo-bounties__cost-row mpoo-bounties__cost-row--award">
-          <span>MPOO award (escrow liability)</span>
+          <span>MPOO award (escrow liability — not paint revenue)</span>
           <span></span>
         </div>
         <div class="mpoo-bounties__cost-row">
-          <span>${escapeHtml(formatNearCost(NEAR_STORAGE, "storage"))}</span>
-          <span>Prepaid separately — not part of the award</span>
+          <span>${escapeHtml(
+            formatNearCost(BOUNTY_NEAR_STORAGE_HINT, "storage"),
+          )}</span>
+          <span>Required separately for create — not part of the award</span>
         </div>
         <div class="mpoo-bounties__cost-row">
-          <span>${escapeHtml(formatNearCost(NEAR_GAS, "gas"))}</span>
+          <span>${escapeHtml(formatNearCost(BOUNTY_NEAR_GAS_HINT, "gas"))}</span>
           <span>Network fee — not part of the award</span>
         </div>
       </div>
       <div class="mpoo-bounties__callout">
         <p><strong>Escrow is not confirmed</strong> until a successful funding readback.
         Saving a draft or reviewing terms never labels this bounty Funded.</p>
+        <p>${escapeHtml(gate.reason)}</p>
+        <p>${escapeHtml(gate.confirmationCopy)}</p>
         <p>On expiry without an award, only the sponsor receives the refund entitlement.
         Painting the region does not create a payout claim.</p>
       </div>
@@ -252,8 +276,8 @@ export function mountCreate(
         <button type="button" class="mpoo-bounties__btn mpoo-bounties__btn--ghost" data-action="edit">Edit terms</button>
         <button type="button" class="mpoo-bounties__btn mpoo-bounties__btn--secondary" data-action="list">Back to bounties</button>
         <button type="button" class="mpoo-bounties__btn" data-action="fund" ${
-          draft.readyToFund ? "" : "disabled"
-        }>Sign funding (demo disabled)</button>
+          fundEnabled ? "" : "disabled"
+        }>${escapeHtml(fundButtonLabel)}</button>
       </div>
     `;
 
@@ -271,7 +295,7 @@ export function mountCreate(
     if (awardSpan) {
       awardSpan.textContent = formatAmountString(
         draft.awardAmount,
-        "MPOO (test)",
+        adapter.mode === "live" ? "MPOO" : "MPOO (test)",
       );
     }
 
@@ -287,8 +311,22 @@ export function mountCreate(
     panel
       .querySelector("[data-action=fund]")
       ?.addEventListener("click", () => {
+        if (!gate.enabled) {
+          window.alert(gate.reason);
+          return;
+        }
+        const confirmed = window.confirm(gate.confirmationCopy);
+        if (!confirmed) {
+          return;
+        }
+        if (adapter.mode === "fixture") {
+          window.alert(
+            "Demo data — no funds or NFTs. Wallet funding is owned by the shell integrator and is not sent from this fixture page.",
+          );
+          return;
+        }
         window.alert(
-          "Demo data — no funds or NFTs. Wallet funding is owned by the shell integrator and is not sent from this fixture page.",
+          "Funding confirmation recorded in UI only. Live FT transfer / wallet broadcast is owned by the shell integrator and is not sent from this page. Not live-verified.",
         );
       });
 

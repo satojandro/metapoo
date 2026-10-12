@@ -38,11 +38,34 @@ export {
 } from "./deep-link";
 export { fundingDisplay, isFundedOpportunity, isOpenForPainting } from "./funded";
 export { createFixtureBountyAdapter } from "./fixture-adapter";
+export { createLiveBountyAdapter } from "./live-adapter";
+export {
+  createDefaultBountyAdapter,
+  selectBountyAdapter,
+} from "./adapter";
+export {
+  resolveFundingGate,
+  isBountyFundingEnabledFlag,
+  FUNDING_GATED_REASON,
+  BOUNTY_NEAR_STORAGE_HINT,
+} from "./funding-gate";
+export {
+  mapContractBountyToDetail,
+  mapContractBountyToSummary,
+  mapContractClaim,
+  mapContractSubmission,
+  mapBountyStatus,
+  requireDecimalString,
+} from "./view-map";
 export { DEMO_DATA_LABEL } from "./demo-banner";
+export { LIVE_VIEWS_LABEL, createModeBanner } from "./mode-banner";
 export { escapeHtml, escapeAndClamp, isSafeHttpUrl } from "./escape";
 export type {
   BountyAdapter,
+  BountyAdapterMode,
+  BountyClaimStub,
   BountyDetail,
+  BountyFundingGate,
   BountyListFilters,
   BountyPageServices,
   BountyStatus,

@@ -1,7 +1,6 @@
-import { createDemoBanner } from "./demo-banner";
+import { createDefaultBountyAdapter } from "./adapter";
 import { deepLinkForBountyCrop } from "./deep-link";
 import { escapeHtml } from "./escape";
-import { createFixtureBountyAdapter } from "./fixture-adapter";
 import {
   formatAmountString,
   formatCrop,
@@ -9,6 +8,7 @@ import {
   formatTimestampNs,
 } from "./format";
 import { fundingDisplay, isOpenForPainting } from "./funded";
+import { createModeBanner } from "./mode-banner";
 import type {
   BountyAdapter,
   BountyDetail,
@@ -31,7 +31,7 @@ export function mountDetail(
   services: BountyPageServices = {},
 ): DisposeFn {
   const adapter: BountyAdapter =
-    services.bounties ?? createFixtureBountyAdapter();
+    services.bounties ?? createDefaultBountyAdapter();
   const navigate = services.navigate ?? defaultNavigate;
   let cancelled = false;
 
@@ -42,7 +42,7 @@ export function mountDetail(
 
   const renderLoading = (): void => {
     shell.replaceChildren();
-    shell.append(createDemoBanner());
+    shell.append(createModeBanner(adapter.mode));
     const p = document.createElement("p");
     p.className = "mpoo-bounties__state";
     p.textContent = "Loading bounty…";
@@ -51,7 +51,7 @@ export function mountDetail(
 
   const renderError = (message: string): void => {
     shell.replaceChildren();
-    shell.append(createDemoBanner());
+    shell.append(createModeBanner(adapter.mode));
     const box = document.createElement("div");
     box.className = "mpoo-bounties__state mpoo-bounties__state--error";
     box.innerHTML = `<h1 id="mpoo-bounty-detail-heading" tabindex="-1">Bounty unavailable</h1><p></p>`;
@@ -69,9 +69,18 @@ export function mountDetail(
     box.querySelector("h1")?.focus();
   };
 
-  const renderDetail = (bounty: BountyDetail): void => {
+  const renderDetail = (bounty: BountyDetail, truncated?: boolean): void => {
     shell.replaceChildren();
-    shell.append(createDemoBanner());
+    shell.append(createModeBanner(adapter.mode));
+
+    if (truncated) {
+      const partial = document.createElement("div");
+      partial.className = "mpoo-bounties__callout mpoo-bounties__callout--partial";
+      partial.setAttribute("role", "status");
+      partial.textContent =
+        "Submissions and/or claims are partial — the escrow returned more pages than this view loaded. Counts below may be incomplete.";
+      shell.append(partial);
+    }
 
     const funding = fundingDisplay(bounty);
     const header = document.createElement("header");
@@ -130,6 +139,15 @@ export function mountDetail(
         bounty.winningSubmissionId ?? "None",
       ],
     ];
+    if (bounty.escrowAccountId) {
+      rows.push(["Escrow account", bounty.escrowAccountId]);
+    }
+    if (bounty.escrowHeld != null) {
+      rows.push([
+        "Escrow held",
+        formatAmountString(bounty.escrowHeld, bounty.tokenSymbol),
+      ]);
+    }
     for (const [dt, dd] of rows) {
       const dtEl = document.createElement("dt");
       dtEl.textContent = dt;
@@ -215,19 +233,56 @@ export function mountDetail(
       const empty = document.createElement("p");
       empty.className = "mpoo-bounties__state";
       empty.textContent =
-        "No submissions yet. Finalized snapshot proposals will appear here (stub).";
+        "No submissions yet. Finalized snapshot proposals will appear here.";
       shell.append(empty);
     } else {
       const list = document.createElement("ul");
       list.className = "mpoo-bounties__submissions";
       for (const sub of bounty.submissions) {
         const li = document.createElement("li");
-        li.textContent = `${sub.id} · ${sub.proposerAccountId} · ${sub.state} · recipients ${String(sub.recipientCount)}${
+        const split =
+          sub.recipients.length > 0
+            ? sub.recipients
+                .map((r) => `${r.accountId} ${String(r.shareBps)}bps`)
+                .join(", ")
+            : `${String(sub.recipientCount)} recipients`;
+        const consent = sub.consentDigest
+          ? ` · consent ${sub.consentDigest}`
+          : "";
+        const approved =
+          sub.approvedAccounts.length > 0
+            ? ` · approved ${sub.approvedAccounts.join(", ")}`
+            : "";
+        li.textContent = `${sub.id} · ${sub.proposerAccountId} · ${sub.state} · split [${split}]${
           sub.snapshotId ? ` · snapshot ${sub.snapshotId}` : ""
-        }`;
+        }${consent}${approved}`;
         list.append(li);
       }
       shell.append(list);
+    }
+
+    const claimHeading = document.createElement("h2");
+    claimHeading.textContent = "Claims";
+    shell.append(claimHeading);
+
+    if (bounty.claims.length === 0) {
+      const emptyClaims = document.createElement("p");
+      emptyClaims.className = "mpoo-bounties__state";
+      emptyClaims.textContent =
+        "No claims yet. Award/refund entitlements appear after accept or expiry.";
+      shell.append(emptyClaims);
+    } else {
+      const claimList = document.createElement("ul");
+      claimList.className = "mpoo-bounties__submissions";
+      for (const claim of bounty.claims) {
+        const li = document.createElement("li");
+        li.textContent = `${claim.id} · ${claim.kind} · ${claim.status} · ${claim.beneficiaryAccountId} · ${formatAmountString(
+          claim.amount,
+          bounty.tokenSymbol,
+        )}`;
+        claimList.append(li);
+      }
+      shell.append(claimList);
     }
 
     h1.focus();
@@ -245,14 +300,22 @@ export function mountDetail(
         renderError(
           "Index is catching up. Authoritative escrow state is not ready yet.",
         );
+      } else if (result.error === "CONTRACT_UNSET") {
+        renderError(
+          result.message ??
+            "Bounty escrow contract is not configured. Set VITE_BOUNTY_CONTRACT_ID.",
+        );
       } else {
         renderError(
-          "Bounty service unavailable. No live escrow was queried from this demo page.",
+          result.message ??
+            (adapter.mode === "live"
+              ? "Bounty escrow views unavailable."
+              : "Bounty service unavailable. No live escrow was queried from this demo page."),
         );
       }
       return;
     }
-    renderDetail(result.bounty);
+    renderDetail(result.bounty, result.truncated);
   });
 
   return () => {

@@ -1,3 +1,4 @@
+import { resolveFundingGate } from "./funding-gate";
 import {
   FIXTURE_BOUNTIES,
   FIXTURE_FORCE_FAIL_QUERY,
@@ -7,16 +8,33 @@ import { isFundedOpportunity } from "./funded";
 import type {
   BountyAdapter,
   BountyDetailResult,
+  BountyFundingGate,
   BountyListFilters,
   BountyListResult,
 } from "./types";
 
+export interface FixtureBountyAdapterOptions {
+  fundingEnabled?: boolean;
+}
+
 /**
- * Fixture-backed bounty adapter for Wave 0 UI.
- * Does not claim live escrow. Live mode must never silently fall back here.
+ * Fixture-backed bounty adapter for UI rehearsal.
+ * Labelled demo data — no funds or NFTs. Live mode must never silently fall back here.
  */
-export function createFixtureBountyAdapter(): BountyAdapter {
+export function createFixtureBountyAdapter(
+  options: FixtureBountyAdapterOptions = {},
+): BountyAdapter {
+  const fundingGate: BountyFundingGate = resolveFundingGate(
+    options.fundingEnabled,
+  );
+
   return {
+    mode: "fixture",
+
+    getFundingGate(): BountyFundingGate {
+      return fundingGate;
+    },
+
     async listBounties(filters: BountyListFilters): Promise<BountyListResult> {
       if (filters.query === FIXTURE_FORCE_FAIL_QUERY) {
         return { ok: false, error: "SERVICE_UNAVAILABLE" };
@@ -53,8 +71,6 @@ export function createFixtureBountyAdapter(): BountyAdapter {
           filters.status !== "ALL" ||
           (filters.fundedOnly && FIXTURE_BOUNTIES.length > 0)
         ) {
-          // Funded-only with no matches among filters → NO_MATCHES when
-          // there are funded items that simply don't match the query/status.
           const fundedPool = FIXTURE_BOUNTIES.filter(isFundedOpportunity);
           if (filters.fundedOnly && fundedPool.length === 0) {
             return { ok: false, error: "EMPTY" };
