@@ -24,12 +24,19 @@
       <main>
         <section class="stall" aria-label="Toilet stall entrance">
           <div class="stall-scene">
-            <div class="stall-ceiling" aria-hidden="true"></div>
+            <div class="stall-room">
+              <div class="stall-ceiling" aria-hidden="true"></div>
 
-            <div class="stall-chamber">
               <div class="stall-wall stall-wall-left" aria-hidden="true">
                 <div class="wall-skin">
                   <div class="wall-marks wall-marks-left"></div>
+                  <div class="wall-fasteners"></div>
+                </div>
+              </div>
+
+              <div class="stall-wall stall-wall-right" aria-hidden="true">
+                <div class="wall-skin">
+                  <div class="wall-marks wall-marks-right"></div>
                   <div class="wall-fasteners"></div>
                 </div>
               </div>
@@ -132,16 +139,9 @@
                 </div>
               </div>
 
-              <div class="stall-wall stall-wall-right" aria-hidden="true">
-                <div class="wall-skin">
-                  <div class="wall-marks wall-marks-right"></div>
-                  <div class="wall-fasteners"></div>
-                </div>
+              <div class="stall-floor" aria-hidden="true">
+                <div class="floor-grate"></div>
               </div>
-            </div>
-
-            <div class="stall-floor" aria-hidden="true">
-              <div class="floor-grate"></div>
             </div>
           </div>
         </section>
