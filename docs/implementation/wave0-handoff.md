@@ -15,6 +15,8 @@ Outcome columns: **implemented** | **fixture-tested** | **live-verified**.
 
 **Exit criteria met for local Wave 0:** interface freeze exists; route disposal tested; pressure scenarios reported; free board still the development baseline; no live money path claimed.
 
+**Post-review fixes (after `127829b`):** unsent paint queue cleared on wall dispose (with drain guards + navigation test); bounty Help-paint route context applied in `mountWall` (router integration test); Rust/TS surcharge overflow aligned via shared `overflow-boundary` golden (checked_mul / reject).
+
 **Not done (later waves):** paid on-chain board, escrow, history service, prints, live adapters, testnet rehearsal.
 
 ---

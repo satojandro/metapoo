@@ -64,6 +64,7 @@ import {
   fitCamera,
   isPanGesture,
   paintZoomCamera,
+  PAINT_CELL_PX,
   panBy,
   selectionRingStyle,
   stageSizeStyle,
@@ -74,16 +75,34 @@ import {
 } from "../../viewport";
 import { revokeDrawingSessionKeyOnChain } from "../../wallet";
 import type { PageMount } from "../../app/page-registry";
+import type { ParsedRoute } from "../../app/routes";
 import type { AppServices } from "../../app/services";
 import { paintOperationId } from "../../app/operations";
+import { parseHelpPaintSearch } from "../bounties/deep-link";
 import { wallPageHtml } from "./wall-template";
 import { createPressureOverlayHooks } from "../../features/pressure";
 
 /**
  * Lifecycle-safe wall mount.
- * mountWall(root, services) → dispose() cancels timers, aborts polls, removes listeners.
- * Broadcast paint operations are recorded on services.operations and survive navigation.
+ * mountWall(root, services) → dispose() cancels timers, aborts polls, removes listeners,
+ * and clears unsent queue paints (already-broadcast ops stay on services.operations).
  */
+
+export interface MountWallOptions {
+  /** Validated router location (Help-paint deep links, etc.). */
+  route?: ParsedRoute | null;
+  /**
+   * Test seam: enqueue unsent paints and drive the drain without a live session.
+   * Production mounts omit this.
+   */
+  attachTestApi?: (api: WallMountTestApi) => void;
+}
+
+export interface WallMountTestApi {
+  enqueueUnsent: (request: DrawRequest) => void;
+  queueLength: () => number;
+  kickDrain: () => Promise<void>;
+}
 
 function mustFindIn<T extends Element>(root: ParentNode, selector: string): T {
   const element = root.querySelector<T>(selector);
@@ -98,14 +117,19 @@ function shellEl<T extends Element>(selector: string): T | null {
 }
 
 /**
- * Page-registry adapter: (root, ctx) → dispose.
+ * Page-registry adapter: passes route context so bounty Help-paint links focus the wall.
  */
-export const mountWallPage: PageMount = (root, ctx) => mountWall(root, ctx.services);
+export const mountWallPage: PageMount = (root, ctx) =>
+  mountWall(root, ctx.services, { route: ctx.route });
 
 /**
  * Extracted from the former main.ts entry. Preserves open-wall gameplay.
  */
-export function mountWall(root: HTMLElement, services: AppServices): () => void {
+export function mountWall(
+  root: HTMLElement,
+  services: AppServices,
+  options: MountWallOptions = {},
+): () => void {
   root.innerHTML = wallPageHtml();
   const pageRoot = root;
 
@@ -208,8 +232,27 @@ export function mountWall(root: HTMLElement, services: AppServices): () => void 
   render();
   showSelection();
   showDrawingSession();
+  applyRoutePaintingContext();
   void bootstrapBoard();
   scheduleBoardPoll();
+
+  options.attachTestApi?.({
+    enqueueUnsent: (request) => {
+      if (disposed) return;
+      enqueuePaint(paintQueue, request);
+      setPendingPaint(pendingPaints, {
+        x: request.x,
+        y: request.y,
+        colorIndex: request.colorIndex,
+        accountId: request.accountId,
+        transactionId: null,
+        phase: "submitted",
+      });
+      render();
+    },
+    queueLength: () => paintQueueLength(paintQueue),
+    kickDrain: () => drainPaintQueue(),
+  });
 
   listen(document, "visibilitychange", () => {
     if (disposed) return;
@@ -377,15 +420,64 @@ export function mountWall(root: HTMLElement, services: AppServices): () => void 
   });
   listenerCleanups.push(unsubWallet);
 
+/**
+ * Apply Help-paint / bounty deep-link query after the wall mounts.
+ * Coordinates and zoom are clamped; a URL never supplies a trusted price.
+ */
+function applyRoutePaintingContext(): void {
+  if (disposed || !options.route) {
+    return;
+  }
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(options.route.query)) {
+    if (value !== undefined && value !== "") {
+      params.set(key, value);
+    }
+  }
+  const parsed = parseHelpPaintSearch(`?${params.toString()}`);
+  if (parsed.x === null || parsed.y === null) {
+    return;
+  }
+
+  selected = { x: parsed.x, y: parsed.y };
+  const cellPx = parsed.zoom ?? PAINT_CELL_PX;
+  applyCamera(paintZoomCamera(readViewportSize(), selected, cellPx));
+
+  const contextBits: string[] = [
+    `Focused square x=${parsed.x}, y=${parsed.y} from the link.`,
+  ];
+  if (parsed.bounty) {
+    contextBits.push(`Bounty context ${parsed.bounty} (coordination only — not territory).`);
+  }
+  if (parsed.template) {
+    contextBits.push(`Template id ${parsed.template} (overlay not applied in this shell yet).`);
+  }
+  if (parsed.board && CONTRACT_ID && parsed.board !== CONTRACT_ID) {
+    contextBits.push(
+      `Link board "${parsed.board}" differs from configured contract ${CONTRACT_ID}; coordinates were still applied.`,
+    );
+  }
+  boardLoadStatus.textContent = contextBits.join(" ");
+  if (walletAccount) {
+    setFlow("editing");
+  }
+  showSelection();
+  render();
+  void refreshSelectedPixel();
+}
+
 async function bootstrapBoard(): Promise<void> {
   if (!isContractConfigured()) {
     contractMetaOk = true;
     evidence.textContent =
       "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
-    boardLoadStatus.textContent =
-      "Board load: mock only (no contract id). Refresh stays disabled.";
+    if (!options.route?.query.x) {
+      boardLoadStatus.textContent =
+        "Board load: mock only (no contract id). Refresh stays disabled.";
+    }
     updateCompactStatus();
     updateDirectPaintAvailability();
+    applyRoutePaintingContext();
     return;
   }
 
@@ -407,6 +499,7 @@ async function bootstrapBoard(): Promise<void> {
     }
     evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK}. ${meta.summary} sponsorship_enabled=${board.sponsorship_enabled}.`;
     await refreshBoardFromContract();
+    applyRoutePaintingContext();
   } catch (error) {
     contractMetaOk = false;
     const detail = error instanceof Error ? error.message : "Unknown read error";
@@ -510,7 +603,7 @@ async function runBoardPoll(): Promise<void> {
 }
 
 async function attemptDraw(request?: DrawRequest): Promise<void> {
-  if (drawInFlight) {
+  if (disposed || drawInFlight) {
     return;
   }
 
@@ -625,11 +718,8 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
       accountId: frozen.accountId,
       networkId: frozen.networkId,
       onProgress: (progress) => {
-        if (progress.phase === "wallet_prompt") {
-          setFlow("wallet_prompt");
-          fillBlock(result, "Waiting for your wallet", progress.detail);
-        } else if (progress.phase === "pending" || progress.phase === "confirming") {
-          setFlow("pending");
+        // Always record broadcast progress on the shared operations store.
+        if (progress.phase === "pending" || progress.phase === "confirming") {
           services.operations.upsert({
             id: opId,
             kind: "paint",
@@ -644,6 +734,15 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
                 : "Confirming against a fresh board read",
             meta: { x: frozen.x, y: frozen.y, colorIndex: frozen.colorIndex },
           });
+        }
+        if (disposed) {
+          return;
+        }
+        if (progress.phase === "wallet_prompt") {
+          setFlow("wallet_prompt");
+          fillBlock(result, "Waiting for your wallet", progress.detail);
+        } else if (progress.phase === "pending" || progress.phase === "confirming") {
+          setFlow("pending");
           setPendingPaint(pendingPaints, {
             x: frozen.x,
             y: frozen.y,
@@ -664,6 +763,48 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
         }
       },
     });
+
+    if (disposed) {
+      // Page left while this draw was in flight: keep operations store, skip DOM.
+      if (submitResult.status === "success" || submitResult.status === "overwritten") {
+        services.operations.upsert({
+          id: opId,
+          kind: "paint",
+          phase: "confirmed",
+          accountId: frozen.accountId,
+          networkId: frozen.networkId,
+          transactionId: submitResult.transactionId,
+          title: submitResult.title,
+          detail: submitResult.message,
+          meta: { x: frozen.x, y: frozen.y, colorIndex: frozen.colorIndex },
+        });
+      } else if (submitResult.status === "confirmation_delayed") {
+        services.operations.upsert({
+          id: opId,
+          kind: "paint",
+          phase: "confirmation_delayed",
+          accountId: frozen.accountId,
+          networkId: frozen.networkId,
+          transactionId: submitResult.transactionId,
+          title: submitResult.title,
+          detail: submitResult.message,
+          meta: { x: frozen.x, y: frozen.y, colorIndex: frozen.colorIndex },
+        });
+      } else if (submitResult.status !== "rejected") {
+        services.operations.upsert({
+          id: opId,
+          kind: "paint",
+          phase: "failed",
+          accountId: frozen.accountId,
+          networkId: frozen.networkId,
+          transactionId: submitResult.transactionId,
+          title: submitResult.title,
+          detail: submitResult.message,
+          meta: { x: frozen.x, y: frozen.y, colorIndex: frozen.colorIndex },
+        });
+      }
+      return;
+    }
 
     if (submitResult.status === "success" && submitResult.pixel) {
       services.operations.upsert({
@@ -1088,9 +1229,10 @@ function updateDirectPaintAvailability(): void {
 
 /**
  * Drop waiting queue entries and their pending previews.
- * An in-flight submit (already shifted) is left alone.
+ * An in-flight submit (already shifted out of the queue) is left alone so a
+ * broadcast can finish recording on services.operations.
  */
-function cancelUnsentPaintQueue(reason: string): void {
+function cancelUnsentPaintQueue(reason: string, options?: { quiet?: boolean }): void {
   if (paintQueueLength(paintQueue) === 0) {
     return;
   }
@@ -1098,12 +1240,15 @@ function cancelUnsentPaintQueue(reason: string): void {
     clearPendingPaint(pendingPaints, item.x, item.y);
   }
   clearPaintQueue(paintQueue);
+  if (options?.quiet || disposed) {
+    return;
+  }
   render();
   fillBlock(result, "Queued paints cancelled", reason);
 }
 
 async function drainPaintQueue(): Promise<void> {
-  if (paintQueue.inFlight) {
+  if (disposed || paintQueue.inFlight) {
     return;
   }
   // Skip (and drop) any head that no longer matches the live wallet.
@@ -1116,7 +1261,16 @@ async function drainPaintQueue(): Promise<void> {
     next = shiftPaint(paintQueue);
   }
   if (!next) {
-    render();
+    if (!disposed) {
+      render();
+    }
+    return;
+  }
+  if (disposed) {
+    clearPendingPaint(pendingPaints, next.x, next.y);
+    cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
+      quiet: true,
+    });
     return;
   }
   paintQueue.inFlight = true;
@@ -1124,6 +1278,12 @@ async function drainPaintQueue(): Promise<void> {
     await attemptDraw(next);
   } finally {
     paintQueue.inFlight = false;
+    if (disposed) {
+      cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
+        quiet: true,
+      });
+      return;
+    }
     if (paintQueueLength(paintQueue) > 0) {
       void drainPaintQueue();
     }
@@ -1419,6 +1579,11 @@ function walletNetworkId(): NetworkId {
     disposed = true;
     clearBoardPoll();
     loadAbort.abort();
+    // Drop unsent queue work; an in-flight attemptDraw may still settle into
+    // services.operations. Do not continue draining after leave.
+    cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
+      quiet: true,
+    });
     resizeObserver.disconnect();
     for (const cleanup of listenerCleanups) {
       try {

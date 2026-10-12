@@ -99,3 +99,24 @@ test("quote at heat cap is max_cost", () => {
   );
   assert.equal(cost, 50n);
 });
+
+test("overflow-boundary golden: Rust/TS agree on u128 surcharge rejection", () => {
+  const file = JSON.parse(
+    readFileSync(join(fixtures, "golden", "overflow-boundary.json"), "utf8"),
+  );
+  for (const c of file.cases) {
+    const config = configFromJson(c.config as PressureConfigJson);
+    const cooled = parseToilet(c.cooled_heat);
+    if (c.expect.error === "overflow") {
+      assert.throws(
+        () => placementCost(cooled, config),
+        (err: unknown) =>
+          err instanceof PressureConfigError &&
+          /overflow/i.test(err.message),
+        c.id,
+      );
+    } else {
+      assert.equal(placementCost(cooled, config), parseToilet(c.expect.cost), c.id);
+    }
+  }
+});

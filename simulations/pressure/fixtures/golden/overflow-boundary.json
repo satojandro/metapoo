@@ -1,0 +1,54 @@
+{
+  "title": "u128 surcharge overflow — Rust and TypeScript must agree",
+  "note": "heat=u128::MAX with numerator=denominator=2 used to diverge (saturating vs BigInt). Both now reject Overflow.",
+  "cases": [
+    {
+      "id": "max-heat-num-den-2-rejects",
+      "cooled_heat": "340282366920938463463374607431768211455",
+      "config": {
+        "version": 1,
+        "base_cost": "10",
+        "max_cost": "50",
+        "heat_cap": "340282366920938463463374607431768211455",
+        "heat_increment": "10",
+        "decay_per_second": "1",
+        "surcharge_numerator": "2",
+        "surcharge_denominator": "2",
+        "effective_at": "0"
+      },
+      "expect": { "error": "overflow" }
+    },
+    {
+      "id": "half-max-heat-num-den-2-fits",
+      "cooled_heat": "170141183460469231731687303715884105727",
+      "config": {
+        "version": 1,
+        "base_cost": "10",
+        "max_cost": "50",
+        "heat_cap": "340282366920938463463374607431768211455",
+        "heat_increment": "10",
+        "decay_per_second": "1",
+        "surcharge_numerator": "2",
+        "surcharge_denominator": "2",
+        "effective_at": "0"
+      },
+      "expect": { "cost": "50" }
+    },
+    {
+      "id": "fixture-heat-cap-still-ok",
+      "cooled_heat": "400",
+      "config": {
+        "version": 1,
+        "base_cost": "10",
+        "max_cost": "50",
+        "heat_cap": "400",
+        "heat_increment": "10",
+        "decay_per_second": "1",
+        "surcharge_numerator": "1",
+        "surcharge_denominator": "10",
+        "effective_at": "0"
+      },
+      "expect": { "cost": "50" }
+    }
+  ]
+}

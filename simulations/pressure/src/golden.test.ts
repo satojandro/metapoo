@@ -168,6 +168,7 @@ test("golden directory contains required scenario files", () => {
     ...SCENARIO_FILES,
     "documented-examples.json",
     "fixed-price-control.json",
+    "overflow-boundary.json",
   ]) {
     assert.ok(files.has(required), `missing ${required}`);
   }

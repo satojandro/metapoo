@@ -51,6 +51,8 @@ pub const FIXTURE_GEOMETRY: BoardGeometry = BoardGeometry {
 pub enum PressureError {
     ZeroDenominator,
     OutOfBounds,
+    /// cooled_heat × surcharge_numerator (or related) exceeds u128.
+    Overflow,
 }
 
 pub fn region_columns(geometry: &BoardGeometry) -> u32 {
@@ -107,10 +109,16 @@ pub fn cooled_heat_at(
 
 pub fn placement_cost(cooled_heat: u128, config: &PressureConfig) -> Result<u128, PressureError> {
     assert_valid(config)?;
-    let surcharge = cooled_heat
-        .saturating_mul(config.surcharge_numerator)
-        / config.surcharge_denominator;
-    let uncapped = config.base_cost.saturating_add(surcharge);
+    // checked_mul (not saturating_mul) so Rust and TypeScript reject the same
+    // overflow boundary instead of disagreeing on surcharge.
+    let product = cooled_heat
+        .checked_mul(config.surcharge_numerator)
+        .ok_or(PressureError::Overflow)?;
+    let surcharge = product / config.surcharge_denominator;
+    let uncapped = config
+        .base_cost
+        .checked_add(surcharge)
+        .ok_or(PressureError::Overflow)?;
     Ok(uncapped.min(config.max_cost))
 }
 
@@ -246,5 +254,75 @@ mod tests {
         cfg.surcharge_denominator = 0;
         let err = placement_cost(0, &cfg).unwrap_err();
         assert!(matches!(err, PressureError::ZeroDenominator));
+    }
+
+    #[derive(Deserialize)]
+    struct OverflowFile {
+        cases: Vec<OverflowCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct OverflowCase {
+        id: String,
+        cooled_heat: String,
+        config: OverflowConfigJson,
+        expect: OverflowExpect,
+    }
+
+    #[derive(Deserialize)]
+    struct OverflowConfigJson {
+        base_cost: String,
+        max_cost: String,
+        heat_cap: String,
+        heat_increment: String,
+        decay_per_second: String,
+        surcharge_numerator: String,
+        surcharge_denominator: String,
+        effective_at: String,
+        version: u32,
+    }
+
+    #[derive(Deserialize)]
+    struct OverflowExpect {
+        #[serde(default)]
+        error: Option<String>,
+        #[serde(default)]
+        cost: Option<String>,
+    }
+
+    #[test]
+    fn overflow_boundary_matches_golden_json() {
+        let path = fixtures_dir().join("overflow-boundary.json");
+        let raw = fs::read_to_string(&path).expect("overflow-boundary.json");
+        let file: OverflowFile = serde_json::from_str(&raw).expect("parse overflow");
+        for case in file.cases {
+            let cfg = PressureConfig {
+                version: case.config.version,
+                base_cost: parse_u128(&case.config.base_cost),
+                max_cost: parse_u128(&case.config.max_cost),
+                heat_cap: parse_u128(&case.config.heat_cap),
+                heat_increment: parse_u128(&case.config.heat_increment),
+                decay_per_second: parse_u128(&case.config.decay_per_second),
+                surcharge_numerator: parse_u128(&case.config.surcharge_numerator),
+                surcharge_denominator: parse_u128(&case.config.surcharge_denominator),
+                effective_at: parse_u64(&case.config.effective_at),
+            };
+            let cooled = parse_u128(&case.cooled_heat);
+            match case.expect.error.as_deref() {
+                Some("overflow") => {
+                    let err = placement_cost(cooled, &cfg).unwrap_err();
+                    assert!(
+                        matches!(err, PressureError::Overflow),
+                        "{}",
+                        case.id
+                    );
+                }
+                _ => {
+                    let cost = placement_cost(cooled, &cfg).expect(&case.id);
+                    let expected = parse_u128(case.expect.cost.as_ref().unwrap());
+                    assert_eq!(cost, expected, "{}", case.id);
+                }
+            }
+        }
     }
 }

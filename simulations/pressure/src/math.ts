@@ -17,6 +17,9 @@ export class PressureConfigError extends Error {
   }
 }
 
+/** NEAR/Rust u128 upper bound — shared with the Rust stub for identical rejection. */
+export const U128_MAX = (1n << 128n) - 1n;
+
 /** Reject zero surcharge denominator before any quote or mutation. */
 export function assertValidConfig(config: PressureConfig): void {
   if (config.surcharge_denominator === 0n) {
@@ -30,6 +33,38 @@ export function assertValidConfig(config: PressureConfig): void {
   }
   if (config.surcharge_numerator < 0n) {
     throw new PressureConfigError("surcharge_numerator must be non-negative");
+  }
+  if (
+    config.base_cost > U128_MAX ||
+    config.max_cost > U128_MAX ||
+    config.heat_cap > U128_MAX ||
+    config.heat_increment > U128_MAX ||
+    config.decay_per_second > U128_MAX ||
+    config.surcharge_numerator > U128_MAX
+  ) {
+    throw new PressureConfigError("config field exceeds u128");
+  }
+}
+
+/**
+ * Reject cooled_heat × numerator products that would overflow u128 before
+ * division. Matches Rust checked_mul (not saturating_mul) so both languages
+ * agree at the boundary instead of silently diverging.
+ */
+export function assertSurchargeProductFits(
+  cooledHeat: bigint,
+  config: PressureConfig,
+): void {
+  assertValidConfig(config);
+  if (cooledHeat < 0n || cooledHeat > U128_MAX) {
+    throw new PressureConfigError("cooled_heat outside u128");
+  }
+  if (cooledHeat === 0n || config.surcharge_numerator === 0n) {
+    return;
+  }
+  const maxHeat = U128_MAX / config.surcharge_numerator;
+  if (cooledHeat > maxHeat) {
+    throw new PressureConfigError("surcharge product overflows u128");
   }
 }
 
@@ -67,9 +102,12 @@ export function cooledHeatAt(
 }
 
 export function placementCost(cooledHeat: bigint, config: PressureConfig): bigint {
-  assertValidConfig(config);
+  assertSurchargeProductFits(cooledHeat, config);
   const surcharge = (cooledHeat * config.surcharge_numerator) / config.surcharge_denominator;
   const uncapped = config.base_cost + surcharge;
+  if (uncapped > U128_MAX) {
+    throw new PressureConfigError("uncapped cost overflows u128");
+  }
   return uncapped < config.max_cost ? uncapped : config.max_cost;
 }
 
