@@ -47,7 +47,8 @@ function sampleRecord(
       networkId: "testnet",
       contractId: "board.example.testnet",
       publicKey: "ed25519:11111111111111111111111111111111",
-      secretKeyHex: "aa".repeat(32),
+      secretKey: "ed25519:SecretKeyForTestsOnlyNotReal",
+      secretKeyHex: "",
       gasAllowanceYocto: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
       authorizedAt: "2026-10-12T00:00:00.000Z",
     }),
@@ -139,7 +140,7 @@ describe("describeDrawingSession state machine", () => {
     expect(status.message).toMatch(/No experimental drawing session/i);
   });
 
-  it("says active with honest no-popup disclaimer", () => {
+  it("says active and prefers local signing with revoke guidance", () => {
     const status = describeDrawingSession({
       contractId: "board.example.testnet",
       accountId: "artist.testnet",
@@ -148,8 +149,8 @@ describe("describeDrawingSession state machine", () => {
     });
     expect(status.phase).toBe("active");
     expect(status.title).toMatch(/experimental/i);
-    expect(status.message).toMatch(/signAndSendTransaction/i);
-    expect(status.message).toMatch(/does not delete the on-chain key/i);
+    expect(status.message).toMatch(/local signing/i);
+    expect(status.message).toMatch(/Revoke on chain/i);
     expect(status.allowanceLabel).toBe("0.05 NEAR");
   });
 
@@ -158,7 +159,12 @@ describe("describeDrawingSession state machine", () => {
       contractId: "board.example.testnet",
       accountId: "artist.testnet",
       networkId: "testnet",
-      record: { ...sampleRecord(), forgottenLocally: true, secretKeyHex: "" },
+      record: {
+        ...sampleRecord(),
+        forgottenLocally: true,
+        secretKey: "",
+        secretKeyHex: "",
+      },
     });
     expect(status.phase).toBe("forgotten_locally");
     expect(status.message).toMatch(/does not delete/i);
@@ -189,6 +195,7 @@ describe("localStorage session persistence", () => {
     saveDrawingSessionRecord(sampleRecord(), storage);
     const forgotten = forgetDrawingSessionLocally(storage);
     expect(forgotten?.forgottenLocally).toBe(true);
+    expect(forgotten?.secretKey).toBe("");
     expect(forgotten?.secretKeyHex).toBe("");
     expect(loadDrawingSessionRecord(storage)?.forgottenLocally).toBe(true);
   });

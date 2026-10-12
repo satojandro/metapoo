@@ -1,20 +1,30 @@
 :root {
-  --ink: #1b1916;
-  --paper: #f3efe6;
-  --stall: #c4b8a4;
-  --stall-deep: #9a8b74;
-  --stall-seam: #6f6352;
+  --ink: #1a1612;
+  --paper: #2a2420;
+  --brick: #2c221c;
+  --brick-deep: #1a1410;
+  --mortar: #6a5e52;
+  --metal: #7a848c;
+  --metal-deep: #3e464c;
+  --metal-shine: #b8c2c8;
+  --stall-seam: #4a4036;
   --wall-empty: #d9d3c7;
-  --focus: #1d4e89;
-  --ok: #1f5c38;
-  --bad: #8a2b22;
-  --muted: #3a342c;
-  --panel: #fffdf8;
-  color: var(--ink);
+  --focus: #1d8ec9;
+  --accent-cyan: #2ad4e8;
+  --accent-yellow: #f0d24a;
+  --accent-pink: #e85a9a;
+  --accent-green: #3ecf6a;
+  --accent-red: #e8453a;
+  --ok: #2d8a4e;
+  --bad: #c44a3c;
+  --muted: #c4b8a8;
+  --panel: #f4efe6;
+  --panel-ink: #1a1612;
+  color: #f0e8dc;
   background:
-    radial-gradient(ellipse at 20% 0%, #ebe4d6 0%, transparent 55%),
-    radial-gradient(ellipse at 90% 30%, #ddd4c4 0%, transparent 45%),
-    var(--paper);
+    radial-gradient(ellipse at 15% 0%, rgba(80, 60, 40, 0.45) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 20%, rgba(40, 70, 80, 0.25) 0%, transparent 40%),
+    linear-gradient(180deg, #3a322c 0%, var(--brick-deep) 100%);
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   line-height: 1.45;
 }
@@ -26,6 +36,7 @@
 body {
   margin: 0;
   padding: 1.25rem;
+  min-height: 100vh;
 }
 
 h1,
@@ -38,6 +49,7 @@ p {
 h1 {
   margin-bottom: 0.25rem;
   font-size: 2rem;
+  letter-spacing: 0.02em;
 }
 
 h2 {
@@ -77,8 +89,9 @@ h3 {
 
 .evidence {
   padding: 0.75rem 1rem;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--stall-seam);
   background: var(--panel);
+  color: var(--panel-ink);
 }
 
 .flow-state {
@@ -89,7 +102,7 @@ h3 {
 
 .flow-state[data-phase="pending"],
 .flow-state[data-phase="wallet_prompt"] {
-  color: var(--focus);
+  color: var(--accent-cyan);
 }
 
 .flow-state[data-phase="success"] {
@@ -117,7 +130,7 @@ h3 {
 
 .action.secondary {
   background: var(--panel);
-  color: var(--ink);
+  color: var(--panel-ink);
 }
 
 .layout {
@@ -128,54 +141,281 @@ h3 {
   margin-top: 0.5rem;
 }
 
-/* Stall framing stays outside the painted cell interiors. */
+/* ——— 3D stall entrance ——— */
 .stall {
   margin: 0;
+  perspective: 1100px;
+  perspective-origin: 50% 42%;
 }
 
-.stall-frame {
+.stall-scene {
   position: relative;
-  padding: 0.85rem;
+  padding: 0.55rem 0.55rem 0;
   background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 17px,
+      rgba(106, 94, 82, 0.22) 17px,
+      rgba(106, 94, 82, 0.22) 19px
+    ),
     repeating-linear-gradient(
       90deg,
       transparent,
-      transparent 11px,
-      rgba(111, 99, 82, 0.08) 11px,
-      rgba(111, 99, 82, 0.08) 12px
+      transparent 38px,
+      rgba(106, 94, 82, 0.28) 38px,
+      rgba(106, 94, 82, 0.28) 40px
     ),
-    linear-gradient(160deg, var(--stall) 0%, var(--stall-deep) 100%);
-  border: 3px solid var(--stall-seam);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+    linear-gradient(165deg, #3a2e26 0%, var(--brick) 45%, var(--brick-deep) 100%);
+  border: 3px solid var(--metal-deep);
+  box-shadow:
+    inset 0 0 0 1px rgba(184, 194, 200, 0.2),
+    0 12px 28px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  transform-style: preserve-3d;
 }
 
-.stall-latch {
+.stall-ceiling {
+  height: 1.1rem;
+  margin: 0 0.35rem;
+  background:
+    linear-gradient(180deg, #5a646c 0%, var(--metal-deep) 100%);
+  border: 1px solid #2a3034;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  clip-path: polygon(4% 100%, 96% 100%, 100% 0, 0 0);
+  transform: translateZ(12px);
+}
+
+.stall-chamber {
+  display: grid;
+  grid-template-columns: minmax(2.25rem, 11%) minmax(0, 1fr) minmax(2.25rem, 11%);
+  align-items: stretch;
+  min-height: 0;
+  transform-style: preserve-3d;
+  gap: 0;
+}
+
+/* Side walls extend toward the viewer */
+.stall-wall {
+  position: relative;
+  min-width: 0;
+  transform-style: preserve-3d;
+}
+
+.stall-wall-left {
+  transform-origin: right center;
+  transform: rotateY(58deg) translateZ(2px);
+}
+
+.stall-wall-right {
+  transform-origin: left center;
+  transform: rotateY(-58deg) translateZ(2px);
+}
+
+.wall-skin {
+  position: relative;
+  height: 100%;
+  min-height: min(58vh, 480px);
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 14px,
+      rgba(90, 78, 66, 0.35) 14px,
+      rgba(90, 78, 66, 0.35) 16px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 28px,
+      rgba(90, 78, 66, 0.4) 28px,
+      rgba(90, 78, 66, 0.4) 30px
+    ),
+    linear-gradient(180deg, #4a3c32 0%, #2a221c 55%, #1c1612 100%);
+  border: 1px solid #1a1410;
+  box-shadow:
+    inset 0 0 24px rgba(0, 0, 0, 0.35),
+    inset -2px 0 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.stall-wall-right .wall-skin {
+  box-shadow:
+    inset 0 0 24px rgba(0, 0, 0, 0.35),
+    inset 2px 0 0 rgba(255, 255, 255, 0.04);
+}
+
+.wall-fasteners::before,
+.wall-fasteners::after {
+  content: "";
   position: absolute;
-  top: 1.1rem;
-  right: 0.35rem;
-  width: 0.55rem;
-  height: 1.6rem;
-  border-radius: 0.15rem;
-  background: linear-gradient(180deg, #d7cfc0, #8a7d68);
-  border: 1px solid var(--stall-seam);
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--metal-shine), var(--metal-deep));
+  border: 1px solid #1a1e22;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.stall-wall-left .wall-fasteners::before {
+  top: 12%;
+  right: 18%;
+}
+
+.stall-wall-left .wall-fasteners::after {
+  bottom: 18%;
+  right: 22%;
+}
+
+.stall-wall-right .wall-fasteners::before {
+  top: 12%;
+  left: 18%;
+}
+
+.stall-wall-right .wall-fasteners::after {
+  bottom: 18%;
+  left: 22%;
+}
+
+/* Original geometric / pixel marks — not copied artwork */
+.wall-marks {
+  position: absolute;
+  inset: 8% 12%;
+  opacity: 0.9;
   pointer-events: none;
+}
+
+.wall-marks-left {
+  background:
+    linear-gradient(135deg, var(--accent-cyan) 0 12%, transparent 12% 100%),
+    linear-gradient(45deg, transparent 60%, var(--accent-yellow) 60% 72%, transparent 72%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 6px,
+      rgba(42, 212, 232, 0.35) 6px 8px
+    ),
+    radial-gradient(circle at 70% 30%, var(--accent-pink) 0 4px, transparent 5px),
+    radial-gradient(circle at 40% 70%, var(--accent-green) 0 5px, transparent 6px);
+  background-size: 100% 100%, 100% 100%, 100% 40%, 100% 100%, 100% 100%;
+  background-position: 0 0, 0 0, 0 55%, 0 0, 0 0;
+  background-repeat: no-repeat;
+  clip-path: polygon(0 5%, 100% 0, 100% 100%, 0 95%);
+}
+
+.wall-marks-right {
+  background:
+    linear-gradient(225deg, var(--accent-red) 0 10%, transparent 10%),
+    linear-gradient(-45deg, transparent 55%, var(--accent-cyan) 55% 68%, transparent 68%),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 5px,
+      rgba(240, 210, 74, 0.4) 5px 7px
+    ),
+    radial-gradient(circle at 30% 25%, var(--accent-yellow) 0 4px, transparent 5px),
+    radial-gradient(circle at 65% 75%, var(--accent-pink) 0 6px, transparent 7px);
+  background-size: 100% 100%, 100% 100%, 55% 100%, 100% 100%, 100% 100%;
+  background-position: 0 0, 0 0, 100% 20%, 0 0, 0 0;
+  background-repeat: no-repeat;
+  clip-path: polygon(0 0, 100% 5%, 100% 95%, 0 100%);
+}
+
+/* Back wall: flat board surface + toilet beneath */
+.stall-back {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  transform: translateZ(-28px);
+  transform-style: flat;
+}
+
+.back-wall-skin {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  padding: 0.65rem 0.7rem 0.35rem;
+  background:
+    linear-gradient(180deg, rgba(90, 100, 108, 0.35) 0%, transparent 18%),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 10px,
+      rgba(70, 60, 52, 0.12) 10px,
+      rgba(70, 60, 52, 0.12) 11px
+    ),
+    linear-gradient(180deg, #4a4038 0%, #322a24 40%, #261f1a 100%);
+  border: 2px solid var(--metal-deep);
+  box-shadow:
+    inset 0 0 0 1px rgba(184, 194, 200, 0.15),
+    inset 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.back-wall-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background:
+    radial-gradient(circle at 8% 18%, var(--accent-yellow) 0 3px, transparent 4px),
+    radial-gradient(circle at 92% 22%, var(--accent-cyan) 0 4px, transparent 5px),
+    radial-gradient(circle at 12% 88%, var(--accent-pink) 0 3px, transparent 4px),
+    linear-gradient(
+      90deg,
+      transparent 0 6%,
+      rgba(62, 207, 106, 0.35) 6% 9%,
+      transparent 9% 91%,
+      rgba(232, 90, 154, 0.3) 91% 94%,
+      transparent 94%
+    );
+  z-index: 0;
+}
+
+.board-mount {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.board-bezel {
+  padding: 0.4rem;
+  background:
+    linear-gradient(145deg, var(--metal-shine) 0%, var(--metal) 35%, var(--metal-deep) 100%);
+  border: 1px solid #1e2428;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.35),
+    0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.board-caption {
+  margin: 0;
+  text-align: center;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(196, 184, 168, 0.65);
 }
 
 .board-focus {
   position: relative;
   outline: none;
-  background: #5c5346;
-  border: 2px solid var(--stall-seam);
+  background: #1a1814;
+  border: 2px solid #0e0c0a;
 }
 
 .board-viewport {
   position: relative;
   width: 100%;
-  height: min(68vh, 560px);
+  height: min(52vh, 440px);
   overflow: hidden;
   touch-action: none;
   background: var(--wall-empty);
   cursor: grab;
+  /* Keep a precise flat paint surface — no 3D skew on the board itself */
+  transform: none;
 }
 
 .board-viewport.is-panning {
@@ -205,6 +445,59 @@ h3 {
   box-shadow:
     0 0 0 2px #ffffff,
     0 0 0 4px var(--focus);
+}
+
+/* Emblematic toilet beneath the board — does not cover cells */
+.stall-toilet {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding: 0.15rem 0 0.2rem;
+  pointer-events: none;
+}
+
+.toilet-svg {
+  width: min(38%, 9.5rem);
+  height: auto;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45));
+}
+
+.stall-floor {
+  position: relative;
+  height: 2.4rem;
+  margin-top: 0.15rem;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #2a2622 0 14px,
+      #221e1a 14px 28px
+    ),
+    linear-gradient(180deg, #3a342e 0%, #1a1612 100%);
+  border-top: 2px solid var(--metal-deep);
+  box-shadow: inset 0 8px 16px rgba(0, 0, 0, 0.4);
+  transform: perspective(420px) rotateX(58deg);
+  transform-origin: top center;
+  clip-path: polygon(2% 0, 98% 0, 100% 100%, 0 100%);
+}
+
+.floor-grate {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  width: 18%;
+  height: 28%;
+  transform: translateX(-50%);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 4px,
+      rgba(0, 0, 0, 0.55) 4px 5px
+    ),
+    #3a4046;
+  border: 1px solid #1a1e22;
+  opacity: 0.85;
 }
 
 .selection-preview {
@@ -239,15 +532,38 @@ canvas {
   color: var(--muted);
 }
 
+.hover-summary:empty {
+  display: none;
+}
+
 .paint-dock {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
+  align-items: center;
   gap: 0.75rem;
   margin: 0.5rem 0 0.75rem;
   padding: 0.65rem;
-  background: rgba(255, 253, 248, 0.85);
+  background: rgba(244, 239, 230, 0.92);
   border: 1px solid var(--stall-seam);
+  color: var(--panel-ink);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.direct-paint-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--panel-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.direct-paint-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--focus);
 }
 
 .palette {
@@ -264,9 +580,9 @@ canvas {
   gap: 0.4rem;
   min-height: 44px;
   padding: 0.35rem 0.6rem;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--panel-ink);
   background: var(--panel);
-  color: var(--ink);
+  color: var(--panel-ink);
   font: inherit;
   cursor: pointer;
 }
@@ -279,7 +595,7 @@ canvas {
 .chip {
   width: 1rem;
   height: 1rem;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--panel-ink);
 }
 
 .action {
@@ -309,33 +625,31 @@ canvas {
   gap: 1.25rem;
 }
 
+.side section {
+  padding: 0.75rem 0.85rem;
+  background: rgba(244, 239, 230, 0.9);
+  border: 1px solid var(--stall-seam);
+  color: var(--panel-ink);
+}
+
+.side .help,
+.side .result {
+  color: inherit;
+}
+
+.side .result {
+  background: transparent;
+  border-left-color: var(--focus);
+  padding-left: 0.65rem;
+}
+
 .drawing-session-opt-in {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
   margin: 0.5rem 0;
   font-size: 0.95rem;
-  color: var(--muted);
-}
-
-.drawing-session-opt-in input {
-  margin-top: 0.2rem;
-}
-
-.drawing-session-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.drawing-session-opt-in {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  margin: 0.5rem 0;
-  color: var(--muted);
-  font-size: 0.95rem;
+  color: #4a4238;
   cursor: pointer;
 }
 
@@ -353,7 +667,8 @@ canvas {
 .about {
   padding: 0.65rem 0.85rem;
   border: 1px solid var(--stall-seam);
-  background: rgba(255, 253, 248, 0.7);
+  background: rgba(244, 239, 230, 0.9);
+  color: var(--panel-ink);
 }
 
 .about summary {
@@ -368,8 +683,9 @@ canvas {
 .result {
   margin-top: 0.75rem;
   padding: 0.75rem 1rem;
-  background: var(--panel);
+  background: rgba(244, 239, 230, 0.92);
   border-left: 4px solid var(--focus);
+  color: var(--panel-ink);
 }
 
 .result h3 {
@@ -407,8 +723,40 @@ canvas {
     max-width: none;
   }
 
+  .stall {
+    perspective: 780px;
+  }
+
+  .stall-chamber {
+    grid-template-columns: minmax(1.6rem, 9%) minmax(0, 1fr) minmax(1.6rem, 9%);
+  }
+
+  .stall-wall-left {
+    transform: rotateY(52deg) translateZ(1px);
+  }
+
+  .stall-wall-right {
+    transform: rotateY(-52deg) translateZ(1px);
+  }
+
+  .wall-skin {
+    min-height: min(48vh, 360px);
+  }
+
+  .stall-back {
+    transform: translateZ(-16px);
+  }
+
   .board-viewport {
-    height: min(58vh, 420px);
+    height: min(46vh, 360px);
+  }
+
+  .toilet-svg {
+    width: min(42%, 7.5rem);
+  }
+
+  .stall-floor {
+    height: 1.85rem;
   }
 
   .paint-dock {
@@ -426,7 +774,65 @@ canvas {
     flex: 1 1 calc(50% - 0.4rem);
   }
 
+  .direct-paint-toggle {
+    flex: 1 1 100%;
+  }
+
   .action.place {
     flex: 1 1 100%;
+  }
+}
+
+/* Narrow phones (~390px): keep entrance readable */
+@media (max-width: 430px) {
+  .stall-scene {
+    padding: 0.4rem 0.35rem 0;
+  }
+
+  .stall-chamber {
+    grid-template-columns: minmax(1.15rem, 7.5%) minmax(0, 1fr) minmax(1.15rem, 7.5%);
+  }
+
+  .back-wall-skin {
+    padding: 0.45rem 0.4rem 0.25rem;
+    gap: 0.4rem;
+  }
+
+  .board-bezel {
+    padding: 0.28rem;
+  }
+
+  .board-viewport {
+    height: min(42vh, 320px);
+  }
+
+  .board-caption {
+    font-size: 0.62rem;
+  }
+
+  .stall-ceiling {
+    height: 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stall-wall-left,
+  .stall-wall-right,
+  .stall-back,
+  .stall-floor {
+    transform: none;
+  }
+
+  .stall-wall-left .wall-skin {
+    clip-path: polygon(0 0, 100% 4%, 100% 96%, 0 100%);
+  }
+
+  .stall-wall-right .wall-skin {
+    clip-path: polygon(0 4%, 100% 0, 100% 100%, 0 96%);
+  }
+
+  .stall-floor {
+    clip-path: none;
+    transform: none;
   }
 }

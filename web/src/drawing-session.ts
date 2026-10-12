@@ -47,7 +47,14 @@ export interface DrawingSessionRecord {
   contractId: string;
   /** NEAR public key string, e.g. "ed25519:…" */
   publicKey: string;
-  /** 32-byte ed25519 seed as lowercase hex (experimental storage). */
+  /**
+   * Preferred: full NEAR secret key `ed25519:…` for `@near-js/crypto` KeyPair.
+   * Empty when forgotten locally.
+   */
+  secretKey: string;
+  /**
+   * Legacy hex seed from the first scaffold. Kept for migration; prefer secretKey.
+   */
   secretKeyHex: string;
   gasAllowanceYocto: string;
   /** When this browser marked the session authorized (ISO string). */
@@ -195,7 +202,7 @@ export function describeDrawingSession(input: {
       phase: "inactive",
       title: "Drawing session: not active",
       message:
-        "Connect your wallet first. Optionally check “Authorize drawing session” to ask the wallet for a limited draw-only key. Ordinary wallet approval remains the default fallback. Draw still uses the wallet popup path until local signing is proven.",
+        "Connect your wallet first. Optionally check “Authorize drawing session” to ask the wallet for a limited draw-only key. Ordinary wallet approval remains the default fallback.",
       allowanceLabel,
       record: input.record,
     };
@@ -242,9 +249,9 @@ export function describeDrawingSession(input: {
     title: "Drawing session: active (experimental)",
     message: [
       `Authorized for ${record.accountId} on ${record.networkId}, contract ${record.contractId}, method “draw” only.`,
-      `Configured lifetime allowance: ${formatAllowanceNear(record.gasAllowanceYocto)} (live remaining balance is not queried yet).`,
-      "Draw still goes through the wallet’s signAndSendTransaction path — this scaffold does not claim no-popup local signing yet.",
-      "Forgetting the session only clears this browser. It does not delete the on-chain key.",
+      `Configured lifetime allowance: ${formatAllowanceNear(record.gasAllowanceYocto)}.`,
+      "Place paint will try local signing with this key first (no wallet popup). If that fails, ordinary wallet approval remains the fallback.",
+      "“Forget” only clears this browser. Use “Revoke on chain” to ask the wallet to delete the access key.",
     ].join(" "),
     allowanceLabel: formatAllowanceNear(record.gasAllowanceYocto),
     record,
@@ -299,7 +306,8 @@ export function forgetDrawingSessionLocally(
   const next: DrawingSessionRecord = {
     ...existing,
     forgottenLocally: true,
-    // Drop the secret so a forgotten session cannot be reused from storage.
+    // Drop secrets so a forgotten session cannot be reused from storage.
+    secretKey: "",
     secretKeyHex: "",
   };
   storage.setItem(DRAWING_SESSION_STORAGE_KEY, JSON.stringify(next));
@@ -314,26 +322,19 @@ export function wipeDrawingSessionStorage(
 }
 
 /**
- * Generate an ed25519 keypair for the FC key experiment (Web Crypto).
- * Returns a NEAR-style public key string and a hex seed for localStorage.
+ * Generate an ed25519 keypair for the FC key experiment via @near-js/crypto.
+ * Returns NEAR-style public + secret key strings for local signing.
  */
-export async function createDrawingSessionKeypair(
-  subtle: SubtleCrypto = crypto.subtle,
-): Promise<{ publicKey: string; secretKeyHex: string }> {
-  const keyPair = await subtle.generateKey({ name: "Ed25519" }, true, [
-    "sign",
-    "verify",
-  ]);
-  const publicRaw = new Uint8Array(await subtle.exportKey("raw", keyPair.publicKey));
-  const pkcs8 = new Uint8Array(await subtle.exportKey("pkcs8", keyPair.privateKey));
-  // RFC 8410 PKCS#8 for Ed25519 ends with the 32-byte seed.
-  if (pkcs8.length < 32) {
-    throw new Error("Unexpected Ed25519 PKCS#8 length from Web Crypto.");
-  }
-  const seed = pkcs8.slice(pkcs8.length - 32);
+export async function createDrawingSessionKeypair(): Promise<{
+  publicKey: string;
+  secretKey: string;
+}> {
+  const { KeyPair } = await import("@near-js/crypto");
+  // Dynamic import keeps this module loadable in unit tests that never sign.
+  const keyPair = KeyPair.fromRandom("ed25519");
   return {
-    publicKey: `ed25519:${encodeBase58(publicRaw)}`,
-    secretKeyHex: bytesToHex(seed),
+    publicKey: keyPair.getPublicKey().toString(),
+    secretKey: keyPair.toString(),
   };
 }
 
@@ -345,7 +346,9 @@ export function makeAuthorizedSessionRecord(input: {
   networkId: string;
   contractId: string;
   publicKey: string;
-  secretKeyHex: string;
+  secretKey?: string;
+  /** @deprecated Prefer secretKey (ed25519:…). */
+  secretKeyHex?: string;
   gasAllowanceYocto?: string;
   authorizedAt?: string;
 }): DrawingSessionRecord {
@@ -356,7 +359,8 @@ export function makeAuthorizedSessionRecord(input: {
     networkId: input.networkId,
     contractId: input.contractId,
     publicKey: input.publicKey,
-    secretKeyHex: input.secretKeyHex,
+    secretKey: input.secretKey ?? "",
+    secretKeyHex: input.secretKeyHex ?? "",
     gasAllowanceYocto:
       input.gasAllowanceYocto ?? DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
     authorizedAt: input.authorizedAt ?? new Date().toISOString(),
@@ -376,6 +380,7 @@ function normalizeRecord(value: unknown): DrawingSessionRecord | null {
   const networkId = asNonEmptyString(record.networkId);
   const contractId = asNonEmptyString(record.contractId);
   const publicKey = asNonEmptyString(record.publicKey);
+  const secretKey = typeof record.secretKey === "string" ? record.secretKey : "";
   const secretKeyHex =
     typeof record.secretKeyHex === "string" ? record.secretKeyHex : "";
   const gasAllowanceYocto = asNonEmptyString(record.gasAllowanceYocto);
@@ -397,6 +402,7 @@ function normalizeRecord(value: unknown): DrawingSessionRecord | null {
     networkId,
     contractId,
     publicKey,
+    secretKey,
     secretKeyHex,
     gasAllowanceYocto,
     authorizedAt,
@@ -406,14 +412,6 @@ function normalizeRecord(value: unknown): DrawingSessionRecord | null {
 
 function asNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  let out = "";
-  for (const byte of bytes) {
-    out += byte.toString(16).padStart(2, "0");
-  }
-  return out;
 }
 
 function defaultStorage(): Storage | null {

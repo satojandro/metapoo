@@ -10,7 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@hot-labs/near-connect": "^0.11.4"
+    "@hot-labs/near-connect": "^0.11.4",
+    "@near-js/accounts": "^2.5.1",
+    "@near-js/crypto": "^2.5.1",
+    "@near-js/providers": "^2.5.1",
+    "@near-js/transactions": "^2.5.1",
+    "@near-js/types": "^2.5.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

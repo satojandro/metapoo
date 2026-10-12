@@ -94,32 +94,30 @@ See `docs/2026-10-12-viewport-and-interaction-brief.md`.
 
 ### Experimental drawing session (function-call key)
 
-A narrow scaffold can optionally call near-connect `connect({ addFunctionCallKey })`
-so the wallet is asked to add a **limited** access key for this board’s `draw`
-method only, with a small explicit gas allowance (0.05 NEAR lifetime).
+Opt-in connect can request `addFunctionCallKey` for this board’s `draw` method
+only (0.05 NEAR lifetime allowance). Place paint then **tries local signing**
+with `@near-js` first; ordinary wallet approval remains the fallback.
 
 **What works in code today**
 
-- Default Connect stays ordinary sign-in (`signInWithoutAddKey`) — no FC key.
-- Opt-in checkbox / “Authorize drawing session” builds `addFunctionCallKey` with
-  `allowMethods: { anyMethod: false, methodNames: ["draw"] }` and a limited
-  `gasAllowance`.
-- An ed25519 keypair is generated (Web Crypto) and stored in `localStorage`
-  under `metapoo.experimental.drawingSession.v1` (labeled experimental).
-- Plain-language status covers inactive / active / forgotten / mismatch, plus
-  renewal and “forget in this browser” copy.
+- Default Connect stays ordinary sign-in — no FC key.
+- Authorize builds a draw-only limited key; ed25519 secret stored in
+  `localStorage` (`metapoo.experimental.drawingSession.v1`).
+- Local draw path via `Account.callFunctionRaw` when the session is active.
+- Live remaining-allowance query; exhaustion returns a clear failed status
+  without auto-resubmit.
+- **Revoke on-chain** asks the wallet for `DeleteKey` (still a wallet prompt).
+- **Direct paint** (session-gated): taps enqueue cells; queue is serialized.
+- Contract `get_board` must match shared schema/size/rule/palette or drawing
+  stays disabled (RPC calls use a 20s timeout).
 
-**Still unverified on testnet**
+**Still unverified on your testnet wallet**
 
-- Whether your chosen wallet actually supports `signInWithFunctionCallKey`.
-- That the key appears on chain with the expected receiver/methods/allowance.
-- Remaining allowance reads, exhaustion handling, and real on-chain revocation.
-- **No-popup drawing:** paint still uses `wallet.signAndSendTransaction`. Having
-  requested an FC key at sign-in does **not** yet mean local signing without a
-  wallet popup. Do not treat multiple paints without popups as proven.
+- End-to-end authorize → multi-paint without popups on your chosen wallet.
+- That DeleteKey actually removes the key (confirm in account keys / explorer).
 
-**Important:** clearing browser storage or clicking “Forget session” only removes
-local key material. It does **not** delete the access key on the NEAR account.
+**Important:** “Forget session” only clears this browser. Use **Revoke on-chain**
+for access-key deletion (wallet prompt).
 
 ## Manual checks (and environment used)
 

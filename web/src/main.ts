@@ -26,13 +26,25 @@ import {
   getPixel,
   isContractConfigured,
 } from "./contract";
+import { validateContractMetadata } from "./contract-meta";
 import { prepareDraw } from "./draw-policy";
 import {
   describeDrawingSession,
   forgetDrawingSessionLocally,
+  formatAllowanceNear,
   loadDrawingSessionRecord,
 } from "./drawing-session";
+import {
+  canUseLocalDrawingSession,
+  fetchDrawingSessionAllowance,
+} from "./local-draw";
 import { describeNetwork } from "./network";
+import {
+  createPaintQueue,
+  enqueuePaint,
+  paintQueueLength,
+  shiftPaint,
+} from "./paint-queue";
 import {
   createPendingPaintMap,
   listPendingPaints,
@@ -57,7 +69,12 @@ import {
   type Camera,
   type ViewportSize,
 } from "./viewport";
-import { connectWallet, disconnectWallet, onWalletSession } from "./wallet";
+import {
+  connectWallet,
+  disconnectWallet,
+  onWalletSession,
+  revokeDrawingSessionKeyOnChain,
+} from "./wallet";
 
 /**
  * Page wiring.
@@ -115,10 +132,16 @@ const authorizeSessionButton = mustFind<HTMLButtonElement>(
 const forgetSessionButton = mustFind<HTMLButtonElement>(
   "#forget-session-button",
 );
+const revokeSessionButton = mustFind<HTMLButtonElement>(
+  "#revoke-session-button",
+);
+const hoverSummary = mustFind<HTMLElement>("#hover-summary");
+const directPaintToggle = mustFind<HTMLInputElement>("#direct-paint-toggle");
 
 const pixelCache = createPixelCache();
 const pendingPaints = createPendingPaintMap();
 const boardSync = createBoardSyncState();
+const paintQueue = createPaintQueue();
 
 let selected: Cell | null = null;
 let selectedColor: number | null = null;
@@ -126,6 +149,8 @@ let walletAccount: string | null = null;
 let walletNetwork: string | null = null;
 let drawInFlight = false;
 let boardLoadInFlight = false;
+/** False until get_board metadata matches shared constants (or mock mode). */
+let contractMetaOk = !isContractConfigured();
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let camera: Camera = { cellSize: 4, panX: 0, panY: 0 };
 /** High-level UI phase for the status strip. */
@@ -192,6 +217,14 @@ authorizeSessionButton.addEventListener("click", () => {
 forgetSessionButton.addEventListener("click", () => {
   forgetDrawingSessionLocally();
   showDrawingSession();
+});
+
+revokeSessionButton.addEventListener("click", () => {
+  void onRevokeSessionClick();
+});
+
+directPaintToggle.addEventListener("change", () => {
+  updateDirectPaintAvailability();
 });
 
 refreshButton.addEventListener("click", () => {
@@ -306,27 +339,42 @@ onWalletSession((session) => {
 
 async function bootstrapBoard(): Promise<void> {
   if (!isContractConfigured()) {
+    contractMetaOk = true;
     evidence.textContent =
       "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
     boardLoadStatus.textContent =
       "Board load: mock only (no contract id). Refresh stays disabled.";
     updateCompactStatus();
+    updateDirectPaintAvailability();
     return;
   }
 
-  evidence.textContent = `Evidence: reading contract ${CONTRACT_ID} on ${PAGE_NETWORK}. Loading painted cells via paginated get_pixels…`;
+  evidence.textContent = `Evidence: reading contract ${CONTRACT_ID} on ${PAGE_NETWORK}. Validating metadata, then loading painted cells…`;
   try {
     const board = await getBoard();
+    const meta = validateContractMetadata(board);
+    contractMetaOk = meta.ok;
+    if (!meta.ok) {
+      evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK} failed metadata checks — ${meta.message}`;
+      fillBlock(result, meta.title, meta.message);
+      boardLoadStatus.textContent = `Board metadata rejected: ${meta.title}`;
+      updateCompactStatus();
+      updateDirectPaintAvailability();
+      return;
+    }
     if (board.sponsorship_enabled && !sponsorship.flagEnabled) {
       sponsorNote.textContent = `${sponsorship.message} (Contract reported sponsorship_enabled=true; this page still does not offer a sponsored submit path.)`;
     }
-    evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK}. Board ${board.width}×${board.height}, rule ${board.overwrite_rule}, schema ${board.schema_version}, sponsorship_enabled=${board.sponsorship_enabled}.`;
+    evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK}. ${meta.summary} sponsorship_enabled=${board.sponsorship_enabled}.`;
     await refreshBoardFromContract();
   } catch (error) {
+    contractMetaOk = false;
     const detail = error instanceof Error ? error.message : "Unknown read error";
-    evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but the initial board read failed: ${detail}. You can still look at the local empty picture and try Refresh.`;
+    evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but the initial board read failed: ${detail}. You can still look at the local empty picture and try Refresh. Drawing stays blocked until metadata validates.`;
     boardLoadStatus.textContent = `Board load failed: ${detail}`;
     updateCompactStatus();
+  } finally {
+    updateDirectPaintAvailability();
   }
 }
 
@@ -421,14 +469,15 @@ async function runBoardPoll(): Promise<void> {
   await refreshBoardFromContract({ reason: "poll" });
 }
 
-async function attemptDraw(): Promise<void> {
+async function attemptDraw(target?: Cell): Promise<void> {
   if (drawInFlight) {
     return;
   }
 
+  const cell = target ?? selected;
   const decision = prepareDraw({
-    x: selected?.x ?? null,
-    y: selected?.y ?? null,
+    x: cell?.x ?? null,
+    y: cell?.y ?? null,
     color: selectedColor,
     connected: walletAccount !== null,
     accountId: walletAccount,
@@ -443,9 +492,20 @@ async function attemptDraw(): Promise<void> {
     return;
   }
 
-  if (!selected || selectedColor === null || !walletAccount) {
+  if (!contractMetaOk) {
+    setFlow("error");
+    fillBlock(
+      result,
+      "Drawing blocked by contract metadata",
+      "This page refused to enable drawing because get_board did not match the shared schema, size, rule, or palette. Fix the contract id or deploy a matching board.",
+    );
     return;
   }
+
+  if (!cell || selectedColor === null || !walletAccount) {
+    return;
+  }
+  selected = cell;
 
   drawInFlight = true;
   drawButton.disabled = true;
@@ -774,6 +834,8 @@ function wirePointerGestures(): void {
       positionSelection();
       lastX = event.clientX;
       lastY = event.clientY;
+    } else {
+      updateHoverFromClient(event.clientX, event.clientY);
     }
   });
 
@@ -830,6 +892,102 @@ function selectAtClientPoint(clientX: number, clientY: number): void {
   showSelection();
   boardFocus.focus();
   void refreshSelectedPixel();
+
+  if (
+    directPaintToggle.checked &&
+    canUseLocalDrawingSession(walletAccount, walletNetwork) &&
+    selectedColor !== null &&
+    contractMetaOk
+  ) {
+    enqueuePaint(paintQueue, {
+      x: next.x,
+      y: next.y,
+      colorIndex: selectedColor,
+    });
+    setPendingPaint(pendingPaints, {
+      x: next.x,
+      y: next.y,
+      colorIndex: selectedColor,
+      accountId: walletAccount!,
+      transactionId: null,
+      phase: "submitted",
+    });
+    render();
+    void drainPaintQueue();
+  }
+}
+
+function updateHoverFromClient(clientX: number, clientY: number): void {
+  const rect = boardViewport.getBoundingClientRect();
+  const cell = cellFromViewportPoint(clientX - rect.left, clientY - rect.top, camera);
+  if (!cell) {
+    hoverSummary.textContent = "";
+    return;
+  }
+  hoverSummary.textContent = `Hover x=${cell.x}, y=${cell.y}`;
+}
+
+function updateDirectPaintAvailability(): void {
+  const allowed =
+    canUseLocalDrawingSession(walletAccount, walletNetwork) && contractMetaOk;
+  directPaintToggle.disabled = !allowed;
+  if (!allowed) {
+    directPaintToggle.checked = false;
+  }
+  directPaintToggle.title = allowed
+    ? "Tap cells to queue paints through your drawing session (serialized, no auto-resubmit on uncertainty)"
+    : "Authorize a drawing session first to enable direct paint";
+}
+
+async function drainPaintQueue(): Promise<void> {
+  if (paintQueue.inFlight) {
+    return;
+  }
+  const next = shiftPaint(paintQueue);
+  if (!next) {
+    return;
+  }
+  paintQueue.inFlight = true;
+  try {
+    await attemptDraw(next);
+  } finally {
+    paintQueue.inFlight = false;
+    if (paintQueueLength(paintQueue) > 0) {
+      void drainPaintQueue();
+    }
+  }
+}
+
+async function onRevokeSessionClick(): Promise<void> {
+  clearBlock(walletError);
+  const record = loadDrawingSessionRecord();
+  if (!record?.publicKey) {
+    fillBlock(
+      walletError,
+      "Nothing to revoke",
+      "No experimental drawing-session public key is stored in this browser.",
+    );
+    return;
+  }
+  revokeSessionButton.disabled = true;
+  try {
+    await revokeDrawingSessionKeyOnChain(record.publicKey);
+    forgetDrawingSessionLocally();
+    fillBlock(
+      result,
+      "Revoke submitted",
+      "The wallet was asked to delete the drawing-session access key on chain. Confirm in the explorer or account keys list. This browser session was cleared.",
+    );
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown wallet error";
+    fillBlock(
+      walletError,
+      "On-chain revoke did not complete",
+      `The key may still exist on chain. ${detail}`,
+    );
+  } finally {
+    showDrawingSession();
+  }
 }
 
 function showSelection(): void {
@@ -904,7 +1062,6 @@ function showWallet(): void {
 
 /**
  * Experimental drawing-session panel. Uses textContent only.
- * Does not claim no-popup drawing until local signing is proven.
  */
 function showDrawingSession(): void {
   const status = describeDrawingSession({
@@ -917,7 +1074,7 @@ function showDrawingSession(): void {
   drawingSessionNote.textContent = [
     `Configured allowance for a new session: ${status.allowanceLabel}.`,
     "Renewal: authorize again to request a new limited key (old on-chain keys are not auto-removed).",
-    "Revoke: “Forget session” only clears this browser — clearing storage is not on-chain key deletion.",
+    "Forget clears this browser only. Revoke on-chain asks the wallet to DeleteKey.",
   ].join(" ");
 
   const canUseContract = isContractConfigured();
@@ -930,6 +1087,36 @@ function showDrawingSession(): void {
   authorizeSessionButton.disabled = !canUseContract || sessionActive;
   forgetSessionButton.disabled =
     status.record === null || status.phase === "forgotten_locally";
+  revokeSessionButton.disabled = !sessionActive || !walletAccount;
+  updateDirectPaintAvailability();
+
+  if (sessionActive && walletAccount) {
+    void refreshAllowanceNote(walletAccount, walletNetwork ?? PAGE_NETWORK);
+  }
+}
+
+async function refreshAllowanceNote(
+  accountId: string,
+  networkId: string,
+): Promise<void> {
+  try {
+    const info = await fetchDrawingSessionAllowance({ accountId, networkId });
+    if (!info.found) {
+      drawingSessionNote.textContent = `${drawingSessionNote.textContent} Live key check: not found on account — authorize again.`;
+      return;
+    }
+    const remaining =
+      info.remainingYocto === null
+        ? "unlimited or unknown"
+        : formatAllowanceNear(info.remainingYocto);
+    drawingSessionNote.textContent = [
+      `Live remaining allowance: ${remaining}.`,
+      info.permissionSummary,
+      "Forget clears this browser only. Revoke on-chain asks the wallet to DeleteKey.",
+    ].join(" ");
+  } catch {
+    // Keep the static note if the live query fails.
+  }
 }
 
 function updateCompactStatus(): void {

@@ -6,6 +6,11 @@ import {
   DRAW_GAS,
 } from "./config";
 import { confirmPixelAfterDraw, isContractConfigured } from "./contract";
+import {
+  canUseLocalDrawingSession,
+  LocalDrawError,
+  signAndSendDrawLocally,
+} from "./local-draw";
 import { describeSponsorship } from "./sponsorship";
 import {
   hasRecognizedTxSuccess,
@@ -110,42 +115,83 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
   // wallet in MVP (see sponsorship.ts).
   const sponsorship = describeSponsorship();
 
-  input.onProgress?.({
-    phase: "wallet_prompt",
-    detail: walletPromptExplanation(input, sponsorship.message),
-  });
-
   let outcome: unknown;
-  try {
-    outcome = await signAndSendDraw({
-      contractId: CONTRACT_ID,
-      x: input.x,
-      y: input.y,
-      color: input.colorIndex,
-      gas: DRAW_GAS,
-      deposit: DRAW_DEPOSIT,
+  let usedLocalSession = false;
+
+  if (canUseLocalDrawingSession(input.accountId, input.networkId)) {
+    input.onProgress?.({
+      phase: "wallet_prompt",
+      detail:
+        "Using your authorized drawing session to sign locally (no wallet popup)…",
     });
-  } catch (error) {
-    if (isUserRejection(error)) {
+    try {
+      outcome = await signAndSendDrawLocally({
+        accountId: input.accountId,
+        networkId: input.networkId,
+        x: input.x,
+        y: input.y,
+        color: input.colorIndex,
+      });
+      usedLocalSession = true;
+    } catch (error) {
+      if (error instanceof LocalDrawError && error.code === "allowance_exhausted") {
+        return {
+          status: "failed",
+          title: "Drawing session allowance exhausted",
+          message: `${error.message} Nothing was auto-resubmitted. Renew the session or use ordinary wallet approval.`,
+          transactionId: null,
+          explorerUrl: null,
+          pixel: null,
+        };
+      }
+      // Fall through to ordinary wallet approval for other local failures.
+      input.onProgress?.({
+        phase: "wallet_prompt",
+        detail: [
+          "Local drawing session could not send this paint.",
+          error instanceof Error ? error.message : "Unknown local-sign error.",
+          walletPromptExplanation(input, sponsorship.message),
+        ].join(" "),
+      });
+    }
+  }
+
+  if (!usedLocalSession) {
+    input.onProgress?.({
+      phase: "wallet_prompt",
+      detail: walletPromptExplanation(input, sponsorship.message),
+    });
+    try {
+      outcome = await signAndSendDraw({
+        contractId: CONTRACT_ID,
+        x: input.x,
+        y: input.y,
+        color: input.colorIndex,
+        gas: DRAW_GAS,
+        deposit: DRAW_DEPOSIT,
+      });
+    } catch (error) {
+      if (isUserRejection(error)) {
+        return {
+          status: "failed",
+          title: "Wallet prompt closed",
+          message:
+            "You closed or rejected the wallet window. Nothing was painted. You can try again when you are ready.",
+          transactionId: null,
+          explorerUrl: null,
+          pixel: null,
+        };
+      }
+      const detail = error instanceof Error ? error.message : "Unknown wallet error";
       return {
         status: "failed",
-        title: "Wallet prompt closed",
-        message:
-          "You closed or rejected the wallet window. Nothing was painted. You can try again when you are ready.",
+        title: "Wallet could not send",
+        message: `The wallet could not send the draw. ${detail}`,
         transactionId: null,
         explorerUrl: null,
         pixel: null,
       };
     }
-    const detail = error instanceof Error ? error.message : "Unknown wallet error";
-    return {
-      status: "failed",
-      title: "Wallet could not send",
-      message: `The wallet could not send the draw. ${detail}`,
-      transactionId: null,
-      explorerUrl: null,
-      pixel: null,
-    };
   }
 
   const parsed = parseTxOutcome(outcome);

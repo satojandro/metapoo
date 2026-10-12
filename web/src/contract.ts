@@ -13,6 +13,9 @@ import { loadAllPaintedPixels } from "./load-board";
 /** Default page size for `get_pixels`. The contract clamps at 256. */
 export const PIXELS_PAGE_LIMIT = 256;
 
+/** Bound how long we wait on RPC so a hung node cannot freeze the page. */
+export const RPC_TIMEOUT_MS = 20_000;
+
 /** Raw JSON shape returned by the Rust contract's `get_board`. */
 export interface ChainBoardView {
   schema_version: number;
@@ -147,7 +150,7 @@ export async function viewFunction<T>(
       ? { block_id: block.blockId }
       : { finality: block.finality };
 
-  const response = await fetch(RPC_URL, {
+  const response = await fetchWithTimeout(RPC_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -192,7 +195,7 @@ export async function viewFunction<T>(
  * Used so every page of a full board load shares one block_id.
  */
 export async function fetchLatestBlockHeight(): Promise<number> {
-  const response = await fetch(RPC_URL, {
+  const response = await fetchWithTimeout(RPC_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -336,6 +339,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = RPC_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`RPC timed out after ${timeoutMs}ms.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function bytesToBase64(bytes: Uint8Array): string {

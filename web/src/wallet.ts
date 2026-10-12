@@ -145,7 +145,7 @@ export async function connectWallet(
             networkId: WALLET_NETWORK,
             contractId: CONTRACT_ID,
             publicKey: keypair.publicKey,
-            secretKeyHex: keypair.secretKeyHex,
+            secretKey: keypair.secretKey,
             gasAllowanceYocto: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
           }),
         );
@@ -161,7 +161,7 @@ export async function connectWallet(
             networkId: session.networkId ?? WALLET_NETWORK,
             contractId: CONTRACT_ID,
             publicKey: keypair.publicKey,
-            secretKeyHex: keypair.secretKeyHex,
+            secretKey: keypair.secretKey,
             gasAllowanceYocto: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
           }),
         );
@@ -209,8 +209,8 @@ export interface DrawCallArgs {
  * Returns the wallet's execution outcome (hash + status), or throws if the
  * user rejects / the wallet errors. This function does not update the picture.
  *
- * Even when an experimental drawing session FC key was requested at connect,
- * this path still uses the wallet popup API until local signing is proven.
+ * Prefer `signAndSendDrawLocally` when an active drawing session exists;
+ * this wallet popup path remains the fallback.
  */
 export async function signAndSendDraw(args: DrawCallArgs): Promise<unknown> {
   const current = ensureConnector();
@@ -230,6 +230,28 @@ export async function signAndSendDraw(args: DrawCallArgs): Promise<unknown> {
           gas: args.gas,
           deposit: args.deposit,
         },
+      },
+    ],
+  });
+}
+
+/**
+ * Ask the connected wallet (full access) to delete the experimental FC key
+ * on chain. Receiver is the user's own account. Still requires a wallet prompt.
+ */
+export async function revokeDrawingSessionKeyOnChain(publicKey: string): Promise<unknown> {
+  const current = ensureConnector();
+  const wallet = await current.wallet();
+  const accountId = accountFromWallet(wallet) ?? session.accountId;
+  if (!accountId) {
+    throw new Error("Connect a wallet before revoking the drawing-session key on chain.");
+  }
+  return wallet.signAndSendTransaction({
+    receiverId: accountId,
+    actions: [
+      {
+        type: "DeleteKey",
+        params: { publicKey },
       },
     ],
   });

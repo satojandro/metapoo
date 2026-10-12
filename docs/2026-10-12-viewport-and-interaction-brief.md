@@ -14,7 +14,7 @@ The board is a precise rectangular painting surface within the spatial scene. On
 
 - **Overview:** Fit the full 128×128 board in the viewport so everyone can see the communal picture.
 - **Painting zoom:** Aim for roughly 16–24 screen pixels per logical cell when placing paint. The logical board size stays 128×128 for this repair.
-- **Explore without painting:** Pan and pinch never submit paint. Only an explicit Place / Draw action (or a later authorized direct-paint mode) writes.
+- **Explore without painting:** Pan and pinch never submit paint. Only an explicit Place action writes by default; Direct paint (serialized queue) is available after a drawing session is authorized.
 - **Selection:** External indicator that does not cover the cell interior. Coordinates and a named color preview remain primary, not color alone.
 - **Shared updates:** Confirmed art comes from chain reads. Pending / preview paint is a separate client layer when introduced.
 - **Palette:** The photographs guide the painting colors as well as the environment: saturated cyan, blue, yellow, green, red, and pink, supported by dark and light tones. The current eight-color palette is an implementation baseline, not the final target. Propose swatches with the visual draft; apply changes consistently across frontend / shared / contract with an explicit compatibility plan for stored art.
