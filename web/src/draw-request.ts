@@ -28,3 +28,20 @@ export function createDrawRequest(input: {
     networkId: input.networkId,
   };
 }
+
+/**
+ * True when the live wallet identity still matches the frozen request.
+ * Queued paints must not run under a different account's drawing key.
+ */
+export function drawRequestMatchesSession(
+  request: DrawRequest,
+  accountId: string | null,
+  networkId: NetworkId | null,
+): boolean {
+  return (
+    accountId !== null &&
+    networkId !== null &&
+    request.accountId === accountId &&
+    request.networkId === networkId
+  );
+}

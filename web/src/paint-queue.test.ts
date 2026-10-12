@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDrawRequest } from "./draw-request";
 import {
+  clearPaintQueue,
   createPaintQueue,
   enqueuePaint,
   paintQueueLength,
@@ -73,4 +74,23 @@ describe("paint queue", () => {
     });
     expect(shiftPaint(queue)).toBeNull();
   });
+
+  it("clears unsent items without resetting inFlight", () => {
+    const queue = createPaintQueue();
+    enqueuePaint(
+      queue,
+      createDrawRequest({
+        x: 2,
+        y: 3,
+        colorIndex: 1,
+        accountId: "alice.testnet",
+        networkId: "testnet",
+      }),
+    );
+    queue.inFlight = true;
+    clearPaintQueue(queue);
+    expect(paintQueueLength(queue)).toBe(0);
+    expect(queue.inFlight).toBe(true);
+  });
 });
+

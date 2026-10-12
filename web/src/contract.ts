@@ -323,7 +323,10 @@ export async function getPixel(
   return mapChainPixel(raw);
 }
 
-/** get_pixel plus the RPC block height used for cache freshness. */
+/**
+ * get_pixel plus the RPC block height from that same response.
+ * Never substitutes a later tip height — that could stamp older paint as newer.
+ */
 export async function getPixelWithBlock(
   x: number,
   y: number,
@@ -338,7 +341,12 @@ export async function getPixelWithBlock(
     meta.blockHeight ??
     (block.kind === "block" && typeof block.blockId === "number"
       ? block.blockId
-      : await fetchLatestBlockHeight());
+      : null);
+  if (blockHeight === null) {
+    throw new Error(
+      "RPC get_pixel response did not include block_height; refusing to invent a newer tip.",
+    );
+  }
   return { pixel: mapChainPixel(meta.data), blockHeight };
 }
 
@@ -388,12 +396,15 @@ export interface PixelConfirmResult {
   kind: PixelConfirmKind;
   /** Latest read of the cell (may be empty on delay). */
   pixel: PixelView | null;
+  /** Block height from the same RPC response as `pixel`, when a read succeeded. */
+  observedBlockHeight: number | null;
 }
 
 /**
  * After a successful transaction, re-read the cell until it matches, shows a
  * different artist (Open wall overwrite), or we time out as delayed.
  * Wallet success is tracked separately — a mismatch is not automatic failure.
+ * The returned block height is from the confirming get_pixel response only.
  */
 export async function confirmPixelAfterDraw(options: {
   x: number;
@@ -406,10 +417,12 @@ export async function confirmPixelAfterDraw(options: {
   const attempts = options.attempts ?? 5;
   const delayMs = options.delayMs ?? 400;
   let last: PixelView | null = null;
+  let lastBlock: number | null = null;
 
   for (let i = 0; i < attempts; i += 1) {
-    const pixel = await getPixel(options.x, options.y);
+    const { pixel, blockHeight } = await getPixelWithBlock(options.x, options.y);
     last = pixel;
+    lastBlock = blockHeight;
     if (
       pixelMatchesDraw(
         pixel,
@@ -419,7 +432,7 @@ export async function confirmPixelAfterDraw(options: {
         options.artistAccountId,
       )
     ) {
-      return { kind: "confirmed", pixel };
+      return { kind: "confirmed", pixel, observedBlockHeight: blockHeight };
     }
     if (
       pixel.colorIndex !== null &&
@@ -428,13 +441,17 @@ export async function confirmPixelAfterDraw(options: {
     ) {
       // Another account already credits this cell — treat as overwritten,
       // not as a failed transaction.
-      return { kind: "overwritten", pixel };
+      return { kind: "overwritten", pixel, observedBlockHeight: blockHeight };
     }
     if (i < attempts - 1) {
       await sleep(delayMs);
     }
   }
-  return { kind: "confirmation_delayed", pixel: last };
+  return {
+    kind: "confirmation_delayed",
+    pixel: last,
+    observedBlockHeight: lastBlock,
+  };
 }
 
 function sleep(ms: number): Promise<void> {

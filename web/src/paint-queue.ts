@@ -39,3 +39,11 @@ export function shiftPaint(queue: PaintQueue): DrawRequest | null {
 export function paintQueueLength(queue: PaintQueue): number {
   return queue.items.length;
 }
+
+/**
+ * Drop every unsent request. Does not touch `inFlight` — a draw already
+ * handed to attemptDraw may still finish; only the waiting list is cancelled.
+ */
+export function clearPaintQueue(queue: PaintQueue): void {
+  queue.items = [];
+}

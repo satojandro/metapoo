@@ -63,6 +63,8 @@ export type SubmitDrawResult =
       transactionId: string;
       explorerUrl: string | null;
       pixel: PixelView;
+      /** Block height from the confirming get_pixel response. */
+      observedBlockHeight: number;
     }
   | {
       status: "confirmation_delayed";
@@ -72,6 +74,7 @@ export type SubmitDrawResult =
       transactionId: string | null;
       explorerUrl: string | null;
       pixel: PixelView | null;
+      observedBlockHeight: number | null;
     }
   | {
       status: "overwritten";
@@ -80,6 +83,7 @@ export type SubmitDrawResult =
       transactionId: string;
       explorerUrl: string | null;
       pixel: PixelView;
+      observedBlockHeight: number;
     }
   | {
       status: "failed";
@@ -161,6 +165,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
             transactionId: null,
             explorerUrl: null,
             pixel: null,
+            observedBlockHeight: null,
           };
         }
         // Definitely never broadcast — safe to offer ordinary wallet fallback.
@@ -285,7 +290,11 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
       artistAccountId: input.accountId,
     });
 
-    if (confirm.kind === "confirmed" && confirm.pixel) {
+    if (
+      confirm.kind === "confirmed" &&
+      confirm.pixel &&
+      confirm.observedBlockHeight !== null
+    ) {
       return {
         status: "success",
         title: "Pixel painted",
@@ -294,10 +303,15 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
         transactionId,
         explorerUrl: link,
         pixel: confirm.pixel,
+        observedBlockHeight: confirm.observedBlockHeight,
       };
     }
 
-    if (confirm.kind === "overwritten" && confirm.pixel) {
+    if (
+      confirm.kind === "overwritten" &&
+      confirm.pixel &&
+      confirm.observedBlockHeight !== null
+    ) {
       return {
         status: "overwritten",
         title: "Paint landed, then the wall moved on",
@@ -306,6 +320,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
         transactionId,
         explorerUrl: link,
         pixel: confirm.pixel,
+        observedBlockHeight: confirm.observedBlockHeight,
       };
     }
 
@@ -317,6 +332,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
       transactionId,
       explorerUrl: link,
       pixel: confirm.pixel,
+      observedBlockHeight: confirm.observedBlockHeight,
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Read failed";
@@ -327,6 +343,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
       transactionId,
       explorerUrl: link,
       pixel: null,
+      observedBlockHeight: null,
     };
   }
 }

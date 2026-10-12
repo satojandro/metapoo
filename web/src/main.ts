@@ -8,7 +8,11 @@ import {
   rememberPixelAtBlock,
   replaceCacheAtBlock,
 } from "./board-cache";
-import { createDrawRequest, type DrawRequest } from "./draw-request";
+import {
+  createDrawRequest,
+  drawRequestMatchesSession,
+  type DrawRequest,
+} from "./draw-request";
 import {
   beginBoardLoad,
   createBoardSyncState,
@@ -22,7 +26,6 @@ import {
 import { CONTRACT_ID, PAGE_NETWORK } from "./config";
 import {
   fetchAllPaintedPixels,
-  fetchLatestBlockHeight,
   getBoard,
   getPixelWithBlock,
   isContractConfigured,
@@ -41,6 +44,7 @@ import {
 } from "./local-draw";
 import { describeNetwork } from "./network";
 import {
+  clearPaintQueue,
   createPaintQueue,
   enqueuePaint,
   paintQueueLength,
@@ -327,8 +331,18 @@ boardFocus.addEventListener("keydown", (event) => {
 });
 
 onWalletSession((session) => {
+  const previousAccount = walletAccount;
+  const previousNetwork = walletNetwork;
   walletAccount = session.accountId;
   walletNetwork = session.networkId;
+  // Unsent queue entries keep the prior account's drawing key. Drop them when
+  // identity changes so a later drain cannot paint as the old artist.
+  if (
+    previousAccount !== walletAccount ||
+    previousNetwork !== walletNetwork
+  ) {
+    cancelUnsentPaintQueue("Wallet account or network changed.");
+  }
   if (!walletAccount) {
     setFlow("disconnected");
   } else if (uiPhase === "disconnected" || uiPhase === "error") {
@@ -487,11 +501,28 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
         })
       : null);
 
+  // Live wallet must still match the frozen request. A queued paint must not
+  // keep going after disconnect or account switch just because the request exists.
+  if (
+    frozen &&
+    !drawRequestMatchesSession(frozen, walletAccount, walletNetworkId())
+  ) {
+    clearPendingPaint(pendingPaints, frozen.x, frozen.y);
+    setFlow(walletAccount ? "editing" : "disconnected");
+    fillBlock(
+      result,
+      "Paint cancelled",
+      "The wallet account or network no longer matches this paint request, so it was not submitted.",
+    );
+    render();
+    return;
+  }
+
   const decision = prepareDraw({
     x: frozen?.x ?? null,
     y: frozen?.y ?? null,
     color: frozen?.colorIndex ?? null,
-    connected: frozen !== null || walletAccount !== null,
+    connected: walletAccount !== null,
     accountId: frozen?.accountId ?? walletAccount,
     sessionNetworkId: frozen?.networkId ?? walletNetworkId(),
     boardNetworkId: PAGE_NETWORK,
@@ -579,8 +610,12 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
     });
 
     if (submitResult.status === "success" && submitResult.pixel) {
-      const tip = await latestBlockOrFallback();
-      rememberPixelAtBlock(pixelCache, submitResult.pixel, tip);
+      // Use the confirming get_pixel's block height only — never a later tip.
+      rememberPixelAtBlock(
+        pixelCache,
+        submitResult.pixel,
+        submitResult.observedBlockHeight,
+      );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       render();
       setFlow("success");
@@ -618,8 +653,11 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
     }
 
     if (submitResult.status === "overwritten" && submitResult.pixel) {
-      const tip = await latestBlockOrFallback();
-      rememberPixelAtBlock(pixelCache, submitResult.pixel, tip);
+      rememberPixelAtBlock(
+        pixelCache,
+        submitResult.pixel,
+        submitResult.observedBlockHeight,
+      );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       render();
       setFlow("success");
@@ -958,12 +996,37 @@ function updateDirectPaintAvailability(): void {
     : "Authorize a drawing session first to enable direct paint";
 }
 
+/**
+ * Drop waiting queue entries and their pending previews.
+ * An in-flight submit (already shifted) is left alone.
+ */
+function cancelUnsentPaintQueue(reason: string): void {
+  if (paintQueueLength(paintQueue) === 0) {
+    return;
+  }
+  for (const item of paintQueue.items) {
+    clearPendingPaint(pendingPaints, item.x, item.y);
+  }
+  clearPaintQueue(paintQueue);
+  render();
+  fillBlock(result, "Queued paints cancelled", reason);
+}
+
 async function drainPaintQueue(): Promise<void> {
   if (paintQueue.inFlight) {
     return;
   }
-  const next = shiftPaint(paintQueue);
+  // Skip (and drop) any head that no longer matches the live wallet.
+  let next = shiftPaint(paintQueue);
+  while (
+    next &&
+    !drawRequestMatchesSession(next, walletAccount, walletNetworkId())
+  ) {
+    clearPendingPaint(pendingPaints, next.x, next.y);
+    next = shiftPaint(paintQueue);
+  }
   if (!next) {
+    render();
     return;
   }
   paintQueue.inFlight = true;
@@ -974,14 +1037,6 @@ async function drainPaintQueue(): Promise<void> {
     if (paintQueueLength(paintQueue) > 0) {
       void drainPaintQueue();
     }
-  }
-}
-
-async function latestBlockOrFallback(): Promise<number> {
-  try {
-    return await fetchLatestBlockHeight();
-  } catch {
-    return Math.max(boardSync.appliedBlockHeight, 1);
   }
 }
 
