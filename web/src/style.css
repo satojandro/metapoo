@@ -617,6 +617,84 @@ canvas {
   accent-color: var(--focus);
 }
 
+/* Journey C — pressure / placement quote (paid mode only) */
+.pressure-panel,
+.placement-quote {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: rgba(244, 239, 230, 0.92);
+  border: 1px solid var(--stall-seam);
+  color: var(--panel-ink);
+}
+
+.pressure-panel[hidden],
+.placement-quote[hidden] {
+  display: none;
+}
+
+.pressure-panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.pressure-heading,
+.placement-quote-heading {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.pressure-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.pressure-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--focus);
+}
+
+.pressure-demo-banner {
+  margin: 0 0 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 2px dashed #8a4b20;
+  background: #fff4e0;
+  color: #5c3310;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.pressure-legend-intro {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+  color: var(--panel-ink);
+}
+
+.pressure-legend-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.pressure-pattern {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.05em;
+}
+
+.pressure-quote-summary,
+.placement-quote-body {
+  margin: 0.4rem 0 0;
+  font-size: 0.92rem;
+}
+
 .palette {
   display: flex;
   flex-wrap: wrap;

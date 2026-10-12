@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_NEAR_NETWORK?: string;
   readonly VITE_NEAR_RPC_URL?: string;
   readonly VITE_SPONSORSHIP_ENABLED?: string;
+  /** Enable Journey C paid-paint UI (quotes / pressure). Default off. */
+  readonly VITE_PAID_PAINT?: string;
 }
 
 interface ImportMeta {

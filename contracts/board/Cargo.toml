@@ -13,6 +13,8 @@ crate-type = ["cdylib", "rlib"]
 # unit-testing lets `cargo test` run on this computer. A real WASM deploy later
 # should use `cargo near build` / the wasm32 target, not this host test path.
 near-sdk = { version = "5.29.1", features = ["unit-testing"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
-serde_json = "1"
+# serde_json already in dependencies for ft_on_transfer message parsing

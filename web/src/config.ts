@@ -60,6 +60,14 @@ export const RPC_URL =
 export const SPONSORSHIP_ENABLED =
   envString("VITE_SPONSORSHIP_ENABLED") === "true";
 
+/**
+ * Paid-paint / pressure UI (Journey C). Off by default so free-board play is unchanged.
+ * When true (or when the contract reports paid pressure metadata), the wall shows
+ * quotes, max-cost checks, and the paint-cost overlay. Mock quotes are labelled
+ * as demo until Worker B's live get_quote is wired.
+ */
+export const PAID_PAINT_FLAG = envString("VITE_PAID_PAINT") === "true";
+
 /** Prepaid gas for one `draw` call (30 Tgas), as a decimal string in gas units. */
 export const DRAW_GAS = "30000000000000";
 

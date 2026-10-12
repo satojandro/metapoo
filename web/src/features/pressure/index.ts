@@ -1,25 +1,33 @@
 /**
- * Pressure / paint-cost overlay hooks (stub).
- * Full overlay UI is owned by Worker F in a later wave — not implemented here.
+ * Pressure / paint-cost overlay (Journey C — Worker F).
  */
 
-export interface PressureOverlayHooks {
-  /** Whether the paint-cost overlay toggle is available. */
-  available: boolean;
-  /** No-op stub until pressure quotes exist. */
-  setEnabled(enabled: boolean): void;
-  isEnabled(): boolean;
-}
+export {
+  createPressureOverlayHooks,
+  bandForCost,
+  formatSelectedQuoteSummary,
+  renderLegendHtml,
+  sampleRegionCostLabel,
+  PRESSURE_BANDS,
+  type PressureOverlayHooks,
+  type PressureOverlayElements,
+} from "./overlay";
 
-export function createPressureOverlayHooks(): PressureOverlayHooks {
-  let enabled = false;
-  return {
-    available: false,
-    setEnabled(next) {
-      enabled = next;
-    },
-    isEnabled() {
-      return enabled;
-    },
-  };
-}
+export {
+  formatDurationNs,
+  formatQuoteAge,
+  formatQuoteExpiry,
+  formatToiletAmount,
+  summarizeQuoteTiming,
+  type QuoteTimingSummary,
+} from "./format";
+
+export {
+  PRICE_CHANGED_TITLE,
+  PRICE_CHANGED_MESSAGE,
+  checkMaxCostAuthorization,
+  revalidateQueuedPaint,
+  queueStopMessage,
+  type MaxCostCheckResult,
+  type QueueStopReason,
+} from "./max-cost-ux";

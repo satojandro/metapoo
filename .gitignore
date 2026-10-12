@@ -1,5 +1,7 @@
 # Rust build output. Safe to delete; cargo test recreates it.
 /contracts/board/target
+/contracts/bounties/target
+/contracts/prints/target
 
 # Frontend dependencies and build output.
 /web/node_modules
