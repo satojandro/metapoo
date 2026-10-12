@@ -2,24 +2,55 @@ import board from "@shared/board.json";
 import { PALETTE } from "@shared/palette.ts";
 import { BOARD_HEIGHT, BOARD_WIDTH } from "@shared/types.ts";
 import type { ChainBoardView } from "./contract";
+import { FREE_BOARD_SCHEMA_VERSION } from "./paid-mode";
 
 /**
  * Compare on-chain `get_board` metadata to the page's shared constants.
  * Drawing stays blocked when the contract is incompatible.
+ *
+ * Accepts free schema 2 (shared/board.json) or paid schema 3 when size,
+ * origin, overwrite rule, and palette still match. Schema 3 must report at
+ * least one paid marker (pricing_version / pressure / ledger_unit). Schema 2
+ * free boards are never rejected for missing those fields.
  */
+
+/** Paid board contract schema (contracts/board SCHEMA_VERSION). */
+export const PAID_BOARD_SCHEMA_VERSION = 3;
 
 export type ContractMetaStatus =
   | { ok: true; summary: string }
   | { ok: false; title: string; message: string };
 
+function hasPaidMarker(view: ChainBoardView): boolean {
+  const pricing =
+    typeof view.pricing_version === "string" && view.pricing_version.length > 0;
+  const pressure = view.pressure != null && typeof view.pressure === "object";
+  const ledger =
+    typeof view.ledger_unit === "string" && view.ledger_unit.length > 0;
+  return pricing || pressure || ledger;
+}
+
 export function validateContractMetadata(view: ChainBoardView): ContractMetaStatus {
-  if (view.schema_version !== board.schema_version) {
+  const schema = view.schema_version;
+  const schemaOk =
+    schema === FREE_BOARD_SCHEMA_VERSION || schema === PAID_BOARD_SCHEMA_VERSION;
+  if (!schemaOk) {
     return {
       ok: false,
       title: "Incompatible contract schema",
-      message: `This page expects schema ${board.schema_version}, but the contract reported ${view.schema_version}. Drawing stays disabled until they match.`,
+      message: `This page accepts schema ${FREE_BOARD_SCHEMA_VERSION} (free) or ${PAID_BOARD_SCHEMA_VERSION} (paid), but the contract reported ${schema}. Drawing stays disabled until they match.`,
     };
   }
+
+  if (schema === PAID_BOARD_SCHEMA_VERSION && !hasPaidMarker(view)) {
+    return {
+      ok: false,
+      title: "Incomplete paid board metadata",
+      message:
+        "Schema 3 requires at least one paid marker (pricing_version, pressure, or ledger_unit). Drawing stays disabled until get_board reports them.",
+    };
+  }
+
   if (view.width !== BOARD_WIDTH || view.height !== BOARD_HEIGHT) {
     return {
       ok: false,
@@ -66,8 +97,10 @@ export function validateContractMetadata(view: ChainBoardView): ContractMetaStat
     }
   }
 
+  const modeLabel =
+    schema === PAID_BOARD_SCHEMA_VERSION ? "paid" : "free";
   return {
     ok: true,
-    summary: `Contract metadata matches: schema ${view.schema_version}, ${view.width}×${view.height}, ${view.overwrite_rule}, ${view.palette.length} colors.`,
+    summary: `Contract metadata matches (${modeLabel}): schema ${schema}, ${view.width}×${view.height}, ${view.overwrite_rule}, ${view.palette.length} colors.`,
   };
 }

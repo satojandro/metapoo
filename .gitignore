@@ -2,6 +2,7 @@
 /contracts/board/target
 /contracts/bounties/target
 /contracts/prints/target
+/shared/history/rust/target
 
 # Frontend dependencies and build output.
 /web/node_modules

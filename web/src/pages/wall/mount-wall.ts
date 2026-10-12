@@ -101,6 +101,12 @@ import {
 import type { QuoteView } from "@shared/protocol/board.ts";
 
 /**
+ * Fixture action_nonce when live get_account is not wired yet.
+ * Paid contract requires last_action_nonce + 1; fresh accounts start at 0 → "1".
+ */
+const FIXTURE_ACTION_NONCE = "1";
+
+/**
  * Lifecycle-safe wall mount.
  * mountWall(root, services) → dispose() cancels timers, aborts polls, removes listeners,
  * and clears unsent queue paints (already-broadcast ops stay on services.operations).
@@ -798,6 +804,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
         maxCost: string;
         expiresAtNs: string;
         pricingVersion: string;
+        actionNonce: string;
       }
     | undefined;
   if (!request && paidModeEnabled) {
@@ -829,6 +836,8 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
       maxCost: maxCostFromQuote(selectedQuote),
       expiresAtNs: selectedQuote.expiresAtNs,
       pricingVersion: selectedQuote.pricingVersion,
+      // Live path should use get_account.last_action_nonce + 1 when available.
+      actionNonce: FIXTURE_ACTION_NONCE,
     };
   }
 
@@ -1000,6 +1009,21 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
       colorIndex: frozen.colorIndex,
       accountId: frozen.accountId,
       networkId: frozen.networkId,
+      ...(frozen.maxCost !== undefined &&
+      frozen.expiresAtNs !== undefined &&
+      frozen.pricingVersion !== undefined
+        ? {
+            paid: {
+              maxCost: frozen.maxCost,
+              expiresAtNs: frozen.expiresAtNs,
+              pricingVersion: frozen.pricingVersion,
+              actionNonce: frozen.actionNonce ?? FIXTURE_ACTION_NONCE,
+              ...(frozen.sessionId !== undefined
+                ? { sessionId: frozen.sessionId }
+                : {}),
+            },
+          }
+        : {}),
       onProgress: (progress) => {
         // Always record broadcast progress on the shared operations store.
         if (progress.phase === "pending" || progress.phase === "confirming") {
@@ -1483,6 +1507,7 @@ function maybeEnqueueDirectPaint(cell: Cell): void {
     maxCost: string;
     expiresAtNs: string;
     pricingVersion: string;
+    actionNonce: string;
   } | undefined;
   if (paidModeEnabled) {
     if (!selectedQuote) {
@@ -1507,6 +1532,7 @@ function maybeEnqueueDirectPaint(cell: Cell): void {
       maxCost: maxCostFromQuote(selectedQuote),
       expiresAtNs: selectedQuote.expiresAtNs,
       pricingVersion: selectedQuote.pricingVersion,
+      actionNonce: FIXTURE_ACTION_NONCE,
     };
   }
 
@@ -1788,8 +1814,8 @@ function fillRules(): void {
       : "Sponsorship is off. No cross-chain or paid checkout is offered on this page.",
     paidModeEnabled
       ? useMockQuotes
-        ? `Paint-cost UI is on (${MOCK_QUOTE_DEMO_LABEL}). Live paid draw/get_quote wait on the board contract (Worker B). Free draw still used until a paid schema is live.`
-        : "Paint-cost UI is on from paid board metadata. Quotes and max-cost checks apply before Place."
+        ? `Paint-cost UI is on (${MOCK_QUOTE_DEMO_LABEL}). Place builds contract-shaped paint_with_wallet / session draw args; live get_quote and get_account nonce still use fixtures until RPC views are wired.`
+        : "Paint-cost UI is on from paid board metadata. Place submits paint_with_wallet (or session draw) with max_cost, pricing_version, expires_at_ns, and action_nonce."
       : "Paid-paint UI is off (VITE_PAID_PAINT unset/false and unpaid schema). Free-board Place path is unchanged.",
   ];
   const list = document.createElement("ul");

@@ -1,8 +1,9 @@
 //! Meta Poo art-bounty escrow contract.
 //!
 //! Bounty MPOO deposits are **escrow liabilities**, never paint revenue.
-//! This crate is Wave 1 unit-testable logic. FT transfers are stubbed with
-//! claim accounting (AVAILABLE → PENDING → PAID). No mainnet deploy.
+//! This crate is Wave 1 unit-testable logic. `claim` schedules a real
+//! `ft_transfer` Promise on the configured MPOO token, then settles via a
+//! private callback that reads `env::promise_result(0)`. No mainnet deploy.
 //!
 //! Mock token / registry account ids used in tests are clearly labelled
 //! `*.mock.test.near`.
@@ -14,7 +15,8 @@ use digest::{compute_consent_digest, proposal_fingerprint};
 use near_sdk::json_types::U128;
 use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{
-    env, near, require, AccountId, BorshStorageKey, NearToken, PanicOnDefault, PromiseOrValue,
+    env, ext_contract, near, require, AccountId, BorshStorageKey, Gas, NearToken,
+    PanicOnDefault, Promise, PromiseOrValue, PromiseResult,
 };
 use split::{
     allocate_award_amounts, sort_recipients, RecipientShare, MAX_RECIPIENTS, SHARE_BPS_TOTAL,
@@ -39,10 +41,23 @@ const MAX_SNAPSHOT_ID_LEN: usize = 128;
 const EVENT_STANDARD: &str = "mpoo_bounties";
 const EVENT_VERSION: &str = "1.0.0";
 
+/// 1 yoctoNEAR required by NEP-141 `ft_transfer`.
+const ONE_YOCTO: NearToken = NearToken::from_yoctonear(1);
+/// Gas for the outbound MPOO `ft_transfer`.
+const GAS_FOR_FT_TRANSFER: Gas = Gas::from_tgas(30);
+/// Gas reserved for the private claim settlement callback.
+const GAS_FOR_CLAIM_CALLBACK: Gas = Gas::from_tgas(15);
+
 /// Labelled mock FT account used when unset in unit tests / local scaffolding.
 pub const MOCK_MPOO_TOKEN: &str = "mpoo.token.mock.test.near";
 /// Labelled mock snapshot-registry authority.
 pub const MOCK_REGISTRY: &str = "snapshot.registry.mock.test.near";
+
+/// Minimal NEP-141 surface used for claim payouts.
+#[ext_contract(ext_mpoo_ft)]
+pub trait ExtMpooFt {
+    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
+}
 
 #[derive(BorshStorageKey)]
 #[near(serializers = [borsh])]
@@ -364,8 +379,11 @@ impl Bounties {
     }
 
     /// Create a draft bounty. Repeat nonce returns existing id only for identical payload.
+    /// Caller must attach NEAR covering new storage bytes (`env::storage_byte_cost()` × growth);
+    /// excess deposit is refunded to the predecessor.
     #[payable]
     pub fn create_bounty(&mut self, terms: BountyTermsInput, client_nonce: String) -> String {
+        let storage_before = env::storage_usage();
         let sponsor = env::predecessor_account_id();
         let now = env::block_timestamp();
         let nonce_key = format!("create:{}:{}", sponsor, client_nonce);
@@ -375,15 +393,17 @@ impl Bounties {
         let submit_by_ns = parse_u64(&terms.submit_by_ns, "SUBMIT_BY");
         let review_by_ns = parse_u64(&terms.review_by_ns, "REVIEW_BY");
 
-        if let Some(existing_id) = self.create_nonces.get(&nonce_key) {
+        if let Some(&existing_id) = self.create_nonces.get(&nonce_key) {
             let existing = self
                 .bounties
-                .get(existing_id)
+                .get(&existing_id)
                 .unwrap_or_else(|| reject("NOT_FOUND", "nonce bounty missing"));
             require!(
                 terms_match(&existing, &terms, award_amount, fund_by_ns, submit_by_ns, review_by_ns),
                 "NONCE_CONFLICT: payload differs from first create"
             );
+            // Idempotent path: no storage growth; refund any attached deposit.
+            self.settle_storage_deposit(storage_before);
             return existing_id.to_string();
         }
 
@@ -431,10 +451,7 @@ impl Bounties {
             ),
         );
 
-        // Storage deposit pattern: require attached NEAR covering state growth.
-        // Wave 1: accept any attached deposit; production will meter precisely.
-        let _ = env::attached_deposit();
-
+        self.settle_storage_deposit(storage_before);
         id.to_string()
     }
 
@@ -483,7 +500,10 @@ impl Bounties {
         }
     }
 
+    /// Registry-only snapshot registration. New records require attached NEAR for storage growth.
+    #[payable]
     pub fn register_snapshot_reference(&mut self, record: SnapshotReferenceInput) {
+        let storage_before = env::storage_usage();
         let caller = env::predecessor_account_id();
         require!(
             caller == self.registry,
@@ -511,7 +531,7 @@ impl Bounties {
             finalized_block_timestamp_ns: ts,
             revision: record.revision.clone(),
         };
-        if let Some(existing) = self.snapshots.get(&record.snapshot_id) {
+        if let Some(existing) = self.snapshots.get(&record.snapshot_id).cloned() {
             require!(
                 existing.manifest_hash == next.manifest_hash
                     && existing.board_id_key == next.board_id_key
@@ -521,6 +541,7 @@ impl Bounties {
                     && existing.revision == next.revision,
                 "SNAPSHOT: conflicting data under existing id"
             );
+            self.settle_storage_deposit(storage_before);
             return;
         }
         self.snapshots.insert(record.snapshot_id.clone(), next);
@@ -531,8 +552,11 @@ impl Bounties {
                 record.snapshot_id, record.manifest_hash
             ),
         );
+        self.settle_storage_deposit(storage_before);
     }
 
+    /// Propose a submission. New proposals require attached NEAR for storage growth.
+    #[payable]
     pub fn propose_submission(
         &mut self,
         bounty_id: String,
@@ -542,19 +566,23 @@ impl Bounties {
         recipients: Vec<PayoutRecipientInput>,
         client_nonce: String,
     ) -> ProposeResult {
+        let storage_before = env::storage_usage();
         let proposer = env::predecessor_account_id();
         let now = env::block_timestamp();
         let bid = parse_u64(&bounty_id, "BOUNTY_ID");
 
         let nonce_key = format!("propose:{}:{}:{}", bid, proposer, client_nonce);
-        if let Some(existing_id) = self.proposal_nonces.get(&nonce_key) {
-            let existing = self
+        if let Some(&existing_id) = self.proposal_nonces.get(&nonce_key) {
+            let consent_digest = self
                 .proposals
-                .get(existing_id)
-                .unwrap_or_else(|| reject("NOT_FOUND", "nonce proposal missing"));
+                .get(&existing_id)
+                .unwrap_or_else(|| reject("NOT_FOUND", "nonce proposal missing"))
+                .consent_digest
+                .clone();
+            self.settle_storage_deposit(storage_before);
             return ProposeResult {
                 proposal_id: existing_id.to_string(),
-                consent_digest: existing.consent_digest.clone(),
+                consent_digest,
             };
         }
 
@@ -677,6 +705,7 @@ impl Bounties {
             ),
         );
 
+        self.settle_storage_deposit(storage_before);
         ProposeResult {
             proposal_id: pid.to_string(),
             consent_digest: digest,
@@ -945,9 +974,9 @@ impl Bounties {
         }
     }
 
-    /// Beneficiary claims payout. FT transfer is stubbed: AVAILABLE → PENDING.
-    /// Settle via `on_claim_result` (private callback / unit-test path).
-    pub fn claim(&mut self, claim_id: String) {
+    /// Beneficiary claims payout. Marks AVAILABLE → PENDING, then schedules
+    /// `ft_transfer` on `self.mpoo_token` with a private settlement callback.
+    pub fn claim(&mut self, claim_id: String) -> Promise {
         let caller = env::predecessor_account_id();
         let cid = parse_u64(&claim_id, "CLAIM_ID");
         let claim = self
@@ -963,57 +992,54 @@ impl Bounties {
             "STATE: claim not available"
         );
         let attempt = claim.next_attempt;
+        let amount = claim.amount;
+        let beneficiary = claim.beneficiary.clone();
         claim.next_attempt = attempt.saturating_add(1);
         claim.attempt_id = Some(attempt);
         claim.status = ClaimStatus::Pending;
 
-        // Stub: real deploy would Promise::ft_transfer then callback.
-        // Unit tests call on_claim_result with predecessor = current account.
         emit_event(
             "claim_started",
             &format!(
-                "{{\"claim_id\":\"{cid}\",\"attempt_id\":\"{attempt}\",\"amount\":\"{}\",\"ft\":\"stubbed\"}}",
-                claim.amount
+                "{{\"claim_id\":\"{cid}\",\"attempt_id\":\"{attempt}\",\"amount\":\"{amount}\",\"ft\":\"{}\"}}",
+                self.mpoo_token
             ),
         );
-        let _ = NearToken::from_yoctonear(0); // keep NearToken import used for future gas deposit
+
+        ext_mpoo_ft::ext(self.mpoo_token.clone())
+            .with_attached_deposit(ONE_YOCTO)
+            .with_static_gas(GAS_FOR_FT_TRANSFER)
+            .ft_transfer(
+                beneficiary,
+                U128(amount),
+                Some(format!("mpoo_bounty_claim:{cid}:{attempt}")),
+            )
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_CLAIM_CALLBACK)
+                    .on_claim_ft_result(cid.to_string(), attempt.to_string()),
+            )
     }
 
-    /// Private callback / test settlement for stubbed FT transfer.
-    /// Matching pending attempt only; success → PAID, failure → AVAILABLE.
-    pub fn on_claim_result(&mut self, claim_id: String, attempt_id: String, success: bool) {
+    /// Private callback after claim `ft_transfer`. Success is derived from
+    /// `env::promise_result(0)` — Successful → PAID, otherwise restore AVAILABLE.
+    #[private]
+    pub fn on_claim_ft_result(&mut self, claim_id: String, attempt_id: String) {
         require!(
             env::predecessor_account_id() == env::current_account_id(),
             "UNAUTHORIZED: private callback only"
         );
-        let cid = parse_u64(&claim_id, "CLAIM_ID");
-        let attempt = parse_u64(&attempt_id, "ATTEMPT_ID");
-        let claim = self
-            .claims
-            .get_mut(&cid)
-            .unwrap_or_else(|| reject("NOT_FOUND", "claim"));
-        require!(
-            claim.status == ClaimStatus::Pending,
-            "STATE: claim not pending"
+        // `promise_result` remains the settlement signal for this callback; unit tests
+        // inject Successful/Failed via testing_env promise_results.
+        #[allow(deprecated)]
+        let success = matches!(env::promise_result(0), PromiseResult::Successful(_));
+        // Production path always settles via promise_result above.
+        // `settle_claim_attempt` is the shared helper used by this callback.
+        self.settle_claim_attempt(
+            parse_u64(&claim_id, "CLAIM_ID"),
+            parse_u64(&attempt_id, "ATTEMPT_ID"),
+            success,
         );
-        require!(
-            claim.attempt_id == Some(attempt),
-            "STATE: stale or mismatched attempt"
-        );
-        if success {
-            claim.status = ClaimStatus::Paid;
-            emit_event(
-                "claim_paid",
-                &format!("{{\"claim_id\":\"{cid}\",\"attempt_id\":\"{attempt}\"}}"),
-            );
-        } else {
-            claim.status = ClaimStatus::Available;
-            claim.attempt_id = None;
-            emit_event(
-                "claim_failed",
-                &format!("{{\"claim_id\":\"{cid}\",\"attempt_id\":\"{attempt}\"}}"),
-            );
-        }
     }
 
     // --- Views ---
@@ -1139,6 +1165,71 @@ pub struct DeploymentIdentity {
 }
 
 impl Bounties {
+    /// Flush dirty `store` collections so `env::storage_usage()` reflects writes.
+    fn flush_storage(&mut self) {
+        self.bounties.flush();
+        self.proposals.flush();
+        self.claims.flush();
+        self.snapshots.flush();
+        self.create_nonces.flush();
+        self.proposal_nonces.flush();
+        self.fingerprints.flush();
+        self.bounty_proposal_ids.flush();
+        self.bounty_claim_ids.flush();
+        self.print_entitlements.flush();
+        self.finalized_counts.flush();
+        self.proposer_counts.flush();
+    }
+
+    /// Require attached deposit ≥ `storage_byte_cost * bytes_used` since `storage_before`.
+    /// Refunds any excess NEAR to the predecessor. Panics (rolling back the tx) if short.
+    fn settle_storage_deposit(&mut self, storage_before: u64) {
+        self.flush_storage();
+        let bytes_used = env::storage_usage().saturating_sub(storage_before);
+        let required = env::storage_byte_cost().saturating_mul(u128::from(bytes_used));
+        let attached = env::attached_deposit();
+        require!(
+            attached.as_yoctonear() >= required.as_yoctonear(),
+            "STORAGE: attached deposit does not cover storage growth"
+        );
+        let refund = attached.as_yoctonear() - required.as_yoctonear();
+        if refund > 0 {
+            Promise::new(env::predecessor_account_id())
+                .transfer(NearToken::from_yoctonear(refund))
+                .detach();
+        }
+    }
+
+    /// Shared claim settlement used by `on_claim_ft_result` (production: promise_result).
+    fn settle_claim_attempt(&mut self, claim_id: u64, attempt: u64, success: bool) {
+        let claim = self
+            .claims
+            .get_mut(&claim_id)
+            .unwrap_or_else(|| reject("NOT_FOUND", "claim"));
+        require!(
+            claim.status == ClaimStatus::Pending,
+            "STATE: claim not pending"
+        );
+        require!(
+            claim.attempt_id == Some(attempt),
+            "STATE: stale or mismatched attempt"
+        );
+        if success {
+            claim.status = ClaimStatus::Paid;
+            emit_event(
+                "claim_paid",
+                &format!("{{\"claim_id\":\"{claim_id}\",\"attempt_id\":\"{attempt}\"}}"),
+            );
+        } else {
+            claim.status = ClaimStatus::Available;
+            claim.attempt_id = None;
+            emit_event(
+                "claim_failed",
+                &format!("{{\"claim_id\":\"{claim_id}\",\"attempt_id\":\"{attempt}\"}}"),
+            );
+        }
+    }
+
     fn try_fund_bounty(
         &mut self,
         bounty_id: u64,
@@ -1497,8 +1588,15 @@ const _SHARE_CHECK: u16 = SHARE_BPS_TOTAL;
 mod tests {
     use super::*;
     use near_sdk::json_types::U128;
-    use near_sdk::test_utils::{accounts, VMContextBuilder};
-    use near_sdk::{testing_env, AccountId, NearToken};
+    use near_sdk::mock::MockAction;
+    use near_sdk::test_utils::{accounts, get_created_receipts, VMContextBuilder};
+    use near_sdk::{testing_env, AccountId, NearToken, PromiseResult, RuntimeFeesConfig};
+    use std::collections::HashMap;
+
+    /// Generous NEAR attachment so storage-metered writes succeed; contract refunds excess.
+    fn storage_deposit() -> u128 {
+        NearToken::from_near(1).as_yoctonear()
+    }
 
     // --- Mock labelled accounts ---
     fn mock_token() -> AccountId {
@@ -1531,6 +1629,27 @@ mod tests {
             .attached_deposit(NearToken::from_yoctonear(deposit))
             .build();
         testing_env!(ctx);
+    }
+
+    /// Callback context with mocked `promise_result(0)` (production claim settlement path).
+    fn context_with_promise(
+        predecessor: AccountId,
+        ts: u64,
+        promise_result: PromiseResult,
+    ) {
+        let ctx = VMContextBuilder::new()
+            .current_account_id(escrow_account())
+            .predecessor_account_id(predecessor)
+            .block_timestamp(ts)
+            .attached_deposit(NearToken::from_yoctonear(0))
+            .build();
+        testing_env!(
+            ctx,
+            near_sdk::test_vm_config(),
+            RuntimeFeesConfig::test(),
+            HashMap::default(),
+            vec![promise_result],
+        );
     }
 
     fn setup() -> Bounties {
@@ -1575,7 +1694,7 @@ mod tests {
     }
 
     fn register_snap(contract: &mut Bounties, snap_id: &str, capture_ns: u64, hash: &str) {
-        context_at(mock_registry(), capture_ns, 0);
+        context_at(mock_registry(), capture_ns, storage_deposit());
         contract.register_snapshot_reference(SnapshotReferenceInput {
             snapshot_id: snap_id.into(),
             manifest_hash: hash.into(),
@@ -1598,7 +1717,7 @@ mod tests {
     fn create_and_cancel_draft() {
         let mut c = setup();
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let id = c.create_bounty(sample_terms(now, "1000"), "nonce-1".into());
         let view = c.get_bounty(id.clone());
         assert_eq!(view.status, "DRAFT");
@@ -1611,11 +1730,20 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "STORAGE")]
+    fn create_bounty_requires_storage_deposit() {
+        let mut c = setup();
+        let now = 1_000u64;
+        context_at(sponsor(), now, 0);
+        let _ = c.create_bounty(sample_terms(now, "1000"), "no-deposit".into());
+    }
+
+    #[test]
     #[should_panic(expected = "UNAUTHORIZED")]
     fn cancel_draft_wrong_sponsor() {
         let mut c = setup();
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let id = c.create_bounty(sample_terms(now, "1000"), "n".into());
         context_at(artist(), now + 1, 0);
         c.cancel_draft(id);
@@ -1625,7 +1753,7 @@ mod tests {
     fn fund_exact_amount_sponsor_only() {
         let mut c = setup();
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let id = c.create_bounty(sample_terms(now, "1000"), "n".into());
 
         // Wrong sponsor → full refund
@@ -1669,7 +1797,7 @@ mod tests {
     fn wrong_token_refunds() {
         let mut c = setup();
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let id = c.create_bounty(sample_terms(now, "1000"), "n".into());
         context_at("evil.token.mock.test.near".parse().unwrap(), now + 1, 0);
         let msg = format!(r#"{{"version":1,"action":"fund_bounty","bounty_id":"{id}"}}"#);
@@ -1679,7 +1807,7 @@ mod tests {
 
     fn happy_path_to_finalized(c: &mut Bounties) -> (String, String, String) {
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let award = "1000";
         let bounty_id = c.create_bounty(sample_terms(now, award), "hp".into());
         let terms = sample_terms(now, award);
@@ -1690,7 +1818,7 @@ mod tests {
         let capture = now + 100;
         register_snap(c, "snap-1", capture, "manifest-hash-1");
 
-        context_at(artist(), now + 200, 0);
+        context_at(artist(), now + 200, storage_deposit());
         let crop = CropRect {
             x: 16,
             y: 16,
@@ -1762,12 +1890,66 @@ mod tests {
         assert_eq!(alice_claim.amount, "600");
 
         context_at(alice(), submit_by + 1, 0);
-        c.claim(alice_claim.id.clone());
+        // Drop/detach so MockedBlockchain records the scheduled receipts.
+        c.claim(alice_claim.id.clone()).detach();
         assert_eq!(c.get_claim(alice_claim.id.clone()).status, "PENDING");
 
-        context_at(escrow_account(), submit_by + 2, 0);
-        c.on_claim_result(alice_claim.id.clone(), "1".into(), true);
+        // Assert claim scheduled ft_transfer (+ then callback) against the mock MPOO token.
+        let receipts = get_created_receipts();
+        let ft_calls: Vec<_> = receipts
+            .iter()
+            .flat_map(|r| r.actions.iter())
+            .filter(|a| {
+                matches!(
+                    a,
+                    MockAction::FunctionCallWeight { method_name, .. }
+                        if method_name == b"ft_transfer"
+                )
+            })
+            .collect();
+        assert!(
+            !ft_calls.is_empty(),
+            "claim must schedule ft_transfer Promise"
+        );
+        assert!(
+            receipts.iter().any(|r| r.receiver_id == mock_token()),
+            "ft_transfer must target configured mpoo_token"
+        );
+
+        // Production settlement: callback reads promise_result(0).
+        context_with_promise(
+            escrow_account(),
+            submit_by + 2,
+            PromiseResult::Successful(vec![]),
+        );
+        c.on_claim_ft_result(alice_claim.id.clone(), "1".into());
         assert_eq!(c.get_claim(alice_claim.id.clone()).status, "PAID");
+    }
+
+    #[test]
+    fn claim_ft_failure_restores_available() {
+        let mut c = setup();
+        let (bounty_id, submission_id, _) = happy_path_to_finalized(&mut c);
+        let terms = sample_terms(1_000, "1000");
+        let submit_by: u64 = terms.submit_by_ns.parse().unwrap();
+        context_at(sponsor(), submit_by, 0);
+        c.accept_submission(bounty_id.clone(), submission_id);
+        let claims = c.list_claims(bounty_id, 0, 50);
+        let bob_claim = claims
+            .items
+            .iter()
+            .find(|x| x.beneficiary == bob().as_str())
+            .unwrap();
+
+        context_at(bob(), submit_by + 1, 0);
+        c.claim(bob_claim.id.clone()).detach();
+        assert_eq!(c.get_claim(bob_claim.id.clone()).status, "PENDING");
+
+        context_with_promise(escrow_account(), submit_by + 2, PromiseResult::Failed);
+        c.on_claim_ft_result(bob_claim.id.clone(), "1".into());
+        let restored = c.get_claim(bob_claim.id.clone());
+        assert_eq!(restored.status, "AVAILABLE");
+        assert!(restored.attempt_id.is_none());
     }
 
     #[test]
@@ -1775,11 +1957,11 @@ mod tests {
     fn crop_must_match_bounty_exactly() {
         let mut c = setup();
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let bounty_id = c.create_bounty(sample_terms(now, "1000"), "crop".into());
         fund_bounty(&mut c, &bounty_id, 1000, now + 50);
         register_snap(&mut c, "snap-c", now + 100, "mh");
-        context_at(artist(), now + 200, 0);
+        context_at(artist(), now + 200, storage_deposit());
         c.propose_submission(
             bounty_id,
             "snap-c".into(),
@@ -1806,11 +1988,11 @@ mod tests {
         let _ = (bounty_id, digest);
         // New proposal path already finalized; craft open proposal separately
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let bounty_id = c.create_bounty(sample_terms(now, "2000"), "cd".into());
         fund_bounty(&mut c, &bounty_id, 2000, now + 50);
         register_snap(&mut c, "snap-d", now + 100, "mh-d");
-        context_at(artist(), now + 200, 0);
+        context_at(artist(), now + 200, storage_deposit());
         let r = c.propose_submission(
             bounty_id,
             "snap-d".into(),
@@ -1837,11 +2019,11 @@ mod tests {
     fn bad_split_rejected() {
         let mut c = setup();
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let bounty_id = c.create_bounty(sample_terms(now, "1000"), "split".into());
         fund_bounty(&mut c, &bounty_id, 1000, now + 50);
         register_snap(&mut c, "snap-s", now + 100, "mh");
-        context_at(artist(), now + 200, 0);
+        context_at(artist(), now + 200, storage_deposit());
         c.propose_submission(
             bounty_id,
             "snap-s".into(),
@@ -1923,7 +2105,7 @@ mod tests {
     fn sponsor_silence_permissionless_expiry_no_submissions() {
         let mut c = setup();
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let bounty_id = c.create_bounty(sample_terms(now, "500"), "silent".into());
         fund_bounty(&mut c, &bounty_id, 500, now + 50);
         let submit_by: u64 = sample_terms(now, "500").submit_by_ns.parse().unwrap();
@@ -1955,11 +2137,11 @@ mod tests {
     fn revoke_approval_before_submit() {
         let mut c = setup();
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         let bounty_id = c.create_bounty(sample_terms(now, "1000"), "rev".into());
         fund_bounty(&mut c, &bounty_id, 1000, now + 50);
         register_snap(&mut c, "snap-r", now + 100, "mh-r");
-        context_at(artist(), now + 200, 0);
+        context_at(artist(), now + 200, storage_deposit());
         let r = c.propose_submission(
             bounty_id,
             "snap-r".into(),
@@ -1998,7 +2180,7 @@ mod tests {
     fn registry_only_may_register_snapshots() {
         let mut c = setup();
         let forged = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            context_at(artist(), 1_000, 0);
+            context_at(artist(), 1_000, storage_deposit());
             c.register_snapshot_reference(SnapshotReferenceInput {
                 snapshot_id: "x".into(),
                 manifest_hash: "m".into(),
@@ -2023,7 +2205,7 @@ mod tests {
     fn list_helpers_bounded() {
         let mut c = setup();
         let now = 1_000u64;
-        context_at(sponsor(), now, 1);
+        context_at(sponsor(), now, storage_deposit());
         for i in 0..3 {
             c.create_bounty(sample_terms(now, "100"), format!("list-{i}"));
         }

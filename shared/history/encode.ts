@@ -79,6 +79,10 @@ export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
 }
 
 export interface CanonicalStateEncodeInput {
+  /**
+   * Chain genesis / crypto hash as 64 hex chars (optional 0x). Encoded as
+   * 32 raw bytes — not a length-prefixed UTF-8 string.
+   */
   chainGenesisHash: string;
   boardAccountId: string;
   boardEpoch: string;
@@ -137,7 +141,7 @@ export function encodeCanonicalStateBytes(input: CanonicalStateEncodeInput): Uin
   const [er, eg, eb, ea] = input.emptyRgba;
   return concatBytes([
     textEncoder.encode(STATE_DOMAIN),
-    encodePrefixedString(input.chainGenesisHash),
+    hexToBytes32(input.chainGenesisHash),
     encodePrefixedString(input.boardAccountId),
     encodePrefixedString(input.boardEpoch),
     encodeU32BE(input.width),
@@ -150,6 +154,10 @@ export function encodeCanonicalStateBytes(input: CanonicalStateEncodeInput): Uin
 
 export interface SnapshotIdentityInput {
   stateHashHex: string;
+  /**
+   * Finalized block crypto hash as 64 hex chars (optional 0x). Encoded as
+   * 32 raw bytes — not a length-prefixed UTF-8 string.
+   */
   finalizedBlockHash: string;
   blockHeight: string;
   blockTimestampNs: string;
@@ -158,12 +166,12 @@ export interface SnapshotIdentityInput {
   receiptId: string;
 }
 
-/** Encode MPOO_SNAPSHOT_V1 bytes (state hash as 32 raw bytes from hex). */
+/** Encode MPOO_SNAPSHOT_V1 bytes (state + block hashes as 32 raw bytes). */
 export function encodeSnapshotIdentityBytes(input: SnapshotIdentityInput): Uint8Array {
   return concatBytes([
     textEncoder.encode(SNAPSHOT_DOMAIN),
     hexToBytes32(input.stateHashHex),
-    encodePrefixedString(input.finalizedBlockHash),
+    hexToBytes32(input.finalizedBlockHash),
     encodeU64BEFromDecimal(input.blockHeight),
     encodeU64BEFromDecimal(input.blockTimestampNs),
     encodeU64BEFromDecimal(input.revision),

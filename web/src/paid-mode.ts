@@ -10,8 +10,7 @@ import { PAID_PAINT_FLAG } from "./config";
 export const FREE_BOARD_SCHEMA_VERSION = 2;
 
 /**
- * Lightweight shape we can sniff from get_board without claiming a live paid
- * contract API exists yet. B owns the real paid methods.
+ * Lightweight shape we can sniff from get_board (free schema 2 or paid schema 3).
  */
 export interface PaidSchemaHints {
   schemaVersion?: number;
@@ -59,7 +58,6 @@ export function isPaidPaintModeEnabled(options?: {
 
 /**
  * True when the UI should use fixture/mock quotes instead of a live contract view.
- * Live contract verification is owned by B and is not claimed here.
  */
 export function shouldUseMockPressureQuotes(options: {
   paidModeEnabled: boolean;

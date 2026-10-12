@@ -1,7 +1,8 @@
 /**
  * Pressure quote adapter.
- * Live get_quote waits on Worker B's contract methods. Until then, paid UI
- * uses a deterministic mock derived from shared fixtures — labelled as demo.
+ * Live get_quote can be enabled when the board contract view is reachable.
+ * Until then, paid UI uses a deterministic mock derived from shared fixtures
+ * — labelled as demo. Submit still builds contract-shaped FunctionCall args.
  */
 
 import type { QuoteRequest, QuoteView, PressureConfigV1 } from "@shared/protocol/board.ts";
@@ -89,8 +90,8 @@ export function buildMockQuote(
 }
 
 /**
- * Fetch a placement quote. Live path is intentionally unavailable until B
- * exposes get_quote — callers must treat mock results as fixture data.
+ * Fetch a placement quote. Live RPC path is optional; callers must treat mock
+ * results as fixture data while still shaping paid FunctionCall args.
  */
 export async function getQuote(
   request: QuoteRequest,
@@ -105,9 +106,8 @@ export async function getQuote(
     };
   }
 
-  // Live contract methods are owned by Worker B and are not wired here.
   throw new Error(
-    "Live get_quote is not available yet. Paid contract view methods are owned by Worker B.",
+    "Live get_quote is not wired yet. Use mock quotes, or wire a board get_quote view call.",
   );
 }
 

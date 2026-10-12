@@ -64,7 +64,7 @@ export const SPONSORSHIP_ENABLED =
  * Paid-paint / pressure UI (Journey C). Off by default so free-board play is unchanged.
  * When true (or when the contract reports paid pressure metadata), the wall shows
  * quotes, max-cost checks, and the paint-cost overlay. Mock quotes are labelled
- * as demo until Worker B's live get_quote is wired.
+ * as demo until live get_quote RPC is wired; Place still builds paid FunctionCalls.
  */
 export const PAID_PAINT_FLAG = envString("VITE_PAID_PAINT") === "true";
 

@@ -16,7 +16,11 @@ export const PIXELS_PAGE_LIMIT = 256;
 /** Bound how long we wait on RPC so a hung node cannot freeze the page. */
 export const RPC_TIMEOUT_MS = 20_000;
 
-/** Raw JSON shape returned by the Rust contract's `get_board`. */
+/**
+ * Raw JSON shape returned by the Rust contract's `get_board`.
+ * Free boards (schema 2) return the core fields only.
+ * Paid boards (schema 3) also report snake_case pressure / ledger markers.
+ */
 export interface ChainBoardView {
   schema_version: number;
   width: number;
@@ -25,6 +29,20 @@ export interface ChainBoardView {
   overwrite_rule: string;
   sponsorship_enabled: boolean;
   palette: Array<{ index: number; name: string; hex: string }>;
+  /** Paid schema 3: pricing schedule id (e.g. pressure-v1-fixture). */
+  pricing_version?: string;
+  /** Paid schema 3: pressure config object from the board contract. */
+  pressure?: Record<string, unknown>;
+  /** Paid schema 3: ledger unit label (e.g. TOILET). */
+  ledger_unit?: string;
+  chain_id?: string;
+  board_account_id?: string;
+  board_epoch?: string;
+  palette_version?: string;
+  revision?: string;
+  paint_token_account_id?: string;
+  writes_paused?: boolean;
+  overwrite_policy?: string;
 }
 
 /** Raw JSON shape returned by `get_pixel`. Field names are snake_case on chain. */
