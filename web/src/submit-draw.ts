@@ -7,7 +7,11 @@ import {
 } from "./config";
 import { confirmPixelAfterDraw, isContractConfigured } from "./contract";
 import { describeSponsorship } from "./sponsorship";
-import { isUserRejection, parseTxOutcome } from "./tx-outcome";
+import {
+  hasRecognizedTxSuccess,
+  isUserRejection,
+  parseTxOutcome,
+} from "./tx-outcome";
 import { signAndSendDraw } from "./wallet";
 
 /**
@@ -16,8 +20,13 @@ import { signAndSendDraw } from "./wallet";
  * Status meanings (same words as `shared/types.ts`):
  * - rejected — client / config stopped us; nothing submitted
  * - pending — reported while we wait (UI may show this briefly)
- * - success — transaction id observed AND `get_pixel` shows the new cell
- * - failed — user rejected, wallet error, on-chain failure, or confirm mismatch
+ * - success — wallet status is a recognized success AND `get_pixel` matches
+ * - failed — user rejected, wallet error, on-chain failure, unclear status,
+ *   or confirm mismatch
+ *
+ * A bare transaction id with an unrecognized status is never enough for
+ * success, even if the pixel already shows the attempted color (it might
+ * have been painted earlier).
  */
 
 export type DrawProgress =
@@ -152,6 +161,20 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
     };
   }
 
+  // Hash alone with an unrecognized status must not become UI success.
+  // A matching get_pixel could be leftover state from an earlier paint.
+  if (!hasRecognizedTxSuccess(parsed)) {
+    return {
+      status: "failed",
+      title: "Transaction status unclear",
+      message:
+        "The wallet returned a transaction id, but not a clear success or failure status. This page will not claim success from a matching pixel alone. Open the explorer link, then use Refresh board to verify what is on chain.",
+      transactionId,
+      explorerUrl: link,
+      pixel: null,
+    };
+  }
+
   input.onProgress?.({
     phase: "pending",
     transactionId,
@@ -176,7 +199,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
     return {
       status: "failed",
       title: "Could not confirm on chain",
-      message: `A transaction id exists, but the page could not re-read the pixel to confirm. ${detail}`,
+      message: `The wallet reported success, but the page could not re-read the pixel to confirm. ${detail}`,
       transactionId,
       explorerUrl: link,
       pixel: null,
@@ -188,7 +211,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
       status: "failed",
       title: "Read did not match yet",
       message:
-        "A transaction was sent, but a later board read did not yet show your color and account on that cell. Open the explorer link and try refreshing. The picture was not updated from a click alone.",
+        "The wallet reported success, but a later board read did not yet show your color and account on that cell. Open the explorer link and try Refresh board. The picture was not updated from a click alone.",
       transactionId,
       explorerUrl: link,
       pixel: null,
@@ -199,7 +222,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
     status: "success",
     title: "Pixel painted",
     message:
-      "The wallet returned a transaction id and a fresh board read shows your color on that square.",
+      "The wallet reported a successful transaction and a fresh board read shows your color on that square.",
     transactionId,
     explorerUrl: link,
     pixel,

@@ -15,8 +15,10 @@ export interface ParsedTxOutcome {
 
 /**
  * Pull the transaction hash and success/failure from a wallet result.
- * Returns `unknown` when the shape is too odd to trust — the caller should
- * then confirm with a fresh `get_pixel` read instead of guessing.
+ * Returns `unknown` when the shape is too odd to trust.
+ *
+ * Callers must not treat `unknown` as success even if a later `get_pixel`
+ * matches — the cell might already have looked that way before this attempt.
  */
 export function parseTxOutcome(outcome: unknown): ParsedTxOutcome {
   if (!outcome || typeof outcome !== "object") {
@@ -46,11 +48,24 @@ export function parseTxOutcome(outcome: unknown): ParsedTxOutcome {
   }
 
   // Some wallets only return { transaction: { hash } } without a full status.
+  // That is not enough to claim success in the UI.
   if (transactionHash) {
     return { status: "unknown", transactionHash, failureMessage: null };
   }
 
   return { status: "unknown", transactionHash: null, failureMessage: null };
+}
+
+/**
+ * True only when the wallet outcome has both a transaction id and a
+ * recognized success status (`SuccessValue` or `SuccessReceiptId`).
+ */
+export function hasRecognizedTxSuccess(parsed: ParsedTxOutcome): boolean {
+  return (
+    parsed.status === "success" &&
+    typeof parsed.transactionHash === "string" &&
+    parsed.transactionHash.length > 0
+  );
 }
 
 function readHash(record: Record<string, unknown>): string | null {

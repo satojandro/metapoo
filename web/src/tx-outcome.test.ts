@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isUserRejection, parseTxOutcome } from "./tx-outcome";
+import {
+  hasRecognizedTxSuccess,
+  isUserRejection,
+  parseTxOutcome,
+} from "./tx-outcome";
 
 describe("parseTxOutcome", () => {
   it("reads a successful FinalExecutionOutcome-shaped object", () => {
@@ -9,6 +13,7 @@ describe("parseTxOutcome", () => {
     });
     expect(parsed.status).toBe("success");
     expect(parsed.transactionHash).toBe("abc123");
+    expect(hasRecognizedTxSuccess(parsed)).toBe(true);
   });
 
   it("reads a failed status", () => {
@@ -19,6 +24,7 @@ describe("parseTxOutcome", () => {
     expect(parsed.status).toBe("failed");
     expect(parsed.transactionHash).toBe("deadbeef");
     expect(parsed.failureMessage).toMatch(/ColorOutOfRange/);
+    expect(hasRecognizedTxSuccess(parsed)).toBe(false);
   });
 
   it("keeps unknown when only a hash is present", () => {
@@ -27,6 +33,8 @@ describe("parseTxOutcome", () => {
     });
     expect(parsed.status).toBe("unknown");
     expect(parsed.transactionHash).toBe("onlyhash");
+    // A matching get_pixel must not turn this into UI success.
+    expect(hasRecognizedTxSuccess(parsed)).toBe(false);
   });
 });
 
