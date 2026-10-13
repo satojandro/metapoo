@@ -1632,6 +1632,15 @@ mod tests {
     use near_sdk::test_utils::{accounts, get_created_receipts, VMContextBuilder};
     use near_sdk::{testing_env, AccountId, NearToken, PromiseResult, RuntimeFeesConfig};
     use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    fn json_str(value: &serde_json::Value, key: &str) -> String {
+        value
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_else(|| panic!("fixture missing string {key}"))
+            .to_string()
+    }
 
     const GENESIS: &str =
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
@@ -2197,6 +2206,123 @@ mod tests {
         let reverted = c.nft_resolve_transfer(alice(), bob(), token_id.clone());
         assert!(!reverted);
         assert_eq!(c.nft_token(token_id).unwrap().owner_id, alice());
+    }
+
+    /// T2.CD: history's encoded snapshot fixture registers on this registry.
+    ///
+    /// The JSON file is Worker C's handoff. It is not a Rust struct, so this
+    /// test reads the file, checks the hex bytes hash to the ids it claims,
+    /// then calls `register_snapshot` the way the attester would.
+    #[test]
+    fn t2_cd_registers_encoded_snapshot_from_history_fixture() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../services/history/fixtures/manifest-for-worker-d.json");
+        let raw = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let doc: serde_json::Value =
+            serde_json::from_str(&raw).expect("manifest fixture is JSON");
+
+        let snap = &doc["primarySnapshot"];
+        let board = &doc["board"];
+        let geo = &doc["geometry"];
+
+        let snapshot_id = json_str(snap, "snapshotId");
+        let state_hash = json_str(snap, "stateHash");
+        let state_bytes = hex::decode(json_str(snap, "stateBytesHex")).expect("state hex");
+        let snapshot_bytes =
+            hex::decode(json_str(snap, "snapshotBytesHex")).expect("snapshot hex");
+
+        // The registry trusts the attester; this check is the shape test's job.
+        // A content hash proves the bytes match the id. It does not prove the
+        // bytes were ever the live board.
+        assert!(
+            state_bytes.starts_with(b"MPOO_STATE_V1\0"),
+            "state bytes must use the canonical domain"
+        );
+        assert!(
+            snapshot_bytes.starts_with(b"MPOO_SNAPSHOT_V1\0"),
+            "snapshot bytes must use the canonical domain"
+        );
+
+        let attester_id: AccountId = json_str(snap, "attesterAccountId").parse().unwrap();
+        let genesis = json_str(geo, "chainGenesisHash");
+        let width = geo["width"].as_u64().expect("width") as u32;
+        let height = geo["height"].as_u64().expect("height") as u32;
+
+        // `env::sha256` only works after the mock chain context exists.
+        context_at(attester_id.clone(), 0);
+        assert_eq!(
+            hex::encode(env::sha256(&state_bytes)),
+            state_hash,
+            "stateBytesHex must hash to stateHash"
+        );
+        assert_eq!(
+            hex::encode(env::sha256(&snapshot_bytes)),
+            snapshot_id,
+            "snapshotBytesHex must hash to snapshotId"
+        );
+
+        // The fixture board is 4×4. The registry rejects a manifest whose
+        // width/height differ from the dimensions it was initialized with.
+        let mut c = Prints::new(
+            attester_id.clone(),
+            genesis,
+            width,
+            height,
+            100,
+        );
+
+        let manifest = SnapshotManifestInput {
+            snapshot_id: snapshot_id.clone(),
+            state_hash: state_hash.clone(),
+            board: BoardIdentity {
+                chain_id: json_str(board, "chainId"),
+                board_account_id: json_str(board, "boardAccountId"),
+                board_epoch: json_str(board, "boardEpoch"),
+            },
+            width,
+            height,
+            palette_version: json_str(geo, "paletteVersion"),
+            finalized_block_hash: json_str(snap, "finalizedBlockHash"),
+            finalized_block_height: json_str(snap, "finalizedBlockHeight"),
+            finalized_block_timestamp_ns: json_str(snap, "finalizedBlockTimestampNs"),
+            revision: json_str(snap, "revision"),
+            receipt_id: json_str(snap, "receiptId"),
+            manifest_uri: json_str(snap, "manifestUri"),
+            manifest_hash: json_str(snap, "manifestHash"),
+            attester_account_id: attester_id.to_string(),
+            media_hash: snap["mediaHash"].as_str().map(str::to_string),
+        };
+
+        context_at(attester_id.clone(), storage_deposit());
+        c.register_snapshot(manifest.clone());
+
+        let view = c.get_snapshot(snapshot_id.clone());
+        assert_eq!(view.snapshot_id, snapshot_id);
+        assert_eq!(view.state_hash, state_hash);
+        assert_eq!(view.revision, "5");
+        assert_eq!(view.receipt_id, "receipt-r5");
+        assert_eq!(view.width, 4);
+        assert_eq!(view.height, 4);
+        assert_eq!(view.board.chain_id, "testnet");
+        assert_eq!(view.board.board_account_id, "board.mpoo.testnet");
+        assert_eq!(view.board.board_epoch, "1");
+        assert_eq!(view.palette_version, "palette-v2");
+        assert_eq!(view.manifest_hash, manifest.manifest_hash);
+        assert_eq!(
+            view.manifest_uri,
+            "fixture://services/history/fixtures/manifest-for-worker-d.json"
+        );
+        assert_eq!(view.attester_account_id, attester_id.to_string());
+        assert!(view.media_hash.is_none(), "fixture mediaHash is null");
+        let registered_at = view.registered_at_ns.clone();
+
+        // Exact duplicate is idempotent and does not rewrite the record.
+        context_at(attester_id, storage_deposit());
+        c.register_snapshot(manifest);
+        let again = c.get_snapshot(snapshot_id);
+        assert_eq!(again.registered_at_ns, registered_at);
+        assert_eq!(again.revision, "5");
     }
 
     #[test]
