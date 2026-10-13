@@ -4,16 +4,27 @@
  */
 
 import { registerPageMount } from "../app/page-registry";
-import { mountHome } from "./home";
 import { mountWallPage } from "./wall/mount-wall";
 import { registerBountyPageStubs } from "./bounties/register-stubs";
 import { createStubPage } from "./stub-page";
 
 export function registerDefaultPages(): void {
-  registerPageMount("home", mountHome);
+  registerPageMount("home", mountWallPage);
   registerPageMount("wall", mountWallPage);
 
-  registerBountyPageStubs();
+  // Keep integration pages available explicitly, but out of the core-wall release.
+  if (import.meta.env.VITE_EXTRA_PAGES_ENABLED === "true") {
+    registerBountyPageStubs();
+  } else {
+    const unavailable = createStubPage({
+      title: "The wall comes first.",
+      body: "Bounties are taking a little longer. For now, explore the communal wall.",
+      note: "Bounties are not enabled in this preview.",
+    });
+    registerPageMount("bounties", unavailable);
+    registerPageMount("bounties/new", unavailable);
+    registerPageMount("bounties/:id", unavailable);
+  }
 
   registerPageMount(
     "history",

@@ -5,8 +5,8 @@ import type { PendingPaint } from "./pending-paint";
 /** Bitmap size of one square before CSS stretches the canvas. */
 const CELL = 4;
 
-const EMPTY_A = "#e7e1d6";
-const EMPTY_B = "#ddd6c8";
+const EMPTY_A = "#242629";
+const EMPTY_B = "#292b2e";
 
 /**
  * Draw the board background, confirmed paints, then pending previews on top.

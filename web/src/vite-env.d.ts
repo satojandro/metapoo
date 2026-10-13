@@ -5,6 +5,7 @@
  * These optional strings configure which contract and network the page uses.
  */
 interface ImportMetaEnv {
+  readonly VITE_EXTRA_PAGES_ENABLED?: string;
   readonly VITE_CONTRACT_ID?: string;
   /** Art bounty escrow contract (views). Empty → fixture adapter. */
   readonly VITE_BOUNTY_CONTRACT_ID?: string;

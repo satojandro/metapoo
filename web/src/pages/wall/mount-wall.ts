@@ -273,12 +273,20 @@ export function mountWall(
     );
   }
 
+  // Enlarge the real canvas without altering its pixels or wallet state.
+  const focusCanvas = mustFindIn<HTMLButtonElement>(pageRoot, "#focus-canvas");
+  listen(focusCanvas, "click", () => {
+    const focused = pageRoot.querySelector(".wall-layout")!.classList.toggle("is-focused");
+    focusCanvas.setAttribute("aria-pressed", String(focused));
+    focusCanvas.textContent = focused ? "Back to the stall ↙" : "Focus canvas ↗";
+  });
+
   const sponsorship = describeSponsorship();
   sponsorNote.textContent = sponsorship.message;
 
   lede.textContent = isContractConfigured()
     ? "A live communal pixel wall on NEAR. Explore freely. Drawing asks your wallet to approve one on-chain paint."
-    : "A live communal pixel wall. Explore freely. Drawing stays blocked until a game contract id is configured.";
+    : "Preview mode · Explore the wall. Blockchain painting is not connected yet.";
 
   fillRules();
   buildPalette();

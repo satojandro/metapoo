@@ -32,16 +32,16 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   const brand = document.createElement("div");
   brand.className = "brand";
   const homeLink = document.createElement("a");
-  homeLink.href = "/";
+  homeLink.href = "/wall";
   homeLink.className = "brand-link";
   const title = document.createElement("h1");
-  title.textContent = "Meta Poo";
+  title.textContent = "meta poo.";
   homeLink.append(title);
   const lede = document.createElement("p");
   lede.id = "shell-lede";
   lede.className = "lede";
   lede.textContent =
-    "A communal pixel wall inside a toilet stall. Open the wall to paint; browse bounties and history from the nav.";
+    "PUBLIC WALL. PRIVATE MOMENT.";
   brand.append(homeLink, lede);
 
   const nav = document.createElement("nav");
@@ -51,6 +51,15 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   navList.className = "app-nav-list";
   for (const item of NAV_ITEMS) {
     const li = document.createElement("li");
+    if (item.match !== "wall") {
+      const disabled = document.createElement("span");
+      disabled.className = "nav-coming-soon";
+      disabled.setAttribute("aria-disabled", "true");
+      disabled.textContent = `${item.label} · soon`;
+      li.append(disabled);
+      navList.append(li);
+      continue;
+    }
     const a = document.createElement("a");
     a.href = item.href;
     a.dataset.navMatch = item.match;
@@ -80,14 +89,16 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   walletPanel.className = "wallet-chrome";
   walletPanel.setAttribute("aria-label", "Wallet");
   walletPanel.innerHTML = `
-    <h2>Wallet</h2>
+    <button id="connect-button" class="action" type="button">Connect NEAR wallet</button>
+    <details class="wallet-details"><summary>Wallet &amp; activity</summary>
+    <h2>Connection details</h2>
     <p id="wallet-summary"></p>
     <p id="network-summary"></p>
     <label class="drawing-session-opt-in" for="authorize-drawing-session">
       <input id="authorize-drawing-session" type="checkbox" disabled />
       Authorize drawing session on connect
     </label>
-    <button id="connect-button" class="action" type="button">Connect NEAR wallet</button>
+    </details>
     <p id="wallet-error" class="result" role="status"></p>
   `;
 
@@ -96,13 +107,15 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   opsPanel.className = "ops-recovery";
   opsPanel.setAttribute("aria-label", "Operation recovery");
 
-  chromeRow.append(walletPanel, opsPanel);
+  walletPanel.querySelector("details")?.append(opsPanel, compactStatus);
+  chromeRow.append(walletPanel);
 
   const outlet = document.createElement("div");
   outlet.id = "page-outlet";
   outlet.className = "page-outlet";
 
-  host.append(header, chromeRow, outlet);
+  header.append(chromeRow);
+  host.append(header, outlet);
 
   const walletDispose: WalletChromeDispose = mountWalletChrome(
     chromeRow,

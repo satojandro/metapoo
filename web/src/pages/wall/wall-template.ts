@@ -7,10 +7,17 @@ export function wallPageHtml(): string {
   return `
     <div class="layout wall-layout" data-page="wall">
       <main>
+        <div class="wall-intro">
+          <div><p class="eyebrow">AN OPEN WALL FOR THE INTERNET</p>
+          <h2 data-route-heading>Leave your <em>mark.</em></h2></div>
+          <p class="wall-invitation">A shared canvas. An unlikely gallery.</p>
+        </div>
         <p id="lede" class="lede wall-lede"></p>
 
         <section class="stall" aria-label="Toilet stall with pixel wall">
           <div class="stall-scene">
+            <div class="scene-label" aria-hidden="true">STALL 001 <span>EVERYONE WAS HERE</span></div>
+            <button id="focus-canvas" class="action scene-focus" type="button" aria-pressed="false">Focus canvas ↗</button>
             <div class="stall-room">
               <div class="stall-ceiling" aria-hidden="true"></div>
 
@@ -52,7 +59,7 @@ export function wallPageHtml(): string {
                         </div>
                       </div>
                     </div>
-                    <p class="board-caption" aria-hidden="true">shared pixel wall</p>
+                    <p class="board-caption" aria-hidden="true">128 × 128 · INTERACTIVE CANVAS</p>
                   </div>
 
                   <div class="stall-toilet" aria-hidden="true">
@@ -82,20 +89,22 @@ export function wallPageHtml(): string {
         </section>
 
         <div class="board-toolbar" role="toolbar" aria-label="Board view">
-          <button id="zoom-out" class="action secondary" type="button">Zoom out</button>
-          <button id="zoom-in" class="action secondary" type="button">Zoom in</button>
+          <button id="zoom-out" class="action secondary" type="button" aria-label="Zoom out">−</button>
+          <button id="zoom-in" class="action secondary" type="button" aria-label="Zoom in">+</button>
           <button id="zoom-fit" class="action secondary" type="button">Fit wall</button>
           <button id="zoom-paint" class="action secondary" type="button">Paint zoom</button>
           <button id="refresh-board" class="action secondary" type="button">Refresh board</button>
           <p id="board-load-status" class="board-load-status" aria-live="polite"></p>
         </div>
 
+        <details class="wall-instructions"><summary>How to paint</summary>
         <p id="board-help" class="help">
           Drag to pan. Scroll or pinch to zoom. Tap a square to select it. Pan
           and pinch never paint — use Place paint (or Direct paint after a
           drawing session). Arrow keys move the selection; Enter places when
           ready.
         </p>
+        </details>
         <p id="selection-summary" class="summary" aria-live="polite"></p>
         <p id="hover-summary" class="summary hover-summary" aria-live="polite"></p>
         <div id="selection-preview" class="selection-preview" aria-live="polite"></div>
@@ -129,9 +138,10 @@ export function wallPageHtml(): string {
         <section id="result" class="result" aria-live="assertive"></section>
       </main>
 
+      <details class="wall-advanced"><summary>Drawing settings &amp; wall rules <span>↗</span></summary>
       <aside class="side">
         <section class="drawing-session" aria-labelledby="drawing-session-heading">
-          <h2 id="drawing-session-heading">Drawing session (experimental)</h2>
+          <h2 id="drawing-session-heading">Drawing session</h2>
           <p id="drawing-session-status"></p>
           <div class="drawing-session-actions">
             <button id="authorize-session-button" class="action secondary" type="button" disabled>
@@ -157,6 +167,7 @@ export function wallPageHtml(): string {
           <div id="rules"></div>
         </details>
       </aside>
+      </details>
     </div>
   `;
 }

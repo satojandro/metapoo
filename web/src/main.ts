@@ -1,4 +1,5 @@
 import "./style.css";
+import "./wall-design.css";
 import { createAppServices } from "./app/services";
 import { createRouter } from "./app/router";
 import { mountShell } from "./app/shell";
