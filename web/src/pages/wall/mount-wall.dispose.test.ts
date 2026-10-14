@@ -118,6 +118,38 @@ describe("mountWall dispose", () => {
     expect(() => dispose()).not.toThrow();
   });
 
+  it("does not submit paint after a board drag", () => {
+    const services = createAppServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+
+    // happy-dom does not implement pointer capture, but the browser surface
+    // does. The gesture must still distinguish a drag from a tap.
+    Object.assign(viewport, {
+      setPointerCapture: vi.fn(),
+    });
+    const pointer = (type: string, x: number, y: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, {
+        pointerId: 1,
+        clientX: x,
+        clientY: y,
+      });
+      viewport.dispatchEvent(event);
+    };
+
+    pointer("pointerdown", 30, 30);
+    pointer("pointermove", 60, 30);
+    pointer("pointerup", 60, 30);
+
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    expect(root.querySelector("#selection-summary")?.textContent).toContain(
+      "No square selected",
+    );
+    dispose();
+  });
+
   it("clears unsent queue paints when navigating away during a pending draw", async () => {
     type DrawResult = Awaited<ReturnType<typeof submitDraw>>;
     const deferred: {

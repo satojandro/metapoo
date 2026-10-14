@@ -74,6 +74,7 @@ import {
   cellFromViewportPoint,
   fitCamera,
   isPanGesture,
+  isPaintZoom,
   paintZoomCamera,
   PAINT_CELL_PX,
   panBy,
@@ -1351,7 +1352,7 @@ function wirePointerGestures(): void {
   let lastY = 0;
   let panning = false;
   let pinchStartDistance = 0;
-  let pinchStartCellSize = 0;
+  let pinchStartCamera: Camera | null = null;
 
   listen(boardViewport, "pointerdown", (event) => {
     const pointerEvent = event as PointerEvent;
@@ -1372,7 +1373,9 @@ function wirePointerGestures(): void {
       panning = true;
       const pts = [...pointers.values()];
       pinchStartDistance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      pinchStartCellSize = camera.cellSize;
+      // Every pinch frame derives from the same camera. Mixing a prior frame's
+      // pan with the initial cell size makes the board jump under two fingers.
+      pinchStartCamera = { ...camera };
       boardViewport.classList.add("is-panning");
     }
   });
@@ -1390,14 +1393,14 @@ function wirePointerGestures(): void {
     if (pointers.size >= 2) {
       const pts = [...pointers.values()];
       const distance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
-      if (pinchStartDistance > 0) {
+      if (pinchStartDistance > 0 && pinchStartCamera) {
         const rect = boardViewport.getBoundingClientRect();
         const midX = (pts[0].x + pts[1].x) / 2 - rect.left;
         const midY = (pts[0].y + pts[1].y) / 2 - rect.top;
         const factor = distance / pinchStartDistance;
         applyCamera(
           zoomAt(
-            { ...camera, cellSize: pinchStartCellSize },
+            pinchStartCamera,
             readViewportSize(),
             factor,
             midX,
@@ -1446,6 +1449,7 @@ function wirePointerGestures(): void {
 
     if (pointers.size < 2) {
       pinchStartDistance = 0;
+      pinchStartCamera = null;
     }
 
     if (pointerEvent.pointerId === primaryId && pointers.size === 0) {
@@ -1454,7 +1458,8 @@ function wirePointerGestures(): void {
       primaryId = null;
       panning = false;
 
-      if (!wasPan) {
+      // A cancelled touch must never turn into a paint-placement tap.
+      if (!wasPan && pointerEvent.type !== "pointercancel") {
         selectAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
       } else {
         updateCompactStatus();
@@ -1495,13 +1500,20 @@ function selectAtClientPoint(clientX: number, clientY: number): void {
     if (disposed) {
       return;
     }
-    maybeEnqueueDirectPaint(next);
+    // Paint zoom is the deliberate, r/place-style direct-placement mode. It
+    // still requires the user's pre-authorized local drawing session; without
+    // one the tap remains a harmless selection and the normal Place action is
+    // available. This never routes a gesture through a form submission.
+    maybeEnqueueDirectPaint(next, { paintZoom: isPaintZoom(camera) });
   });
 }
 
-function maybeEnqueueDirectPaint(cell: Cell): void {
+function maybeEnqueueDirectPaint(
+  cell: Cell,
+  options: { paintZoom: boolean } = { paintZoom: false },
+): void {
   if (
-    !directPaintToggle.checked ||
+    (!options.paintZoom && !directPaintToggle.checked) ||
     !canUseLocalDrawingSession(walletAccount, walletNetwork) ||
     selectedColor === null ||
     !walletAccount ||
@@ -1967,4 +1979,3 @@ function walletNetworkId(): NetworkId {
 
   return disposeWall;
 }
-

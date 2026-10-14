@@ -99,10 +99,10 @@ export function wallPageHtml(): string {
 
         <details class="wall-instructions"><summary>How to paint</summary>
         <p id="board-help" class="help">
-          Drag to pan. Scroll or pinch to zoom. Tap a square to select it. Pan
-          and pinch never paint — use Place paint (or Direct paint after a
-          drawing session). Arrow keys move the selection; Enter places when
-          ready.
+          Drag to pan. Scroll or pinch to zoom. Tap a square to select it; at
+          Paint zoom, a tap directly places the selected color when a drawing
+          session is authorized. Pan and pinch never paint. Arrow keys move the
+          selection; Enter places when ready.
         </p>
         </details>
         <p id="selection-summary" class="summary" aria-live="polite"></p>

@@ -17,6 +17,8 @@ export interface Camera {
 
 /** Comfortable paint target from the board-review brief. */
 export const PAINT_CELL_PX = 20;
+/** A cell must be at least this large before tap-to-paint is enabled. */
+export const PAINT_MIN_CELL_PX = 16;
 /** Floor for interactive zoom (not for fit-to-wall overview). */
 export const MIN_CELL_PX = 2;
 /** Absolute floor so fit can shrink below painting minimum on tiny viewports. */
@@ -80,6 +82,11 @@ export function clampCellSize(cellSize: number): number {
   return Math.min(MAX_CELL_PX, Math.max(MIN_CELL_PX, cellSize));
 }
 
+/** Whether the camera is close enough for an unambiguous paint target. */
+export function isPaintZoom(camera: Camera): boolean {
+  return camera.cellSize >= PAINT_MIN_CELL_PX;
+}
+
 /** Allow overview scales smaller than the painting zoom floor. */
 export function clampFitCellSize(cellSize: number): number {
   if (!Number.isFinite(cellSize)) {
@@ -127,7 +134,11 @@ export function zoomAt(
   if (!Number.isFinite(factor) || factor <= 0) {
     return camera;
   }
-  const nextSize = clampCellSize(camera.cellSize * factor);
+  // Keep fit/overview reachable with a wheel or pinch. `clampPan` already
+  // distinguishes that sub-interactive range from normal zoomed-in values;
+  // forcing MIN_CELL_PX here would make a zoom-out from a small overview jump
+  // *in* to 2px cells.
+  const nextSize = clampFitCellSize(camera.cellSize * factor);
   if (nextSize === camera.cellSize) {
     return clampPan(camera, viewport);
   }

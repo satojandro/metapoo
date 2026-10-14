@@ -7,6 +7,8 @@ import {
   paintZoomCamera,
   panBy,
   PAINT_CELL_PX,
+  PAINT_MIN_CELL_PX,
+  isPaintZoom,
   selectionRingStyle,
   zoomAt,
 } from "./viewport";
@@ -36,6 +38,13 @@ describe("viewport camera", () => {
     expect(cellFromViewportPoint(128, 128, camera)).toEqual({ x: 64, y: 64 });
   });
 
+  it("hit-tests cells through the same zoom and pan transform used for rendering", () => {
+    const camera = { cellSize: 20, panX: -190, panY: -390 };
+    // Cell (10, 20) starts at viewport position (10, 10).
+    expect(cellFromViewportPoint(19.9, 29.9, camera)).toEqual({ x: 10, y: 20 });
+    expect(cellFromViewportPoint(30, 30, camera)).toEqual({ x: 11, y: 21 });
+  });
+
   it("keeps the focus cell under the viewport center after paint zoom", () => {
     const focus = { x: 10, y: 20 };
     const viewport = { width: 390, height: 480 };
@@ -47,6 +56,29 @@ describe("viewport camera", () => {
       camera,
     );
     expect(underCenter).toEqual(focus);
+  });
+
+  it("only enables paint zoom at the 16px target threshold", () => {
+    expect(
+      isPaintZoom({ cellSize: PAINT_MIN_CELL_PX - 0.01, panX: 0, panY: 0 }),
+    ).toBe(false);
+    expect(
+      isPaintZoom({ cellSize: PAINT_MIN_CELL_PX, panX: 0, panY: 0 }),
+    ).toBe(true);
+    expect(
+      isPaintZoom(
+        paintZoomCamera({ width: 390, height: 480 }, { x: 10, y: 20 }),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps overview zoom below the paint threshold when zooming out", () => {
+    const viewport = { width: 230, height: 190 };
+    const overview = fitCamera(viewport, 0);
+    const zoomedOut = zoomAt(overview, viewport, 0.5, 115, 95);
+
+    expect(zoomedOut.cellSize).toBeLessThan(overview.cellSize);
+    expect(isPaintZoom(zoomedOut)).toBe(false);
   });
 
   it("zooms toward a pivot without jumping the cell under the pointer", () => {
