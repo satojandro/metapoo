@@ -139,21 +139,29 @@ async fn chain_time(worker: &Worker<Sandbox>) -> u64 {
 /// Move the sandbox clock to at least `target_ns` without jumping a full week.
 /// One block is measured first so the step size is whatever this sandbox uses.
 async fn advance_to_at_least(worker: &Worker<Sandbox>, target_ns: u64) {
+    // One extrapolation is not enough: the measured step does not always hold
+    // at scale (epochs change production pace), so re-probe until we land.
+    for attempt in 0..10 {
+        let now = chain_time(worker).await;
+        if now >= target_ns {
+            return;
+        }
+        worker.fast_forward(1).await.expect("probe fast_forward");
+        let after = chain_time(worker).await;
+        if after >= target_ns {
+            return;
+        }
+        let step = after.saturating_sub(now).max(1);
+        let blocks = (target_ns - after) / step + 1;
+        worker
+            .fast_forward(blocks)
+            .await
+            .unwrap_or_else(|e| panic!("fast_forward {blocks} blocks: {e}"));
+    }
     let now = chain_time(worker).await;
-    if now >= target_ns {
-        return;
-    }
-    worker.fast_forward(1).await.expect("probe fast_forward");
-    let after = chain_time(worker).await;
-    if after >= target_ns {
-        return;
-    }
-    let step = after.saturating_sub(now).max(1);
-    let blocks = (target_ns - after) / step + 1;
-    worker
-        .fast_forward(blocks)
-        .await
-        .unwrap_or_else(|e| panic!("fast_forward {blocks} blocks: {e}"));
+    panic!(
+        "sandbox clock {now} never reached {target_ns} after 10 advance attempts"
+    );
 }
 
 struct World {
