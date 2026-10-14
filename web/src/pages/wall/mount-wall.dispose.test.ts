@@ -150,6 +150,42 @@ describe("mountWall dispose", () => {
     dispose();
   });
 
+  it("paint-zoom tap does not bypass the Direct paint consent toggle", async () => {
+    const services = createAppServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
+
+    // regression: isPaintZoom(camera) used to short-circuit the toggle check,
+    // letting a tap at >=16px cells submit without explicit consent.
+    // Simulate paint zoom (cellSize >= PAINT_MIN_CELL_PX = 16).
+    toggle.checked = false;
+    toggle.disabled = false;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    const tap = (x: number, y: number) => {
+      for (const type of ["pointerdown", "pointerup"]) {
+        const event = new Event(type, { bubbles: true });
+        Object.assign(event, { pointerId: 1, clientX: x, clientY: y });
+        viewport.dispatchEvent(event);
+      }
+    };
+    // zoom the camera to paint zoom via the zoom-in control enough times to
+    // exceed the 16px floor, then tap an empty cell.
+    const zoomIn = root.querySelector<HTMLButtonElement>("#zoom-in")!;
+    for (let i = 0; i < 6; i++) {
+      zoomIn.click();
+    }
+    // allow the async post-selection refresh to flush
+    await vi.waitFor(() => {
+      tap(40, 40);
+      expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    });
+    // and with the toggle ON, paint zoom taps still work through the session
+    // path (not asserted here: session gating is covered by session tests).
+    dispose();
+  });
+
   it("clears unsent queue paints when navigating away during a pending draw", async () => {
     type DrawResult = Awaited<ReturnType<typeof submitDraw>>;
     const deferred: {

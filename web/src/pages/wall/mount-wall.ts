@@ -1501,9 +1501,10 @@ function selectAtClientPoint(clientX: number, clientY: number): void {
       return;
     }
     // Paint zoom is the deliberate, r/place-style direct-placement mode. It
-    // still requires the user's pre-authorized local drawing session; without
-    // one the tap remains a harmless selection and the normal Place action is
-    // available. This never routes a gesture through a form submission.
+    // relaxes the two-step form (tap = place), but NEVER the consent toggle:
+    // direct submission requires the user to have opted in, same as 2-step
+    // mode, plus the pre-authorized local drawing session. A gesture never
+    // routes through a form submission, and never submits unrequested.
     maybeEnqueueDirectPaint(next, { paintZoom: isPaintZoom(camera) });
   });
 }
@@ -1513,7 +1514,7 @@ function maybeEnqueueDirectPaint(
   options: { paintZoom: boolean } = { paintZoom: false },
 ): void {
   if (
-    (!options.paintZoom && !directPaintToggle.checked) ||
+    !directPaintToggle.checked ||
     !canUseLocalDrawingSession(walletAccount, walletNetwork) ||
     selectedColor === null ||
     !walletAccount ||
