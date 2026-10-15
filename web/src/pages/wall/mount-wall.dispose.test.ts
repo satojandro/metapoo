@@ -150,6 +150,32 @@ describe("mountWall dispose", () => {
     dispose();
   });
 
+  it("never selects or submits after a pinch gesture", () => {
+    const services = createAppServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    const pointer = (type: string, pointerId: number, x: number, y: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, { pointerId, clientX: x, clientY: y });
+      viewport.dispatchEvent(event);
+    };
+
+    pointer("pointerdown", 1, 30, 30);
+    pointer("pointerdown", 2, 70, 30);
+    pointer("pointermove", 2, 100, 30);
+    pointer("pointerup", 2, 100, 30);
+    pointer("pointerup", 1, 30, 30);
+
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    expect(root.querySelector("#selection-summary")?.textContent).toContain(
+      "No square selected",
+    );
+    dispose();
+  });
+
   it("paint-zoom tap does not bypass the Direct paint consent toggle", async () => {
     const services = createAppServices();
     const root = document.querySelector<HTMLElement>("#root")!;

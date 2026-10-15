@@ -1351,6 +1351,9 @@ function wirePointerGestures(): void {
   let lastX = 0;
   let lastY = 0;
   let panning = false;
+  // This is deliberately separate from movement. Once a second pointer joins
+  // a gesture, no later pointer-up can be reclassified as a paint tap.
+  let gestureConsumed = false;
   let pinchStartDistance = 0;
   let pinchStartCamera: Camera | null = null;
 
@@ -1369,8 +1372,10 @@ function wirePointerGestures(): void {
       lastX = pointerEvent.clientX;
       lastY = pointerEvent.clientY;
       panning = false;
+      gestureConsumed = false;
     } else if (pointers.size === 2) {
       panning = true;
+      gestureConsumed = true;
       const pts = [...pointers.values()];
       pinchStartDistance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       // Every pinch frame derives from the same camera. Mixing a prior frame's
@@ -1421,6 +1426,7 @@ function wirePointerGestures(): void {
     const dy = pointerEvent.clientY - startY;
     if (!panning && isPanGesture(dx, dy)) {
       panning = true;
+      gestureConsumed = true;
       boardViewport.classList.add("is-panning");
     }
     if (panning) {
@@ -1453,13 +1459,14 @@ function wirePointerGestures(): void {
     }
 
     if (pointerEvent.pointerId === primaryId && pointers.size === 0) {
-      const wasPan = panning;
+      const wasGesture = panning || gestureConsumed;
       boardViewport.classList.remove("is-panning");
       primaryId = null;
       panning = false;
+      gestureConsumed = false;
 
       // A cancelled touch must never turn into a paint-placement tap.
-      if (!wasPan && pointerEvent.type !== "pointercancel") {
+      if (!wasGesture && pointerEvent.type !== "pointercancel") {
         selectAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
       } else {
         updateCompactStatus();

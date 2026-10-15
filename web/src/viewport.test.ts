@@ -7,6 +7,7 @@ import {
   paintZoomCamera,
   panBy,
   PAINT_CELL_PX,
+  PAINT_MAX_CELL_PX,
   PAINT_MIN_CELL_PX,
   isPaintZoom,
   selectionRingStyle,
@@ -56,6 +57,13 @@ describe("viewport camera", () => {
       camera,
     );
     expect(underCenter).toEqual(focus);
+  });
+
+  it("snaps paint zoom to a comfortable 16–24px target range", () => {
+    const viewport = { width: 390, height: 480 };
+    const focus = { x: 10, y: 20 };
+    expect(paintZoomCamera(viewport, focus, 2).cellSize).toBe(PAINT_MIN_CELL_PX);
+    expect(paintZoomCamera(viewport, focus, 80).cellSize).toBe(PAINT_MAX_CELL_PX);
   });
 
   it("only enables paint zoom at the 16px target threshold", () => {
@@ -115,10 +123,10 @@ describe("viewport camera", () => {
     expect(moved.panY).toBeGreaterThan(start.panY);
   });
 
-  it("draws the selection ring slightly outside the cell", () => {
+  it("uses the exact cell box so CSS can draw its outline outside the paint", () => {
     const style = selectionRingStyle({ x: 0, y: 0 });
-    expect(parseFloat(style.left)).toBeLessThan(0);
-    expect(parseFloat(style.top)).toBeLessThan(0);
-    expect(parseFloat(style.width)).toBeGreaterThan(100 / 128);
+    expect(parseFloat(style.left)).toBe(0);
+    expect(parseFloat(style.top)).toBe(0);
+    expect(parseFloat(style.width)).toBe(100 / 128);
   });
 });

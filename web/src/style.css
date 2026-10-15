@@ -478,19 +478,15 @@ h3 {
 
 #selection-ring {
   position: absolute;
-  box-sizing: border-box;
-  border: 2px solid #111111;
-  box-shadow:
-    0 0 0 2px #ffffff,
-    0 0 0 4px #111111;
+  /* Outlines paint outside the box: selected art remains completely visible. */
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px #111111;
   pointer-events: none;
-  /* External ring only — no inset fill that covers paint. */
 }
 
 #selection-ring[data-has-color="true"] {
-  box-shadow:
-    0 0 0 2px #ffffff,
-    0 0 0 4px var(--focus);
+  box-shadow: 0 0 0 4px var(--focus);
 }
 
 /* Emblematic toilet beneath the board — does not cover cells */
@@ -575,6 +571,7 @@ canvas {
   height: 100%;
   background: var(--wall-empty);
   image-rendering: pixelated;
+  image-rendering: crisp-edges;
   pointer-events: none;
 }
 

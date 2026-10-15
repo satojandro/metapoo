@@ -19,6 +19,8 @@ export interface Camera {
 export const PAINT_CELL_PX = 20;
 /** A cell must be at least this large before tap-to-paint is enabled. */
 export const PAINT_MIN_CELL_PX = 16;
+/** Keep the paint-mode snap within the deliberately thumb-friendly target range. */
+export const PAINT_MAX_CELL_PX = 24;
 /** Floor for interactive zoom (not for fit-to-wall overview). */
 export const MIN_CELL_PX = 2;
 /** Absolute floor so fit can shrink below painting minimum on tiny viewports. */
@@ -69,7 +71,10 @@ export function paintZoomCamera(
   focus: Cell,
   cellSize: number = PAINT_CELL_PX,
 ): Camera {
-  const size = clampCellSize(cellSize);
+  // A paint-mode command is a snap, not just an arbitrary zoom. This prevents
+  // deep links or keyboard selection from arriving at an overview-sized cell
+  // that looks selected but is too small to accurately target on a phone.
+  const size = clampPaintCellSize(cellSize);
   const panX = viewport.width / 2 - (focus.x + 0.5) * size;
   const panY = viewport.height / 2 - (focus.y + 0.5) * size;
   return clampPan({ cellSize: size, panX, panY }, viewport);
@@ -80,6 +85,14 @@ export function clampCellSize(cellSize: number): number {
     return MIN_CELL_PX;
   }
   return Math.min(MAX_CELL_PX, Math.max(MIN_CELL_PX, cellSize));
+}
+
+/** Cell size used by the explicit Paint zoom command (16–24 screen px). */
+export function clampPaintCellSize(cellSize: number): number {
+  if (!Number.isFinite(cellSize)) {
+    return PAINT_CELL_PX;
+  }
+  return Math.min(PAINT_MAX_CELL_PX, Math.max(PAINT_MIN_CELL_PX, cellSize));
 }
 
 /** Whether the camera is close enough for an unambiguous paint target. */
@@ -182,8 +195,9 @@ export function stageSizeStyle(camera: Camera): { width: string; height: string 
 }
 
 /**
- * Selection ring box in stage-local coordinates (percent of the stage).
- * Slightly larger than the cell so the ring sits outside the paint.
+ * Selection box in stage-local coordinates (percent of the stage).
+ * Its CSS outline is drawn outside this exact cell rectangle, preserving every
+ * painted pixel inside the selected cell at every camera scale.
  */
 export function selectionRingStyle(cell: Cell): {
   left: string;
@@ -193,14 +207,11 @@ export function selectionRingStyle(cell: Cell): {
 } {
   const widthPercent = 100 / BOARD_WIDTH;
   const heightPercent = 100 / BOARD_HEIGHT;
-  // Expand by a fraction of a cell so borders fall outside the fill.
-  const padX = widthPercent * 0.12;
-  const padY = heightPercent * 0.12;
   return {
-    left: `${cell.x * widthPercent - padX}%`,
-    top: `${cell.y * heightPercent - padY}%`,
-    width: `${widthPercent + padX * 2}%`,
-    height: `${heightPercent + padY * 2}%`,
+    left: `${cell.x * widthPercent}%`,
+    top: `${cell.y * heightPercent}%`,
+    width: `${widthPercent}%`,
+    height: `${heightPercent}%`,
   };
 }
 
