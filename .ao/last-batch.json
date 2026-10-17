@@ -1,9 +1,9 @@
 {
-  "batch_goal": "Advance board-review 'Proposed implementation order' step 2 (the board usable without changing the contract) by finishing the core painting moment: at paint zoom a cell is precisely targetable with seam-free edges at any zoom/DPR, the selection indicator never hides the chosen cell's color, and the palette/Place controls sit within thumb reach on a 390 px viewport without covering the board. Builds on the merged zoom/pan pilot and the merged block-pinned reads / placement-outcome work; no contract, wallet-signing, economy, or deployment changes. Re-plans the two tasks blocked last batch, each with a different approach named in its judgment_basis.",
-  "repo_head": "feed447bd8af7294defd7ee21dbc285f012199f6",
+  "batch_goal": "Finish board-review step 2's painting-moment acceptance on the wall viewport without changing the contract, wallet, economy or deployment: the chosen cell stays fully colored with the selection indicator drawn outside it, a cell is crisp and comfortably targetable at paint zoom, adjacent painted cells touch without unintended gaps, pan/pinch/drag gestures never submit paint, and queued paint stays visibly distinct from confirmed art. Both tasks re-plan the two last-batch blocked tasks (selected-cell-legibility, gesture-guards-and-pending-layer) with different approaches named in their judgment_basis; all edits stay under web/ and no repo-root document may be modified.",
+  "repo_head": "245f9c742532800ffec57d9d106e7386f4981792",
   "results": [
     {
-      "task_id": "cell-accurate-rendering",
+      "task_id": "selected-cell-legibility",
       "state": "blocked",
       "attempts": {
         "implement": 0,
@@ -11,20 +11,21 @@
       },
       "review": null,
       "changed_files": [
+        "AGENT.md",
+        "fix_plan.md",
+        "web/src/pages/wall/mount-wall.ts",
+        "web/src/pages/wall/wall-template.ts",
+        "web/src/render-board.test.ts",
         "web/src/render-board.ts",
-        "web/src/render-board.test.ts"
+        "web/src/style.css",
+        "web/src/viewport.test.ts",
+        "web/src/viewport.ts"
       ],
       "blocked_reason": "scope_violation",
-      "events": [
-        "task_started",
-        "preflight_passed",
-        "implementation_recorded",
-        "blocked"
-      ],
-      "run_dir": "/var/folders/81/6xxbzvnx00g9b6fgk1_dm3640000gn/T/ao-task-jxx8kzdb"
+      "evidence_hint": "scope_violation"
     },
     {
-      "task_id": "mobile-paint-toolbar",
+      "task_id": "gesture-guards-and-pending-layer",
       "state": "blocked",
       "attempts": {
         "implement": 0,
@@ -32,22 +33,48 @@
       },
       "review": null,
       "changed_files": [
-        "web/src/pages/wall/mount-wall.dispose.test.ts"
+        "AGENT.md",
+        "fix_plan.md",
+        "web/src/pages/wall/mount-wall.dispose.test.ts",
+        "web/src/pages/wall/mount-wall.ts",
+        "web/src/pages/wall/wall-template.ts",
+        "web/src/render-board.ts",
+        "web/src/style.css"
       ],
       "blocked_reason": "scope_violation",
-      "events": [
-        "task_started",
-        "preflight_passed",
-        "implementation_recorded",
-        "blocked"
+      "evidence_hint": "scope_violation"
+    },
+    {
+      "task_id": "gesture-guards-and-pending-layer",
+      "state": "awaiting_merge",
+      "attempts": {
+        "implement": 0,
+        "revise": 0
+      },
+      "review": {
+        "gate": "b-backend-engineering",
+        "outcome": "pass",
+        "findings": [],
+        "revision_bound": "245f9c742532800ffec57d9d106e7386f4981792",
+        "evidence_refs": [
+          "verification/cmd-001.stdout.log",
+          "verification/cmd-002.stdout.log",
+          "verification/cmd-003.stdout.log",
+          "diff: web/src/pages/wall/mount-wall.ts"
+        ],
+        "scope_checked": true
+      },
+      "changed_files": [
+        "web/src/gesture.ts",
+        "web/src/gesture.test.ts",
+        "web/src/pages/wall/mount-wall.ts"
       ],
-      "run_dir": "/var/folders/81/6xxbzvnx00g9b6fgk1_dm3640000gn/T/ao-task-8cm85ftw"
+      "blocked_reason": null
     }
   ],
   "escalations": [
-    "OPERATIONAL: work branch `pilot/zoom-pan-paint` is still present alongside the merged pilot commits. Confirm it is merged or discard it so the checkout is clean before dispatch \u2014 a dirty workspace blocked a previous batch at pre-flight. Both briefs above run `cd web && npm ci` first, so a clean tree plus installed dependencies is required.",
-    "NEAR drawing-session experiment (board-review step 4) remains ask-first and unresolved: authorizing a function-call key limited to the board's draw method with a bounded gas allowance, showing activation/remaining allowance/renewal/revoke, and verifying on-chain key removal. Touches wallet signing, key creation, and a testnet deployment. Needs a human decision on allowance scope plus a funded testnet account and game contract identifier before a brief can be written.",
-    "The milestone's live two-session check ('two people on separate devices observe each other's work') needs a deployed testnet board contract and a configured VITE_CONTRACT_ID. That is a human deployment step; without it only mock/local verification is possible, so the milestone cannot be demonstrated from agent work alone.",
-    "Saturated palette proposal: moving beyond the current eight-color contract palette changes metadata coordinated across web/shared/contract and would change the meaning of already-stored colors. Per the judgment doc (ask first: contract/economy changes) this needs an accepted tier-2 decision-record update before any implementation task is written."
+    "NEAR drawing-session experiment (board-review step 4) stays ask-first: authorizing a function-call key limited to the board's draw method with a bounded gas allowance, plain-language activation / remaining allowance / renewal / revoke, and verified on-chain key removal. This touches wallet signing, key creation and a testnet deployment, so a human decision on allowance scope plus a funded testnet account and game contract identifier is needed before a brief can be written.",
+    "The milestone's live two-session check ('two people on separate devices observe each other's work automatically') still needs a deployed testnet board contract and a configured VITE_CONTRACT_ID; that is a human deployment step. Without it only mock/local verification is possible, so confirmed changes visible within ~3-5 seconds cannot be demonstrated from agent work alone.",
+    "Saturated palette proposal (docs/2026-10-12-palette-proposal.md) remains ask-first: moving past the eight-color contract palette changes metadata coordinated across web/shared/contract and the meaning of already-stored colors. Per the judgment doc ('ask first: ... economy changes', contract changes) it needs a tier-2 decision-record update in docs/00-shared-decisions.md before any implementation task is written."
   ]
 }

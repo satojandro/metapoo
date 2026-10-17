@@ -1,0 +1,358 @@
+diff --git a/fix_plan.md b/fix_plan.md
+index 34dffc2..c7e9a61 100644
+--- a/fix_plan.md
++++ b/fix_plan.md
+@@ -1,3 +1,3 @@
+ # fix_plan
+ 
+-(plan empty — regenerate from specs)
++1. [x] Make the wall canvas and cell rasterization device-pixel accurate across camera, resize, and DPR changes; cover the mapping and full-cell invariants with unit tests.
+diff --git a/web/src/pages/wall/mount-wall.ts b/web/src/pages/wall/mount-wall.ts
+index 2755809..d6435fd 100644
+--- a/web/src/pages/wall/mount-wall.ts
++++ b/web/src/pages/wall/mount-wall.ts
+@@ -66,12 +66,13 @@ import {
+   MOCK_QUOTE_DEMO_LABEL,
+   type QuoteResult,
+ } from "../../pressure-quote";
+-import { renderBoard } from "../../render-board";
++import { renderBoard, resizeBoardBackingStore } from "../../render-board";
+ import { moveSelection, type Cell } from "../../selection";
+ import { describeSponsorship } from "../../sponsorship";
+ import { submitDraw } from "../../submit-draw";
+ import {
+   cellFromViewportPoint,
++  deviceAlignedCamera,
+   fitCamera,
+   isPanGesture,
+   isPaintZoom,
+@@ -337,13 +338,34 @@ export function mountWall(
+   });
+ 
+   const resizeObserver = new ResizeObserver(() => {
+-    if (disposed) return;
+-    camera = clampToViewport(camera);
+-    applyCamera(camera);
+-    positionSelection();
++    refreshCanvasGeometry();
+   });
+   resizeObserver.observe(boardViewport);
+ 
++  listen(window, "resize", () => refreshCanvasGeometry());
++
++  let dprMediaQuery: MediaQueryList | null = null;
++  const onDevicePixelRatioChange = (): void => {
++    if (disposed) return;
++    watchDevicePixelRatio();
++    refreshCanvasGeometry(true);
++  };
++  function watchDevicePixelRatio(): void {
++    dprMediaQuery?.removeEventListener("change", onDevicePixelRatioChange);
++    if (typeof window.matchMedia !== "function") {
++      dprMediaQuery = null;
++      return;
++    }
++    dprMediaQuery = window.matchMedia(
++      `(resolution: ${currentDevicePixelRatio()}dppx)`,
++    );
++    dprMediaQuery.addEventListener("change", onDevicePixelRatioChange);
++  }
++  watchDevicePixelRatio();
++  listenerCleanups.push(() =>
++    dprMediaQuery?.removeEventListener("change", onDevicePixelRatioChange),
++  );
++
+   listen(drawButton, "click", () => {
+     void attemptDraw();
+   });
+@@ -1308,11 +1330,45 @@ function positionSelection(): void {
+ }
+ 
+ function applyCamera(next: Camera): void {
+-  camera = next;
++  camera = deviceAlignedCamera(next, currentDevicePixelRatio());
+   const size = stageSizeStyle(camera);
+   boardStage.style.width = size.width;
+   boardStage.style.height = size.height;
+   boardStage.style.transform = stageTransform(camera);
++  const boardWidth = BOARD_WIDTH * camera.cellSize;
++  const boardHeight = BOARD_HEIGHT * camera.cellSize;
++  if (
++    resizeBoardBackingStore(
++      canvas,
++      boardWidth,
++      boardHeight,
++      currentDevicePixelRatio(),
++    )
++  ) {
++    render();
++  }
++}
++
++function currentDevicePixelRatio(): number {
++  return Number.isFinite(window.devicePixelRatio) && window.devicePixelRatio > 0
++    ? window.devicePixelRatio
++    : 1;
++}
++
++function refreshCanvasGeometry(forceRender = false): void {
++  if (disposed) return;
++  camera = clampToViewport(camera);
++  const previousWidth = canvas.width;
++  const previousHeight = canvas.height;
++  applyCamera(camera);
++  if (
++    forceRender &&
++    canvas.width === previousWidth &&
++    canvas.height === previousHeight
++  ) {
++    render();
++  }
++  positionSelection();
+ }
+ 
+ function clampToViewport(current: Camera): Camera {
+diff --git a/web/src/render-board.ts b/web/src/render-board.ts
+index b08753e..6004bb9 100644
+--- a/web/src/render-board.ts
++++ b/web/src/render-board.ts
+@@ -2,12 +2,68 @@ import { paletteColor } from "@shared/palette.ts";
+ import { BOARD_HEIGHT, BOARD_WIDTH, type PixelView } from "@shared/types.ts";
+ import type { PendingPaint } from "./pending-paint";
+ 
+-/** Bitmap size of one square before CSS stretches the canvas. */
+-const CELL = 4;
+-
+ const EMPTY_A = "#242629";
+ const EMPTY_B = "#292b2e";
+ 
++export interface DevicePixelRect {
++  left: number;
++  top: number;
++  width: number;
++  height: number;
++}
++
++/** Convert a CSS box to the integer bitmap dimensions supported by canvas. */
++export function backingStoreSize(
++  cssWidth: number,
++  cssHeight: number,
++  devicePixelRatio: number,
++): { width: number; height: number } {
++  const dpr =
++    Number.isFinite(devicePixelRatio) && devicePixelRatio > 0
++      ? devicePixelRatio
++      : 1;
++  return {
++    width: Math.max(1, Math.round(Math.max(0, cssWidth) * dpr)),
++    height: Math.max(1, Math.round(Math.max(0, cssHeight) * dpr)),
++  };
++}
++
++/**
++ * Device-pixel rectangle for one logical board cell.
++ *
++ * Both edges are derived from the same rounded boundary function. Neighbours
++ * therefore share an edge exactly, even when a logical cell is a fractional
++ * number of device pixels at fit-to-wall zoom.
++ */
++export function logicalCellDeviceRect(
++  x: number,
++  y: number,
++  bitmapWidth: number,
++  bitmapHeight: number,
++): DevicePixelRect {
++  const left = Math.round((x * bitmapWidth) / BOARD_WIDTH);
++  const right = Math.round(((x + 1) * bitmapWidth) / BOARD_WIDTH);
++  const top = Math.round((y * bitmapHeight) / BOARD_HEIGHT);
++  const bottom = Math.round(((y + 1) * bitmapHeight) / BOARD_HEIGHT);
++  return { left, top, width: right - left, height: bottom - top };
++}
++
++/** Resize only when necessary because assigning width/height clears the bitmap. */
++export function resizeBoardBackingStore(
++  canvas: HTMLCanvasElement,
++  cssWidth: number,
++  cssHeight: number,
++  devicePixelRatio: number,
++): boolean {
++  const size = backingStoreSize(cssWidth, cssHeight, devicePixelRatio);
++  if (canvas.width === size.width && canvas.height === size.height) {
++    return false;
++  }
++  canvas.width = size.width;
++  canvas.height = size.height;
++  return true;
++}
++
+ /**
+  * Draw the board background, confirmed paints, then pending previews on top.
+  *
+@@ -28,13 +84,15 @@ export function renderBoard(
+     return;
+   }
+ 
+-  canvas.width = BOARD_WIDTH * CELL;
+-  canvas.height = BOARD_HEIGHT * CELL;
++  context.setTransform(1, 0, 0, 1, 0, 0);
++  context.imageSmoothingEnabled = false;
++  context.clearRect(0, 0, canvas.width, canvas.height);
+ 
+   for (let y = 0; y < BOARD_HEIGHT; y += 1) {
+     for (let x = 0; x < BOARD_WIDTH; x += 1) {
++      const rect = logicalCellDeviceRect(x, y, canvas.width, canvas.height);
+       context.fillStyle = (x + y) % 2 === 0 ? EMPTY_A : EMPTY_B;
+-      context.fillRect(x * CELL, y * CELL, CELL, CELL);
++      context.fillRect(rect.left, rect.top, rect.width, rect.height);
+     }
+   }
+ 
+@@ -46,8 +104,14 @@ export function renderBoard(
+     if (!swatch) {
+       continue;
+     }
++    const rect = logicalCellDeviceRect(
++      pixel.x,
++      pixel.y,
++      canvas.width,
++      canvas.height,
++    );
+     context.fillStyle = swatch.hex;
+-    context.fillRect(pixel.x * CELL, pixel.y * CELL, CELL, CELL);
++    context.fillRect(rect.left, rect.top, rect.width, rect.height);
+   }
+ 
+   for (const paint of pending) {
+@@ -66,22 +130,30 @@ function drawPendingCell(
+   y: number,
+   hex: string,
+ ): void {
+-  const left = x * CELL;
+-  const top = y * CELL;
++  const rect = logicalCellDeviceRect(
++    x,
++    y,
++    context.canvas.width,
++    context.canvas.height,
++  );
++  const { left, top, width, height } = rect;
+   context.save();
++  context.beginPath();
++  context.rect(left, top, width, height);
++  context.clip();
+   context.globalAlpha = 0.55;
+   context.fillStyle = hex;
+-  context.fillRect(left, top, CELL, CELL);
++  context.fillRect(left, top, width, height);
+   context.globalAlpha = 0.9;
+   context.strokeStyle = "#111111";
+-  context.lineWidth = 1;
++  context.lineWidth = Math.max(1, Math.round(Math.min(width, height) / 4));
+   context.beginPath();
+-  context.moveTo(left, top + CELL);
+-  context.lineTo(left + CELL, top);
++  context.moveTo(left, top + height);
++  context.lineTo(left + width, top);
+   context.stroke();
+   context.beginPath();
+-  context.moveTo(left, top + CELL / 2);
+-  context.lineTo(left + CELL / 2, top);
++  context.moveTo(left, top + height / 2);
++  context.lineTo(left + width / 2, top);
+   context.stroke();
+   context.restore();
+ }
+@@ -96,7 +168,13 @@ export function bitmapHex(
+   if (!context) {
+     return null;
+   }
+-  const pixel = context.getImageData(x * CELL + 1, y * CELL + 1, 1, 1).data;
++  const rect = logicalCellDeviceRect(x, y, canvas.width, canvas.height);
++  if (rect.width <= 0 || rect.height <= 0) {
++    return null;
++  }
++  const sampleX = rect.left + Math.floor((rect.width - 1) / 2);
++  const sampleY = rect.top + Math.floor((rect.height - 1) / 2);
++  const pixel = context.getImageData(sampleX, sampleY, 1, 1).data;
+   return rgbToHex(pixel[0], pixel[1], pixel[2]);
+ }
+ 
+diff --git a/web/src/viewport.test.ts b/web/src/viewport.test.ts
+index 6a06380..5f71201 100644
+--- a/web/src/viewport.test.ts
++++ b/web/src/viewport.test.ts
+@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
+ import {
+   cellFromViewportPoint,
+   clampPan,
++  deviceAlignedCamera,
+   fitCamera,
+   isPanGesture,
+   paintZoomCamera,
+@@ -45,6 +46,39 @@ describe("viewport camera", () => {
+     expect(cellFromViewportPoint(30, 30, camera)).toEqual({ x: 11, y: 21 });
+   });
+ 
++  it.each([1, 2, 3])(
++    "keeps corners and centre targetable on the device grid after pan/resize at DPR %i",
++    (dpr) => {
++      const cameras = [
++        fitCamera({ width: 397, height: 331 }, 8),
++        { cellSize: 20.003, panX: -913.17, panY: -477.29 },
++      ];
++      const cells = [
++        { x: 0, y: 0 },
++        { x: 127, y: 0 },
++        { x: 0, y: 127 },
++        { x: 127, y: 127 },
++        { x: 64, y: 64 },
++      ];
++
++      for (const source of cameras) {
++        const camera = deviceAlignedCamera(source, dpr);
++        expect(camera.panX * dpr).toBeCloseTo(Math.round(camera.panX * dpr), 10);
++        expect(camera.panY * dpr).toBeCloseTo(Math.round(camera.panY * dpr), 10);
++        expect(camera.cellSize * 128 * dpr).toBeCloseTo(
++          Math.round(camera.cellSize * 128 * dpr),
++          10,
++        );
++
++        for (const cell of cells) {
++          const screenX = camera.panX + (cell.x + 0.5) * camera.cellSize;
++          const screenY = camera.panY + (cell.y + 0.5) * camera.cellSize;
++          expect(cellFromViewportPoint(screenX, screenY, camera)).toEqual(cell);
++        }
++      }
++    },
++  );
++
+   it("keeps the focus cell under the viewport center after paint zoom", () => {
+     const focus = { x: 10, y: 20 };
+     const viewport = { width: 390, height: 480 };
+diff --git a/web/src/viewport.ts b/web/src/viewport.ts
+index 83ee8c5..ae9feca 100644
+--- a/web/src/viewport.ts
++++ b/web/src/viewport.ts
+@@ -181,6 +181,22 @@ export function stageSizeStyle(camera: Camera): { width: string; height: string
+   };
+ }
+ 
++/** Align camera output to the physical pixel grid without introducing a second transform. */
++export function deviceAlignedCamera(camera: Camera, devicePixelRatio: number): Camera {
++  const dpr =
++    Number.isFinite(devicePixelRatio) && devicePixelRatio > 0
++      ? devicePixelRatio
++      : 1;
++  // Quantizing the full board extent keeps its CSS size exactly representable
++  // by an integer canvas backing store. Pan is aligned independently.
++  const boardStep = 1 / (BOARD_WIDTH * dpr);
++  return {
++    cellSize: Math.round(camera.cellSize / boardStep) * boardStep,
++    panX: Math.round(camera.panX * dpr) / dpr,
++    panY: Math.round(camera.panY * dpr) / dpr,
++  };
++}
++
+ /**
+  * Selection ring box in stage-local coordinates (percent of the stage).
+  * Slightly larger than the cell so the ring sits outside the paint.
