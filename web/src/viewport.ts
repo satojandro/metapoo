@@ -33,11 +33,58 @@ export interface ViewportSize {
   height: number;
 }
 
+export interface ViewportRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * One immutable projection of board coordinates into viewport coordinates.
+ * The wall mount keeps a single instance for DOM placement, hit-testing, and
+ * selection geometry, replacing it whenever the camera changes.
+ */
+export interface CameraTransform {
+  readonly camera: Camera;
+  readonly stage: ViewportRect & { transform: string };
+  cellAt(viewportX: number, viewportY: number): Cell | null;
+  cellRect(cell: Cell): ViewportRect;
+}
+
 /** Board size in screen pixels for the current camera. */
 export function boardScreenSize(camera: Camera): { width: number; height: number } {
   return {
     width: BOARD_WIDTH * camera.cellSize,
     height: BOARD_HEIGHT * camera.cellSize,
+  };
+}
+
+export function createCameraTransform(camera: Camera): CameraTransform {
+  const snapshot = { ...camera };
+  const board = boardScreenSize(snapshot);
+  return {
+    camera: snapshot,
+    stage: {
+      left: snapshot.panX,
+      top: snapshot.panY,
+      width: board.width,
+      height: board.height,
+      transform: `translate(${snapshot.panX}px, ${snapshot.panY}px)`,
+    },
+    cellAt(viewportX, viewportY) {
+      const x = Math.floor((viewportX - snapshot.panX) / snapshot.cellSize);
+      const y = Math.floor((viewportY - snapshot.panY) / snapshot.cellSize);
+      return clampCell(x, y);
+    },
+    cellRect(cell) {
+      return {
+        left: snapshot.panX + cell.x * snapshot.cellSize,
+        top: snapshot.panY + cell.y * snapshot.cellSize,
+        width: snapshot.cellSize,
+        height: snapshot.cellSize,
+      };
+    },
   };
 }
 
@@ -162,45 +209,20 @@ export function cellFromViewportPoint(
   viewportY: number,
   camera: Camera,
 ): Cell | null {
-  const x = Math.floor((viewportX - camera.panX) / camera.cellSize);
-  const y = Math.floor((viewportY - camera.panY) / camera.cellSize);
-  return clampCell(x, y);
+  return createCameraTransform(camera).cellAt(viewportX, viewportY);
 }
 
 /** CSS transform placing the board stage from camera state. */
 export function stageTransform(camera: Camera): string {
-  return `translate(${camera.panX}px, ${camera.panY}px)`;
+  return createCameraTransform(camera).stage.transform;
 }
 
 /** Width/height CSS for the stage so each cell matches `camera.cellSize`. */
 export function stageSizeStyle(camera: Camera): { width: string; height: string } {
-  const board = boardScreenSize(camera);
+  const board = createCameraTransform(camera).stage;
   return {
     width: `${board.width}px`,
     height: `${board.height}px`,
-  };
-}
-
-/**
- * Selection ring box in stage-local coordinates (percent of the stage).
- * Slightly larger than the cell so the ring sits outside the paint.
- */
-export function selectionRingStyle(cell: Cell): {
-  left: string;
-  top: string;
-  width: string;
-  height: string;
-} {
-  const widthPercent = 100 / BOARD_WIDTH;
-  const heightPercent = 100 / BOARD_HEIGHT;
-  // Expand by a fraction of a cell so borders fall outside the fill.
-  const padX = widthPercent * 0.12;
-  const padY = heightPercent * 0.12;
-  return {
-    left: `${cell.x * widthPercent - padX}%`,
-    top: `${cell.y * heightPercent - padY}%`,
-    width: `${widthPercent + padX * 2}%`,
-    height: `${heightPercent + padY * 2}%`,
   };
 }
 

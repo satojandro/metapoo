@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   cellFromViewportPoint,
   clampPan,
+  createCameraTransform,
   fitCamera,
   isPanGesture,
   paintZoomCamera,
@@ -9,7 +10,6 @@ import {
   PAINT_CELL_PX,
   PAINT_MIN_CELL_PX,
   isPaintZoom,
-  selectionRingStyle,
   zoomAt,
 } from "./viewport";
 
@@ -115,10 +115,46 @@ describe("viewport camera", () => {
     expect(moved.panY).toBeGreaterThan(start.panY);
   });
 
-  it("draws the selection ring slightly outside the cell", () => {
-    const style = selectionRingStyle({ x: 0, y: 0 });
-    expect(parseFloat(style.left)).toBeLessThan(0);
-    expect(parseFloat(style.top)).toBeLessThan(0);
-    expect(parseFloat(style.width)).toBeGreaterThan(100 / 128);
+  it.each([1.5, 16, 20, 24, 48])(
+    "keeps rendering, selection, and corner hit-testing aligned at %spx per cell",
+    (cellSize) => {
+      const transform = createCameraTransform({
+        cellSize,
+        panX: -7.25,
+        panY: 13.5,
+      });
+      const cell = { x: 37, y: 62 };
+      const rect = transform.cellRect(cell);
+
+      expect(rect).toEqual({
+        left: -7.25 + 37 * cellSize,
+        top: 13.5 + 62 * cellSize,
+        width: cellSize,
+        height: cellSize,
+      });
+      expect(transform.cellAt(rect.left + cellSize / 2, rect.top + cellSize / 2)).toEqual(
+        cell,
+      );
+      expect(transform.cellAt(rect.left + 0.001, rect.top + 0.001)).toEqual(cell);
+      expect(
+        transform.cellAt(rect.left + cellSize - 0.001, rect.top + cellSize - 0.001),
+      ).toEqual(cell);
+    },
+  );
+
+  it("snapshots camera values so a transform cannot desync mid-frame", () => {
+    const camera = { cellSize: 20, panX: -100, panY: -200 };
+    const transform = createCameraTransform(camera);
+    camera.cellSize = 48;
+    camera.panX = 0;
+
+    expect(transform.stage.width).toBe(128 * 20);
+    expect(transform.cellRect({ x: 5, y: 10 })).toEqual({
+      left: 0,
+      top: 0,
+      width: 20,
+      height: 20,
+    });
+    expect(transform.cellAt(10, 10)).toEqual({ x: 5, y: 10 });
   });
 });

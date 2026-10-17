@@ -72,17 +72,15 @@ import { moveSelection, type Cell } from "../../selection";
 import { describeSponsorship } from "../../sponsorship";
 import { submitDraw } from "../../submit-draw";
 import {
-  cellFromViewportPoint,
+  createCameraTransform,
   fitCamera,
   isPaintZoom,
   paintZoomCamera,
   PAINT_CELL_PX,
   panBy,
-  selectionRingStyle,
-  stageSizeStyle,
-  stageTransform,
   zoomAt,
   type Camera,
+  type CameraTransform,
   type ViewportSize,
 } from "../../viewport";
 import { revokeDrawingSessionKeyOnChain } from "../../wallet";
@@ -249,6 +247,7 @@ export function mountWall(
   let contractMetaOk = !isContractConfigured();
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let camera: Camera = { cellSize: 4, panX: 0, panY: 0 };
+  let viewTransform: CameraTransform = createCameraTransform(camera);
   let disposed = false;
   let loadAbort: AbortController = new AbortController();
   /** High-level UI phase for the status strip. */
@@ -1298,21 +1297,22 @@ function positionSelection(): void {
     selectionRing.hidden = true;
     return;
   }
-  const style = selectionRingStyle(selected);
+  const rect = viewTransform.cellRect(selected);
   selectionRing.hidden = false;
-  selectionRing.style.left = style.left;
-  selectionRing.style.top = style.top;
-  selectionRing.style.width = style.width;
-  selectionRing.style.height = style.height;
+  selectionRing.style.left = `${rect.left}px`;
+  selectionRing.style.top = `${rect.top}px`;
+  selectionRing.style.width = `${rect.width}px`;
+  selectionRing.style.height = `${rect.height}px`;
   selectionRing.dataset.hasColor = selectedColor !== null ? "true" : "false";
 }
 
 function applyCamera(next: Camera): void {
-  camera = next;
-  const size = stageSizeStyle(camera);
-  boardStage.style.width = size.width;
-  boardStage.style.height = size.height;
-  boardStage.style.transform = stageTransform(camera);
+  viewTransform = createCameraTransform(next);
+  camera = viewTransform.camera;
+  boardStage.style.width = `${viewTransform.stage.width}px`;
+  boardStage.style.height = `${viewTransform.stage.height}px`;
+  boardStage.style.transform = viewTransform.stage.transform;
+  positionSelection();
 }
 
 function clampToViewport(current: Camera): Camera {
@@ -1373,10 +1373,9 @@ function wirePointerGestures(): void {
     boardViewport.setPointerCapture(pointerEvent.pointerId);
     const rect = boardViewport.getBoundingClientRect();
     const beganOnPanSurface =
-      cellFromViewportPoint(
+      viewTransform.cellAt(
         pointerEvent.clientX - rect.left,
         pointerEvent.clientY - rect.top,
-        camera,
       ) === null;
     const update = updateGesture(
       gesture,
@@ -1496,7 +1495,7 @@ function wirePointerGestures(): void {
 
 function selectAtClientPoint(clientX: number, clientY: number): void {
   const rect = boardViewport.getBoundingClientRect();
-  const next = cellFromViewportPoint(clientX - rect.left, clientY - rect.top, camera);
+  const next = viewTransform.cellAt(clientX - rect.left, clientY - rect.top);
   if (!next) {
     return;
   }
@@ -1592,7 +1591,7 @@ function maybeEnqueueDirectPaint(
 
 function updateHoverFromClient(clientX: number, clientY: number): void {
   const rect = boardViewport.getBoundingClientRect();
-  const cell = cellFromViewportPoint(clientX - rect.left, clientY - rect.top, camera);
+  const cell = viewTransform.cellAt(clientX - rect.left, clientY - rect.top);
   if (!cell) {
     hoverSummary.textContent = "";
     return;

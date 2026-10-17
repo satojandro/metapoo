@@ -486,16 +486,16 @@ h3 {
   box-sizing: border-box;
   border: 0;
   box-shadow:
-    0 0 0 2px #ffffff,
-    0 0 0 4px #111111;
+    0 0 0 1px #ffffff,
+    0 0 0 3px #111111;
   pointer-events: none;
-  /* The box already sits beyond the cell; outer shadows never cover its fill. */
+  /* Spread shadows begin at the exact cell edge and draw only outward. */
 }
 
 #selection-ring[data-has-color="true"] {
   box-shadow:
-    0 0 0 2px #ffffff,
-    0 0 0 4px var(--focus);
+    0 0 0 1px #ffffff,
+    0 0 0 3px var(--focus);
 }
 
 /* Emblematic toilet beneath the board — does not cover cells */

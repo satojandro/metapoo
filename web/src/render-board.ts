@@ -15,8 +15,9 @@ const EMPTY_B = "#292b2e";
  * paint, and it is not one of the eight palette colors.
  *
  * Confirmed colors come from `pixels` — sparse list after authoritative reads.
- * Pending paints are a separate client layer (striped) and must not be confused
- * with confirmed art. Clicking a square must not invent a confirmed entry.
+ * Pending paints are a separate client-state layer, but use the complete chosen
+ * color so a just-painted square never looks clipped or partially filled.
+ * Clicking a square must not invent a confirmed entry.
  */
 export function renderBoard(
   canvas: HTMLCanvasElement,
@@ -55,35 +56,9 @@ export function renderBoard(
     if (!swatch) {
       continue;
     }
-    drawPendingCell(context, paint.x, paint.y, swatch.hex);
+    context.fillStyle = swatch.hex;
+    context.fillRect(paint.x * CELL, paint.y * CELL, CELL, CELL);
   }
-}
-
-/** Striped overlay so pending paint is visibly different from confirmed art. */
-function drawPendingCell(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  hex: string,
-): void {
-  const left = x * CELL;
-  const top = y * CELL;
-  context.save();
-  context.globalAlpha = 0.55;
-  context.fillStyle = hex;
-  context.fillRect(left, top, CELL, CELL);
-  context.globalAlpha = 0.9;
-  context.strokeStyle = "#111111";
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(left, top + CELL);
-  context.lineTo(left + CELL, top);
-  context.stroke();
-  context.beginPath();
-  context.moveTo(left, top + CELL / 2);
-  context.lineTo(left + CELL / 2, top);
-  context.stroke();
-  context.restore();
 }
 
 /** Read one bitmap pixel. Used to spot unexpected local paints in checks. */

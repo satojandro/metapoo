@@ -54,8 +54,8 @@ export function wallPageHtml(): string {
                               A 128 by 128 pixel board. Use the selection text if
                               the picture does not load.
                             </canvas>
-                            <div id="selection-ring" hidden></div>
                           </div>
+                          <div id="selection-ring" hidden></div>
                         </div>
                       </div>
                     </div>
