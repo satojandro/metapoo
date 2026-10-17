@@ -15,3 +15,7 @@
 !web/.env.example
 *.key
 *.pem
+
+# Orchestrator runtime files (local only)
+.orchestrator-worktree.json
+orchestrator-init.log
