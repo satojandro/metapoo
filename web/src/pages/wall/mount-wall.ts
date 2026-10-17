@@ -67,13 +67,13 @@ import {
   type QuoteResult,
 } from "../../pressure-quote";
 import { renderBoard } from "../../render-board";
+import { createGestureState, updateGesture } from "../../gesture";
 import { moveSelection, type Cell } from "../../selection";
 import { describeSponsorship } from "../../sponsorship";
 import { submitDraw } from "../../submit-draw";
 import {
   cellFromViewportPoint,
   fitCamera,
-  isPanGesture,
   isPaintZoom,
   paintZoomCamera,
   PAINT_CELL_PX,
@@ -1346,35 +1346,53 @@ function zoomFromCenter(factor: number): void {
  * - two pointers → pinch zoom (never paint)
  */
 function wirePointerGestures(): void {
-  const pointers = new Map<number, { x: number; y: number }>();
-  let primaryId: number | null = null;
-  let startX = 0;
-  let startY = 0;
+  let gesture = createGestureState();
   let lastX = 0;
   let lastY = 0;
-  let panning = false;
   let pinchStartDistance = 0;
   let pinchStartCamera: Camera | null = null;
+
+  const gestureEvent = (
+    event: PointerEvent,
+    beganOnPanSurface = false,
+  ) => ({
+    type: event.type as
+      | "pointerdown"
+      | "pointermove"
+      | "pointerup"
+      | "pointercancel",
+    pointerId: event.pointerId,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    timeStamp: event.timeStamp,
+    beganOnPanSurface,
+  });
 
   listen(boardViewport, "pointerdown", (event) => {
     const pointerEvent = event as PointerEvent;
     boardViewport.setPointerCapture(pointerEvent.pointerId);
-    pointers.set(pointerEvent.pointerId, {
-      x: pointerEvent.clientX,
-      y: pointerEvent.clientY,
-    });
+    const rect = boardViewport.getBoundingClientRect();
+    const beganOnPanSurface =
+      cellFromViewportPoint(
+        pointerEvent.clientX - rect.left,
+        pointerEvent.clientY - rect.top,
+        camera,
+      ) === null;
+    const update = updateGesture(
+      gesture,
+      gestureEvent(pointerEvent, beganOnPanSurface),
+    );
+    gesture = update.state;
 
-    if (pointers.size === 1) {
-      primaryId = pointerEvent.pointerId;
-      startX = pointerEvent.clientX;
-      startY = pointerEvent.clientY;
+    if (gesture.points.length === 1) {
       lastX = pointerEvent.clientX;
       lastY = pointerEvent.clientY;
-      panning = false;
-    } else if (pointers.size === 2) {
-      panning = true;
-      const pts = [...pointers.values()];
-      pinchStartDistance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    } else if (gesture.points.length === 2) {
+      const pts = gesture.points;
+      pinchStartDistance = Math.hypot(
+        pts[0].clientX - pts[1].clientX,
+        pts[0].clientY - pts[1].clientY,
+      );
       // Every pinch frame derives from the same camera. Mixing a prior frame's
       // pan with the initial cell size makes the board jump under two fingers.
       pinchStartCamera = { ...camera };
@@ -1384,21 +1402,22 @@ function wirePointerGestures(): void {
 
   listen(boardViewport, "pointermove", (event) => {
     const pointerEvent = event as PointerEvent;
-    if (!pointers.has(pointerEvent.pointerId)) {
+    if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
       return;
     }
-    pointers.set(pointerEvent.pointerId, {
-      x: pointerEvent.clientX,
-      y: pointerEvent.clientY,
-    });
+    const update = updateGesture(gesture, gestureEvent(pointerEvent));
+    gesture = update.state;
 
-    if (pointers.size >= 2) {
-      const pts = [...pointers.values()];
-      const distance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    if (update.activeKind === "pinch" && gesture.points.length >= 2) {
+      const pts = gesture.points;
+      const distance = Math.hypot(
+        pts[0].clientX - pts[1].clientX,
+        pts[0].clientY - pts[1].clientY,
+      );
       if (pinchStartDistance > 0 && pinchStartCamera) {
         const rect = boardViewport.getBoundingClientRect();
-        const midX = (pts[0].x + pts[1].x) / 2 - rect.left;
-        const midY = (pts[0].y + pts[1].y) / 2 - rect.top;
+        const midX = (pts[0].clientX + pts[1].clientX) / 2 - rect.left;
+        const midY = (pts[0].clientY + pts[1].clientY) / 2 - rect.top;
         const factor = distance / pinchStartDistance;
         applyCamera(
           zoomAt(
@@ -1415,17 +1434,12 @@ function wirePointerGestures(): void {
       return;
     }
 
-    if (pointerEvent.pointerId !== primaryId) {
+    if (pointerEvent.pointerId !== gesture.primaryId) {
       return;
     }
 
-    const dx = pointerEvent.clientX - startX;
-    const dy = pointerEvent.clientY - startY;
-    if (!panning && isPanGesture(dx, dy)) {
-      panning = true;
+    if (update.activeKind === "drag" || update.activeKind === "pan") {
       boardViewport.classList.add("is-panning");
-    }
-    if (panning) {
       applyCamera(
         panBy(
           camera,
@@ -1444,24 +1458,23 @@ function wirePointerGestures(): void {
 
   const endPointer = (event: Event): void => {
     const pointerEvent = event as PointerEvent;
-    if (!pointers.has(pointerEvent.pointerId)) {
+    if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
       return;
     }
-    pointers.delete(pointerEvent.pointerId);
+    const update = updateGesture(gesture, gestureEvent(pointerEvent));
+    gesture = update.state;
 
-    if (pointers.size < 2) {
+    if (gesture.points.length < 2) {
       pinchStartDistance = 0;
       pinchStartCamera = null;
     }
 
-    if (pointerEvent.pointerId === primaryId && pointers.size === 0) {
-      const wasPan = panning;
+    if (update.completedKind !== null) {
       boardViewport.classList.remove("is-panning");
-      primaryId = null;
-      panning = false;
 
-      // A cancelled touch must never turn into a paint-placement tap.
-      if (!wasPan && pointerEvent.type !== "pointercancel") {
+      // Only the pure classifier's deliberate-tap result may reach selection
+      // or direct paint. Drag, pan, pinch, long press, and cancel are discarded.
+      if (update.completedKind === "tap") {
         selectAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
       } else {
         updateCompactStatus();
@@ -1469,14 +1482,11 @@ function wirePointerGestures(): void {
       return;
     }
 
-    if (pointers.size === 1) {
-      const remaining = [...pointers.entries()][0];
-      primaryId = remaining[0];
-      startX = remaining[1].x;
-      startY = remaining[1].y;
-      lastX = remaining[1].x;
-      lastY = remaining[1].y;
-      panning = true;
+    if (gesture.points.length === 1) {
+      const remaining = gesture.points[0];
+      lastX = remaining.clientX;
+      lastY = remaining.clientY;
+      boardViewport.classList.add("is-panning");
     }
   };
 
