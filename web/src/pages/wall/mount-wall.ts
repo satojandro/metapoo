@@ -211,6 +211,12 @@ export function mountWall(
   pointerPreview.setAttribute("aria-hidden", "true");
   boardViewport.append(pointerPreview);
 
+  const positionReadout = document.createElement("div");
+  positionReadout.className = "position-readout";
+  positionReadout.setAttribute("role", "status");
+  positionReadout.setAttribute("aria-live", "off");
+  boardFocus.append(positionReadout);
+
   // Shell-owned status strip (survives wall dispose; safe if missing in tests).
   const flowState = shellEl<HTMLElement>("#flow-state") ?? document.createElement("p");
   const compactStatus =
@@ -1297,7 +1303,23 @@ async function onAuthorizeSessionClick(): Promise<void> {
 function render(): void {
   renderBoard(canvas, paintedPixels(pixelCache), listPendingPaints(pendingPaints));
   positionSelection();
+  updatePositionReadout();
   updateCompactStatus();
+}
+
+function updatePositionReadout(): void {
+  const fitCellSize = fitCamera(readViewportSize()).cellSize;
+  const zoomPercent = Math.max(1, Math.round((camera.cellSize / fitCellSize) * 100));
+  const cellLabel = selected
+    ? `Cell (${selected.x}, ${selected.y})`
+    : "Cell: none selected";
+  positionReadout.textContent = `Zoom ${zoomPercent}% · ${cellLabel}`;
+  positionReadout.setAttribute(
+    "aria-label",
+    selected
+      ? `Zoom ${zoomPercent} percent of whole-wall view. Selected cell: column ${selected.x}, row ${selected.y}.`
+      : `Zoom ${zoomPercent} percent of whole-wall view. No cell selected.`,
+  );
 }
 
 function positionSelection(): void {
@@ -1321,6 +1343,7 @@ function applyCamera(next: Camera): void {
   boardStage.style.height = `${viewTransform.stage.height}px`;
   boardStage.style.transform = viewTransform.stage.transform;
   positionSelection();
+  updatePositionReadout();
 }
 
 function clampToViewport(current: Camera): Camera {
