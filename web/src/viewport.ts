@@ -63,18 +63,31 @@ export function boardScreenSize(camera: Camera): { width: number; height: number
 export function createCameraTransform(camera: Camera): CameraTransform {
   const snapshot = { ...camera };
   const board = boardScreenSize(snapshot);
+  const stage = {
+    left: snapshot.panX,
+    top: snapshot.panY,
+    width: board.width,
+    height: board.height,
+    transform: `translate(${snapshot.panX}px, ${snapshot.panY}px)`,
+  };
   return {
     camera: snapshot,
-    stage: {
-      left: snapshot.panX,
-      top: snapshot.panY,
-      width: board.width,
-      height: board.height,
-      transform: `translate(${snapshot.panX}px, ${snapshot.panY}px)`,
-    },
+    stage,
     cellAt(viewportX, viewportY) {
-      const x = Math.floor((viewportX - snapshot.panX) / snapshot.cellSize);
-      const y = Math.floor((viewportY - snapshot.panY) / snapshot.cellSize);
+      // Reject against the same half-open rectangle used to render the stage
+      // before dividing. At fractional scales, calculating the right/bottom
+      // edge back into board coordinates can produce 127.999... and otherwise
+      // misclassify an out-of-board pointer as the final cell.
+      if (
+        viewportX < stage.left ||
+        viewportY < stage.top ||
+        viewportX >= stage.left + stage.width ||
+        viewportY >= stage.top + stage.height
+      ) {
+        return null;
+      }
+      const x = cellIndexAt(viewportX, stage.left, snapshot.cellSize);
+      const y = cellIndexAt(viewportY, stage.top, snapshot.cellSize);
       return clampCell(x, y);
     },
     cellRect(cell) {
@@ -86,6 +99,18 @@ export function createCameraTransform(camera: Camera): CameraTransform {
       };
     },
   };
+}
+
+/** Resolve rounding at rendered cell boundaries using the forward transform. */
+function cellIndexAt(point: number, stageStart: number, cellSize: number): number {
+  const approximate = Math.floor((point - stageStart) / cellSize);
+  if (point < stageStart + approximate * cellSize) {
+    return approximate - 1;
+  }
+  if (point >= stageStart + (approximate + 1) * cellSize) {
+    return approximate + 1;
+  }
+  return approximate;
 }
 
 /**

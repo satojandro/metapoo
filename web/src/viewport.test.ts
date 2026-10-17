@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BOARD_HEIGHT, BOARD_WIDTH } from "@shared/types.ts";
 import {
   cellFromViewportPoint,
   clampPan,
@@ -12,6 +13,36 @@ import {
   isPaintZoom,
   zoomAt,
 } from "./viewport";
+
+const BOARD_LANDMARKS = [
+  { point: { x: 0.5, y: 0.5 }, cell: { x: 0, y: 0 } },
+  { point: { x: BOARD_WIDTH - 0.5, y: 0.5 }, cell: { x: 127, y: 0 } },
+  { point: { x: 0.5, y: BOARD_HEIGHT - 0.5 }, cell: { x: 0, y: 127 } },
+  {
+    point: { x: BOARD_WIDTH - 0.5, y: BOARD_HEIGHT - 0.5 },
+    cell: { x: 127, y: 127 },
+  },
+  {
+    point: { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2 },
+    cell: { x: 64, y: 64 },
+  },
+] as const;
+
+function expectBoardLandmarksToMap(camera: {
+  cellSize: number;
+  panX: number;
+  panY: number;
+}): void {
+  const transform = createCameraTransform(camera);
+  for (const { point, cell } of BOARD_LANDMARKS) {
+    expect(
+      transform.cellAt(
+        transform.stage.left + point.x * camera.cellSize,
+        transform.stage.top + point.y * camera.cellSize,
+      ),
+    ).toEqual(cell);
+  }
+}
 
 describe("viewport camera", () => {
   it("fits the full board inside a square viewport", () => {
@@ -28,14 +59,20 @@ describe("viewport camera", () => {
     expect(camera.cellSize * 128).toBeLessThanOrEqual(190 + 0.001);
   });
 
-  it("maps viewport corners and center after fit", () => {
-    const camera = fitCamera({ width: 256, height: 256 }, 0);
-    expect(cellFromViewportPoint(0, 0, camera)).toEqual({ x: 0, y: 0 });
-    expect(cellFromViewportPoint(255.9, 255.9, camera)).toEqual({
-      x: 127,
-      y: 127,
-    });
-    expect(cellFromViewportPoint(128, 128, camera)).toEqual({ x: 64, y: 64 });
+  it.each([0.25, 0.7, 1.25, Math.PI, 16, 47.875])(
+    "maps all four board corners and its centre at an arbitrary %spx zoom",
+    (cellSize) => {
+      expectBoardLandmarksToMap({ cellSize, panX: -37.125, panY: 23.625 });
+    },
+  );
+
+  it("keeps landmarks mapped after resize changes the fit scale", () => {
+    const portraitFit = fitCamera({ width: 640, height: 900 });
+    const landscapeFit = fitCamera({ width: 1000, height: 430 });
+
+    expect(portraitFit.cellSize).not.toBe(landscapeFit.cellSize);
+    expectBoardLandmarksToMap(portraitFit);
+    expectBoardLandmarksToMap(landscapeFit);
   });
 
   it("hit-tests cells through the same zoom and pan transform used for rendering", () => {
@@ -141,6 +178,70 @@ describe("viewport camera", () => {
       ).toEqual(cell);
     },
   );
+
+  it("uses the exact inverse of rendered stage placement for paint hit testing", () => {
+    const transform = createCameraTransform({
+      cellSize: 3.141592653589793,
+      panX: -211.375,
+      panY: 97.625,
+    });
+    const cells = [
+      { x: 0, y: 0 },
+      { x: 1, y: 126 },
+      { x: 63, y: 64 },
+      { x: 127, y: 127 },
+    ];
+    const inCellOffsets = [0, 0.125, 0.5, 0.999999];
+
+    for (const cell of cells) {
+      const renderedRect = transform.cellRect(cell);
+      for (const offset of inCellOffsets) {
+        const pointerX =
+          transform.stage.left + (cell.x + offset) * transform.camera.cellSize;
+        const pointerY =
+          transform.stage.top + (cell.y + offset) * transform.camera.cellSize;
+
+        expect(pointerX).toBeCloseTo(
+          renderedRect.left + offset * renderedRect.width,
+          12,
+        );
+        expect(pointerY).toBeCloseTo(
+          renderedRect.top + offset * renderedRect.height,
+          12,
+        );
+        expect(transform.cellAt(pointerX, pointerY)).toEqual(cell);
+        expect(
+          cellFromViewportPoint(pointerX, pointerY, transform.camera),
+        ).toEqual(cell);
+      }
+    }
+  });
+
+  it("returns no cell outside any rendered board edge", () => {
+    // This fractional transform makes the old divide-then-floor calculation
+    // produce 127.999... at the exact right/bottom edge.
+    const transform = createCameraTransform({
+      cellSize: 1.25,
+      panX: 96.4,
+      panY: -73.6,
+    });
+    const { left, top, width, height } = transform.stage;
+    const middleX = left + width / 2;
+    const middleY = top + height / 2;
+
+    expect(transform.cellAt(left - 0.001, middleY)).toBeNull();
+    expect(transform.cellAt(left + width, middleY)).toBeNull();
+    expect(transform.cellAt(middleX, top - 0.001)).toBeNull();
+    expect(transform.cellAt(middleX, top + height)).toBeNull();
+    expect(transform.cellAt(left - 100, top - 100)).toBeNull();
+    expect(transform.cellAt(left + width + 100, top + height + 100)).toBeNull();
+
+    expect(transform.cellAt(left, top)).toEqual({ x: 0, y: 0 });
+    expect(transform.cellAt(left + width - 0.001, top + height - 0.001)).toEqual({
+      x: 127,
+      y: 127,
+    });
+  });
 
   it("snapshots camera values so a transform cannot desync mid-frame", () => {
     const camera = { cellSize: 20, panX: -100, panY: -200 };
