@@ -100,16 +100,21 @@ h3 {
   color: var(--muted);
 }
 
-.flow-state[data-phase="pending"],
+.flow-state[data-phase="submitted"],
+.flow-state[data-phase="confirmation_delayed"],
 .flow-state[data-phase="wallet_prompt"] {
   color: var(--accent-cyan);
 }
 
-.flow-state[data-phase="success"] {
+.flow-state[data-phase="confirmed"] {
   color: var(--ok);
 }
 
-.flow-state[data-phase="error"] {
+.flow-state[data-phase="overwritten"] {
+  color: var(--accent-yellow);
+}
+
+.flow-state[data-phase="failed"] {
   color: var(--bad);
 }
 

@@ -29,10 +29,10 @@ import { signAndSendDraw } from "./wallet";
  * Status meanings:
  * - rejected — client / config stopped us; nothing submitted
  * - pending — reported while we wait (UI progress only)
- * - success — wallet recognized success AND `get_pixel` matches
+ * - confirmed — wallet recognized success AND `get_pixel` matches
  * - confirmation_delayed — wallet recognized success, board read not matched yet
  * - overwritten — wallet recognized success, another artist already credits the cell
- * - failed — user rejected, wallet error, on-chain failure, or unclear status
+ * - failed — user rejected, wallet send error, or recognized on-chain failure
  *
  * An uncertain / delayed outcome must not be auto-resubmitted.
  * A bare transaction id with an unrecognized status is never enough for success.
@@ -61,7 +61,7 @@ export type SubmitDrawResult =
       pixel: null;
     }
   | {
-      status: "success";
+      status: "confirmed";
       title: string;
       message: string;
       transactionId: string;
@@ -315,30 +315,26 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
     };
   }
 
-  if (!transactionId) {
-    return {
-      status: "failed",
-      title: "No transaction id",
-      message:
-        "The wallet returned no transaction id, so this page will not claim success. Try again or check the wallet activity list.",
-      transactionId: null,
-      explorerUrl: null,
-      pixel: null,
-    };
-  }
-
-  // Hash alone with an unrecognized status must not become UI success.
-  // A matching get_pixel could be leftover state from an earlier paint.
+  // A fulfilled wallet call with an unrecognized outcome is unresolved, not a
+  // transaction failure. It may already have broadcast, so never resubmit it.
+  // A matching get_pixel is also insufficient: it could be older board state.
   if (!hasRecognizedTxSuccess(parsed)) {
     return {
-      status: "failed",
-      title: "Transaction status unclear",
-      message:
-        "The wallet returned a transaction id, but not a clear success or failure status. This page will not claim success from a matching pixel alone. Open the explorer link, then use Refresh board to verify what is on chain.",
+      status: "confirmation_delayed",
+      title: "Submission unresolved — not retried",
+      message: transactionId
+        ? "The wallet call completed and returned a transaction id, but its execution status is not yet resolvable. This page will not mark it failed or submit it again automatically. Check the explorer and refresh the board later."
+        : "The wallet call completed, but returned neither a transaction id nor a resolvable execution status. It may have broadcast, so this page will not mark it failed or submit it again automatically. Check wallet activity before trying another paint.",
       transactionId,
       explorerUrl: link,
       pixel: null,
+      observedBlockHeight: null,
     };
+  }
+
+  // Recognized success necessarily carries a transaction id.
+  if (!transactionId) {
+    throw new Error("Recognized transaction success is missing its hash.");
   }
 
   input.onProgress?.({
@@ -366,7 +362,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
       confirm.observedBlockHeight !== null
     ) {
       return {
-        status: "success",
+        status: "confirmed",
         title: "Pixel painted",
         message:
           "The wallet reported a successful transaction and a fresh board read shows your color on that square.",

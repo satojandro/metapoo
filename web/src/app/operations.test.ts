@@ -45,4 +45,21 @@ describe("operations store", () => {
     });
     expect(ops.listRecoverable()).toHaveLength(0);
   });
+
+  it("records overwritten separately from confirmed execution", () => {
+    const ops = createOperationsStore();
+    ops.upsert({
+      id: "paint:repainted",
+      kind: "paint",
+      phase: "overwritten",
+      accountId: "alice.testnet",
+      networkId: "testnet",
+      transactionId: "tx-overwritten",
+      title: "Paint landed, then the wall moved on",
+      detail: "Executed, but Bob is now the current artist.",
+    });
+
+    expect(ops.get("paint:repainted")?.phase).toBe("overwritten");
+    expect(ops.listRecoverable()).toHaveLength(0);
+  });
 });

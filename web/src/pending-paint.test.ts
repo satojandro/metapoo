@@ -44,7 +44,7 @@ describe("pending paint layer", () => {
     expect(listPendingPaints(map)).toHaveLength(0);
   });
 
-  it("clears pending when another artist overwrites the cell", () => {
+  it("keeps an unresolved preview when current ownership does not prove its outcome", () => {
     const map = createPendingPaintMap();
     setPendingPaint(map, {
       x: 1,
@@ -62,6 +62,6 @@ describe("pending paint layer", () => {
         artistAccountId: "bob.testnet",
       },
     ]);
-    expect(listPendingPaints(map)).toHaveLength(0);
+    expect(listPendingPaints(map)).toHaveLength(1);
   });
 });

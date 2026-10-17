@@ -257,9 +257,11 @@ export function mountWall(
     | "connected"
     | "editing"
     | "wallet_prompt"
-    | "pending"
-    | "success"
-    | "error" = "disconnected";
+    | "submitted"
+    | "confirmed"
+    | "confirmation_delayed"
+    | "overwritten"
+    | "failed" = "disconnected";
 
   const listenerCleanups: Array<() => void> = [];
   function listen(
@@ -482,7 +484,7 @@ export function mountWall(
     }
     if (!walletAccount) {
       setFlow("disconnected");
-    } else if (uiPhase === "disconnected" || uiPhase === "error") {
+    } else if (uiPhase === "disconnected" || uiPhase === "failed") {
       setFlow(selected ? "editing" : "connected");
     }
     showDrawingSession();
@@ -898,7 +900,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
   }
 
   if (!contractMetaOk) {
-    setFlow("error");
+    setFlow("failed");
     fillBlock(
       result,
       "Drawing blocked by contract metadata",
@@ -1058,7 +1060,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
           setFlow("wallet_prompt");
           fillBlock(result, "Waiting for your wallet", progress.detail);
         } else if (progress.phase === "pending" || progress.phase === "confirming") {
-          setFlow("pending");
+          setFlow("submitted");
           setPendingPaint(pendingPaints, {
             x: frozen.x,
             y: frozen.y,
@@ -1072,7 +1074,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
             "Transaction pending",
             progress.phase === "pending"
               ? "The wallet returned a transaction id. Confirming against a fresh board read…"
-              : "Re-reading the pixel from the contract before we claim success…",
+              : "Re-reading the pixel to distinguish confirmed ownership from a later overwrite…",
             progress.transactionId,
             progress.explorer,
           );
@@ -1082,11 +1084,11 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
 
     if (disposed) {
       // Page left while this draw was in flight: keep operations store, skip DOM.
-      if (submitResult.status === "success" || submitResult.status === "overwritten") {
+      if (submitResult.status === "confirmed" || submitResult.status === "overwritten") {
         services.operations.upsert({
           id: opId,
           kind: "paint",
-          phase: "confirmed",
+          phase: submitResult.status,
           accountId: frozen.accountId,
           networkId: frozen.networkId,
           transactionId: submitResult.transactionId,
@@ -1122,7 +1124,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
       return;
     }
 
-    if (submitResult.status === "success" && submitResult.pixel) {
+    if (submitResult.status === "confirmed" && submitResult.pixel) {
       services.operations.upsert({
         id: opId,
         kind: "paint",
@@ -1142,7 +1144,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
       );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       render();
-      setFlow("success");
+      setFlow("confirmed");
       fillResultWithLink(
         submitResult.title,
         submitResult.message,
@@ -1175,7 +1177,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
         phase: "confirmation_delayed",
       });
       render();
-      setFlow("pending");
+      setFlow("confirmation_delayed");
       fillResultWithLink(
         submitResult.title,
         submitResult.message,
@@ -1191,7 +1193,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
       services.operations.upsert({
         id: opId,
         kind: "paint",
-        phase: "confirmed",
+        phase: "overwritten",
         accountId: frozen.accountId,
         networkId: frozen.networkId,
         transactionId: submitResult.transactionId,
@@ -1206,7 +1208,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
       );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       render();
-      setFlow("success");
+      setFlow("overwritten");
       fillResultWithLink(
         submitResult.title,
         submitResult.message,
@@ -1231,7 +1233,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
     });
     clearPendingPaint(pendingPaints, frozen.x, frozen.y);
     render();
-    setFlow("error");
+    setFlow("failed");
     fillResultWithLink(
       submitResult.title,
       submitResult.message,
@@ -1272,7 +1274,7 @@ async function onAuthorizeSessionClick(): Promise<void> {
     setFlow(selected ? "editing" : "connected");
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown wallet error";
-    setFlow("error");
+    setFlow("failed");
     if (walletError) {
       fillBlock(
         walletError,
@@ -1828,7 +1830,7 @@ function fillRules(): void {
     "The current artist is credit for the latest successful write. That is not a legal claim on the artwork.",
     "Explore with pan and zoom. Only Place paint (or Enter) submits a draw — drag and pinch never paint.",
     isContractConfigured()
-      ? `Game contract: ${CONTRACT_ID} on ${PAGE_NETWORK}. On open (and Refresh), the page loads every painted cell via paginated get_pixels. Success still requires a transaction id and a matching get_pixel read.`
+      ? `Game contract: ${CONTRACT_ID} on ${PAGE_NETWORK}. On open (and Refresh), the page loads every painted cell via paginated get_pixels. Transaction execution is reported separately from the latest cell owner; a successful paint may already be overwritten under Open wall.`
       : "No game contract id is configured yet (VITE_CONTRACT_ID empty), so this page will not open a draw signature or claim a chain success.",
     sponsorship.flagEnabled
       ? "Sponsorship flag is on, but the submit path stays ordinary wallet until a sponsor service exists."
@@ -1888,9 +1890,11 @@ function setFlow(phase: typeof uiPhase): void {
     connected: "State: connected — pick a square and a named color.",
     editing: "State: editing — review the pixel rule, then Place paint.",
     wallet_prompt: "State: wallet prompt — approve or reject in your wallet.",
-    pending: "State: pending — waiting for transaction confirmation + board read.",
-    success: "State: success — chain read matched your draw.",
-    error: "State: error — recoverable; you can change selection or reconnect.",
+    submitted: "State: submitted — transaction is in flight; awaiting confirmation.",
+    confirmed: "State: confirmed — the transaction executed and the confirming read matched.",
+    confirmation_delayed: "State: confirmation delayed — outcome is unresolved and will not be resubmitted automatically.",
+    overwritten: "State: overwritten — the transaction executed, then another artist became the current cell owner.",
+    failed: "State: failed — the transaction did not execute; you can review and try again.",
   };
   flowState.textContent = labels[phase];
   flowState.dataset.phase = phase;

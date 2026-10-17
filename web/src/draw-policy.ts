@@ -132,7 +132,7 @@ export function prepareDraw(attempt: DrawAttempt): DrawResult {
     code: "ReadyToSign",
     title: "Ready to ask the wallet",
     message:
-      "Client checks passed under Open wall. Next, your wallet will ask you to approve one draw call. Success is only shown after the transaction id exists and a fresh board read matches.",
+      "Client checks passed under Open wall. Next, your wallet will ask you to approve one draw call. Transaction execution and current cell ownership are reported separately because another artist may repaint immediately.",
     transactionHash: null,
     explorerUrl: null,
   };

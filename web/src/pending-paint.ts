@@ -54,8 +54,9 @@ export function listPendingPaints(map: PendingPaintMap): PendingPaint[] {
 }
 
 /**
- * Drop pending cells that now match confirmed chain state for the same artist
- * and color, or that were clearly overwritten by someone else.
+ * Drop pending cells only when chain state confirms the requested artist and
+ * color. A different current owner cannot resolve an uncertain transaction:
+ * that paint may not have executed yet, or may have executed and been replaced.
  */
 export function reconcilePendingWithConfirmed(
   map: PendingPaintMap,
@@ -77,14 +78,6 @@ export function reconcilePendingWithConfirmed(
     ) {
       map.delete(key(pixel.x, pixel.y));
       continue;
-    }
-    if (
-      pixel.colorIndex !== null &&
-      pixel.artistAccountId !== null &&
-      pixel.artistAccountId !== pending.accountId
-    ) {
-      // Someone else owns the cell now — pending preview is stale.
-      map.delete(key(pixel.x, pixel.y));
     }
   }
 }

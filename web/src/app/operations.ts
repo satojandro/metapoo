@@ -15,6 +15,7 @@ export type OperationPhase =
   | "submitted"
   | "confirmation_delayed"
   | "confirmed"
+  | "overwritten"
   | "failed"
   | "cancelled_before_submission";
 
