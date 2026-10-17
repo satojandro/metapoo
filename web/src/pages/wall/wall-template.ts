@@ -1,5 +1,5 @@
 /**
- * Wall page markup (stall + board + paint dock + side panel).
+ * Wall page markup (stall + board + paint dock + collapsed details).
  * Wallet chrome lives on the app shell so it survives navigation.
  */
 
@@ -10,9 +10,13 @@ export function wallPageHtml(): string {
         <div class="wall-intro">
           <div><p class="eyebrow">AN OPEN WALL FOR THE INTERNET</p>
           <h2 data-route-heading>Leave your <em>mark.</em></h2></div>
-          <p class="wall-invitation">A shared canvas. An unlikely gallery.</p>
+          <div class="wall-intro-meta">
+            <p class="wall-invitation">A shared canvas. An unlikely gallery.</p>
+            <p class="wall-runtime-status" aria-label="Testnet and connection status">
+              <span>Testnet</span><span>Connection status above</span><span>No app fee</span>
+            </p>
+          </div>
         </div>
-        <p id="lede" class="lede wall-lede"></p>
 
         <section class="stall" aria-label="Toilet stall with pixel wall">
           <div class="stall-scene">
@@ -88,13 +92,21 @@ export function wallPageHtml(): string {
           </div>
         </section>
 
+        <div class="paint-dock">
+          <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
+          <label class="direct-paint-toggle" for="direct-paint-toggle">
+            <input id="direct-paint-toggle" type="checkbox" />
+            Direct paint
+          </label>
+          <button id="draw-button" class="action place" type="button">Place paint</button>
+        </div>
+
         <div class="board-toolbar" role="toolbar" aria-label="Board view">
           <button id="zoom-out" class="action secondary" type="button" aria-label="Zoom out">−</button>
           <button id="zoom-in" class="action secondary" type="button" aria-label="Zoom in">+</button>
           <button id="zoom-fit" class="action secondary" type="button">Fit wall</button>
           <button id="zoom-paint" class="action secondary" type="button">Paint zoom</button>
           <button id="refresh-board" class="action secondary" type="button">Refresh board</button>
-          <p id="board-load-status" class="board-load-status" aria-live="polite"></p>
         </div>
 
         <details class="wall-instructions"><summary>How to paint</summary>
@@ -127,47 +139,50 @@ export function wallPageHtml(): string {
           <p id="placement-quote-body" class="placement-quote-body"></p>
         </section>
 
-        <div class="paint-dock">
-          <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
-          <label class="direct-paint-toggle" for="direct-paint-toggle">
-            <input id="direct-paint-toggle" type="checkbox" />
-            Direct paint
-          </label>
-          <button id="draw-button" class="action place" type="button">Place paint</button>
-        </div>
         <section id="result" class="result" aria-live="assertive"></section>
-      </main>
 
-      <details class="wall-advanced"><summary>Drawing settings &amp; wall rules <span>↗</span></summary>
-      <aside class="side">
-        <section class="drawing-session" aria-labelledby="drawing-session-heading">
-          <h2 id="drawing-session-heading">Drawing session</h2>
-          <p id="drawing-session-status"></p>
-          <div class="drawing-session-actions">
-            <button id="authorize-session-button" class="action secondary" type="button" disabled>
-              Authorize drawing session
-            </button>
-            <button id="forget-session-button" class="action secondary" type="button" disabled>
-              Forget session in this browser
-            </button>
-            <button id="revoke-session-button" class="action secondary" type="button" disabled>
-              Revoke session on-chain
-            </button>
-          </div>
-          <p id="drawing-session-note" class="help"></p>
-        </section>
-        <section>
-          <h2>Fees</h2>
-          <p id="sponsor-note"></p>
-        </section>
-        <details class="about">
-          <summary>About, rules, and contract detail</summary>
-          <p id="evidence" class="evidence"></p>
-          <h3>Rules on this page</h3>
-          <div id="rules"></div>
+        <details class="wall-advanced about wall-about">
+          <summary>About / details <span aria-hidden="true">↗</span></summary>
+          <aside class="side wall-details-content">
+            <section data-wall-detail="bootstrap">
+              <h2>About this wall</h2>
+              <p id="lede" class="lede wall-lede"></p>
+            </section>
+            <section data-wall-detail="board-state">
+              <h2>Raw board state</h2>
+              <p id="board-load-status" class="board-load-status" aria-live="polite"></p>
+            </section>
+            <section data-wall-detail="contract-schema">
+              <h2>Contract &amp; schema</h2>
+              <p id="evidence" class="evidence"></p>
+            </section>
+            <section data-wall-detail="rules">
+              <h2>Wall rules</h2>
+              <div id="rules"></div>
+            </section>
+            <section class="drawing-session" aria-labelledby="drawing-session-heading">
+              <h2 id="drawing-session-heading">Drawing session</h2>
+              <p id="drawing-session-status"></p>
+              <div class="drawing-session-actions">
+                <button id="authorize-session-button" class="action secondary" type="button" disabled>
+                  Authorize drawing session
+                </button>
+                <button id="forget-session-button" class="action secondary" type="button" disabled>
+                  Forget session in this browser
+                </button>
+                <button id="revoke-session-button" class="action secondary" type="button" disabled>
+                  Revoke session on-chain
+                </button>
+              </div>
+              <p id="drawing-session-note" class="help"></p>
+            </section>
+            <section>
+              <h2>Fees</h2>
+              <p id="sponsor-note"></p>
+            </section>
+          </aside>
         </details>
-      </aside>
-      </details>
+      </main>
     </div>
   `;
 }
