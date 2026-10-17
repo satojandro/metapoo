@@ -1,0 +1,8 @@
+{
+  "items": {
+    "replace-the-in-cell-selection-ring-inset-shadow-selection-ring-with-a-zoom-aware-overlay-drawn-outside-the-cell-interior-so-a-selected-cell-s-full-color-stays-visible-and-comfortably-targetable-at-paint-zoom-the-overlay-must-share-the-same-camera-transform-used-for-rendering-and-pointer-hit-testing-sit-above-the-board-without-capturing-paint-gestures-and-keep-keyboard-navigation-and-touch-drag-pinch-from-ever-submitting-paint-keep-the-selected-color-swatch-visible-next-to-the-board-acceptance-at-paint-zoom-a-chosen-cell-shows-its-entire-color-with-the-indicator-fully-outside-the-cell-adjacent-painted-cells-still-touch-with-no-unintended-gaps-corners-center-still-map-correctly-after-zoom-pan-resize-touch-drag-and-pinch-do-not-paint-arrow-key-navigation-remains-usable-and-moves-the-external-indicator-with-the-selection": {
+      "text": "Replace the in-cell selection ring / inset shadow (#selection-ring) with a zoom-aware overlay drawn OUTSIDE the cell interior so a selected cell's full color stays visible and comfortably targetable at paint zoom. The overlay must share the same camera transform used for rendering and pointer hit testing, sit above the board without capturing paint gestures, and keep keyboard navigation and touch drag/pinch from ever submitting paint. Keep the selected color swatch visible next to the board. Acceptance: at paint zoom a chosen cell shows its entire color with the indicator fully outside the cell; adjacent painted cells still touch with no unintended gaps; corners/center still map correctly after zoom/pan/resize; touch drag and pinch do not paint; arrow-key navigation remains usable and moves the external indicator with the selection.",
+      "priority": 1
+    }
+  }
+}
