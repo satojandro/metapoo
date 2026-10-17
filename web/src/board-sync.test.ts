@@ -29,12 +29,12 @@ describe("board sync stale guards", () => {
     expect(shouldApplyBoardLoad(state, second, 150)).toBe(false);
   });
 
-  it("accepts a newer block even if an older load id finishes late", () => {
+  it("rejects an older-started load even if it reports a newer block", () => {
     const state = createBoardSyncState();
     const older = beginBoardLoad(state);
     const newer = beginBoardLoad(state);
     markBoardLoadApplied(state, newer, 300, 2_000);
-    expect(shouldApplyBoardLoad(state, older, 301)).toBe(true);
+    expect(shouldApplyBoardLoad(state, older, 301)).toBe(false);
   });
 
   it("rejects a same-block finish from an older load id", () => {

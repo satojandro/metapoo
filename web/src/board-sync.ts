@@ -44,18 +44,20 @@ export function beginBoardLoad(state: BoardSyncState): number {
 
 /**
  * Decide whether a finished load may replace the cache.
- * Newer block wins. Same block is allowed if this load is not older than the
- * last applied load id (lets a reconnect refresh replace an equal snapshot).
+ * A response is stale if either its request started before the last applied
+ * request or its pinned block predates the applied snapshot. Both dimensions
+ * must be monotonic: a slow, older-started request must never regain authority
+ * merely because its RPC resolved to a later block.
  */
 export function shouldApplyBoardLoad(
   state: BoardSyncState,
   loadId: number,
   blockHeight: number,
 ): boolean {
-  if (blockHeight < state.appliedBlockHeight) {
+  if (loadId < state.appliedLoadId) {
     return false;
   }
-  if (blockHeight === state.appliedBlockHeight && loadId < state.appliedLoadId) {
+  if (blockHeight < state.appliedBlockHeight) {
     return false;
   }
   return true;
