@@ -203,6 +203,14 @@ export function mountWall(
   const placementQuote = mustFindIn<HTMLElement>(pageRoot, "#placement-quote");
   const placementQuoteBody = mustFindIn<HTMLElement>(pageRoot, "#placement-quote-body");
 
+  // The pointer preview is mount-owned so the wall template remains presentation-only.
+  // It is deliberately separate from selection: moving or dragging never paints.
+  const pointerPreview = document.createElement("div");
+  pointerPreview.className = "pointer-preview";
+  pointerPreview.hidden = true;
+  pointerPreview.setAttribute("aria-hidden", "true");
+  boardViewport.append(pointerPreview);
+
   // Shell-owned status strip (survives wall dispose; safe if missing in tests).
   const flowState = shellEl<HTMLElement>("#flow-state") ?? document.createElement("p");
   const compactStatus =
@@ -1402,6 +1410,7 @@ function wirePointerGestures(): void {
   listen(boardViewport, "pointermove", (event) => {
     const pointerEvent = event as PointerEvent;
     if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
+      updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
       return;
     }
     const update = updateGesture(gesture, gestureEvent(pointerEvent));
@@ -1430,6 +1439,7 @@ function wirePointerGestures(): void {
         positionSelection();
         updateCompactStatus();
       }
+      updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
       return;
     }
 
@@ -1450,13 +1460,15 @@ function wirePointerGestures(): void {
       positionSelection();
       lastX = pointerEvent.clientX;
       lastY = pointerEvent.clientY;
-    } else {
-      updateHoverFromClient(pointerEvent.clientX, pointerEvent.clientY);
     }
+    updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
   });
 
   const endPointer = (event: Event): void => {
     const pointerEvent = event as PointerEvent;
+    if (pointerEvent.type === "pointercancel") {
+      clearPointerPreview();
+    }
     if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
       return;
     }
@@ -1491,6 +1503,7 @@ function wirePointerGestures(): void {
 
   listen(boardViewport, "pointerup", endPointer);
   listen(boardViewport, "pointercancel", endPointer);
+  listen(boardViewport, "pointerleave", clearPointerPreview);
 }
 
 function selectAtClientPoint(clientX: number, clientY: number): void {
@@ -1589,14 +1602,25 @@ function maybeEnqueueDirectPaint(
   void drainPaintQueue();
 }
 
-function updateHoverFromClient(clientX: number, clientY: number): void {
+function updatePointerPreview(clientX: number, clientY: number): void {
   const rect = boardViewport.getBoundingClientRect();
   const cell = viewTransform.cellAt(clientX - rect.left, clientY - rect.top);
   if (!cell) {
-    hoverSummary.textContent = "";
+    clearPointerPreview();
     return;
   }
-  hoverSummary.textContent = `Hover x=${cell.x}, y=${cell.y}`;
+  const cellRect = viewTransform.cellRect(cell);
+  pointerPreview.hidden = false;
+  pointerPreview.style.left = `${cellRect.left}px`;
+  pointerPreview.style.top = `${cellRect.top}px`;
+  pointerPreview.style.width = `${cellRect.width}px`;
+  pointerPreview.style.height = `${cellRect.height}px`;
+  hoverSummary.textContent = `x ${cell.x} · y ${cell.y}`;
+}
+
+function clearPointerPreview(): void {
+  pointerPreview.hidden = true;
+  hoverSummary.textContent = "";
 }
 
 function updateDirectPaintAvailability(): void {
