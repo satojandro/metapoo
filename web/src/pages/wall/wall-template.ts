@@ -20,7 +20,7 @@ export function wallPageHtml(): string {
 
         <section class="stall" aria-label="Toilet stall with pixel wall">
           <div class="stall-scene">
-            <div class="scene-label" aria-hidden="true">STALL 001 <span>EVERYONE WAS HERE</span></div>
+            <div class="scene-label" aria-hidden="true">DEMO STALL ART <span>LIVE BOARD</span></div>
             <button id="focus-canvas" class="action scene-focus" type="button" aria-pressed="false">Focus canvas ↗</button>
             <div class="stall-room">
               <div class="stall-ceiling" aria-hidden="true"></div>
@@ -109,14 +109,6 @@ export function wallPageHtml(): string {
           <button id="refresh-board" class="action secondary" type="button">Refresh board</button>
         </div>
 
-        <details class="wall-instructions"><summary>How to paint</summary>
-        <p id="board-help" class="help">
-          Drag to pan. Scroll or pinch to zoom. Tap a square to select it; at
-          Paint zoom, a tap directly places the selected color when a drawing
-          session is authorized. Pan and pinch never paint. Arrow keys move the
-          selection; Enter places when ready.
-        </p>
-        </details>
         <p id="selection-summary" class="summary" aria-live="polite"></p>
         <p id="hover-summary" class="summary hover-summary" aria-live="polite"></p>
         <div id="selection-preview" class="selection-preview" aria-live="polite"></div>
@@ -142,8 +134,17 @@ export function wallPageHtml(): string {
         <section id="result" class="result" aria-live="assertive"></section>
 
         <details class="wall-advanced about wall-about">
-          <summary>About / details <span aria-hidden="true">↗</span></summary>
+          <summary>About / details <span aria-hidden="true">＋</span></summary>
           <aside class="side wall-details-content">
+            <section data-wall-detail="instructions">
+              <h2>How to paint</h2>
+              <p id="board-help" class="help">
+                Drag to pan. Scroll or pinch to zoom. Tap a square to select it;
+                at Paint zoom, a tap directly places the selected color when a
+                drawing session is authorized. Pan and pinch never paint. Arrow
+                keys move the selection; Enter places when ready.
+              </p>
+            </section>
             <section data-wall-detail="bootstrap">
               <h2>About this wall</h2>
               <p id="lede" class="lede wall-lede"></p>

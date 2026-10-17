@@ -815,6 +815,22 @@ canvas {
 }
 
 /* Keep the canvas and paint controls primary; implementation detail opens on demand. */
+.wall-layout .stall-scene {
+  height: clamp(400px, calc(100dvh - 19rem), 680px);
+  aspect-ratio: auto;
+}
+
+.wall-layout .stall-back,
+.wall-layout.is-focused .stall-back {
+  top: 6%;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  width: min(58%, calc(100dvh - 22rem), 640px);
+  min-width: 360px;
+  transform: translateX(-50%);
+}
+
 .wall-intro-meta {
   display: grid;
   justify-items: end;
@@ -844,12 +860,27 @@ canvas {
 
 .wall-layout .wall-about > summary {
   display: flex;
+  min-height: 44px;
+  align-items: center;
   justify-content: space-between;
+  padding: 0 0.35rem;
   list-style: none;
+  color: #f4f1e9;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .wall-layout .wall-about > summary::-webkit-details-marker {
   display: none;
+}
+
+.wall-layout .wall-about > summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.wall-layout .wall-about[open] > summary span {
+  transform: rotate(45deg);
 }
 
 .wall-layout .wall-about .wall-details-content {
@@ -1120,7 +1151,6 @@ canvas {
 
   .wall-layout .wall-intro .eyebrow,
   .wall-layout .wall-invitation,
-  .wall-layout .wall-instructions,
   .wall-layout .hover-summary:empty {
     display: none;
   }
@@ -1238,7 +1268,7 @@ canvas {
   .wall-layout .wall-about {
     flex: 0 0 auto;
     margin-top: 4px;
-    padding: 10px 0;
+    padding: 3px 0;
   }
 
   .wall-layout .wall-about .wall-details-content {
