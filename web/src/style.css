@@ -578,7 +578,11 @@ canvas {
   display: block;
   width: 100%;
   height: 100%;
+  /* Keep the stretched bitmap on whole-pixel edges when layout yields fractions. */
+  width: round(nearest, 100%, 1px);
+  height: round(nearest, 100%, 1px);
   background: var(--wall-empty);
+  image-rendering: crisp-edges;
   image-rendering: pixelated;
   pointer-events: none;
 }
