@@ -1,0 +1,53 @@
+{
+  "batch_goal": "Advance board-review 'Proposed implementation order' step 2 (the board usable without changing the contract) by finishing the core painting moment: at paint zoom a cell is precisely targetable with seam-free edges at any zoom/DPR, the selection indicator never hides the chosen cell's color, and the palette/Place controls sit within thumb reach on a 390 px viewport without covering the board. Builds on the merged zoom/pan pilot and the merged block-pinned reads / placement-outcome work; no contract, wallet-signing, economy, or deployment changes. Re-plans the two tasks blocked last batch, each with a different approach named in its judgment_basis.",
+  "repo_head": "feed447bd8af7294defd7ee21dbc285f012199f6",
+  "results": [
+    {
+      "task_id": "cell-accurate-rendering",
+      "state": "blocked",
+      "attempts": {
+        "implement": 0,
+        "revise": 0
+      },
+      "review": null,
+      "changed_files": [
+        "web/src/render-board.ts",
+        "web/src/render-board.test.ts"
+      ],
+      "blocked_reason": "scope_violation",
+      "events": [
+        "task_started",
+        "preflight_passed",
+        "implementation_recorded",
+        "blocked"
+      ],
+      "run_dir": "/var/folders/81/6xxbzvnx00g9b6fgk1_dm3640000gn/T/ao-task-jxx8kzdb"
+    },
+    {
+      "task_id": "mobile-paint-toolbar",
+      "state": "blocked",
+      "attempts": {
+        "implement": 0,
+        "revise": 0
+      },
+      "review": null,
+      "changed_files": [
+        "web/src/pages/wall/mount-wall.dispose.test.ts"
+      ],
+      "blocked_reason": "scope_violation",
+      "events": [
+        "task_started",
+        "preflight_passed",
+        "implementation_recorded",
+        "blocked"
+      ],
+      "run_dir": "/var/folders/81/6xxbzvnx00g9b6fgk1_dm3640000gn/T/ao-task-8cm85ftw"
+    }
+  ],
+  "escalations": [
+    "OPERATIONAL: work branch `pilot/zoom-pan-paint` is still present alongside the merged pilot commits. Confirm it is merged or discard it so the checkout is clean before dispatch \u2014 a dirty workspace blocked a previous batch at pre-flight. Both briefs above run `cd web && npm ci` first, so a clean tree plus installed dependencies is required.",
+    "NEAR drawing-session experiment (board-review step 4) remains ask-first and unresolved: authorizing a function-call key limited to the board's draw method with a bounded gas allowance, showing activation/remaining allowance/renewal/revoke, and verifying on-chain key removal. Touches wallet signing, key creation, and a testnet deployment. Needs a human decision on allowance scope plus a funded testnet account and game contract identifier before a brief can be written.",
+    "The milestone's live two-session check ('two people on separate devices observe each other's work') needs a deployed testnet board contract and a configured VITE_CONTRACT_ID. That is a human deployment step; without it only mock/local verification is possible, so the milestone cannot be demonstrated from agent work alone.",
+    "Saturated palette proposal: moving beyond the current eight-color contract palette changes metadata coordinated across web/shared/contract and would change the meaning of already-stored colors. Per the judgment doc (ask first: contract/economy changes) this needs an accepted tier-2 decision-record update before any implementation task is written."
+  ]
+}
