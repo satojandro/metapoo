@@ -102,9 +102,6 @@ export function wallPageHtml(): string {
         </div>
 
         <div class="board-toolbar" role="toolbar" aria-label="Board view">
-          <button id="zoom-out" class="action secondary" type="button" aria-label="Zoom out">−</button>
-          <button id="zoom-in" class="action secondary" type="button" aria-label="Zoom in">+</button>
-          <button id="zoom-fit" class="action secondary" type="button">Fit wall</button>
           <button id="zoom-paint" class="action secondary" type="button">Paint zoom</button>
           <button id="refresh-board" class="action secondary" type="button">Refresh board</button>
         </div>

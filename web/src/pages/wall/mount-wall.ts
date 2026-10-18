@@ -74,7 +74,9 @@ import { submitDraw } from "../../submit-draw";
 import {
   createCameraTransform,
   fitCamera,
+  FIT_MIN_CELL_PX,
   isPaintZoom,
+  MAX_CELL_PX,
   paintZoomCamera,
   PAINT_CELL_PX,
   panBy,
@@ -83,6 +85,7 @@ import {
   type CameraTransform,
   type ViewportSize,
 } from "../../viewport";
+import { mountWallZoomControls } from "../../wall-zoom-controls";
 import { revokeDrawingSessionKeyOnChain } from "../../wallet";
 import type { PageMount } from "../../app/page-registry";
 import type { ParsedRoute } from "../../app/routes";
@@ -98,6 +101,7 @@ import {
   type PressureOverlayElements,
 } from "../../features/pressure";
 import type { QuoteView } from "@shared/protocol/board.ts";
+import { mountWallHint } from "../../wall-hint";
 
 /**
  * Fixture action_nonce when live get_account is not wired yet.
@@ -157,10 +161,12 @@ export function mountWall(
   const pageRoot = root;
 
   const canvas = mustFindIn<HTMLCanvasElement>(pageRoot, "#board");
+  const stallScene = mustFindIn<HTMLElement>(pageRoot, ".stall-scene");
   const selectionRing = mustFindIn<HTMLElement>(pageRoot, "#selection-ring");
   const boardFocus = mustFindIn<HTMLElement>(pageRoot, "#board-focus");
   const boardViewport = mustFindIn<HTMLElement>(pageRoot, "#board-viewport");
   const boardStage = mustFindIn<HTMLElement>(pageRoot, "#board-stage");
+  const boardToolbar = mustFindIn<HTMLElement>(pageRoot, ".board-toolbar");
   const selectionSummary = mustFindIn<HTMLElement>(pageRoot, "#selection-summary");
   const preview = mustFindIn<HTMLElement>(pageRoot, "#selection-preview");
   const palette = mustFindIn<HTMLElement>(pageRoot, "#palette");
@@ -172,9 +178,6 @@ export function mountWall(
   const lede = mustFindIn<HTMLElement>(pageRoot, "#lede");
   const refreshButton = mustFindIn<HTMLButtonElement>(pageRoot, "#refresh-board");
   const boardLoadStatus = mustFindIn<HTMLElement>(pageRoot, "#board-load-status");
-  const zoomInButton = mustFindIn<HTMLButtonElement>(pageRoot, "#zoom-in");
-  const zoomOutButton = mustFindIn<HTMLButtonElement>(pageRoot, "#zoom-out");
-  const zoomFitButton = mustFindIn<HTMLButtonElement>(pageRoot, "#zoom-fit");
   const zoomPaintButton = mustFindIn<HTMLButtonElement>(pageRoot, "#zoom-paint");
   const drawingSessionStatus = mustFindIn<HTMLElement>(pageRoot, "#drawing-session-status");
   const drawingSessionNote = mustFindIn<HTMLElement>(pageRoot, "#drawing-session-note");
@@ -216,6 +219,8 @@ export function mountWall(
   positionReadout.setAttribute("role", "status");
   positionReadout.setAttribute("aria-live", "off");
   boardFocus.append(positionReadout);
+
+  const wallHint = mountWallHint(stallScene);
 
   // Shell-owned status strip (survives wall dispose; safe if missing in tests).
   const flowState = shellEl<HTMLElement>("#flow-state") ?? document.createElement("p");
@@ -277,6 +282,7 @@ export function mountWall(
     | "failed" = "disconnected";
 
   const listenerCleanups: Array<() => void> = [];
+  const zoomStateListeners = new Set<() => void>();
   function listen(
     target: EventTarget,
     type: string,
@@ -288,6 +294,18 @@ export function mountWall(
       target.removeEventListener(type, handler, options),
     );
   }
+
+  listenerCleanups.push(
+    mountWallZoomControls(boardToolbar, {
+      getCurrentZoom: readZoomState,
+      zoomBy: zoomFromCenter,
+      zoomToFit: fitWallToView,
+      subscribe: (listener) => {
+        zoomStateListeners.add(listener);
+        return () => zoomStateListeners.delete(listener);
+      },
+    }),
+  );
 
   // Enlarge the real canvas without altering its pixels or wallet state.
   const focusCanvas = mustFindIn<HTMLButtonElement>(pageRoot, "#focus-canvas");
@@ -382,17 +400,6 @@ export function mountWall(
     void refreshBoardFromContract();
   });
 
-  listen(zoomInButton, "click", () => {
-    zoomFromCenter(1.25);
-  });
-  listen(zoomOutButton, "click", () => {
-    zoomFromCenter(1 / 1.25);
-  });
-  listen(zoomFitButton, "click", () => {
-    applyCamera(fitCamera(readViewportSize()));
-    positionSelection();
-    updateCompactStatus();
-  });
   listen(zoomPaintButton, "click", () => {
     const focus = selected ?? { x: Math.floor(BOARD_WIDTH / 2), y: Math.floor(BOARD_HEIGHT / 2) };
     applyCamera(paintZoomCamera(readViewportSize(), focus));
@@ -449,9 +456,7 @@ export function mountWall(
     }
     if (keyEvent.key === "0") {
       keyEvent.preventDefault();
-      applyCamera(fitCamera(readViewportSize()));
-      positionSelection();
-      updateCompactStatus();
+      fitWallToView();
       return;
     }
     const next = moveSelection(selected, keyEvent.key);
@@ -466,6 +471,7 @@ export function mountWall(
     ) {
       keyEvent.preventDefault();
       selected = next;
+      wallHint.selectionSucceeded();
       if (walletAccount) {
         setFlow("editing");
       }
@@ -631,6 +637,7 @@ function applyRoutePaintingContext(): void {
   }
 
   selected = { x: parsed.x, y: parsed.y };
+  wallHint.selectionSucceeded();
   const cellPx = parsed.zoom ?? PAINT_CELL_PX;
   applyCamera(paintZoomCamera(readViewportSize(), selected, cellPx));
 
@@ -1344,6 +1351,21 @@ function applyCamera(next: Camera): void {
   boardStage.style.transform = viewTransform.stage.transform;
   positionSelection();
   updatePositionReadout();
+  for (const listener of zoomStateListeners) listener();
+}
+
+function readZoomState() {
+  const fittedCamera = fitCamera(readViewportSize());
+  const fitted =
+    Math.abs(camera.cellSize - fittedCamera.cellSize) < 1e-6 &&
+    Math.abs(camera.panX - fittedCamera.panX) < 1e-6 &&
+    Math.abs(camera.panY - fittedCamera.panY) < 1e-6;
+  return {
+    current: camera.cellSize,
+    minimum: FIT_MIN_CELL_PX,
+    maximum: MAX_CELL_PX,
+    fitted,
+  };
 }
 
 function clampToViewport(current: Camera): Camera {
@@ -1366,6 +1388,12 @@ function readViewportSize(): ViewportSize {
 function zoomFromCenter(factor: number): void {
   const viewport = readViewportSize();
   applyCamera(zoomAt(camera, viewport, factor, viewport.width / 2, viewport.height / 2));
+  positionSelection();
+  updateCompactStatus();
+}
+
+function fitWallToView(): void {
+  applyCamera(fitCamera(readViewportSize()));
   positionSelection();
   updateCompactStatus();
 }
@@ -1536,6 +1564,7 @@ function selectAtClientPoint(clientX: number, clientY: number): void {
     return;
   }
   selected = next;
+  wallHint.selectionSucceeded();
   if (walletAccount) {
     setFlow("editing");
   }
@@ -2020,6 +2049,7 @@ function walletNetworkId(): NetworkId {
     loadAbort.abort();
     quoteFetchGeneration += 1;
     pressureHooks.dispose();
+    wallHint.dispose();
     // Drop unsent queue work; an in-flight attemptDraw may still settle into
     // services.operations. Do not continue draining after leave.
     cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
