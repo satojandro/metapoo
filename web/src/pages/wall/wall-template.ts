@@ -3,7 +3,11 @@
  * Wallet chrome lives on the app shell so it survives navigation.
  */
 
+import { stallScenery } from "./stall-scenery";
+
 export function wallPageHtml(): string {
+  const scenery = stallScenery();
+
   return `
     <div class="layout wall-layout" data-page="wall">
       <main>
@@ -20,28 +24,14 @@ export function wallPageHtml(): string {
 
         <section class="stall" aria-label="Toilet stall with pixel wall">
           <div class="stall-scene">
-            <div class="scene-label" aria-hidden="true">DEMO STALL ART <span>LIVE BOARD</span></div>
+            ${scenery.demoLabelHtml}
             <button id="focus-canvas" class="action scene-focus" type="button" aria-pressed="false">Focus canvas ↗</button>
             <div class="stall-room">
-              <div class="stall-ceiling" aria-hidden="true"></div>
-
-              <div class="stall-wall stall-wall-left" aria-hidden="true">
-                <div class="wall-skin">
-                  <div class="wall-marks wall-marks-left"></div>
-                  <div class="wall-fasteners"></div>
-                </div>
-              </div>
-
-              <div class="stall-wall stall-wall-right" aria-hidden="true">
-                <div class="wall-skin">
-                  <div class="wall-marks wall-marks-right"></div>
-                  <div class="wall-fasteners"></div>
-                </div>
-              </div>
+              ${scenery.entranceHtml}
 
               <div class="stall-back">
                 <div class="back-wall-skin">
-                  <div class="back-wall-marks" aria-hidden="true"></div>
+                  ${scenery.backWallArtHtml}
                   <div class="board-mount">
                     <div class="board-bezel">
                       <div
@@ -65,29 +55,11 @@ export function wallPageHtml(): string {
                     </div>
                     <p class="board-caption" aria-hidden="true">128 × 128 · INTERACTIVE CANVAS</p>
                   </div>
-
-                  <div class="stall-toilet" aria-hidden="true">
-                    <svg
-                      class="toilet-svg"
-                      viewBox="0 0 120 88"
-                      xmlns="http://www.w3.org/2000/svg"
-                      focusable="false"
-                    >
-                      <ellipse cx="60" cy="78" rx="34" ry="6" fill="#1a1512" opacity="0.45" />
-                      <rect x="28" y="8" width="64" height="18" rx="4" fill="#c8d0d6" stroke="#5a6570" stroke-width="2" />
-                      <rect x="78" y="2" width="14" height="10" rx="2" fill="#9aa6b0" stroke="#5a6570" stroke-width="1.5" />
-                      <path d="M22 28h76c4 0 8 4 8 9v18c0 14-16 26-46 26S14 69 14 55V37c0-5 4-9 8-9z" fill="#e8eef2" stroke="#5a6570" stroke-width="2" />
-                      <ellipse cx="60" cy="48" rx="28" ry="16" fill="#3d6f8a" stroke="#2a4f62" stroke-width="2" />
-                      <ellipse cx="60" cy="46" rx="18" ry="10" fill="#2a556b" opacity="0.85" />
-                      <path d="M48 44c4-3 20-3 24 0" fill="none" stroke="#7eb8d4" stroke-width="2" stroke-linecap="round" opacity="0.7" />
-                    </svg>
-                  </div>
+                  ${scenery.toiletHtml}
                 </div>
               </div>
 
-              <div class="stall-floor" aria-hidden="true">
-                <div class="floor-grate"></div>
-              </div>
+              ${scenery.floorHtml}
             </div>
           </div>
         </section>

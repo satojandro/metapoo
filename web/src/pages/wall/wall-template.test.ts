@@ -37,6 +37,21 @@ describe("wallPageHtml", () => {
     expect(root.querySelector(".scene-label")?.textContent).toMatch(
       /DEMO STALL ART[\s\S]*LIVE BOARD/,
     );
+    const sceneryLayers = [
+      ...root.querySelectorAll<HTMLElement>("[data-stall-scenery]"),
+    ];
+    expect(sceneryLayers.length).toBeGreaterThanOrEqual(7);
+    expect(sceneryLayers.every((layer) => !layer.contains(board))).toBe(true);
+    expect(
+      root
+        .querySelector('[data-stall-scenery="back-wall-art"]')!
+        .compareDocumentPosition(board!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(
+      board!.compareDocumentPosition(
+        root.querySelector('[data-stall-scenery="toilet"]')!,
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(about?.contains(root.querySelector("#palette"))).toBe(false);
     expect(about?.contains(root.querySelector("#draw-button"))).toBe(false);
     expect(
