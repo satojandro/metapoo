@@ -51,6 +51,13 @@ improvise.
   (selection indicator placement, zoom snapping behavior), code organization.
 - **Ask first:** anything touching contracts/payments/token addresses/deployments,
   new features beyond the proven pattern, economy changes, brand voice shifts.
+  "Touching" means changing behavior, values, or flows — not mentioning them:
+  web-only files may render, describe, or test wallet/payment wording without
+  asking, provided the addresses, amounts, and connect/sign flows are unchanged.
+  Scope the `touches` declaration to every directory the feature genuinely
+  needs (e.g. a wall polling feature may include `web/src/board-sync.ts`);
+  do not shrink `touches` to look conservative — an undeclared real edit is
+  what the scope gate punishes, not a wide honest one.
 - **Never:** mainnet anything, secret handling, silent scope expansion (per
   agent-orchestrator docs/05).
 
