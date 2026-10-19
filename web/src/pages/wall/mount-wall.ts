@@ -206,6 +206,9 @@ export function mountWall(
   const placementQuote = mustFindIn<HTMLElement>(pageRoot, "#placement-quote");
   const placementQuoteBody = mustFindIn<HTMLElement>(pageRoot, "#placement-quote-body");
 
+  // Keep the current cell coordinates available when keyboard users reach Place.
+  drawButton.setAttribute("aria-describedby", "selection-summary");
+
   // The pointer preview is mount-owned so the wall template remains presentation-only.
   // It is deliberately separate from selection: moving or dragging never paints.
   const pointerPreview = document.createElement("div");
@@ -1945,6 +1948,7 @@ function buildPalette(): void {
       "aria-label",
       `${swatch.name}, palette index ${swatch.index}, color ${swatch.hex}`,
     );
+    button.setAttribute("aria-describedby", "selection-summary");
     const chip = document.createElement("span");
     chip.className = "chip";
     chip.style.background = swatch.hex;

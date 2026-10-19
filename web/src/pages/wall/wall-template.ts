@@ -3,10 +3,35 @@
  * Wallet chrome lives on the app shell so it survives navigation.
  */
 
-import { stallScenery } from "./stall-scenery";
-
 export function wallPageHtml(): string {
-  const scenery = stallScenery();
+  const scenery = {
+    demoLabelHtml:
+      '<div class="scene-label" data-stall-scenery="scene-label" aria-hidden="true">DEMO STALL ART <span>LIVE BOARD</span></div>',
+    entranceHtml: `
+      <div class="stall-ceiling" data-stall-scenery="ceiling" aria-hidden="true"></div>
+      <div class="stall-wall stall-wall-left" data-stall-scenery="left-wall" aria-hidden="true">
+        <div class="wall-skin"><div class="wall-marks wall-marks-left"></div><div class="wall-fasteners"></div></div>
+      </div>
+      <div class="stall-wall stall-wall-right" data-stall-scenery="right-wall" aria-hidden="true">
+        <div class="wall-skin"><div class="wall-marks wall-marks-right"></div><div class="wall-fasteners"></div></div>
+      </div>`,
+    backWallArtHtml:
+      '<div class="back-wall-marks" data-stall-scenery="back-wall-art" aria-hidden="true"></div>',
+    toiletHtml: `
+      <div class="stall-toilet" data-stall-scenery="toilet" aria-hidden="true">
+        <svg class="toilet-svg" viewBox="0 0 120 88" xmlns="http://www.w3.org/2000/svg" focusable="false">
+          <ellipse cx="60" cy="78" rx="34" ry="6" fill="#1a1512" opacity="0.45" />
+          <rect x="28" y="8" width="64" height="18" rx="4" fill="#c8d0d6" stroke="#5a6570" stroke-width="2" />
+          <rect x="78" y="2" width="14" height="10" rx="2" fill="#9aa6b0" stroke="#5a6570" stroke-width="1.5" />
+          <path d="M22 28h76c4 0 8 4 8 9v18c0 14-16 26-46 26S14 69 14 55V37c0-5 4-9 8-9z" fill="#e8eef2" stroke="#5a6570" stroke-width="2" />
+          <ellipse cx="60" cy="48" rx="28" ry="16" fill="#3d6f8a" stroke="#2a4f62" stroke-width="2" />
+          <ellipse cx="60" cy="46" rx="18" ry="10" fill="#2a556b" opacity="0.85" />
+          <path d="M48 44c4-3 20-3 24 0" fill="none" stroke="#7eb8d4" stroke-width="2" stroke-linecap="round" opacity="0.7" />
+        </svg>
+      </div>`,
+    floorHtml:
+      '<div class="stall-floor" data-stall-scenery="floor" aria-hidden="true"><div class="floor-grate"></div></div>',
+  };
 
   return `
     <div class="layout wall-layout" data-page="wall">
@@ -78,7 +103,7 @@ export function wallPageHtml(): string {
           <button id="refresh-board" class="action secondary" type="button">Refresh board</button>
         </div>
 
-        <p id="selection-summary" class="summary" aria-live="polite"></p>
+        <p id="selection-summary" class="summary" aria-live="polite" aria-atomic="true"></p>
         <p id="hover-summary" class="summary hover-summary" aria-live="polite"></p>
         <div id="selection-preview" class="selection-preview" aria-live="polite"></div>
 
@@ -100,7 +125,7 @@ export function wallPageHtml(): string {
           <p id="placement-quote-body" class="placement-quote-body"></p>
         </section>
 
-        <section id="result" class="result" aria-live="assertive"></section>
+        <section id="result" class="result" role="status" aria-live="polite" aria-atomic="true"></section>
 
         <details class="wall-advanced about wall-about">
           <summary>About / details <span aria-hidden="true">＋</span></summary>
