@@ -129,6 +129,7 @@ export interface WallMountTestApi {
   enqueueUnsent: (request: DrawRequest) => void;
   queueLength: () => number;
   kickDrain: () => Promise<void>;
+  pendingPaintCount: () => number;
 }
 
 function mustFindIn<T extends Element>(root: ParentNode, selector: string): T {
@@ -178,6 +179,7 @@ export function mountWall(
   const lede = mustFindIn<HTMLElement>(pageRoot, "#lede");
   const refreshButton = mustFindIn<HTMLButtonElement>(pageRoot, "#refresh-board");
   const boardLoadStatus = mustFindIn<HTMLElement>(pageRoot, "#board-load-status");
+  const boardFreshness = mustFindIn<HTMLElement>(pageRoot, "#board-freshness");
   const zoomPaintButton = mustFindIn<HTMLButtonElement>(pageRoot, "#zoom-paint");
   const drawingSessionStatus = mustFindIn<HTMLElement>(pageRoot, "#drawing-session-status");
   const drawingSessionNote = mustFindIn<HTMLElement>(pageRoot, "#drawing-session-note");
@@ -234,6 +236,22 @@ export function mountWall(
   const pendingPaints = createPendingPaintMap();
   const boardSync = createBoardSyncState();
   const paintQueue = createPaintQueue();
+
+  function showBoardFreshness(): void {
+    if (boardSync.lastAppliedAtMs === null) {
+      boardFreshness.textContent = boardSync.consecutiveFailures > 0
+        ? "Board update failed; not read successfully yet."
+        : "Board not read yet.";
+      return;
+    }
+    const freshness = formatFreshness(boardSync, Date.now()).replace(
+      /^Board freshness: /,
+      "",
+    );
+    boardFreshness.textContent = boardSync.consecutiveFailures > 0
+      ? `Board update failed; last ${freshness}`
+      : `Board last updated ${freshness}`;
+  }
 
   /** Paid UI off until flag or paid schema detection; free path unchanged. */
   let paidModeEnabled = isPaidPaintModeEnabled();
@@ -352,6 +370,7 @@ export function mountWall(
     },
     queueLength: () => paintQueueLength(paintQueue),
     kickDrain: () => drainPaintQueue(),
+    pendingPaintCount: () => listPendingPaints(pendingPaints).length,
   });
 
   listen(document, "visibilitychange", () => {
@@ -761,6 +780,7 @@ async function refreshBoardFromContract(options?: {
     replaceCacheAtBlock(pixelCache, snapshot.pixels, snapshot.blockHeight);
     reconcilePendingWithConfirmed(pendingPaints, snapshot.pixels);
     markBoardLoadApplied(boardSync, loadId, snapshot.blockHeight, Date.now());
+    showBoardFreshness();
     render();
     showSelection();
     boardLoadStatus.textContent = `Board load: ${snapshot.pixels.length} painted cell${
@@ -768,6 +788,7 @@ async function refreshBoardFromContract(options?: {
     } at block ${snapshot.blockHeight}. ${formatFreshness(boardSync, Date.now())}`;
   } catch (error) {
     markBoardLoadFailed(boardSync);
+    showBoardFreshness();
     const detail = error instanceof Error ? error.message : "Unknown read error";
     boardLoadStatus.textContent = `Board load failed: ${detail}. ${formatFreshness(boardSync, Date.now())}`;
   } finally {
@@ -804,7 +825,11 @@ function clearBoardPoll(): void {
 
 function scheduleBoardPoll(): void {
   clearBoardPoll();
-  if (disposed || !isContractConfigured()) {
+  if (
+    disposed ||
+    !isContractConfigured() ||
+    document.visibilityState === "hidden"
+  ) {
     return;
   }
   const delay = nextPollDelayMs(boardSync.consecutiveFailures);

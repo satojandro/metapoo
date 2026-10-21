@@ -68,6 +68,7 @@ vi.mock("../../contract", async (importOriginal) => {
 });
 
 import { submitDraw } from "../../submit-draw";
+import { fetchAllPaintedPixels } from "../../contract";
 
 describe("mountWall dispose", () => {
   beforeEach(() => {
@@ -286,6 +287,120 @@ describe("mountWall dispose", () => {
     expect(
       stubServices.operations.list().some((op) => op.transactionId === "tx-pending-1"),
     ).toBe(true);
+  });
+});
+
+describe("mountWall board polling", () => {
+  let visibility: DocumentVisibilityState;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    visibility = "visible";
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibility,
+    });
+    document.body.innerHTML = `
+      <p id="flow-state"></p>
+      <p id="compact-status"></p>
+      <div id="wallet-error"></div>
+      <div id="root"></div>
+    `;
+    vi.mocked(fetchAllPaintedPixels).mockResolvedValue({
+      pixels: [],
+      blockHeight: 1,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    document.body.innerHTML = "";
+    vi.restoreAllMocks();
+  });
+
+  async function mountAfterInitialRead(): Promise<{
+    dispose: () => void;
+    root: HTMLElement;
+  }> {
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, createAppServices());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
+    vi.mocked(fetchAllPaintedPixels).mockClear();
+    return { dispose, root };
+  }
+
+  it("reads again on the visible-tab interval", async () => {
+    const { dispose, root } = await mountAfterInitialRead();
+
+    await vi.advanceTimersByTimeAsync(4_000);
+
+    expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
+    expect(root.querySelector("#board-freshness")?.textContent).toMatch(
+      /last updated/i,
+    );
+    dispose();
+  });
+
+  it("pauses while hidden and reads immediately when visible again", async () => {
+    const { dispose } = await mountAfterInitialRead();
+
+    visibility = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(vi.mocked(fetchAllPaintedPixels)).not.toHaveBeenCalled();
+
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it("backs off after failed reads and returns to the normal interval after success", async () => {
+    const { dispose, root } = await mountAfterInitialRead();
+    vi.mocked(fetchAllPaintedPixels)
+      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockResolvedValueOnce({ pixels: [], blockHeight: 2 })
+      .mockResolvedValue({ pixels: [], blockHeight: 3 });
+
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(root.querySelector("#board-freshness")?.textContent).toMatch(/failed/i);
+    await vi.advanceTimersByTimeAsync(7_999);
+    expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(2);
+    expect(root.querySelector("#board-freshness")?.textContent).not.toMatch(/failed/i);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(3);
+    dispose();
+  });
+
+  it("keeps an unconfirmed pending paint when a poll supplies no confirmation", async () => {
+    let api: WallMountTestApi | null = null;
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, createAppServices(), {
+      attachTestApi: (testApi) => {
+        api = testApi;
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(fetchAllPaintedPixels).mockClear();
+    api!.enqueueUnsent(
+      createDrawRequest({
+        x: 1,
+        y: 1,
+        colorIndex: 2,
+        accountId: "alice.testnet",
+        networkId: "testnet",
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(4_000);
+
+    expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
+    expect(api!.pendingPaintCount()).toBe(1);
+    dispose();
   });
 });
 

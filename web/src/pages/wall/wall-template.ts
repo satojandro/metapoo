@@ -44,6 +44,7 @@ export function wallPageHtml(): string {
             <p class="wall-runtime-status" aria-label="Testnet and connection status">
               <span>Testnet</span><span>Connection status above</span><span>No app fee</span>
             </p>
+            <p id="board-freshness" class="board-freshness wall-runtime-status" role="status" aria-live="polite">Board not read yet.</p>
           </div>
         </div>
 
