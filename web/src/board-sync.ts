@@ -1,154 +1,126 @@
-/**
- * Shared-board sync helpers: load generations, stale guards, polling cadence.
- *
- * A full board load is pinned to one NEAR block height. An older snapshot must
- * not replace a newer one. Visible-tab polling stays bounded with backoff.
- */
+/** Framework-free board synchronisation primitives. RPC, wallet, and UI stay outside. */
 
-export interface BoardLoadSnapshot<T> {
-  /** NEAR block height the pages were read against. */
-  blockHeight: number;
-  /** Monotonic id assigned when this load started. */
-  loadId: number;
-  data: T;
+export interface BoardPage<T> { pixels: readonly T[]; nextFromIndex: number | null; }
+export interface BoardBlock { id: string | number; height: number; }
+export interface PinnedBoardLoadDependencies<T> {
+  /** Called once; all page reads below use this exact id. */
+  getBlock(): Promise<BoardBlock>;
+  getPixels(request: { fromIndex: number; limit: number; blockId: BoardBlock["id"] }): Promise<BoardPage<T>>;
+}
+export interface PinnedBoardSnapshot<T> { blockId: BoardBlock["id"]; blockHeight: number; pixels: T[]; }
+
+/** Download every page against a single immutable chain block. */
+export async function loadPinnedBoard<T>(
+  dependencies: PinnedBoardLoadDependencies<T>, pageLimit = 256,
+): Promise<PinnedBoardSnapshot<T>> {
+  if (!Number.isInteger(pageLimit) || pageLimit <= 0) throw new Error("pageLimit must be a positive integer.");
+  const block = await dependencies.getBlock();
+  if (!Number.isFinite(block.height)) throw new Error("Pinned board block must include a finite height.");
+  const pixels: T[] = [];
+  const seenCursors = new Set<number>();
+  let fromIndex = 0;
+  while (true) {
+    if (seenCursors.has(fromIndex)) throw new Error("get_pixels returned a repeated page cursor.");
+    seenCursors.add(fromIndex);
+    const page = await dependencies.getPixels({ fromIndex, limit: pageLimit, blockId: block.id });
+    pixels.push(...page.pixels);
+    if (page.nextFromIndex === null) return { blockId: block.id, blockHeight: block.height, pixels };
+    if (!Number.isInteger(page.nextFromIndex) || page.nextFromIndex < 0) throw new Error("get_pixels returned an invalid next page cursor.");
+    fromIndex = page.nextFromIndex;
+  }
 }
 
+export interface BoardLoadSnapshot<T> { blockHeight: number; loadId: number; data: T; }
 export interface BoardSyncState {
-  /** Next loadId to hand out. */
-  nextLoadId: number;
-  /** Highest loadId that successfully updated the cache. */
-  appliedLoadId: number;
-  /** Block height of the applied snapshot (0 = none yet). */
-  appliedBlockHeight: number;
-  /** Wall-clock ms when the applied snapshot landed. */
-  lastAppliedAtMs: number | null;
-  /** Consecutive poll failures (for backoff). */
-  consecutiveFailures: number;
+  nextLoadId: number; appliedLoadId: number; appliedBlockHeight: number;
+  lastAppliedAtMs: number | null; consecutiveFailures: number;
 }
-
 export function createBoardSyncState(): BoardSyncState {
-  return {
-    nextLoadId: 0,
-    appliedLoadId: 0,
-    appliedBlockHeight: 0,
-    lastAppliedAtMs: null,
-    consecutiveFailures: 0,
-  };
+  return { nextLoadId: 0, appliedLoadId: 0, appliedBlockHeight: 0, lastAppliedAtMs: null, consecutiveFailures: 0 };
 }
-
-/** Reserve a load id before starting the async fetch. */
-export function beginBoardLoad(state: BoardSyncState): number {
-  state.nextLoadId += 1;
-  return state.nextLoadId;
+export function beginBoardLoad(state: BoardSyncState): number { return ++state.nextLoadId; }
+/** A completed request may not replace either a newer request or a newer block. */
+export function shouldApplyBoardLoad(state: BoardSyncState, loadId: number, blockHeight: number): boolean {
+  return loadId >= state.appliedLoadId && blockHeight >= state.appliedBlockHeight;
 }
-
-/**
- * Decide whether a finished load may replace the cache.
- * A response is stale if either its request started before the last applied
- * request or its pinned block predates the applied snapshot. Both dimensions
- * must be monotonic: a slow, older-started request must never regain authority
- * merely because its RPC resolved to a later block.
- */
-export function shouldApplyBoardLoad(
-  state: BoardSyncState,
-  loadId: number,
-  blockHeight: number,
-): boolean {
-  if (loadId < state.appliedLoadId) {
-    return false;
-  }
-  if (blockHeight < state.appliedBlockHeight) {
-    return false;
-  }
-  return true;
-}
-
-export function markBoardLoadApplied(
-  state: BoardSyncState,
-  loadId: number,
-  blockHeight: number,
-  nowMs: number,
-): void {
-  state.appliedLoadId = Math.max(state.appliedLoadId, loadId);
+export function markBoardLoadApplied(state: BoardSyncState, loadId: number, blockHeight: number, nowMs: number): void {
+  if (!shouldApplyBoardLoad(state, loadId, blockHeight)) throw new Error("Cannot apply a stale board load.");
+  state.appliedLoadId = loadId;
   state.appliedBlockHeight = blockHeight;
   state.lastAppliedAtMs = nowMs;
   state.consecutiveFailures = 0;
 }
+export function markBoardLoadFailed(state: BoardSyncState): void { state.consecutiveFailures += 1; }
 
-export function markBoardLoadFailed(state: BoardSyncState): void {
-  state.consecutiveFailures += 1;
+export type SubmittedDraw<TTransaction> = { status: "submitted"; transaction: TTransaction };
+export type ResolvedDraw<TPixel, TTransaction> =
+  | { status: "confirmed"; transaction: TTransaction; pixel: TPixel }
+  | { status: "failed"; transaction: TTransaction | null; reason: string }
+  | { status: "confirmation_delayed"; transaction: TTransaction | null; reason: string; pixel: TPixel | null }
+  | { status: "overwritten"; transaction: TTransaction; pixel: TPixel };
+export type DrawOutcome<TPixel, TTransaction> = SubmittedDraw<TTransaction> | ResolvedDraw<TPixel, TTransaction>;
+export type DrawConfirmation =
+  | { status: "succeeded" }
+  | { status: "failed"; reason: string }
+  | { status: "unresolved"; reason: string };
+export interface SubmittedDrawDependencies<TPixel, TTransaction> {
+  /** Invoked exactly once. There is deliberately no retry path in this module. */
+  submit(): Promise<TTransaction>;
+  confirm(transaction: TTransaction): Promise<DrawConfirmation>;
+  readCurrentPixel(transaction: TTransaction): Promise<TPixel | null>;
+  matchesRequestedPixel(pixel: TPixel): boolean;
+  /** True only when this read proves another paint currently owns the cell. */
+  isOverwritten(pixel: TPixel): boolean;
+  onOutcome?(outcome: DrawOutcome<TPixel, TTransaction>): void;
+  isUncertainSubmitError?(error: unknown): boolean;
 }
 
-/** Compare nanosecond write times as digit strings. */
-export function isWriteAtLeastAsNew(
-  candidateNs: string | null,
-  existingNs: string | null,
-): boolean {
-  if (candidateNs === null || candidateNs === undefined) {
-    // Empty / clearing reads are allowed through (caller decides).
-    return true;
+/** Submit once, then classify execution separately from current board ownership. */
+export async function submitAndResolveDraw<TPixel, TTransaction>(
+  dependencies: SubmittedDrawDependencies<TPixel, TTransaction>,
+): Promise<ResolvedDraw<TPixel, TTransaction>> {
+  let transaction: TTransaction;
+  try { transaction = await dependencies.submit(); }
+  catch (error) {
+    const reason = error instanceof Error ? error.message : "Draw submission failed.";
+    return dependencies.isUncertainSubmitError?.(error)
+      ? { status: "confirmation_delayed", transaction: null, reason, pixel: null }
+      : { status: "failed", transaction: null, reason };
   }
-  if (existingNs === null || existingNs === undefined) {
-    return true;
+  dependencies.onOutcome?.({ status: "submitted", transaction });
+  let confirmation: DrawConfirmation;
+  try { confirmation = await dependencies.confirm(transaction); }
+  catch (error) {
+    return { status: "confirmation_delayed", transaction, reason: error instanceof Error ? error.message : "Confirmation could not be read.", pixel: null };
   }
+  if (confirmation.status === "failed") return { status: "failed", transaction, reason: confirmation.reason };
+  if (confirmation.status === "unresolved") return { status: "confirmation_delayed", transaction, reason: confirmation.reason, pixel: null };
   try {
-    return BigInt(candidateNs) >= BigInt(existingNs);
-  } catch {
-    return true;
+    const pixel = await dependencies.readCurrentPixel(transaction);
+    if (pixel !== null && dependencies.matchesRequestedPixel(pixel)) return { status: "confirmed", transaction, pixel };
+    if (pixel !== null && dependencies.isOverwritten(pixel)) return { status: "overwritten", transaction, pixel };
+    return { status: "confirmation_delayed", transaction, reason: "Transaction succeeded, but the current board read is not conclusive.", pixel };
+  } catch (error) {
+    return { status: "confirmation_delayed", transaction, reason: error instanceof Error ? error.message : "Current board read failed.", pixel: null };
   }
 }
 
+// Existing callers use these small utilities. Polling policy itself remains in UI code.
+export function isWriteAtLeastAsNew(candidateNs: string | null, existingNs: string | null): boolean {
+  if (candidateNs == null || existingNs == null) return true;
+  try { return BigInt(candidateNs) >= BigInt(existingNs); } catch { return true; }
+}
 export const BOARD_POLL_BASE_MS = 4_000;
 export const BOARD_POLL_MAX_MS = 30_000;
-
-/** Exponential backoff after failures, capped. */
-export function nextPollDelayMs(
-  consecutiveFailures: number,
-  baseMs = BOARD_POLL_BASE_MS,
-  maxMs = BOARD_POLL_MAX_MS,
-): number {
-  if (consecutiveFailures <= 0) {
-    return baseMs;
-  }
-  const factor = 2 ** Math.min(consecutiveFailures, 4);
-  return Math.min(maxMs, baseMs * factor);
+export function nextPollDelayMs(consecutiveFailures: number, baseMs = BOARD_POLL_BASE_MS, maxMs = BOARD_POLL_MAX_MS): number {
+  return consecutiveFailures <= 0 ? baseMs : Math.min(maxMs, baseMs * 2 ** Math.min(consecutiveFailures, 4));
 }
-
-export function formatFreshness(
-  state: BoardSyncState,
-  nowMs: number,
-): string {
-  if (state.lastAppliedAtMs === null) {
-    return "Board freshness: not loaded yet.";
-  }
+export function formatFreshness(state: BoardSyncState, nowMs: number): string {
+  if (state.lastAppliedAtMs === null) return "Board freshness: not loaded yet.";
   const ageSec = Math.max(0, Math.round((nowMs - state.lastAppliedAtMs) / 1000));
-  const block =
-    state.appliedBlockHeight > 0
-      ? ` block ${state.appliedBlockHeight}`
-      : "";
-  if (ageSec < 2) {
-    return `Board freshness: just updated${block}.`;
-  }
-  return `Board freshness: updated ${ageSec}s ago${block}.`;
+  const block = state.appliedBlockHeight > 0 ? ` block ${state.appliedBlockHeight}` : "";
+  return ageSec < 2 ? `Board freshness: just updated${block}.` : `Board freshness: updated ${ageSec}s ago${block}.`;
 }
-
-/**
- * Whether automatic polling should run.
- * Hidden tabs pause; callers still refresh on becoming visible again.
- */
-export function shouldPollNow(options: {
-  contractConfigured: boolean;
-  documentHidden: boolean;
-  loadInFlight: boolean;
-}): boolean {
-  if (!options.contractConfigured) {
-    return false;
-  }
-  if (options.documentHidden) {
-    return false;
-  }
-  if (options.loadInFlight) {
-    return false;
-  }
-  return true;
+export function shouldPollNow(options: { contractConfigured: boolean; documentHidden: boolean; loadInFlight: boolean }): boolean {
+  return options.contractConfigured && !options.documentHidden && !options.loadInFlight;
 }
