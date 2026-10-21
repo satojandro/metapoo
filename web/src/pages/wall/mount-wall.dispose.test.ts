@@ -18,6 +18,11 @@ vi.mock("../../submit-draw", () => ({
   submitDraw: vi.fn(),
 }));
 
+vi.mock("../../local-draw", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../local-draw")>();
+  return { ...actual, canUseLocalDrawingSession: vi.fn(() => false) };
+});
+
 vi.mock("../../config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../config")>();
   return {
@@ -69,6 +74,7 @@ vi.mock("../../contract", async (importOriginal) => {
 
 import { submitDraw } from "../../submit-draw";
 import { fetchAllPaintedPixels } from "../../contract";
+import { canUseLocalDrawingSession } from "../../local-draw";
 
 describe("mountWall dispose", () => {
   beforeEach(() => {
@@ -79,12 +85,40 @@ describe("mountWall dispose", () => {
       <div id="root"></div>
     `;
     vi.mocked(submitDraw).mockReset();
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(false);
   });
 
   afterEach(() => {
     document.body.innerHTML = "";
     vi.restoreAllMocks();
   });
+
+  function connectedWallServices() {
+    const services = createAppServices();
+    const connect = vi.fn(async () => undefined);
+    services.wallet = {
+      getSession: () => ({ accountId: "alice.testnet", networkId: "testnet" }),
+      connect,
+      disconnect: async () => undefined,
+      subscribe: (listener) => {
+        listener({ accountId: "alice.testnet", networkId: "testnet" });
+        return () => undefined;
+      },
+    };
+    return { services, connect };
+  }
+
+  function touchPointer(
+    viewport: HTMLElement,
+    type: "pointerdown" | "pointermove" | "pointerup",
+    pointerId: number,
+    x: number,
+    y: number,
+  ): void {
+    const event = new Event(type, { bubbles: true });
+    Object.assign(event, { pointerId, clientX: x, clientY: y, pointerType: "touch" });
+    viewport.dispatchEvent(event);
+  }
 
   it("clears the wall DOM and does not clear shared operations", () => {
     const services = createAppServices();
@@ -148,6 +182,89 @@ describe("mountWall dispose", () => {
     expect(root.querySelector("#selection-summary")?.textContent).toContain(
       "No square selected",
     );
+    dispose();
+  });
+
+  it("routes one stationary touch tap through the existing draw path, without a touch preview", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    vi.mocked(submitDraw).mockResolvedValue({
+      status: "confirmation_delayed",
+      title: "Delayed",
+      message: "Still confirming",
+      transactionId: "tx-touch-1",
+      explorerUrl: null,
+      pixel: null,
+      observedBlockHeight: null,
+    });
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 512, bottom: 512, width: 512, height: 512,
+    } as DOMRect);
+    root.querySelector<HTMLButtonElement>(".swatch")!.click();
+    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+
+    touchPointer(viewport, "pointerdown", 1, 40, 40);
+    touchPointer(viewport, "pointerup", 1, 40, 40);
+
+    await vi.waitFor(() => expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(1));
+    expect(root.querySelector<HTMLElement>(".pointer-preview")?.hidden).toBe(true);
+    expect(root.querySelector("[data-placement-outcomes]")?.textContent).toMatch(/confirmation delayed/i);
+    dispose();
+  });
+
+  it("never submits paint for a multi-touch pinch", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 512, bottom: 512, width: 512, height: 512,
+    } as DOMRect);
+    root.querySelector<HTMLButtonElement>(".swatch")!.click();
+    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+
+    touchPointer(viewport, "pointerdown", 1, 40, 40);
+    touchPointer(viewport, "pointerdown", 2, 80, 80);
+    touchPointer(viewport, "pointermove", 2, 130, 130);
+    touchPointer(viewport, "pointerup", 2, 130, 130);
+    touchPointer(viewport, "pointerup", 1, 40, 40);
+    await Promise.resolve();
+
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it("keeps tap-to-paint state in this mount without requesting a wallet or draw", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const { services, connect } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
+    const affordance = toggle.closest<HTMLElement>("label")!;
+
+    await vi.waitFor(() => expect(toggle.disabled).toBe(false));
+
+    expect(affordance.hidden).toBe(false);
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    window.dispatchEvent(new Event("online"));
+
+    expect(toggle.checked).toBe(true);
+    expect(root.querySelector("#tap-to-paint-status")?.textContent).toMatch(/mode on/i);
+    expect(connect).not.toHaveBeenCalled();
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
     dispose();
   });
 
