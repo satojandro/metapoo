@@ -1457,6 +1457,10 @@ function wirePointerGestures(): void {
   let lastY = 0;
   let pinchStartDistance = 0;
   let pinchStartCamera: Camera | null = null;
+  // The reducer decides whether a sequence is a tap. Keep its originating
+  // cell alongside that state so a sub-threshold move across tiny fitted
+  // cells cannot turn a touch scroll/pan into a placement on another cell.
+  let tapStartCell: Cell | null = null;
 
   const gestureEvent = (
     event: PointerEvent,
@@ -1478,11 +1482,14 @@ function wirePointerGestures(): void {
     const pointerEvent = event as PointerEvent;
     boardViewport.setPointerCapture(pointerEvent.pointerId);
     const rect = boardViewport.getBoundingClientRect();
-    const beganOnPanSurface =
-      viewTransform.cellAt(
-        pointerEvent.clientX - rect.left,
-        pointerEvent.clientY - rect.top,
-      ) === null;
+    const beganCell = viewTransform.cellAt(
+      pointerEvent.clientX - rect.left,
+      pointerEvent.clientY - rect.top,
+    );
+    const beganOnPanSurface = beganCell === null;
+    if (gesture.points.length === 0) {
+      tapStartCell = beganCell;
+    }
     const update = updateGesture(
       gesture,
       gestureEvent(pointerEvent, beganOnPanSurface),
@@ -1582,8 +1589,23 @@ function wirePointerGestures(): void {
       boardViewport.classList.remove("is-panning");
 
       // Only the pure classifier's deliberate-tap result may reach selection
-      // or direct paint. Drag, pan, pinch, long press, and cancel are discarded.
-      if (update.completedKind === "tap") {
+      // or direct paint. It must also end in the cell where it started:
+      // fitted cells can be smaller than the movement threshold. Drag, pan,
+      // pinch, long press, cancel, and cross-cell releases are discarded.
+      const beganCell = tapStartCell;
+      tapStartCell = null;
+      const rect = boardViewport.getBoundingClientRect();
+      const endedCell = viewTransform.cellAt(
+        pointerEvent.clientX - rect.left,
+        pointerEvent.clientY - rect.top,
+      );
+      if (
+        update.completedKind === "tap" &&
+        beganCell !== null &&
+        endedCell !== null &&
+        beganCell.x === endedCell.x &&
+        beganCell.y === endedCell.y
+      ) {
         selectAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
       } else {
         updateCompactStatus();
