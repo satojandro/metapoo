@@ -79,6 +79,11 @@ summary { cursor:pointer; }
 .direct-paint-toggle { flex:0 0 auto; font-size:11px; color:#3d3943; }
 .action.place { flex:0 0 auto; background:#27252d; color:#f5d8e4; border:0; padding:14px 24px; }
 .action.place:hover:not(:disabled) { background:#413748; }
+.draw-state { flex:1 1 180px; margin:0; color:#46414a; font:10px/1.35 monospace; }
+.draw-state[data-phase=submitted],.draw-state[data-phase=wallet_prompt],.draw-state[data-phase=confirmation_delayed] { color:#226f86; }
+.draw-state[data-phase=confirmed] { color:#17623f; }
+.draw-state[data-phase=overwritten] { color:#765a00; }
+.draw-state[data-phase=failed] { color:#9f3029; }
 .wall-advanced { border-top:1px solid #39383f; padding:18px 0; font-size:12px; color:#afaeb8; }
 .wall-advanced > summary { display:flex; justify-content:space-between; list-style:none; }
 .wall-advanced .side { margin-top:20px; grid-template-columns:1fr 1fr; }

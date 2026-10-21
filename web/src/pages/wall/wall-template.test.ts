@@ -54,6 +54,10 @@ describe("wallPageHtml", () => {
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(about?.contains(root.querySelector("#palette"))).toBe(false);
     expect(about?.contains(root.querySelector("#draw-button"))).toBe(false);
+    const drawState = root.querySelector("#draw-state");
+    expect(drawState).not.toBeNull();
+    expect(drawState?.getAttribute("role")).toBe("status");
+    expect(drawState?.closest(".paint-dock")).not.toBeNull();
     expect(
       board!.compareDocumentPosition(root.querySelector("#palette")!) &
         Node.DOCUMENT_POSITION_FOLLOWING,

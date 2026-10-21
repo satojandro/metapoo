@@ -15,8 +15,9 @@ const EMPTY_B = "#292b2e";
  * paint, and it is not one of the eight palette colors.
  *
  * Confirmed colors come from `pixels` — sparse list after authoritative reads.
- * Pending paints are a separate client-state layer, but use the complete chosen
- * color so a just-painted square never looks clipped or partially filled.
+ * Pending paints are a separate client-state layer. They use the chosen color
+ * with a light inset marker, so they remain visibly distinct from chain-read
+ * confirmed art without being written into the confirmed cache.
  * Clicking a square must not invent a confirmed entry.
  */
 export function renderBoard(
@@ -58,6 +59,13 @@ export function renderBoard(
     }
     context.fillStyle = swatch.hex;
     context.fillRect(paint.x * CELL, paint.y * CELL, CELL, CELL);
+    // A one-device-pixel inset marker is deliberately visible even at the
+    // board's native 4px cell size. It is paint-preview chrome, never art.
+    context.strokeStyle = paint.phase === "confirmation_delayed"
+      ? "#f0d24a"
+      : "#f4efe4";
+    context.lineWidth = 1;
+    context.strokeRect(paint.x * CELL + 0.5, paint.y * CELL + 0.5, CELL - 1, CELL - 1);
   }
 }
 

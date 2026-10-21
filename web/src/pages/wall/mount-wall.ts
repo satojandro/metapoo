@@ -172,6 +172,7 @@ export function mountWall(
   const preview = mustFindIn<HTMLElement>(pageRoot, "#selection-preview");
   const palette = mustFindIn<HTMLElement>(pageRoot, "#palette");
   const drawButton = mustFindIn<HTMLButtonElement>(pageRoot, "#draw-button");
+  const drawState = mustFindIn<HTMLElement>(pageRoot, "#draw-state");
   const result = mustFindIn<HTMLElement>(pageRoot, "#result");
   const rules = mustFindIn<HTMLElement>(pageRoot, "#rules");
   const sponsorNote = mustFindIn<HTMLElement>(pageRoot, "#sponsor-note");
@@ -832,6 +833,9 @@ function scheduleBoardPoll(): void {
   ) {
     return;
   }
+  // Healthy visible tabs poll every 4s (BOARD_POLL_BASE_MS), keeping the
+  // expected cross-session update window auditable at roughly 3–5 seconds.
+  // Read failures back off through nextPollDelayMs; hidden tabs schedule none.
   const delay = nextPollDelayMs(boardSync.consecutiveFailures);
   pollTimer = setTimeout(() => {
     void runBoardPoll();
@@ -2012,6 +2016,10 @@ function setFlow(phase: typeof uiPhase): void {
   };
   flowState.textContent = labels[phase];
   flowState.dataset.phase = phase;
+  // Keep the current transaction outcome adjacent to the action that caused it;
+  // shell chrome remains a compact duplicate for navigation-wide visibility.
+  drawState.textContent = labels[phase].replace(/^State: /, "");
+  drawState.dataset.phase = phase;
 }
 
 /** textContent only. Account ids and error strings must not be inserted as HTML. */

@@ -97,6 +97,7 @@ export function wallPageHtml(): string {
             Direct paint
           </label>
           <button id="draw-button" class="action place" type="button">Place paint</button>
+          <p id="draw-state" class="draw-state" role="status" aria-live="polite"></p>
         </div>
 
         <div class="board-toolbar" role="toolbar" aria-label="Board view">
