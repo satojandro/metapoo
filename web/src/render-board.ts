@@ -31,6 +31,10 @@ export function renderBoard(
 
   canvas.width = BOARD_WIDTH * CELL;
   canvas.height = BOARD_HEIGHT * CELL;
+  // The viewport scales this bitmap through its camera transform. Keep the
+  // source pixels hard-edged so a scaled logical cell cannot blend into its
+  // neighbour at a camera boundary.
+  context.imageSmoothingEnabled = false;
 
   for (let y = 0; y < BOARD_HEIGHT; y += 1) {
     for (let x = 0; x < BOARD_WIDTH; x += 1) {

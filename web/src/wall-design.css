@@ -49,7 +49,7 @@ summary { cursor:pointer; }
 .board-bezel { padding:0; border:1px solid #ffffff15; background:#242629; box-shadow:0 4px 12px #0005; }
 .board-focus { border:0; background:#242629; }
 .board-viewport { aspect-ratio:1; flex:auto; min-height:0; }
-.pointer-preview { position:absolute; z-index:4; border:1px solid #fff; outline:1px solid #111; background:#ffffff20; pointer-events:none; }
+.pointer-preview { position:absolute; z-index:4; box-sizing:border-box; border:1px solid #fff; outline:1px solid #111; background:#ffffff20; pointer-events:none; }
 .position-readout { box-sizing:border-box; flex:0 0 auto; width:100%; min-height:22px; padding:5px 8px; border-top:1px solid #ffffff15; overflow:hidden; background:#18191c; color:#d8d5d0; font:9px/1.25 monospace; letter-spacing:.04em; text-align:right; white-space:nowrap; pointer-events:none; user-select:none; }
 .board-caption { padding:10px 0; font:8px monospace; color:#c0bcb8; letter-spacing:1.4px; text-shadow:0 1px 4px #000; }
 .is-focused .stall-scene { aspect-ratio:1.8; min-height:620px; }
