@@ -102,6 +102,10 @@ import {
 } from "../../features/pressure";
 import type { QuoteView } from "@shared/protocol/board.ts";
 import { mountWallHint } from "../../wall-hint";
+import {
+  createPlacementOutcomeController,
+  mountPlacementOutcomeLayer,
+} from "./placement-outcome";
 
 /**
  * Fixture action_nonce when live get_account is not wired yet.
@@ -235,6 +239,11 @@ export function mountWall(
 
   const pixelCache = createPixelCache();
   const pendingPaints = createPendingPaintMap();
+  const placementOutcomes = createPlacementOutcomeController();
+  const unmountPlacementOutcomes = mountPlacementOutcomeLayer(
+    boardViewport,
+    placementOutcomes,
+  );
   const boardSync = createBoardSyncState();
   const paintQueue = createPaintQueue();
 
@@ -1027,6 +1036,11 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
     y: frozen.y,
     colorIndex: frozen.colorIndex,
   });
+  const placementOutcomeId = placementOutcomes.submit({
+    x: frozen.x,
+    y: frozen.y,
+    colorIndex: frozen.colorIndex,
+  });
   services.operations.upsert({
     id: opId,
     kind: "paint",
@@ -1133,6 +1147,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
         }
       },
     });
+    placementOutcomes.settle(placementOutcomeId, submitResult);
 
     if (disposed) {
       // Page left while this draw was in flight: keep operations store, skip DOM.
@@ -2087,6 +2102,7 @@ function walletNetworkId(): NetworkId {
     quoteFetchGeneration += 1;
     pressureHooks.dispose();
     wallHint.dispose();
+    unmountPlacementOutcomes();
     // Drop unsent queue work; an in-flight attemptDraw may still settle into
     // services.operations. Do not continue draining after leave.
     cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
