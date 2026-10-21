@@ -187,6 +187,112 @@ describe("mountWall dispose", () => {
     dispose();
   });
 
+  it("keeps corner and centre hit testing aligned through phone/desktop fit, paint zoom, pan, and resize", () => {
+    const resizeCallbacks = new Set<ResizeObserverCallback>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(): void {
+          resizeCallbacks.add(this.callback);
+        }
+        disconnect(): void {
+          resizeCallbacks.delete(this.callback);
+        }
+        unobserve(): void {}
+      },
+    );
+
+    const services = createAppServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+
+    let width = 390;
+    let height = 480;
+    vi.spyOn(viewport, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          right: width,
+          bottom: height,
+          width,
+          height,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    );
+    for (const callback of resizeCallbacks) {
+      callback([], {} as ResizeObserver);
+    }
+
+    const pointer = (type: string, x: number, y: number) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, { pointerId: 1, clientX: x, clientY: y });
+      viewport.dispatchEvent(event);
+    };
+    const tap = (x: number, y: number) => {
+      pointer("pointerdown", x, y);
+      pointer("pointerup", x, y);
+    };
+    const expectSelection = (x: number, y: number) => {
+      expect(root.querySelector("#selection-summary")?.textContent).toContain(
+        `Selected square x=${x}, y=${y}`,
+      );
+    };
+
+    // The fitted 390px-wide view has an 8px horizontal margin; both the first
+    // and centre logical cells must still resolve through the mount's transform.
+    tap(8 + 374 / 256, 53 + 374 / 256);
+    expectSelection(0, 0);
+    tap(195, 240);
+    expectSelection(64, 64);
+
+    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    const ring = root.querySelector<HTMLElement>("#selection-ring")!;
+    expect(ring.style.width).toBe("20px");
+    expect(ring.style.height).toBe("20px");
+    // The ring's box remains the cell itself: its visual affordance is CSS
+    // outward shadow, so it cannot cover the canvas pixels inside this box.
+    expect(ring.style.background).toBe("");
+    expect(ring.style.border).toBe("");
+
+    // Panning is classified as a gesture, never a selection, then a centre tap
+    // hits the projected cell at the new camera origin.
+    pointer("pointerdown", 195, 240);
+    pointer("pointermove", 100, 120);
+    pointer("pointerup", 100, 120);
+    tap(100, 120);
+    expectSelection(64, 64);
+
+    // Resize while zoomed: retain the camera, clamp it to desktop bounds, and
+    // prove both opposite corners remain selectable after deliberate pans.
+    width = 1200;
+    height = 800;
+    for (const callback of resizeCallbacks) {
+      callback([], {} as ResizeObserver);
+    }
+    pointer("pointerdown", 600, 400);
+    pointer("pointermove", 3000, 3000);
+    pointer("pointerup", 3000, 3000);
+    tap(10, 10);
+    expectSelection(0, 0);
+
+    pointer("pointerdown", 600, 400);
+    pointer("pointermove", -2000, -2000);
+    pointer("pointerup", -2000, -2000);
+    tap(1190, 790);
+    expectSelection(127, 127);
+    expect(ring.style.width).toBe("20px");
+    expect(ring.style.height).toBe("20px");
+
+    dispose();
+    vi.unstubAllGlobals();
+  });
+
   it("clears unsent queue paints when navigating away during a pending draw", async () => {
     type DrawResult = Awaited<ReturnType<typeof submitDraw>>;
     const deferred: {
