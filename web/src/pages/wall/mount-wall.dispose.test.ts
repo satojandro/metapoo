@@ -256,6 +256,62 @@ describe("mountWall dispose", () => {
     dispose();
   });
 
+  it("ignores a sub-threshold touch tap whose release lands in another fitted cell", () => {
+    const resizeCallbacks = new Set<ResizeObserverCallback>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(): void {
+          resizeCallbacks.add(this.callback);
+        }
+        disconnect(): void {
+          resizeCallbacks.delete(this.callback);
+        }
+        unobserve(): void {}
+      },
+    );
+
+    const services = createAppServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+
+    // A 200px-wide fitted view of the 128-cell board is ~1.44 px per cell, so
+    // movement under the 8px tap threshold can still cross cell boundaries.
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 480,
+      width: 200,
+      height: 480,
+      toJSON: () => ({}),
+    } as DOMRect);
+    for (const callback of resizeCallbacks) {
+      callback([], {} as ResizeObserver);
+    }
+
+    const summary = () => root.querySelector("#selection-summary")?.textContent ?? "";
+
+    // The tap that stays inside one cell still selects it.
+    touchPointer(viewport, "pointerdown", 1, 60, 200);
+    touchPointer(viewport, "pointerup", 1, 60, 200);
+    expect(summary()).toContain("Selected square x=36, y=36");
+
+    // 4px of movement is a tap by threshold, but it releases over cell 38:
+    // a sub-threshold move across a cell edge is a scroll, never a placement.
+    touchPointer(viewport, "pointerdown", 1, 60, 200);
+    touchPointer(viewport, "pointerup", 1, 64, 200);
+    expect(summary()).toContain("Selected square x=36, y=36");
+
+    dispose();
+    vi.unstubAllGlobals();
+  });
+
   it("keeps tap-to-paint state in this mount without requesting a wallet or draw", async () => {
     vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
     const { services, connect } = connectedWallServices();
