@@ -18,6 +18,16 @@ vi.mock("../../submit-draw", () => ({
   submitDraw: vi.fn(),
 }));
 
+vi.mock("../../local-draw", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../local-draw")>();
+  return {
+    ...actual,
+    canUseLocalDrawingSession: vi.fn(
+      (accountId: string | null) => accountId === "alice.testnet",
+    ),
+  };
+});
+
 vi.mock("../../config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../config")>();
   return {
@@ -69,6 +79,61 @@ vi.mock("../../contract", async (importOriginal) => {
 
 import { submitDraw } from "../../submit-draw";
 import { fetchAllPaintedPixels } from "../../contract";
+
+function dispatchPointer(
+  viewport: HTMLElement,
+  type: string,
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+  pointerType: string,
+): void {
+  const event = new Event(type, { bubbles: true });
+  Object.assign(event, { pointerId, clientX, clientY, pointerType });
+  viewport.dispatchEvent(event);
+}
+
+function createConnectedServices() {
+  const services = createAppServices();
+  const listeners = new Set<(session: { accountId: string | null; networkId: string | null }) => void>();
+  const session = { accountId: "alice.testnet", networkId: "testnet" };
+  services.wallet = {
+    getSession: () => session,
+    connect: vi.fn(async () => undefined),
+    disconnect: vi.fn(async () => undefined),
+    subscribe: (listener) => {
+      listeners.add(listener);
+      listener(session);
+      return () => listeners.delete(listener);
+    },
+  };
+  return services;
+}
+
+function failedDrawResult(): Awaited<ReturnType<typeof submitDraw>> {
+  return {
+    status: "failed",
+    title: "Declined",
+    message: "Test submission",
+    transactionId: null,
+    explorerUrl: null,
+    pixel: null,
+  };
+}
+
+function useBoardSizedViewport(viewport: HTMLElement): void {
+  vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 512,
+    bottom: 512,
+    width: 512,
+    height: 512,
+    toJSON: () => ({}),
+  } as DOMRect);
+}
 
 describe("mountWall dispose", () => {
   beforeEach(() => {
@@ -148,6 +213,73 @@ describe("mountWall dispose", () => {
     expect(root.querySelector("#selection-summary")?.textContent).toContain(
       "No square selected",
     );
+    dispose();
+  });
+
+  it("selects a clean touch tap and submits its direct paint exactly once", async () => {
+    const services = createConnectedServices();
+    vi.mocked(submitDraw).mockResolvedValue(failedDrawResult());
+
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    useBoardSizedViewport(viewport);
+    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+
+    await vi.waitFor(() => expect(toggle.disabled).toBe(false));
+    root.querySelector<HTMLButtonElement>("#palette button")!.click();
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(toggle.checked).toBe(true);
+    expect(services.wallet.connect).not.toHaveBeenCalled();
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+
+    dispatchPointer(viewport, "pointerdown", 1, 256, 256, "touch");
+    dispatchPointer(viewport, "pointerup", 1, 256, 256, "touch");
+
+    await vi.waitFor(() =>
+      expect(root.querySelector("#selection-summary")?.textContent).toContain(
+        "Selected square",
+      ),
+    );
+    await vi.waitFor(() => expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(1));
+    expect(toggle.checked).toBe(true);
+    expect(services.wallet.connect).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it("never submits direct paint after touch pan or pinch gestures", async () => {
+    const services = createConnectedServices();
+    vi.mocked(submitDraw).mockResolvedValue(failedDrawResult());
+
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
+    viewport.style.touchAction = "pan-x pan-y";
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    useBoardSizedViewport(viewport);
+    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+
+    await vi.waitFor(() => expect(toggle.disabled).toBe(false));
+    root.querySelector<HTMLButtonElement>("#palette button")!.click();
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+
+    dispatchPointer(viewport, "pointerdown", 1, 256, 256, "touch");
+    dispatchPointer(viewport, "pointermove", 1, 286, 256, "touch");
+    dispatchPointer(viewport, "pointerup", 1, 286, 256, "touch");
+
+    dispatchPointer(viewport, "pointerdown", 1, 200, 256, "touch");
+    dispatchPointer(viewport, "pointerdown", 2, 300, 256, "touch");
+    dispatchPointer(viewport, "pointermove", 2, 360, 256, "touch");
+    dispatchPointer(viewport, "pointerup", 2, 360, 256, "touch");
+    dispatchPointer(viewport, "pointerup", 1, 200, 256, "touch");
+
+    await Promise.resolve();
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
     dispose();
   });
 
