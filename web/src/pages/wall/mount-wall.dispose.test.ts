@@ -67,7 +67,7 @@ vi.mock("../../contract", async (importOriginal) => {
   };
 });
 
-import { submitDraw } from "../../submit-draw";
+import { submitDraw, type SubmitDrawResult } from "../../submit-draw";
 import { fetchAllPaintedPixels } from "../../contract";
 
 describe("mountWall dispose", () => {
@@ -559,5 +559,239 @@ describe("mountWall Help-paint deep link via router", () => {
     expect(status?.textContent).toMatch(/Template id tmpl-demo/);
 
     router.stop();
+  });
+});
+
+/** A failure claim names the transaction itself as failed. Avoid the word even in a negation. */
+function claimsFailedTransaction(text: string): boolean {
+  return /\b(fail(?:ed|ure|s)?|unsuccessful)\b/i.test(text);
+}
+
+describe("mounted wall placement vocabulary", () => {
+  let dispose: () => void;
+  let root: HTMLElement;
+  let api: WallMountTestApi;
+
+  function connectedServices() {
+    const services = createAppServices();
+    let accountId: string | null = "alice.testnet";
+    let networkId: string | null = "testnet";
+    const listeners = new Set<
+      (session: { accountId: string | null; networkId: string | null }) => void
+    >();
+    services.wallet = {
+      getSession: () => ({ accountId, networkId }),
+      connect: async () => {
+        accountId = "alice.testnet";
+        networkId = "testnet";
+        for (const listener of listeners) listener({ accountId, networkId });
+      },
+      disconnect: async () => {
+        accountId = null;
+        networkId = null;
+        for (const listener of listeners) listener({ accountId, networkId });
+      },
+      subscribe: (listener) => {
+        listeners.add(listener);
+        listener({ accountId, networkId });
+        return () => listeners.delete(listener);
+      },
+    };
+    return services;
+  }
+
+  beforeEach(async () => {
+    document.body.innerHTML = `
+      <p id="flow-state"></p>
+      <p id="compact-status"></p>
+      <div id="wallet-error"></div>
+      <div id="root"></div>
+    `;
+    vi.mocked(submitDraw).mockReset();
+    root = document.querySelector<HTMLElement>("#root")!;
+    dispose = mountWall(root, connectedServices(), {
+      attachTestApi: (testApi) => {
+        api = testApi;
+      },
+    });
+    await vi.waitFor(() => {
+      expect(root.querySelector("#board-load-status")?.textContent ?? "").not.toMatch(
+        /fetching painted pages/i,
+      );
+    });
+  });
+
+  afterEach(() => {
+    dispose();
+    document.body.innerHTML = "";
+  });
+
+  function paintRequest() {
+    return createDrawRequest({
+      x: 1,
+      y: 0,
+      colorIndex: 2,
+      accountId: "alice.testnet",
+      networkId: "testnet",
+    });
+  }
+
+  function surfaces() {
+    const flow = document.querySelector<HTMLElement>("#flow-state")!;
+    const draw = root.querySelector<HTMLElement>("#draw-state")!;
+    const outcome = root.querySelector<HTMLElement>("[data-placement-state]");
+    return { flow, draw, outcome };
+  }
+
+  async function settle(result: SubmitDrawResult): Promise<void> {
+    vi.mocked(submitDraw).mockResolvedValue(result);
+    api.enqueueUnsent(paintRequest());
+    await api.kickDrain();
+  }
+
+  it("setFlow('submitted') does not describe the in-flight transaction as failed", async () => {
+    let release: (value: SubmitDrawResult) => void = () => undefined;
+    vi.mocked(submitDraw).mockImplementation((input) => {
+      input.onProgress?.({
+        phase: "pending",
+        transactionId: "tx-sub",
+        explorer: null,
+      });
+      return new Promise<SubmitDrawResult>((resolve) => {
+        release = resolve;
+      });
+    });
+    api.enqueueUnsent(paintRequest());
+    const drain = api.kickDrain();
+    await vi.waitFor(() => {
+      expect(document.querySelector("#flow-state")?.getAttribute("data-phase")).toBe(
+        "submitted",
+      );
+    });
+    const { flow, draw, outcome } = surfaces();
+    expect(flow.dataset.phase).toBe("submitted");
+    expect(draw.dataset.phase).toBe("submitted");
+    expect(outcome?.getAttribute("data-placement-state")).toBe("submitted");
+    for (const text of [flow.textContent ?? "", draw.textContent ?? "", outcome?.textContent ?? ""]) {
+      expect(text).toMatch(/awaiting/i);
+      expect(claimsFailedTransaction(text)).toBe(false);
+      expect(text).not.toMatch(/\bexecuted\b/i);
+    }
+    release({
+      status: "confirmed",
+      title: "Pixel painted",
+      message: "matched",
+      transactionId: "tx-sub",
+      explorerUrl: null,
+      pixel: {
+        x: 1,
+        y: 0,
+        colorIndex: 2,
+        artistAccountId: "alice.testnet",
+        lastWriteTimestampNs: "1",
+      },
+      observedBlockHeight: 3,
+    });
+    await drain;
+  });
+
+  it("setFlow('overwritten') says the transaction executed and the owner differs, not that it failed", async () => {
+    await settle({
+      status: "overwritten",
+      title: "Paint landed, then the wall moved on",
+      message: "Another artist owns the cell.",
+      transactionId: "tx-over",
+      explorerUrl: null,
+      pixel: {
+        x: 1,
+        y: 0,
+        colorIndex: 4,
+        artistAccountId: "bob.testnet",
+        lastWriteTimestampNs: "2",
+      },
+      observedBlockHeight: 9,
+    });
+    const { flow, draw, outcome } = surfaces();
+    expect(flow.dataset.phase).toBe("overwritten");
+    expect(draw.dataset.phase).toBe("overwritten");
+    expect(outcome?.getAttribute("data-placement-state")).toBe("overwritten");
+    for (const text of [flow.textContent ?? "", draw.textContent ?? "", outcome?.textContent ?? ""]) {
+      expect(text).toMatch(/\bexecuted\b/i);
+      expect(text).toMatch(/current cell owner now differs/i);
+      expect(claimsFailedTransaction(text)).toBe(false);
+    }
+  });
+
+  it("setFlow('confirmation_delayed') says the outcome is unresolved and not-retried, not failed", async () => {
+    await settle({
+      status: "confirmation_delayed",
+      title: "Submitted — confirmation delayed",
+      message: "The confirming read has not landed.",
+      transactionId: "tx-delay",
+      explorerUrl: null,
+      pixel: null,
+      observedBlockHeight: null,
+    });
+    const { flow, draw, outcome } = surfaces();
+    expect(flow.dataset.phase).toBe("confirmation_delayed");
+    expect(draw.dataset.phase).toBe("confirmation_delayed");
+    expect(outcome?.getAttribute("data-placement-state")).toBe("confirmation-delayed");
+    for (const text of [flow.textContent ?? "", draw.textContent ?? "", outcome?.textContent ?? ""]) {
+      expect(text).toMatch(/unresolved/i);
+      expect(text).toMatch(/not-retried/i);
+      expect(text).toMatch(/will not be auto-resubmitted/i);
+      expect(claimsFailedTransaction(text)).toBe(false);
+      expect(text).not.toMatch(/\bexecuted\b/i);
+    }
+  });
+
+  it("setFlow('confirmed') reports that the transaction executed", async () => {
+    await settle({
+      status: "confirmed",
+      title: "Pixel painted",
+      message: "matched",
+      transactionId: "tx-ok",
+      explorerUrl: null,
+      pixel: {
+        x: 1,
+        y: 0,
+        colorIndex: 2,
+        artistAccountId: "alice.testnet",
+        lastWriteTimestampNs: "1",
+      },
+      observedBlockHeight: 4,
+    });
+    const { flow, draw, outcome } = surfaces();
+    expect(flow.dataset.phase).toBe("confirmed");
+    expect(draw.dataset.phase).toBe("confirmed");
+    expect(outcome?.getAttribute("data-placement-state")).toBe("confirmed");
+    for (const text of [flow.textContent ?? "", draw.textContent ?? "", outcome?.textContent ?? ""]) {
+      expect(text).toMatch(/\bexecuted\b/i);
+      expect(claimsFailedTransaction(text)).toBe(false);
+    }
+  });
+
+  it("setFlow('failed') is the only outcome that calls an unexecuted transaction failed", async () => {
+    await settle({
+      status: "failed",
+      title: "Transaction failed",
+      message: "The transaction did not execute.",
+      transactionId: null,
+      explorerUrl: null,
+      pixel: null,
+    });
+    const { flow, draw, outcome } = surfaces();
+    expect(flow.dataset.phase).toBe("failed");
+    expect(draw.dataset.phase).toBe("failed");
+    expect(outcome?.getAttribute("data-placement-state")).toBe("failed");
+    for (const text of [flow.textContent ?? "", draw.textContent ?? ""]) {
+      expect(text).toMatch(/\bfailed\b/i);
+      expect(text).toMatch(/did not execute/i);
+      expect(text).not.toMatch(/unresolved/i);
+      expect(text).not.toMatch(/not-retried/i);
+    }
+    const outcomeText = outcome?.textContent ?? "";
+    expect(outcomeText).toMatch(/\bfailed\b/i);
+    expect(outcomeText).toMatch(/did not execute/i);
   });
 });

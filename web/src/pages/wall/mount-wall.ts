@@ -2025,8 +2025,10 @@ function setFlow(phase: typeof uiPhase): void {
     wallet_prompt: "State: wallet prompt — approve or reject in your wallet.",
     submitted: "State: submitted — transaction is in flight; awaiting confirmation.",
     confirmed: "State: confirmed — the transaction executed and the confirming read matched.",
-    confirmation_delayed: "State: confirmation delayed — outcome is unresolved and will not be resubmitted automatically.",
-    overwritten: "State: overwritten — the transaction executed, then another artist became the current cell owner.",
+    confirmation_delayed:
+      "State: confirmation delayed — the outcome is unresolved and not-retried; it will not be auto-resubmitted.",
+    overwritten:
+      "State: overwritten — the transaction executed and the current cell owner now differs.",
     failed: "State: failed — the transaction did not execute; you can review and try again.",
   };
   flowState.textContent = labels[phase];

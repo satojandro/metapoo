@@ -63,10 +63,11 @@ export function createPlacementOutcomeController(options: { now?: () => number }
 
 const labels: Record<PlacementOutcomeState, string> = {
   submitted: "Submitted — awaiting wallet/chain confirmation",
-  confirmed: "Confirmed on current cell",
-  failed: "Failed — no confirmed placement",
-  overwritten: "Overwritten/uncertain — transaction succeeded, current cell differs",
-  "confirmation-delayed": "Confirmation delayed — pending/uncertain; not retried",
+  confirmed: "Confirmed — the transaction executed and the confirming read matched",
+  failed: "Failed — the transaction did not execute",
+  overwritten: "Overwritten — the transaction executed and the current cell owner now differs",
+  "confirmation-delayed":
+    "Confirmation delayed — the outcome is unresolved and not-retried; it will not be auto-resubmitted",
 };
 
 /** Render only inside this wall mount; global page styling stays untouched. */
