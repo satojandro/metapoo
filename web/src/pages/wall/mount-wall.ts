@@ -215,6 +215,21 @@ export function mountWall(
   const pressureDemoBanner = mustFindIn<HTMLElement>(pageRoot, "#pressure-demo-banner");
   const placementQuote = mustFindIn<HTMLElement>(pageRoot, "#placement-quote");
   const placementQuoteBody = mustFindIn<HTMLElement>(pageRoot, "#placement-quote-body");
+  const tapToPaintAffordanceCandidate = directPaintToggle.closest<HTMLLabelElement>("label");
+  if (!tapToPaintAffordanceCandidate) {
+    throw new Error("The wall page is missing the tap-to-paint affordance.");
+  }
+  const tapToPaintAffordance = tapToPaintAffordanceCandidate;
+  // This control is deliberately mount-owned: merely revealing or toggling it
+  // must not connect a wallet or request a contract action.
+  tapToPaintAffordance.hidden = true;
+  const tapToPaintAnnouncement = document.createElement("p");
+  tapToPaintAnnouncement.id = "tap-to-paint-status";
+  tapToPaintAnnouncement.setAttribute("role", "status");
+  tapToPaintAnnouncement.setAttribute("aria-live", "polite");
+  tapToPaintAnnouncement.hidden = true;
+  tapToPaintAffordance.after(tapToPaintAnnouncement);
+  directPaintToggle.setAttribute("aria-describedby", tapToPaintAnnouncement.id);
 
   // Keep the current cell coordinates available when keyboard users reach Place.
   drawButton.setAttribute("aria-describedby", "selection-summary");
@@ -243,6 +258,7 @@ export function mountWall(
   const pixelCache = createPixelCache();
   const pendingPaints = createPendingPaintMap();
   const placementOutcomes = createPlacementOutcomeController();
+  const queuedPlacementOutcomes = new WeakMap<DrawRequest, string>();
   const unmountPlacementOutcomes = mountPlacementOutcomeLayer(
     boardViewport,
     placementOutcomes,
@@ -292,6 +308,7 @@ export function mountWall(
 
   let selected: Cell | null = null;
   let selectedColor: number | null = null;
+  let tapToPaintEnabled = directPaintToggle.checked;
   let walletAccount: string | null = null;
   let walletNetwork: string | null = null;
   let drawInFlight = false;
@@ -431,6 +448,7 @@ export function mountWall(
   });
 
   listen(directPaintToggle, "change", () => {
+    tapToPaintEnabled = directPaintToggle.checked;
     updateDirectPaintAvailability();
   });
 
@@ -872,7 +890,10 @@ async function runBoardPoll(): Promise<void> {
   await refreshBoardFromContract({ reason: "poll" });
 }
 
-async function attemptDraw(request?: DrawRequest): Promise<void> {
+async function attemptDraw(
+  request?: DrawRequest,
+  queuedPlacementOutcomeId?: string,
+): Promise<void> {
   if (disposed || drawInFlight) {
     return;
   }
@@ -1043,7 +1064,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
     y: frozen.y,
     colorIndex: frozen.colorIndex,
   });
-  const placementOutcomeId = placementOutcomes.submit({
+  const placementOutcomeId = queuedPlacementOutcomeId ?? placementOutcomes.submit({
     x: frozen.x,
     y: frozen.y,
     colorIndex: frozen.colorIndex,
@@ -1538,7 +1559,7 @@ function wirePointerGestures(): void {
   listen(boardViewport, "pointermove", (event) => {
     const pointerEvent = event as PointerEvent;
     if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
-      updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
+      updatePointerPreview(pointerEvent);
       return;
     }
     const update = updateGesture(gesture, gestureEvent(pointerEvent));
@@ -1567,7 +1588,7 @@ function wirePointerGestures(): void {
         positionSelection();
         updateCompactStatus();
       }
-      updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
+      updatePointerPreview(pointerEvent);
       return;
     }
 
@@ -1580,7 +1601,7 @@ function wirePointerGestures(): void {
       if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
       render();
       if (activeStroke.state.truncated) fillBlock(result, "Stroke limit", TRUNCATED_STROKE_COPY);
-      updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
+      updatePointerPreview(pointerEvent);
       return;
     }
     if (update.activeKind === "drag" || update.activeKind === "pan") {
@@ -1597,7 +1618,7 @@ function wirePointerGestures(): void {
       lastX = pointerEvent.clientX;
       lastY = pointerEvent.clientY;
     }
-    updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
+    updatePointerPreview(pointerEvent);
   });
 
   const endPointer = (event: Event): void => {
@@ -1742,7 +1763,7 @@ function maybeEnqueueDirectPaint(
 ): void {
   if (
     drawInFlight ||
-    !directPaintToggle.checked ||
+    !tapToPaintEnabled ||
     !canUseLocalDrawingSession(walletAccount, walletNetwork) ||
     selectedColor === null ||
     !walletAccount ||
@@ -1793,6 +1814,17 @@ function maybeEnqueueDirectPaint(
     networkId: walletNetworkId(),
     ...(paidFields ?? {}),
   });
+  // A direct tap gets a mount-local pending marker immediately, before the
+  // serialized draw reaches the existing submit path. It is never a second
+  // submission path: drainPaintQueue hands this id to attemptDraw below.
+  queuedPlacementOutcomes.set(
+    queued,
+    placementOutcomes.submit({
+      x: queued.x,
+      y: queued.y,
+      colorIndex: queued.colorIndex,
+    }),
+  );
   enqueuePaint(paintQueue, queued);
   setPendingPaint(pendingPaints, {
     x: queued.x,
@@ -1806,8 +1838,19 @@ function maybeEnqueueDirectPaint(
   void drainPaintQueue();
 }
 
-function updatePointerPreview(clientX: number, clientY: number): void {
-  const cell = cellAtClientPoint(clientX, clientY);
+function updatePointerPreview(event: PointerEvent): void {
+  // Hover is a fine-pointer affordance only. On a touch pointer, or on a
+  // surface that owns touch gestures, it must neither show a prospective cell
+  // nor participate in the tap-to-paint route.
+  if (
+    event.pointerType === "touch" ||
+    getComputedStyle(boardViewport).touchAction !== "auto"
+  ) {
+    clearPointerPreview();
+    return;
+  }
+  const rect = boardViewport.getBoundingClientRect();
+  const cell = viewTransform.cellAt(event.clientX - rect.left, event.clientY - rect.top);
   if (!cell) {
     clearPointerPreview();
     return;
@@ -1829,13 +1872,21 @@ function clearPointerPreview(): void {
 function updateDirectPaintAvailability(): void {
   const allowed =
     canUseLocalDrawingSession(walletAccount, walletNetwork) && contractMetaOk;
+  const established = walletAccount !== null || allowed;
+  tapToPaintAffordance.hidden = !established;
+  tapToPaintAnnouncement.hidden = !established;
   directPaintToggle.disabled = !allowed;
-  if (!allowed) {
-    directPaintToggle.checked = false;
-  }
+  directPaintToggle.checked = tapToPaintEnabled;
   directPaintToggle.title = allowed
     ? "Tap cells to queue paints through your drawing session (serialized, no auto-resubmit on uncertainty)"
     : "Authorize a drawing session first to enable direct paint";
+  tapToPaintAnnouncement.textContent = !established
+    ? ""
+    : allowed
+      ? tapToPaintEnabled
+        ? "Tap-to-paint mode on. A deliberate tap queues one paint through your drawing session."
+        : "Tap-to-paint is available. Turn it on to queue one paint per deliberate tap."
+      : "Tap-to-paint needs an authorized drawing session. No wallet request was made.";
 }
 
 /**
@@ -1849,6 +1900,8 @@ function cancelUnsentPaintQueue(reason: string, options?: { quiet?: boolean }): 
   }
   for (const item of paintQueue.items) {
     clearPendingPaint(pendingPaints, item.x, item.y);
+    const outcomeId = queuedPlacementOutcomes.get(item);
+    if (outcomeId) placementOutcomes.discard(outcomeId);
   }
   clearPaintQueue(paintQueue);
   if (options?.quiet || disposed) {
@@ -1869,6 +1922,8 @@ async function drainPaintQueue(): Promise<void> {
     !drawRequestMatchesSession(next, walletAccount, walletNetworkId())
   ) {
     clearPendingPaint(pendingPaints, next.x, next.y);
+    const outcomeId = queuedPlacementOutcomes.get(next);
+    if (outcomeId) placementOutcomes.discard(outcomeId);
     next = shiftPaint(paintQueue);
   }
   if (!next) {
@@ -1879,6 +1934,8 @@ async function drainPaintQueue(): Promise<void> {
   }
   if (disposed) {
     clearPendingPaint(pendingPaints, next.x, next.y);
+    const outcomeId = queuedPlacementOutcomes.get(next);
+    if (outcomeId) placementOutcomes.discard(outcomeId);
     cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
       quiet: true,
     });
@@ -1886,7 +1943,7 @@ async function drainPaintQueue(): Promise<void> {
   }
   paintQueue.inFlight = true;
   try {
-    await attemptDraw(next);
+    await attemptDraw(next, queuedPlacementOutcomes.get(next));
   } finally {
     paintQueue.inFlight = false;
     if (disposed) {
