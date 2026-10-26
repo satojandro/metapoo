@@ -137,6 +137,9 @@ export interface WallMountTestApi {
   queueLength: () => number;
   kickDrain: () => Promise<void>;
   pendingPaintCount: () => number;
+  /** Test-only read seam for verifying board-load ordering. */
+  refreshPixel: (cell: Cell) => Promise<void>;
+  cachedPixelColor: (cell: Cell) => number | null | undefined;
 }
 
 function mustFindIn<T extends Element>(root: ParentNode, selector: string): T {
@@ -404,6 +407,8 @@ export function mountWall(
     queueLength: () => paintQueueLength(paintQueue),
     kickDrain: () => drainPaintQueue(),
     pendingPaintCount: () => listPendingPaints(pendingPaints).length,
+    refreshPixel: (cell) => refreshSelectedPixel(cell),
+    cachedPixelColor: (cell) => getCachedPixel(pixelCache, cell.x, cell.y)?.colorIndex,
   });
 
   listen(document, "visibilitychange", () => {
@@ -834,15 +839,27 @@ async function refreshBoardFromContract(options?: {
   }
 }
 
-async function refreshSelectedPixel(): Promise<void> {
-  if (!selected || !isContractConfigured()) {
+async function refreshSelectedPixel(cell = selected): Promise<void> {
+  if (!cell || !isContractConfigured()) {
     showSelection();
     return;
   }
+  const loadId = beginBoardLoad(boardSync);
   try {
-    const { pixel, blockHeight } = await getPixelWithBlock(selected.x, selected.y);
+    const { pixel, blockHeight } = await getPixelWithBlock(cell.x, cell.y);
+    // A cell response is board evidence too.  Do not let it replace a newer
+    // full snapshot (or another cell read), including after unmount.
+    if (
+      disposed ||
+      loadAbort.signal.aborted ||
+      !shouldApplyBoardLoad(boardSync, loadId, blockHeight)
+    ) {
+      return;
+    }
     rememberPixelAtBlock(pixelCache, pixel, blockHeight);
     reconcilePendingWithConfirmed(pendingPaints, [pixel]);
+    markBoardLoadApplied(boardSync, loadId, blockHeight, Date.now());
+    showBoardFreshness();
     render();
     showSelection();
   } catch {

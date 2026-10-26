@@ -83,7 +83,7 @@ vi.mock("../../contract", async (importOriginal) => {
 });
 
 import { submitDraw } from "../../submit-draw";
-import { fetchAllPaintedPixels } from "../../contract";
+import { fetchAllPaintedPixels, getPixelWithBlock } from "../../contract";
 import { canUseLocalDrawingSession } from "../../local-draw";
 
 describe("mountWall dispose", () => {
@@ -643,6 +643,73 @@ describe("mountWall board polling", () => {
     document.dispatchEvent(new Event("visibilitychange"));
     await vi.advanceTimersByTimeAsync(0);
     expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it("refreshes immediately when the browser reconnects", async () => {
+    const { dispose } = await mountAfterInitialRead();
+
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it("discards a late selected-cell read after a newer full refresh", async () => {
+    let api: WallMountTestApi | null = null;
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, createAppServices(), {
+      attachTestApi: (testApi) => {
+        api = testApi;
+      },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(fetchAllPaintedPixels).mockClear();
+
+    let resolveCellRead!: (value: {
+      pixel: {
+        x: number;
+        y: number;
+        colorIndex: number | null;
+        artistAccountId: string | null;
+        lastWriteTimestampNs: string | null;
+      };
+      blockHeight: number;
+    }) => void;
+    vi.mocked(getPixelWithBlock).mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolveCellRead = resolve;
+      }),
+    );
+    const lateRead = api!.refreshPixel({ x: 3, y: 4 });
+
+    vi.mocked(fetchAllPaintedPixels).mockResolvedValueOnce({
+      pixels: [{
+        x: 3,
+        y: 4,
+        colorIndex: 6,
+        artistAccountId: "newer.testnet",
+        lastWriteTimestampNs: "2",
+      }],
+      blockHeight: 2,
+    });
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    resolveCellRead({
+      pixel: {
+        x: 3,
+        y: 4,
+        colorIndex: 1,
+        artistAccountId: "older.testnet",
+        lastWriteTimestampNs: "1",
+      },
+      blockHeight: 1,
+    });
+    await lateRead;
+
+    expect(api!.cachedPixelColor({ x: 3, y: 4 })).toBe(6);
     dispose();
   });
 
