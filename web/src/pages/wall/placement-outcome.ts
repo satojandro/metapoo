@@ -69,7 +69,7 @@ const labels: Record<PlacementOutcomeState, string> = {
   submitted: "Submitted — awaiting wallet/chain confirmation",
   confirmed: "Confirmed on current cell",
   failed: "Failed — no confirmed placement",
-  overwritten: "Overwritten/uncertain — transaction succeeded, current cell differs",
+  overwritten: "Overwritten — transaction executed; current cell owner differs",
   "confirmation-delayed": "Confirmation delayed — pending/uncertain; not retried",
 };
 
