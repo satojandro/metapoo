@@ -3,6 +3,8 @@ import { KeyPair, type KeyPairString } from "@near-js/crypto";
 import { JsonRpcProvider } from "@near-js/providers";
 import { KeyPairSigner } from "@near-js/signers";
 import type { FinalExecutionOutcome } from "@near-js/types";
+import { chunkCells, chunkArgs, type StrokeCell } from "./pages/wall/stroke-paint";
+import { parseTxOutcome, hasRecognizedTxSuccess } from "./tx-outcome";
 import { CONTRACT_ID, DRAW_DEPOSIT, DRAW_GAS, RPC_URL } from "./config";
 import {
   describeDrawingSession,
@@ -233,4 +235,68 @@ export function canUseLocalDrawingSession(
     record: loadDrawingSessionRecord(),
   });
   return status.phase === "active";
+}
+
+export interface LocalStrokeResult {
+  status: "confirmed" | "partial";
+  confirmedChunks: number;
+  totalChunks: number;
+  outcomes: FinalExecutionOutcome[];
+  failingChunk: { index: number; mayHaveBroadcast: boolean; message: string } | null;
+}
+
+/** Submit sequential atomic batches. Never retry or switch paths after a failure. */
+export async function signAndSendStrokeLocally(args: {
+  accountId: string;
+  networkId: string;
+  cells: readonly StrokeCell[];
+  color: number;
+}): Promise<LocalStrokeResult> {
+  const chunks = chunkCells([...args.cells]);
+  const result: LocalStrokeResult = {
+    status: "confirmed", confirmedChunks: 0, totalChunks: chunks.length,
+    outcomes: [], failingChunk: null,
+  };
+  for (const [index, chunk] of chunks.entries()) {
+    let mayHaveBroadcast = false;
+    try {
+      const record = requireActiveRecord(args.accountId, args.networkId);
+      const allowance = await fetchDrawingSessionAllowance(args);
+      if (!allowance.found) {
+        throw new LocalDrawError("key_missing", "Authorize a new drawing session before continuing.");
+      }
+      const rpc = provider();
+      if (allowance.remainingYocto !== null) {
+        const price = await rpc.gasPrice(null);
+        // Reserve prepaid gas at the current RPC price, with headroom for
+        // transaction fees and the protocol's gas-price inflation margin.
+        const required = BigInt(DRAW_GAS) * BigInt(price.gas_price) * 2n;
+        if (BigInt(allowance.remainingYocto) < required) {
+          throw new LocalDrawError("allowance_exhausted",
+            "This drawing session has too little gas allowance for the next batch. Authorize a new session to continue.");
+        }
+      }
+      const account = new Account(args.accountId, rpc, signerFromRecord(record));
+      mayHaveBroadcast = true;
+      const outcome = await account.callFunctionRaw({
+        contractId: CONTRACT_ID, methodName: "draw_many",
+        args: chunkArgs(chunk, args.color), gas: DRAW_GAS, deposit: DRAW_DEPOSIT,
+        waitUntil: "EXECUTED_OPTIMISTIC",
+      });
+      result.outcomes.push(outcome);
+      const parsed = parseTxOutcome(outcome);
+      if (!hasRecognizedTxSuccess(parsed)) {
+        throw new Error(parsed.failureMessage ?? "Batch execution is still unconfirmed.");
+      }
+      result.confirmedChunks += 1;
+    } catch (error) {
+      result.status = "partial";
+      result.failingChunk = {
+        index, mayHaveBroadcast,
+        message: error instanceof Error ? error.message : String(error),
+      };
+      break;
+    }
+  }
+  return result;
 }

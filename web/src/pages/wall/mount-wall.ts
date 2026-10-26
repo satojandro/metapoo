@@ -1,3 +1,5 @@
+import { strokeBegin, strokeExtend, MAX_BATCH, type StrokeState } from "./stroke-paint";
+import { planStrokeCommit, strokeResultCopy, TRUNCATED_STROKE_COPY, WALLET_STROKE_COPY } from "./stroke-commit";
 import { PALETTE } from "@shared/palette.ts";
 import { BOARD_HEIGHT, BOARD_WIDTH, type NetworkId } from "@shared/types.ts";
 import {
@@ -40,6 +42,7 @@ import {
 import {
   canUseLocalDrawingSession,
   fetchDrawingSessionAllowance,
+  signAndSendStrokeLocally,
 } from "../../local-draw";
 import {
   clearPaintQueue,
@@ -309,6 +312,9 @@ export function mountWall(
   let walletAccount: string | null = null;
   let walletNetwork: string | null = null;
   let drawInFlight = false;
+  type AnchoredStroke = { state: StrokeState; accountId: string; networkId: string; color: number };
+  let activeStroke: AnchoredStroke | null = null;
+
   let boardLoadInFlight = false;
   /** False until get_board metadata matches shared constants (or mock mode). */
   let contractMetaOk = !isContractConfigured();
@@ -545,6 +551,7 @@ export function mountWall(
       previousAccount !== walletAccount ||
       previousNetwork !== walletNetwork
     ) {
+      activeStroke = null;
       cancelUnsentPaintQueue("Wallet account or network changed.");
       // Account/network change invalidates quote authorization — fresh intent required.
       selectedQuote = null;
@@ -1376,7 +1383,13 @@ async function onAuthorizeSessionClick(): Promise<void> {
 }
 
 function render(): void {
-  renderBoard(canvas, paintedPixels(pixelCache), listPendingPaints(pendingPaints));
+  renderBoard(canvas, paintedPixels(pixelCache), [
+    ...listPendingPaints(pendingPaints),
+    ...(activeStroke?.state.cells.map(cell => ({ ...cell,
+      colorIndex: activeStroke!.color, accountId: activeStroke!.accountId,
+      transactionId: null, phase: "submitted" as const,
+    })) ?? []),
+  ]);
   positionSelection();
   updatePositionReadout();
   updateCompactStatus();
@@ -1468,12 +1481,18 @@ function fitWallToView(): void {
 
 /**
  * Pointer rules:
- * - one finger / mouse drag past threshold → pan (never paint)
+ * - with paint zoom and Direct paint consent, one pointer accumulates a stroke
+ * - otherwise one finger / mouse drag past threshold → pan (never paint)
  * - release without much movement → select cell
  * - two pointers → pinch zoom (never paint)
  */
 function wirePointerGestures(): void {
   let gesture = createGestureState();
+  let strokeCancelled = false;
+  const cancelStroke = () => { activeStroke = null; strokeCancelled = true; render(); };
+  listen(boardViewport, "wheel", () => { if (gesture.points.length) cancelStroke(); });
+  listen(boardViewport, "lostpointercapture", cancelStroke);
+
   let lastX = 0;
   let lastY = 0;
   let pinchStartDistance = 0;
@@ -1511,9 +1530,20 @@ function wirePointerGestures(): void {
     gesture = update.state;
 
     if (gesture.points.length === 1) {
+      strokeCancelled = false;
+      const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
+      if (cell && isPaintZoom(camera) && directPaintToggle.checked &&
+          walletAccount && selectedColor !== null && contractMetaOk &&
+          !drawInFlight && !paintQueue.inFlight && !paintQueueLength(paintQueue) &&
+          canUseLocalDrawingSession(walletAccount, walletNetwork)) {
+        activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
+          networkId: walletNetworkId(), color: selectedColor };
+        render();
+      }
       lastX = pointerEvent.clientX;
       lastY = pointerEvent.clientY;
     } else if (gesture.points.length === 2) {
+      cancelStroke();
       const pts = gesture.points;
       pinchStartDistance = Math.hypot(
         pts[0].clientX - pts[1].clientX,
@@ -1566,6 +1596,14 @@ function wirePointerGestures(): void {
       return;
     }
 
+    if (activeStroke) {
+      const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
+      if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
+      render();
+      if (activeStroke.state.truncated) fillBlock(result, "Stroke limit", TRUNCATED_STROKE_COPY);
+      updatePointerPreview(pointerEvent);
+      return;
+    }
     if (update.activeKind === "drag" || update.activeKind === "pan") {
       boardViewport.classList.add("is-panning");
       applyCamera(
@@ -1586,6 +1624,7 @@ function wirePointerGestures(): void {
   const endPointer = (event: Event): void => {
     const pointerEvent = event as PointerEvent;
     if (pointerEvent.type === "pointercancel") {
+      cancelStroke();
       clearPointerPreview();
     }
     if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
@@ -1602,6 +1641,20 @@ function wirePointerGestures(): void {
     if (update.completedKind !== null) {
       boardViewport.classList.remove("is-panning");
 
+      if (activeStroke) {
+        const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
+        if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
+        const stroke = activeStroke;
+        activeStroke = null;
+        // Long presses and cancelled gestures retain the classifier's guards.
+        if (update.completedKind === "tap" || update.completedKind === "drag") {
+          if (stroke.state.cells.length > 1) void commitStroke(stroke);
+          else if (update.completedKind === "tap") selectAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
+        }
+        render();
+        return;
+      }
+      if (strokeCancelled) { updateCompactStatus(); return; }
       // Only the pure classifier's deliberate-tap result may reach selection
       // or direct paint. Drag, pan, pinch, long press, and cancel are discarded.
       if (update.completedKind === "tap") {
@@ -1625,9 +1678,60 @@ function wirePointerGestures(): void {
   listen(boardViewport, "pointerleave", clearPointerPreview);
 }
 
-function selectAtClientPoint(clientX: number, clientY: number): void {
+function cellAtClientPoint(clientX: number, clientY: number): Cell | null {
   const rect = boardViewport.getBoundingClientRect();
-  const next = viewTransform.cellAt(clientX - rect.left, clientY - rect.top);
+  return viewTransform.cellAt(clientX - rect.left, clientY - rect.top);
+}
+
+async function commitStroke(stroke: AnchoredStroke): Promise<void> {
+  if (disposed || drawInFlight || stroke.accountId !== walletAccount ||
+      stroke.networkId !== walletNetworkId() || !directPaintToggle.checked) return;
+  const plan = planStrokeCommit(stroke.state, canUseLocalDrawingSession(walletAccount, walletNetwork));
+  if (plan.kind === "wallet_approval") {
+    fillBlock(result, "Drawing session needed", WALLET_STROKE_COPY);
+    return;
+  }
+  drawInFlight = true;
+  for (const cell of stroke.state.cells) setPendingPaint(pendingPaints, {
+    ...cell, colorIndex: stroke.color, accountId: stroke.accountId,
+    transactionId: null, phase: "submitted",
+  });
+  render();
+  setFlow("submitted");
+  try {
+    const outcome = await signAndSendStrokeLocally({
+      accountId: stroke.accountId, networkId: stroke.networkId,
+      cells: stroke.state.cells, color: stroke.color,
+    });
+    if (disposed) return;
+    // Resolve known outcomes through a fresh chain read; uncertain cells keep
+    // a pending marker. Never infer execution from matching pre-existing paint.
+    const uncertain = outcome.failingChunk?.mayHaveBroadcast;
+    const uncertainStart = outcome.confirmedChunks * MAX_BATCH;
+    for (const [i, cell] of stroke.state.cells.entries()) {
+      if (uncertain && i >= uncertainStart && i < uncertainStart + MAX_BATCH) {
+        setPendingPaint(pendingPaints, { ...cell, colorIndex: stroke.color,
+          accountId: stroke.accountId, transactionId: null, phase: "confirmation_delayed" });
+      } else clearPendingPaint(pendingPaints, cell.x, cell.y);
+    }
+    fillBlock(result, outcome.status === "confirmed" ? "Stroke confirmed" : "Stroke stopped", strokeResultCopy(stroke.state, outcome));
+    setFlow(outcome.status === "confirmed" ? "confirmed" : "confirmation_delayed");
+    // Stroke execution and latest ownership are distinct; do not reuse the
+    // single-cell label that promises a matching confirming read.
+    const statusText = outcome.status === "confirmed"
+      ? "Stroke transactions executed. Refreshing the latest board state."
+      : "Stroke stopped. Review the batch results before painting again.";
+    flowState.textContent = statusText;
+    drawState.textContent = statusText;
+    await refreshBoardFromContract({ reason: "after_draw" });
+  } finally {
+    drawInFlight = false;
+    if (!disposed) render();
+  }
+}
+
+function selectAtClientPoint(clientX: number, clientY: number): void {
+  const next = cellAtClientPoint(clientX, clientY);
   if (!next) {
     return;
   }
@@ -1658,6 +1762,7 @@ function maybeEnqueueDirectPaint(
   options: { paintZoom: boolean } = { paintZoom: false },
 ): void {
   if (
+    drawInFlight ||
     !tapToPaintEnabled ||
     !canUseLocalDrawingSession(walletAccount, walletNetwork) ||
     selectedColor === null ||
@@ -2016,7 +2121,7 @@ function fillRules(): void {
     "An unpainted square is not a color. It has no stored artist. Palette index 0 is Ink, a real paint color.",
     "Overwrite rule: Open wall. Any connected account may paint any pixel, including one someone else painted. Vandalism is possible.",
     "The current artist is credit for the latest successful write. That is not a legal claim on the artwork.",
-    "Explore with pan and zoom. Only Place paint (or Enter) submits a draw — drag and pinch never paint.",
+    "Explore with pan and zoom. Place paint (or Enter) submits a draw. With Direct paint enabled at paint zoom, drag to paint a stroke. Pan and pinch never paint.",
     isContractConfigured()
       ? `Game contract: ${CONTRACT_ID} on ${PAGE_NETWORK}. On open (and Refresh), the page loads every painted cell via paginated get_pixels. Transaction execution is reported separately from the latest cell owner; a successful paint may already be overwritten under Open wall.`
       : "No game contract id is configured yet (VITE_CONTRACT_ID empty), so this page will not open a draw signature or claim a chain success.",

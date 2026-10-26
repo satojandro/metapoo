@@ -3,7 +3,7 @@ import {
   buildAddFunctionCallKeyParams,
   describeDrawingSession,
   DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
-  DRAWING_SESSION_METHOD,
+  DRAWING_SESSION_METHODS,
   encodeBase58,
   forgetDrawingSessionLocally,
   formatAllowanceNear,
@@ -88,7 +88,7 @@ describe("encodeBase58", () => {
 });
 
 describe("buildAddFunctionCallKeyParams", () => {
-  it("limits methods to draw with a limited gas allowance", () => {
+  it("limits methods to the paint methods with a limited gas allowance", () => {
     const params = buildAddFunctionCallKeyParams(
       "board.example.testnet",
       "ed25519:SomePublicKey",
@@ -97,12 +97,25 @@ describe("buildAddFunctionCallKeyParams", () => {
     expect(params.publicKey).toBe("ed25519:SomePublicKey");
     expect(params.allowMethods).toEqual({
       anyMethod: false,
-      methodNames: [DRAWING_SESSION_METHOD],
+      methodNames: [...DRAWING_SESSION_METHODS],
     });
     expect(params.gasAllowance).toEqual({
       kind: "limited",
       amount: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
     });
+  });
+
+  it("never grants full access or an unrestricted method list", () => {
+    const params = buildAddFunctionCallKeyParams(
+      "board.example.testnet",
+      "ed25519:SomePublicKey",
+    );
+    // A session key must not be able to move funds or call unrelated methods.
+    expect(params.allowMethods.anyMethod).toBe(false);
+    expect(params.allowMethods.methodNames).not.toContain("transfer");
+    expect(params.allowMethods.methodNames).not.toContain("new");
+    // Only the board's paint entry points are reachable.
+    expect([...params.allowMethods.methodNames].sort()).toEqual(["draw", "draw_many"]);
   });
 });
 

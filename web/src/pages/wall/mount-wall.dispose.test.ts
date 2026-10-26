@@ -14,13 +14,23 @@ import {
   type WallMountTestApi,
 } from "./mount-wall";
 
+import { signAndSendStrokeLocally } from "../../local-draw";
+
 vi.mock("../../submit-draw", () => ({
   submitDraw: vi.fn(),
 }));
 
 vi.mock("../../local-draw", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../local-draw")>();
-  return { ...actual, canUseLocalDrawingSession: vi.fn(() => false) };
+  return {
+    ...actual,
+    // Direct paint is off unless a test turns it on AND dispatches the toggle
+    // change (mount-wall mirrors the toggle into `tapToPaintEnabled` on change).
+    canUseLocalDrawingSession: vi.fn(() => false),
+    fetchDrawingSessionAllowance: vi.fn(async () => ({ found: true, remainingYocto: null, permissionSummary: "" })),
+    // Stroke submission is asserted; it must never really sign in unit tests.
+    signAndSendStrokeLocally: vi.fn(async () => ({ status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null })),
+  };
 });
 
 vi.mock("../../config", async (importOriginal) => {
@@ -676,5 +686,62 @@ describe("mountWall Help-paint deep link via router", () => {
     expect(status?.textContent).toMatch(/Template id tmpl-demo/);
 
     router.stop();
+  });
+});
+
+describe("mounted paint strokes", () => {
+  it.each(["drag", "tap", "pinch", "wheel", "cancel", "same-cell-drag"])("handles %s without accidental single-cell draws", async (kind) => {
+    document.body.innerHTML = '<div id="root"></div>';
+    vi.mocked(submitDraw).mockReset().mockResolvedValue({ status: "confirmation_delayed", title: "Pending", message: "Pending", transactionId: null, explorerUrl: null, pixel: null, observedBlockHeight: null });
+    vi.mocked(signAndSendStrokeLocally).mockClear();
+    const services = createAppServices();
+    services.wallet.subscribe = listener => {
+      listener({ accountId: "alice.testnet", networkId: "testnet" });
+      return () => {};
+    };
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    await vi.waitFor(() => expect(root.querySelector("#board-load-status")?.textContent).toContain("painted cell"));
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 390, height: 480 } as DOMRect);
+    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    root.querySelector<HTMLButtonElement>("#palette button")!.click();
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const paintToggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
+    paintToggle.checked = true;
+    paintToggle.dispatchEvent(new Event("change"));
+    const pointer = (type: string, x: number, id = 1) => {
+      const event = new Event(type, { bubbles: true });
+      Object.assign(event, { pointerId: id, clientX: x, clientY: 240 });
+      viewport.dispatchEvent(event);
+    };
+    pointer("pointerdown", 195);
+    expect(submitDraw).not.toHaveBeenCalled();
+    expect(signAndSendStrokeLocally).not.toHaveBeenCalled();
+    if (kind === "pinch") pointer("pointerdown", 215, 2);
+    if (kind === "wheel") viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: 1 }));
+    const endX = kind === "same-cell-drag" ? 204 : kind === "tap" ? 195 : 255;
+    if (kind !== "tap") pointer("pointermove", endX);
+    expect(submitDraw).not.toHaveBeenCalled();
+    expect(signAndSendStrokeLocally).not.toHaveBeenCalled();
+    pointer(kind === "cancel" ? "pointercancel" : "pointerup", endX);
+    if (kind === "pinch") pointer("pointerup", 215, 2);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    if (kind === "drag") {
+      expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(signAndSendStrokeLocally).mock.calls[0][0]).toMatchObject({
+        cells: [{ x: 64, y: 64 }, { x: 65, y: 64 }, { x: 66, y: 64 }, { x: 67, y: 64 }],
+        accountId: "alice.testnet", color: 0,
+      });
+      expect(submitDraw).not.toHaveBeenCalled();
+    } else if (kind === "tap") {
+      expect(submitDraw).toHaveBeenCalledTimes(1);
+      expect(signAndSendStrokeLocally).not.toHaveBeenCalled();
+    } else {
+      expect(submitDraw).not.toHaveBeenCalled();
+      expect(signAndSendStrokeLocally).not.toHaveBeenCalled();
+    }
+    dispose();
   });
 });

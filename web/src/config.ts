@@ -85,7 +85,7 @@ export const SPONSORSHIP_ENABLED =
  */
 export const PAID_PAINT_FLAG = envString("VITE_PAID_PAINT") === "true";
 
-/** Prepaid gas for one `draw` call (30 Tgas), as a decimal string in gas units. */
+/** Prepaid gas for one `draw` or up to 64-cell `draw_many` call (30 Tgas), as a decimal string in gas units. */
 export const DRAW_GAS = "30000000000000";
 
 /** Attached deposit for `draw`. The game adds no fee; only network gas may apply. */
