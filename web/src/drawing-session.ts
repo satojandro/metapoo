@@ -23,8 +23,11 @@ export const DRAWING_SESSION_STORAGE_KEY =
 export const DRAWING_SESSION_GAS_ALLOWANCE_YOCTO =
   "50000000000000000000000";
 
-/** Only the board paint method is allowed for this experiment. */
-export const DRAWING_SESSION_METHOD = "draw";
+/** Methods the drawing-session key may call on the board contract. */
+export const DRAWING_SESSION_METHODS = ["draw", "draw_many"] as const;
+
+/** Legacy alias kept for status copy that names the primary method. */
+export const DRAWING_SESSION_METHOD = "draw_many";
 
 const YOCTO_PER_NEAR = 10n ** 24n;
 
@@ -165,7 +168,7 @@ export function buildAddFunctionCallKeyParams(
     publicKey,
     allowMethods: {
       anyMethod: false,
-      methodNames: [DRAWING_SESSION_METHOD],
+      methodNames: [...DRAWING_SESSION_METHODS],
     },
     gasAllowance: {
       kind: "limited",
