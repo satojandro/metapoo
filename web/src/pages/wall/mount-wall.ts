@@ -1515,17 +1515,40 @@ function fitWallToView(): void {
 
 /**
  * Pointer rules:
- * - with paint zoom and Direct paint consent, one pointer accumulates a stroke
+ * - direct paint armed (session + colour + consent): one pointer paints a stroke
+ * - panning while armed is a deliberate gesture: middle/right button, held
+ *   space, two fingers, or a drag that starts outside the board
  * - otherwise one finger / mouse drag past threshold → pan (never paint)
  * - release without much movement → select cell
  * - two pointers → pinch zoom (never paint)
+ *
+ * Paint zoom is deliberately NOT part of arming. Requiring a zoom level to be
+ * allowed to drag-paint was an invented precondition: it made drag silently
+ * pan for every user who had not discovered the zoom button, and the button
+ * carried no state to discover.
  */
 function wirePointerGestures(): void {
   let gesture = createGestureState();
   let strokeCancelled = false;
+  let spaceHeld = false;
   const cancelStroke = () => { activeStroke = null; strokeCancelled = true; render(); };
   listen(boardViewport, "wheel", () => { if (gesture.points.length) cancelStroke(); });
   listen(boardViewport, "lostpointercapture", cancelStroke);
+
+  // Space is the conventional "temporarily pan" modifier. Ignore it while a
+  // control is focused so the keyboard path for the palette keeps working.
+  listen(window, "keydown", (event) => {
+    const key = (event as KeyboardEvent).key;
+    if (key !== " " || (event as KeyboardEvent).repeat) return;
+    const target = event.target as HTMLElement | null;
+    if (target && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName)) return;
+    spaceHeld = true;
+  });
+  listen(window, "keyup", (event) => {
+    if ((event as KeyboardEvent).key === " ") spaceHeld = false;
+  });
+  // Right-drag is a pan gesture here, so the browser menu must not interrupt it.
+  listen(boardViewport, "contextmenu", (event) => event.preventDefault());
 
   let lastX = 0;
   let lastY = 0;
@@ -1573,7 +1596,15 @@ function wirePointerGestures(): void {
     if (gesture.points.length === 1) {
       strokeCancelled = false;
       const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
-      if (cell && isPaintZoom(camera) && directPaintToggle.checked &&
+      // A non-primary button or a held space means "I want to move the board",
+      // not "I want to paint here". That is the only way drag-painting can be
+      // unconditional at every zoom level.
+      const wantsPan =
+        pointerEvent.button === 1 ||
+        pointerEvent.button === 2 ||
+        spaceHeld ||
+        beganOnPanSurface;
+      if (cell && !wantsPan && directPaintToggle.checked &&
           walletAccount && selectedColor !== null && contractMetaOk &&
           !drawInFlight && !paintQueue.inFlight && !paintQueueLength(paintQueue) &&
           canUseLocalDrawingSession(walletAccount, walletNetwork)) {
@@ -1777,8 +1808,18 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     const statusText = outcome.status === "confirmed"
       ? "Stroke transactions executed. Refreshing the latest board state."
       : "Stroke stopped. Review the batch results before painting again.";
+    // Keep the reason where it cannot scroll away: the dock line persists, the
+    // result block is one action away from being replaced.
+    const failureReason =
+      outcome.status === "confirmed" ? null : outcome.failingChunk?.message;
+    if (failureReason) {
+      // Also to the console, so a tester can hand back the exact error.
+      console.error("[wall] stroke submission failed:", failureReason);
+    }
     flowState.textContent = statusText;
-    drawState.textContent = statusText;
+    drawState.textContent = failureReason
+      ? `${statusText} Reason: ${failureReason}`
+      : statusText;
     await refreshBoardFromContract({ reason: "after_draw" });
   } finally {
     drawInFlight = false;
@@ -1952,7 +1993,7 @@ function updateDirectPaintAvailability(): void {
   tapToPaintAnnouncement.textContent = !allowed
     ? ""
     : tapToPaintEnabled
-      ? "Direct paint is on. Click any square to paint it. No wallet popup."
+      ? "Direct paint is on. Drag or click to paint. To move the board, hold space, use two fingers, or the middle mouse button."
       : "Direct paint is off. Select a square, then press Place paint.";
 }
 

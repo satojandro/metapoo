@@ -342,7 +342,7 @@ describe("mountWall dispose", () => {
 
     expect(toggle.checked).toBe(true);
     expect(root.querySelector("#tap-to-paint-status")?.textContent).toMatch(
-      /click any square to paint it/i,
+      /drag or click to paint/i,
     );
     expect(connect).not.toHaveBeenCalled();
     expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
@@ -656,7 +656,7 @@ describe("mountWall dispose", () => {
     await vi.waitFor(() => expect(toggle.checked).toBe(true));
     expect(root.querySelector<HTMLElement>("#paint-unlock")!.hidden).toBe(true);
     expect(status.hidden).toBe(false);
-    expect(status.textContent).toMatch(/click any square to paint it/i);
+    expect(status.textContent).toMatch(/drag or click to paint/i);
 
     // An explicit "no" is honoured, and survives a wallet re-emit.
     toggle.checked = false;
@@ -666,6 +666,82 @@ describe("mountWall dispose", () => {
     expect(status.textContent).toMatch(/place paint/i);
 
     expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    dispose();
+  });
+  it("paints a drag at fitted zoom, with no paint-zoom precondition", async () => {
+    const resizeCallbacks = new Set<ResizeObserverCallback>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(): void {
+          resizeCallbacks.add(this.callback);
+        }
+        disconnect(): void {
+          resizeCallbacks.delete(this.callback);
+        }
+        unobserve(): void {}
+      },
+    );
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    // 200 / 128 = ~1.56 px per cell: far below PAINT_MIN_CELL_PX (16). Drag used
+    // to pan here no matter what, because paint zoom was part of the arm gate.
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 480, width: 200, height: 480,
+      toJSON: () => ({}),
+    } as DOMRect);
+    for (const callback of resizeCallbacks) {
+      callback([], {} as ResizeObserver);
+    }
+    root.querySelector<HTMLButtonElement>(".swatch")!.click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked,
+      ).toBe(true),
+    );
+
+    touchPointer(viewport, "pointerdown", 1, 60, 200);
+    touchPointer(viewport, "pointermove", 1, 80, 200);
+    touchPointer(viewport, "pointermove", 1, 100, 200);
+    touchPointer(viewport, "pointerup", 1, 100, 200);
+
+    await vi.waitFor(() =>
+      expect(vi.mocked(signAndSendStrokeLocally)).toHaveBeenCalledTimes(1),
+    );
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it("still pans a drag while painting is armed when space is held", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      left: 0, top: 0, right: 512, bottom: 512, width: 512, height: 512,
+    } as DOMRect);
+    root.querySelector<HTMLButtonElement>(".swatch")!.click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked,
+      ).toBe(true),
+    );
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    touchPointer(viewport, "pointerdown", 1, 40, 40);
+    touchPointer(viewport, "pointermove", 1, 120, 40);
+    touchPointer(viewport, "pointerup", 1, 200, 40);
+    await Promise.resolve();
+
+    expect(vi.mocked(signAndSendStrokeLocally)).not.toHaveBeenCalled();
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: " " }));
     dispose();
   });
 });

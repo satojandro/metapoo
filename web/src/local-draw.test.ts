@@ -40,12 +40,35 @@ describe("session stroke submission", () => {
     }
   });
   it("stops at the first lost response without retry or fallback", async () => {
+    // "lost response" means the transaction may exist. The allowance moving is
+    // the evidence for that: chunk 1 read it before the call and again after
+    // the failure, and it dropped, so gas was spent by a real transaction.
+    mocks.key
+      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "1000000000000000000000000" } } })
+      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "1000000000000000000000000" } } })
+      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "900000000000000000000000" } } });
     mocks.call.mockResolvedValueOnce(success).mockRejectedValueOnce(new Error("lost response"));
     expect(await signAndSendStrokeLocally(args)).toMatchObject({ status: "partial", confirmedChunks: 1, totalChunks: 3,
       failingChunk: { index: 1, mayHaveBroadcast: true, message: "lost response" } });
     expect(mocks.call).toHaveBeenCalledTimes(2);
   });
+
+  it("does not claim a possible broadcast when the session key never spent gas", async () => {
+    // A payload that never left the browser (serialisation, signer, or a
+    // rejected RPC call) leaves the allowance byte-identical. Reporting
+    // "may have been broadcast" there pinned every cell of the batch as
+    // confirmation-delayed forever, on a chain with no such transaction.
+    mocks.call.mockRejectedValueOnce(new Error("Expected Array-like not bigint"));
+    const result = await signAndSendStrokeLocally(args);
+    expect(result).toMatchObject({ status: "partial", confirmedChunks: 0, failingChunk: {
+      index: 0, mayHaveBroadcast: false, message: "Expected Array-like not bigint",
+    } });
+  });
   it("stops on a returned failed or unknown execution", async () => {
+    // Executed-but-failed still spends gas, so the allowance moves: uncertain.
+    mocks.key
+      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "1000000000000000000000000" } } })
+      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "899000000000000000000000" } } });
     mocks.call.mockResolvedValueOnce({ status: { Failure: "failed" } });
     expect(await signAndSendStrokeLocally(args)).toMatchObject({ status: "partial", confirmedChunks: 0, failingChunk: { mayHaveBroadcast: true } });
     expect(mocks.call).toHaveBeenCalledTimes(1);

@@ -152,10 +152,11 @@ export function wallPageHtml(): string {
             <section data-wall-detail="instructions">
               <h2>How to paint</h2>
               <p id="board-help" class="help">
-                Drag to pan. Scroll or pinch to zoom. Tap a square to select it;
-                at Paint zoom, a tap directly places the selected color when a
-                drawing session is authorized. Pan and pinch never paint. Arrow
-                keys move the selection; Enter places when ready.
+                Drag to paint once a drawing key is approved; click selects a
+                square. To move the board, hold space and drag, use the middle
+                mouse button, or use two fingers on a touchscreen. Scroll or
+                pinch to zoom. Arrow keys move the selection; Enter places when
+                ready.
               </p>
             </section>
             <section data-wall-detail="bootstrap">

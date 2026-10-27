@@ -259,9 +259,11 @@ export async function signAndSendStrokeLocally(args: {
   };
   for (const [index, chunk] of chunks.entries()) {
     let mayHaveBroadcast = false;
+    let allowanceBefore: string | null = null;
     try {
       const record = requireActiveRecord(args.accountId, args.networkId);
       const allowance = await fetchDrawingSessionAllowance(args);
+      allowanceBefore = allowance.remainingYocto;
       if (!allowance.found) {
         throw new LocalDrawError("key_missing", "Authorize a new drawing session before continuing.");
       }
@@ -291,9 +293,29 @@ export async function signAndSendStrokeLocally(args: {
       result.confirmedChunks += 1;
     } catch (error) {
       result.status = "partial";
+      const message = error instanceof Error ? error.message : String(error);
       result.failingChunk = {
-        index, mayHaveBroadcast,
-        message: error instanceof Error ? error.message : String(error),
+        index,
+        // `mayHaveBroadcast` was set before the call, so it means "the send was
+        // attempted", not "a transaction may exist". Ask the chain instead: an
+        // executed transaction spends the session key's gas allowance, and a
+        // payload that never left the browser leaves it byte-identical. Without
+        // this check a purely local failure pinned every cell in the batch as
+        // "confirmation delayed" forever, with no transaction on chain.
+        mayHaveBroadcast: mayHaveBroadcast
+          ? await (async () => {
+              try {
+                const after = await fetchDrawingSessionAllowance(args);
+                if (after.remainingYocto === null || allowanceBefore === null) {
+                  return true; // unknown allowance: stay conservative
+                }
+                return BigInt(after.remainingYocto) !== BigInt(allowanceBefore);
+              } catch {
+                return true;
+              }
+            })()
+          : false,
+        message,
       };
       break;
     }
