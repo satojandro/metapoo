@@ -3,10 +3,35 @@ import { BOARD_HEIGHT, BOARD_WIDTH, type PixelView } from "@shared/types.ts";
 import type { PendingPaint } from "./pending-paint";
 
 /** Bitmap size of one square before CSS stretches the canvas. */
-const CELL = 4;
+export const CELL = 4;
 
 const EMPTY_A = "#242629";
 const EMPTY_B = "#292b2e";
+
+/** Device pixels per logical bitmap pixel. Clamped so 3x is the ceiling. */
+export const MAX_RENDER_SCALE = 3;
+
+/**
+ * Integer scale from CSS pixels to device pixels.
+ *
+ * Reading `devicePixelRatio` inside the renderer means every render picks up the
+ * current display, so moving the window between a HiDPI and a standard monitor
+ * fixes itself on the next frame instead of needing a listener that can be
+ * missed. Rounded, not fractional: a fractional scale reintroduces exactly the
+ * sub-pixel seams this exists to remove.
+ */
+export function renderScale(dpr?: number): number {
+  const raw =
+    typeof dpr === "number"
+      ? dpr
+      : typeof window !== "undefined" && typeof window.devicePixelRatio === "number"
+        ? window.devicePixelRatio
+        : 1;
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 1;
+  }
+  return Math.min(MAX_RENDER_SCALE, Math.max(1, Math.round(raw)));
+}
 
 /**
  * Marker for a cell whose paint is not confirmed on chain yet.
@@ -33,14 +58,20 @@ export function renderBoard(
   canvas: HTMLCanvasElement,
   pixels: readonly PixelView[] = [],
   pending: readonly PendingPaint[] = [],
+  dpr?: number,
 ): void {
   const context = canvas.getContext("2d");
   if (!context) {
     return;
   }
 
-  canvas.width = BOARD_WIDTH * CELL;
-  canvas.height = BOARD_HEIGHT * CELL;
+  // Backing store in device pixels, CSS size unchanged: the bitmap is never
+  // stretched by a fractional factor, so a cell lands on whole device pixels
+  // and cannot blur or leave a seam against its neighbour.
+  const scale = renderScale(dpr);
+  const cell = CELL * scale;
+  canvas.width = BOARD_WIDTH * cell;
+  canvas.height = BOARD_HEIGHT * cell;
   // The viewport scales this bitmap through its camera transform. Keep the
   // source pixels hard-edged so a scaled logical cell cannot blend into its
   // neighbour at a camera boundary.
@@ -49,7 +80,7 @@ export function renderBoard(
   for (let y = 0; y < BOARD_HEIGHT; y += 1) {
     for (let x = 0; x < BOARD_WIDTH; x += 1) {
       context.fillStyle = (x + y) % 2 === 0 ? EMPTY_A : EMPTY_B;
-      context.fillRect(x * CELL, y * CELL, CELL, CELL);
+      context.fillRect(x * cell, y * cell, cell, cell);
     }
   }
 
@@ -62,7 +93,7 @@ export function renderBoard(
       continue;
     }
     context.fillStyle = swatch.hex;
-    context.fillRect(pixel.x * CELL, pixel.y * CELL, CELL, CELL);
+    context.fillRect(pixel.x * cell, pixel.y * cell, cell, cell);
   }
 
   for (const paint of pending) {
@@ -71,14 +102,14 @@ export function renderBoard(
       continue;
     }
     context.fillStyle = swatch.hex;
-    context.fillRect(paint.x * CELL, paint.y * CELL, CELL, CELL);
+    context.fillRect(paint.x * cell, paint.y * cell, cell, cell);
     // One device pixel in the cell's own top-left corner, never an outline.
     // At CELL = 4 an inset 1px stroke leaves a 2x2 interior, so an unconfirmed
     // cell reads as the marker's colour instead of the paint's — which is the
     // "why is my pixel yellow" bug reported from live testing. The marker may
     // mark a cell; it may never repaint one.
     context.fillStyle = PENDING_MARK;
-    context.fillRect(paint.x * CELL, paint.y * CELL, 1, 1);
+    context.fillRect(paint.x * cell, paint.y * cell, scale, scale);
   }
 }
 
@@ -92,7 +123,13 @@ export function bitmapHex(
   if (!context) {
     return null;
   }
-  const pixel = context.getImageData(x * CELL + 1, y * CELL + 1, 1, 1).data;
+  // Derive the scale from the canvas itself so the read seam keeps working at
+  // whatever resolution the caller rendered at.
+  const scale = Math.max(1, Math.round(canvas.width / (BOARD_WIDTH * CELL)));
+  const cell = CELL * scale;
+  const middle = x * cell + Math.floor(cell / 2);
+  const vertical = y * cell + Math.floor(cell / 2);
+  const pixel = context.getImageData(middle, vertical, 1, 1).data;
   return rgbToHex(pixel[0], pixel[1], pixel[2]);
 }
 
