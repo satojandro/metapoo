@@ -65,15 +65,15 @@ Baseline for this revision: `origin/main = 5b40b63`, 263 tests / 39 files, build
 | — | Browser `Buffer` polyfill (strokes never reached the chain) | `4152d73` |
 | — | Zoom controls + first-visit hint | `2615cef` |
 | — | Always-reachable zoom % + cell coords readout | `b8a0861` |
+| **T1** | Device-resolution canvas (DPR clamped 1–3, whole-block cells, bitmapHex read seam) | `19e95bd`. **Manual visual gate still open** — see below |
+| **T9** | Drag preconditions named individually | `34eb5a1` (`strokeBlockedReason`) |
+| **T8r** | Plain-language contract line + state legend | `34eb5a1` |
 
 ## Open — verified not done
 
 | id | item | evidence that it is missing | size |
 |---|---|---|---|
-| **T1** | Crisp device-pixel paint moment | `grep -rn devicePixelRatio web/src` → **0 hits**. Canvas is a fixed 512×512 bitmap stretched by CSS. The CSS half exists (`style.css:669-670` `pixelated` + `crisp-edges`; `width: round(nearest, 100%, 1px)`), the resolution half does not | **M** |
 | **T5** | Schema-driven board dimensions | `mount-wall.ts:4` imports `BOARD_WIDTH/HEIGHT` and *validates* the contract against them (`contract-meta.ts`) rather than adopting contract values. Deliberate, but it means a differently-sized board is rejected instead of rendered | **S/M** |
-| **T9** | Drag preconditions visible | Gate removed (`9d13412`) and the busy case now speaks (`993842d`), but nothing names *which* precondition is missing when painting is not armed | **S** |
-| **T8r** | Orientation remainder | A first-visit hint exists (`2615cef`, `wall-hint.ts`), but there is no plain-language line about what the contract stores, and no legend for board states. The hint never mentions the drawing key | **S** |
 | **R2.2** | Cheap change detection before paging | Full read is 6 requests today, 64 at 16,384 cells, every 4 s. Needs an O(1) view → **contract change = ask-first** | **M** |
 | **T2b** | *(unverified)* roving tabindex over swatches | Not checked this revision. Tab moves through all 8 swatches rather than arrow keys within the group — cosmetic a11y, not a blocker | **S** |
 
@@ -93,6 +93,35 @@ quotes**, off by default. MPOO is `mpoo.nearlytrade.near` on **mainnet**; the li
 `wall.berrywall1.testnet` — so the first paid slice needs a **testnet fungible token**, not the real one.
 Sequence and gates: `roadmap.md` R2 + the delivery-plan briefs (B–I), which need one revision pass
 before dispatch because they predate the working wall.
+
+## Open gates and scoped work
+
+### T1 manual visual gate — **human, open**
+`19e95bd` is tested but not seen. At paint zoom a single painted cell must be a solid square
+with no halo or seam, compared side by side against the previous build. Until that is done, T1
+is implemented, not accepted.
+
+### T5 — scoped, **not started**
+Adopting contract-reported board dimensions instead of validating against `BOARD_WIDTH`/`HEIGHT`
+constants is not a small change: those constants are read by the camera (`fitCamera`, `clampPan`,
+`zoomAt`, `boardScreenSize`), the renderer, selection and the template. Doing it properly means
+board geometry becoming runtime state that the camera is rebuilt against after `get_board`.
+File set for a dispatch: `web/src/viewport.ts`, `render-board.ts`, `pages/wall/mount-wall.ts`,
+`shared/types.ts`, plus their tests. Risk: camera maths — `learning/traps.md` says do not change
+it casually. Recommended: one task, tests first, human visual check after zoom and pan.
+
+### Agent-orchestrator dispatch — 2026-10-27, blocked on credentials
+T1 was dispatched (`max-tasks 1`, codex lane, gpt-6.1-sol). The PO planned it correctly — one
+reversible task with the acceptance criteria from this document — then the engineer lane failed
+four times with **zero file changes**. Cause: the Codex CLI's refresh token was rejected
+(`your refresh token was already used`, then `workspace routing discovery unauthorized (401)`).
+The work was therefore implemented directly.
+
+Preconditions before the next dispatch:
+1. **Re-login the Codex CLI** (`codex login`); verify with `codex exec -m gpt-6.1-sol "PONG"`.
+2. The PO also carried forward a process escalation: `scope_violation` fires on reversible web
+   files because of ask-first vocabulary matching, not because of a genuine off-scope edit. That
+   gate needs narrowing before another web-only batch.
 
 ## Superseded inputs
 
