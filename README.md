@@ -36,6 +36,8 @@ These files preserve the original free-MVP scope, assignments and longer-term id
 7. [Chain abstraction research brief](07-agent-brief-chain-abstraction-research.md)
 8. [Acceptance security and QA](08-acceptance-security-and-qa.md)
 9. [Learning journal](09-learning-journal.md)
+10. [Roadmap — open product decisions](docs/roadmap.md)
+11. [Learning records](docs/learning/README.md) · [traps](docs/learning/traps.md)
 
 ## Evidence labels
 
