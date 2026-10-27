@@ -16,6 +16,7 @@ listed, the newest dated file wins and this map is missing an entry.
 | topic | authoritative document |
 |---|---|
 | what to do before changing code | `../AGENT.md` |
+| **what is left to build** | **`backlog.md`** — verified state; agents keep it current, every row carries its proof |
 | traps that have already cost time | `learning/traps.md` |
 | open product decisions (R1–R5) | `roadmap.md` |
 | decisions already taken | `00-shared-decisions.md` |

@@ -16,6 +16,20 @@ Read these before changing anything, in order:
 
 Do not infer project state from the code alone, and do not infer it from a green test run.
 
+# Keep `docs/backlog.md` current
+
+You own that file. If your change alters a status in it, update it **in the same PR** — moving
+the row, adding the commit that proves it, or marking it unverified with what is missing.
+
+The failure it exists to prevent: on 2026-10-27 six rows said "not delivered" for work that had
+already shipped in commits from the same document's ancestry. The problem was not that an agent
+held the pen — it was that nobody re-derived the status. So:
+
+**A status line is a claim until you check it.** Never copy a row forward. Run
+`git log --oneline origin/main -- <paths>` and grep for the artefact itself before you write
+"missing" or "done". Delivered rows keep their commit id so the next agent cannot re-dispatch
+them.
+
 # Web verification
 
 Run web checks from `web/`: `npm test -- <test-name>`, `npm test`, and `npm run build`.

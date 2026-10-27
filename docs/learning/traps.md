@@ -34,6 +34,15 @@ redeploy over live state bricked a board.
 2026-10-27 a change was green in vitest and red in `tsc` because a test fixture predated a
 new required field. If you only run tests, you ship a broken build.
 
+**A backlog or status document is a claim, not evidence.** On 2026-10-27 six backlog items
+were recorded as undelivered when commits in the same document's own ancestry had already
+shipped them (`6080412` a11y controls, `db4d50a` mobile ergonomics, `ff08ccf` scenery,
+`2615cef` first-visit hint, `b8a0861` zoom readout). Acting on them would have rebuilt
+working code. Before believing a status, run
+`git log --oneline -- <paths>` and grep for the artefact itself. `docs/backlog.md` is agent-
+maintained precisely so it stays true: update it in the same PR, and never carry a status
+forward without re-deriving it.
+
 **A passing suite is not evidence that the feature works.** On 2026-10-27 the wall carried
 248 green tests over 39 files, a clean build and 13 "delivered" backlog items while
 drag-to-paint had **never completed a single transaction**. Unit tests verified the wrong
