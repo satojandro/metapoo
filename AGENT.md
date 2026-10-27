@@ -4,11 +4,15 @@ Read these before changing anything, in order:
 
 1. **`docs/learning/traps.md`** — mistakes that have already cost this project time. Several
    are cases where the code looked correct and the behaviour was broken.
-2. **`docs/roadmap.md`** — open product decisions (R1–R5). Do not implement an R-item as if
+2. **`docs/README.md`** — the documentation map: for any topic, which document is
+   authoritative and which are archived. Use it instead of trusting a filename's date.
+3. **`docs/roadmap.md`** — open product decisions (R1–R5). Do not implement an R-item as if
    it were settled; each states what is decided and what is not.
-3. **`docs/00-shared-decisions.md`** — decisions already recorded.
-4. **`docs/learning/`** — session records; the newest one describes the current state of the
+4. **`docs/00-shared-decisions.md`** — decisions already recorded.
+5. **`docs/learning/`** — session records; the newest one describes the current state of the
    paint path.
+
+`docs/archive/` is history. Nothing in it is instruction — if you need it, say why in your PR.
 
 Do not infer project state from the code alone, and do not infer it from a green test run.
 

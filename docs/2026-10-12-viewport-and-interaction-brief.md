@@ -21,7 +21,7 @@ The board is a precise rectangular painting surface within the spatial scene. On
 
 ## Technical references (not forks)
 
-- **Berry Club / NEAR Place:** Engineering patterns — batched draws, pending preview, guarded refresh, row-oriented updates, function-call drawing sessions. Study public history; do not copy old wallet URLs, economics, or undifferentiated pending paint. Primary sources are linked from `docs/2026-10-12-board-review-and-next-steps.md`.
+- **Berry Club / NEAR Place:** Engineering patterns — batched draws, pending preview, guarded refresh, row-oriented updates, function-call drawing sessions. Study public history; do not copy old wallet URLs, economics, or undifferentiated pending paint. Primary sources are linked from `docs/archive/2026-10-12-board-review-and-next-steps.md` (archived).
 - **Reddit r/place:** Synchronized board state, substantial zoom, easy pan, desktop and mobile; distinguish small logical pixels from larger screen targets.
 
 Original product requirement stands: Meta Poo is not a Berry Club fork. Studying its public implementation for patterns is encouraged.

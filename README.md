@@ -17,7 +17,7 @@ The implemented board is free. The economy above is planned, not enabled. Its la
 
 October 2026 board work (viewport, shared updates, drawing session, 3D stall):
 
-- Assessment / plan: `docs/2026-10-12-board-review-and-next-steps.md`
+- Assessment / plan: `docs/2026-10-12-board-review-and-next-steps.md` (archived — see `docs/archive/`)
 - Interaction brief: `docs/2026-10-12-viewport-and-interaction-brief.md`
 - Stall visual references: `docs/2026-10-12-stall-visual-references.md`
 - Saturated palette proposal (not shipped): `docs/2026-10-12-palette-proposal.md`
@@ -36,8 +36,9 @@ These files preserve the original free-MVP scope, assignments and longer-term id
 7. [Chain abstraction research brief](07-agent-brief-chain-abstraction-research.md)
 8. [Acceptance security and QA](08-acceptance-security-and-qa.md)
 9. [Learning journal](09-learning-journal.md)
-10. [Roadmap — open product decisions](docs/roadmap.md)
-11. [Learning records](docs/learning/README.md) · [traps](docs/learning/traps.md)
+10. [Documentation map — which doc is authoritative](docs/README.md)
+11. [Roadmap — open product decisions](docs/roadmap.md)
+12. [Learning records](docs/learning/README.md) · [traps](docs/learning/traps.md)
 
 ## Evidence labels
 
