@@ -49,7 +49,7 @@ describe("mountWallZoomControls", () => {
   it("creates accessible buttons and exposes no placement callback to the module", () => {
     const container = document.createElement("div");
     document.body.append(container);
-    const { host } = createHost({ current: 3, minimum: 0.25, maximum: 48, fitted: true });
+    const { host } = createHost({ current: 3, minimum: 0.25, maximum: 48, fit: 0.25, fitted: true });
 
     const dispose = mountWallZoomControls(container, host);
 
@@ -69,7 +69,7 @@ describe("mountWallZoomControls", () => {
   it("clamps zoom requests and disables controls at both limits and at fit", () => {
     const container = document.createElement("div");
     document.body.append(container);
-    const fixture = createHost({ current: 47, minimum: 0.25, maximum: 48, fitted: false });
+    const fixture = createHost({ current: 47, minimum: 0.25, maximum: 48, fit: 0.25, fitted: false });
     const dispose = mountWallZoomControls(container, fixture.host);
     const zoomIn = container.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!;
     const zoomOut = container.querySelector<HTMLButtonElement>('[aria-label="Zoom out"]')!;
@@ -79,7 +79,7 @@ describe("mountWallZoomControls", () => {
     expect(fixture.host.zoomBy).toHaveBeenLastCalledWith(48 / 47);
     expect(zoomIn.disabled).toBe(true);
 
-    fixture.setState({ current: 0.26, minimum: 0.25, maximum: 48, fitted: false });
+    fixture.setState({ current: 0.26, minimum: 0.25, maximum: 48, fit: 0.25, fitted: false });
     zoomOut.click();
     expect(fixture.host.zoomBy).toHaveBeenLastCalledWith(0.25 / 0.26);
     expect(zoomOut.disabled).toBe(true);
@@ -100,7 +100,7 @@ describe("mountWallZoomControls", () => {
     for (const eventType of ["pointerdown", "pointerup", "wheel", "beforeinput", "input", "keydown"]) {
       canvasPath.addEventListener(eventType, seen);
     }
-    const { host } = createHost({ current: 3, minimum: 0.25, maximum: 48, fitted: false });
+    const { host } = createHost({ current: 3, minimum: 0.25, maximum: 48, fit: 0.25, fitted: false });
     const dispose = mountWallZoomControls(container, host);
     const button = container.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!;
 
@@ -115,7 +115,7 @@ describe("mountWallZoomControls", () => {
   it("disposal unsubscribes, removes listeners, and removes its nodes", () => {
     const container = document.createElement("div");
     document.body.append(container);
-    const fixture = createHost({ current: 3, minimum: 0.25, maximum: 48, fitted: false });
+    const fixture = createHost({ current: 3, minimum: 0.25, maximum: 48, fit: 0.25, fitted: false });
     const dispose = mountWallZoomControls(container, fixture.host);
     const detachedZoomIn = container.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!;
 
@@ -127,5 +127,22 @@ describe("mountWallZoomControls", () => {
     expect(container.childElementCount).toBe(0);
     detachedZoomIn.click();
     expect(fixture.host.zoomBy).not.toHaveBeenCalled();
+  });
+
+  it("shows how zoomed the wall is, with 100% meaning the whole board fits", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const fixture = createHost({ current: 3, minimum: 3, maximum: 48, fit: 3, fitted: true });
+    mountWallZoomControls(container, fixture.host);
+
+    const level = () => container.querySelector("#zoom-level")!.textContent;
+    expect(level()).toBe("100%");
+
+    // Double the fitted cell size: twice as big as "everything visible".
+    fixture.setState({ current: 6, minimum: 3, maximum: 48, fit: 3, fitted: false });
+    expect(level()).toBe("200%");
+
+    fixture.setState({ current: 48, minimum: 3, maximum: 48, fit: 3, fitted: false });
+    expect(level()).toBe("1600%");
   });
 });

@@ -114,6 +114,24 @@ function cellIndexAt(point: number, stageStart: number, cellSize: number): numbe
 }
 
 /**
+ * Largest cell size that still shows the whole board inside the viewport.
+ *
+ * This is also the zoom-out floor. Zooming out past it only grows the empty
+ * space between the board and its container: the wall keeps shrinking while
+ * nothing else changes, which is unreadable and serves no purpose.
+ */
+export function fitCellSize(viewport: ViewportSize, margin = 8): number {
+  if (viewport.width <= 0 || viewport.height <= 0) {
+    return FIT_MIN_CELL_PX;
+  }
+  const usableW = Math.max(1, viewport.width - margin * 2);
+  const usableH = Math.max(1, viewport.height - margin * 2);
+  return clampFitCellSize(
+    Math.min(usableW / BOARD_WIDTH, usableH / BOARD_HEIGHT),
+  );
+}
+
+/**
  * Fit the whole wall inside the viewport with a little margin.
  * Centers the board when the viewport aspect differs from the wall.
  */
@@ -121,12 +139,7 @@ export function fitCamera(viewport: ViewportSize, margin = 8): Camera {
   if (viewport.width <= 0 || viewport.height <= 0) {
     return { cellSize: FIT_MIN_CELL_PX, panX: 0, panY: 0 };
   }
-  const usableW = Math.max(1, viewport.width - margin * 2);
-  const usableH = Math.max(1, viewport.height - margin * 2);
-  // Overview may go below MIN_CELL_PX so small viewports still show the whole wall.
-  const cellSize = clampFitCellSize(
-    Math.min(usableW / BOARD_WIDTH, usableH / BOARD_HEIGHT),
-  );
+  const cellSize = fitCellSize(viewport, margin);
   const board = boardScreenSize({ cellSize, panX: 0, panY: 0 });
   return {
     cellSize,
@@ -168,19 +181,45 @@ export function clampFitCellSize(cellSize: number): number {
 }
 
 /**
- * Keep some of the board visible. When zoomed out past the viewport, center.
+ * Keep some of the board visible. The whole board is always at least as large
+ * as the viewport allows, so zooming out cannot open a gap around it.
  * When zoomed in, allow panning but do not lose the wall entirely.
- * Preserves sub-MIN overview scales from fitCamera.
  */
 export function clampPan(camera: Camera, viewport: ViewportSize): Camera {
-  const cellSize =
-    camera.cellSize < MIN_CELL_PX
-      ? clampFitCellSize(camera.cellSize)
-      : clampCellSize(camera.cellSize);
+  const floor = fitCellSize(viewport);
+  const cellSize = Math.min(MAX_CELL_PX, Math.max(floor, camera.cellSize));
   const board = boardScreenSize({ cellSize, panX: 0, panY: 0 });
   const panX = clampAxis(camera.panX, viewport.width, board.width);
   const panY = clampAxis(camera.panY, viewport.height, board.height);
   return { cellSize, panX, panY };
+}
+
+/** Zoom per wheel notch on a classic mouse (deltaY of 100). */
+const WHEEL_ZOOM_SENSITIVITY = 0.0015;
+/** A single wheel event may never move the camera more than this. */
+const WHEEL_ZOOM_MAX_STEP = 1.2;
+
+/**
+ * Convert a wheel event into a zoom factor.
+ *
+ * A trackpad emits dozens of small events per gesture, so a fixed factor per
+ * event multiplies into a violent jump: one flick crossed the entire zoom range.
+ * Scaling by the actual delta, exponentially, makes a gesture compose smoothly,
+ * while the per-event clamp keeps a single massive notch from teleporting.
+ *
+ * `deltaMode` 1 = lines, 2 = pages (Firefox and some mice).
+ */
+export function wheelZoomFactor(deltaY: number, deltaMode = 0): number {
+  if (!Number.isFinite(deltaY) || deltaY === 0) {
+    return 1;
+  }
+  const pixels =
+    deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 100 : deltaY;
+  const factor = Math.exp(-pixels * WHEEL_ZOOM_SENSITIVITY);
+  return Math.min(
+    WHEEL_ZOOM_MAX_STEP,
+    Math.max(1 / WHEEL_ZOOM_MAX_STEP, factor),
+  );
 }
 
 function clampAxis(pan: number, viewport: number, board: number): number {
@@ -206,11 +245,12 @@ export function zoomAt(
   if (!Number.isFinite(factor) || factor <= 0) {
     return camera;
   }
-  // Keep fit/overview reachable with a wheel or pinch. `clampPan` already
-  // distinguishes that sub-interactive range from normal zoomed-in values;
-  // forcing MIN_CELL_PX here would make a zoom-out from a small overview jump
-  // *in* to 2px cells.
-  const nextSize = clampFitCellSize(camera.cellSize * factor);
+  // The floor is the fitted size: below that the board would float in empty
+  // space, so a zoom-out gesture simply stops.
+  const nextSize = Math.min(
+    MAX_CELL_PX,
+    Math.max(fitCellSize(viewport), camera.cellSize * factor),
+  );
   if (nextSize === camera.cellSize) {
     return clampPan(camera, viewport);
   }

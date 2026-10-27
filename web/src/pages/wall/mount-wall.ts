@@ -77,12 +77,14 @@ import { submitDraw } from "../../submit-draw";
 import {
   createCameraTransform,
   fitCamera,
+  fitCellSize,
   FIT_MIN_CELL_PX,
   isPaintZoom,
   MAX_CELL_PX,
   paintZoomCamera,
   PAINT_CELL_PX,
   panBy,
+  wheelZoomFactor,
   zoomAt,
   type Camera,
   type CameraTransform,
@@ -498,7 +500,10 @@ export function mountWall(
       const wheelEvent = event as WheelEvent;
       wheelEvent.preventDefault();
       const rect = boardViewport.getBoundingClientRect();
-      const factor = wheelEvent.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const factor = wheelZoomFactor(wheelEvent.deltaY, wheelEvent.deltaMode);
+      if (factor === 1) {
+        return;
+      }
       applyCamera(
         zoomAt(
           camera,
@@ -1471,15 +1476,19 @@ function applyCamera(next: Camera): void {
 }
 
 function readZoomState() {
-  const fittedCamera = fitCamera(readViewportSize());
+  const viewport = readViewportSize();
+  const fittedCamera = fitCamera(viewport);
   const fitted =
     Math.abs(camera.cellSize - fittedCamera.cellSize) < 1e-6 &&
     Math.abs(camera.panX - fittedCamera.panX) < 1e-6 &&
     Math.abs(camera.panY - fittedCamera.panY) < 1e-6;
   return {
     current: camera.cellSize,
-    minimum: FIT_MIN_CELL_PX,
+    // The floor is the fitted size, not the smallest representable cell: a
+    // board smaller than the viewport is only empty space with a picture in it.
+    minimum: fitCellSize(viewport),
     maximum: MAX_CELL_PX,
+    fit: fittedCamera.cellSize,
     fitted,
   };
 }

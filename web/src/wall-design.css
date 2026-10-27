@@ -58,7 +58,8 @@ summary { cursor:pointer; }
 .is-focused .board-bezel { box-shadow:0 15px 65px #000a; border-color:#818086; }
 .board-toolbar { margin:12px 0; gap:6px; }
 .board-toolbar .action { min-height:38px; padding:8px 12px; font-size:11px; }
-.wall-zoom-controls { display:flex; flex:0 0 auto; gap:6px; }
+.wall-zoom-controls { display:flex; flex:0 0 auto; gap:6px; align-items:center; }
+.wall-zoom-level { min-width:46px; text-align:center; font:11px/1 ui-monospace,SFMono-Regular,monospace; color:#3d3943; font-variant-numeric:tabular-nums; }
 .wall-layout .board-toolbar .wall-zoom-control { min-width:44px; min-height:44px; touch-action:manipulation; user-select:none; }
 #zoom-in,#zoom-out { font-size:20px; line-height:1; }
 .board-load-status { text-align:right; font:10px monospace; }
