@@ -31,7 +31,7 @@ import {
   getPixelWithBlock,
   isContractConfigured,
 } from "../../contract";
-import { validateContractMetadata } from "../../contract-meta";
+import { contractMetaBlockCopy, validateContractMetadata, type ContractMetaIssue } from "../../contract-meta";
 import { prepareDraw } from "../../draw-policy";
 import {
   describeDrawingSession,
@@ -336,6 +336,11 @@ export function mountWall(
   let boardLoadInFlight = false;
   /** False until get_board metadata matches shared constants (or mock mode). */
   let contractMetaOk = !isContractConfigured();
+  // A failed *read* and a real metadata *mismatch* both leave contractMetaOk
+  // false, and the draw path used to report both as "did not match the shared
+  // schema". They need different advice: one is "try again", the other is
+  // "this contract is not this board".
+  let contractMetaIssue: ContractMetaIssue | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let camera: Camera = { cellSize: 4, panX: 0, panY: 0 };
   let viewTransform: CameraTransform = createCameraTransform(camera);
@@ -477,6 +482,11 @@ export function mountWall(
   });
 
   listen(refreshButton, "click", () => {
+    // A transient read failure at load used to block drawing until a full page
+    // reload, because nothing re-ran the metadata check. Refresh now does.
+    if (!contractMetaOk) {
+      void revalidateContractMeta();
+    }
     void refreshBoardFromContract();
   });
 
@@ -768,6 +778,45 @@ function syncPaidModeFromBoard(board: unknown): void {
   }
 }
 
+/**
+ * Re-run the `get_board` comparison after a failed load.
+ *
+ * The boot path validates metadata once. When that read threw — RPC hiccup, rate
+ * limit, offline — drawing stayed disabled until the page was reloaded, and the
+ * only explanation offered was a metadata mismatch that never happened. This
+ * lets "Refresh board" recover without a reload.
+ */
+async function revalidateContractMeta(): Promise<boolean> {
+  if (!isContractConfigured()) {
+    contractMetaOk = true;
+    contractMetaIssue = null;
+    updateDirectPaintAvailability();
+    return true;
+  }
+  try {
+    const board = await getBoard();
+    const meta = validateContractMetadata(board);
+    contractMetaOk = meta.ok;
+    contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
+    if (meta.ok) {
+      contractLine.textContent =
+        `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
+        `Painting a square replaces the colour that was there, and the contract ` +
+        `records which account painted it and when.`;
+    } else {
+      fillBlock(result, meta.title, meta.message);
+    }
+    return meta.ok;
+  } catch (error) {
+    contractMetaOk = false;
+    const detail = error instanceof Error ? error.message : "Unknown read error";
+    contractMetaIssue = { kind: "read", detail };
+    return false;
+  } finally {
+    updateDirectPaintAvailability();
+  }
+}
+
 async function bootstrapBoard(): Promise<void> {
   if (!isContractConfigured()) {
     contractMetaOk = true;
@@ -793,6 +842,7 @@ async function bootstrapBoard(): Promise<void> {
     syncPaidModeFromBoard(board);
     const meta = validateContractMetadata(board);
     contractMetaOk = meta.ok;
+    contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
     if (!meta.ok) {
       evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK} failed metadata checks — ${meta.message}`;
       fillBlock(result, meta.title, meta.message);
@@ -817,6 +867,7 @@ async function bootstrapBoard(): Promise<void> {
   } catch (error) {
     contractMetaOk = false;
     const detail = error instanceof Error ? error.message : "Unknown read error";
+    contractMetaIssue = { kind: "read", detail };
     evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but the initial board read failed: ${detail}. You can still look at the local empty picture and try Refresh. Drawing stays blocked until metadata validates.`;
     contractLine.textContent =
       "The board contract could not be read, so nothing here is confirmed chain state.";
@@ -1039,11 +1090,8 @@ async function attemptDraw(
 
   if (!contractMetaOk) {
     setFlow("failed");
-    fillBlock(
-      result,
-      "Drawing blocked by contract metadata",
-      "This page refused to enable drawing because get_board did not match the shared schema, size, rule, or palette. Fix the contract id or deploy a matching board.",
-    );
+    const copy = contractMetaBlockCopy(contractMetaIssue);
+    fillBlock(result, copy.title, copy.message);
     return;
   }
 

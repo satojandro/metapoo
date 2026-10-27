@@ -83,7 +83,7 @@ vi.mock("../../contract", async (importOriginal) => {
 });
 
 import { submitDraw } from "../../submit-draw";
-import { fetchAllPaintedPixels, getPixelWithBlock } from "../../contract";
+import { fetchAllPaintedPixels, getBoard, getPixelWithBlock } from "../../contract";
 import { canUseLocalDrawingSession } from "../../local-draw";
 
 describe("mountWall dispose", () => {
@@ -957,7 +957,24 @@ describe("mountWall dispose", () => {
     expect(vi.mocked(signAndSendStrokeLocally)).not.toHaveBeenCalled();
     dispose();
   });
-});
+  it("recovers from a failed board read when Refresh is pressed", async () => {
+    // The boot path validates get_board once. A transient failure used to leave
+    // drawing disabled until a full page reload; Refresh now re-validates.
+    vi.mocked(getBoard).mockRejectedValueOnce(new Error("rpc rate limited"));
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+
+    const line = () => root.querySelector("#wall-contract-line")!.textContent ?? "";
+    await vi.waitFor(() => expect(root.querySelector("#board-load-status")!.textContent).toMatch(/failed/i));
+    expect(line()).not.toMatch(/board\.test\.near/);
+
+    vi.mocked(getBoard).mockClear();
+    root.querySelector<HTMLButtonElement>("#refresh-board")!.click();
+    await vi.waitFor(() => expect(vi.mocked(getBoard)).toHaveBeenCalled());
+    await vi.waitFor(() => expect(line()).toMatch(/board\.test\.near/));
+    dispose();
+  });});
 
 describe("mountWall board polling", () => {
   let visibility: DocumentVisibilityState;

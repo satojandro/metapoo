@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChainBoardView } from "./contract";
-import { validateContractMetadata } from "./contract-meta";
+import { contractMetaBlockCopy, validateContractMetadata } from "./contract-meta";
 
 function validFreeBoard(): ChainBoardView {
   return {
@@ -90,5 +90,25 @@ describe("validateContractMetadata", () => {
     board.palette[2] = { ...board.palette[2], hex: "#ff0000" };
     const result = validateContractMetadata(board);
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("contractMetaBlockCopy", () => {
+  it("calls a failed read a read failure and points at Refresh", () => {
+    const copy = contractMetaBlockCopy({ kind: "read", detail: "rpc rate limited" });
+    expect(copy.title).toMatch(/not read/i);
+    expect(copy.message).toMatch(/could not be read/i);
+    expect(copy.message).toMatch(/not a contract mismatch/i);
+    expect(copy.message).toMatch(/Refresh board/);
+  });
+
+  it("reports a real mismatch with the specific field that differed", () => {
+    const copy = contractMetaBlockCopy({
+      kind: "mismatch",
+      detail: "Palette index 3 differs (page Marigold #e0a100 vs contract Brick #b23a2f).",
+    });
+    expect(copy.title).toMatch(/contract metadata/i);
+    expect(copy.message).toMatch(/Palette index 3 differs/);
+    expect(copy.message).not.toMatch(/not a contract mismatch/i);
   });
 });

@@ -104,3 +104,34 @@ export function validateContractMetadata(view: ChainBoardView): ContractMetaStat
     summary: `Contract metadata matches (${modeLabel}): schema ${schema}, ${view.width}×${view.height}, ${view.overwrite_rule}, ${view.palette.length} colors.`,
   };
 }
+
+/**
+ * Why painting is disabled, in words that match the actual cause.
+ *
+ * A failed read and a genuine mismatch both leave the page unable to draw, but
+ * they need opposite instructions: one is "try again", the other is "this
+ * contract is not this board". Reporting a transient RPC failure as
+ * "get_board did not match the shared schema" sends the reader to the wrong
+ * place entirely.
+ */
+export type ContractMetaIssue = { kind: "read" | "mismatch"; detail: string };
+
+export function contractMetaBlockCopy(issue: ContractMetaIssue | null): {
+  title: string;
+  message: string;
+} {
+  if (issue?.kind === "read") {
+    return {
+      title: "Board not read yet",
+      message:
+        `The board contract could not be read, so painting is paused: ${issue.detail}. ` +
+        `This is a read failure, not a contract mismatch — press Refresh board to try again.`,
+    };
+  }
+  const detail =
+    issue?.detail ?? "get_board did not match this page's schema, size, rule, or palette.";
+  return {
+    title: "Drawing blocked by contract metadata",
+    message: `${detail} Drawing stays off until the contract id or the deployed board matches.`,
+  };
+}
