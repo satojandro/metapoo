@@ -1,5 +1,5 @@
 import { strokeBegin, strokeExtend, MAX_BATCH, type StrokeState } from "./stroke-paint";
-import { planStrokeCommit, strokeResultCopy, TRUNCATED_STROKE_COPY, WALLET_STROKE_COPY } from "./stroke-commit";
+import { planStrokeCommit, strokeBlockedReason, strokeResultCopy, TRUNCATED_STROKE_COPY, WALLET_STROKE_COPY } from "./stroke-commit";
 import { PALETTE } from "@shared/palette.ts";
 import { BOARD_HEIGHT, BOARD_WIDTH, type NetworkId } from "@shared/types.ts";
 import {
@@ -209,6 +209,7 @@ export function mountWall(
     "#revoke-session-button",
   );
   const hoverSummary = mustFindIn<HTMLElement>(pageRoot, "#hover-summary");
+  const contractLine = mustFindIn<HTMLElement>(pageRoot, "#wall-contract-line");
   const directPaintToggle = mustFindIn<HTMLInputElement>(pageRoot, "#direct-paint-toggle");
   const pressurePanel = mustFindIn<HTMLElement>(pageRoot, "#pressure-panel");
   const pressureToggle = mustFindIn<HTMLInputElement>(pageRoot, "#pressure-toggle");
@@ -773,6 +774,8 @@ async function bootstrapBoard(): Promise<void> {
     syncPaidModeFromBoard(null);
     evidence.textContent =
       "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
+    contractLine.textContent =
+      "This is a local demo board. Nothing here is on a blockchain."
     if (!options.route?.query.x) {
       boardLoadStatus.textContent =
         "Board load: mock only (no contract id). Refresh stays disabled.";
@@ -802,6 +805,12 @@ async function bootstrapBoard(): Promise<void> {
       sponsorNote.textContent = `${sponsorship.message} (Contract reported sponsorship_enabled=true; this page still does not offer a sponsored submit path.)`;
     }
     evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK}. ${meta.summary} sponsorship_enabled=${board.sponsorship_enabled}.`;
+    // One sentence a non-crypto visitor can repeat. Everything here is enforced
+    // by the contract (`overwrite_rule: open_wall`), not by this page.
+    contractLine.textContent =
+      `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
+      `Painting a square replaces the colour that was there, and the contract ` +
+      `records which account painted it and when.`;
     await refreshBoardFromContract();
     applyRoutePaintingContext();
     void refreshPlacementQuote();
@@ -809,6 +818,8 @@ async function bootstrapBoard(): Promise<void> {
     contractMetaOk = false;
     const detail = error instanceof Error ? error.message : "Unknown read error";
     evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but the initial board read failed: ${detail}. You can still look at the local empty picture and try Refresh. Drawing stays blocked until metadata validates.`;
+    contractLine.textContent =
+      "The board contract could not be read, so nothing here is confirmed chain state.";
     boardLoadStatus.textContent = `Board load failed: ${detail}`;
     updateCompactStatus();
   } finally {
@@ -1620,17 +1631,23 @@ function wirePointerGestures(): void {
         activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
           networkId: walletNetworkId(), color: selectedColor };
         render();
-      } else if (
-        cell && !wantsPan && directPaintToggle.checked &&
-        walletAccount && selectedColor !== null && contractMetaOk &&
-        canUseLocalDrawingSession(walletAccount, walletNetwork) &&
-        (drawInFlight || paintQueue.inFlight || paintQueueLength(paintQueue) > 0)
-      ) {
-        // Everything is armed except the wire, which is busy with the previous
-        // paint. Say so: a drag that silently pans here is indistinguishable
-        // from painting being broken.
-        drawState.textContent =
-          "Paint still confirming — drag painting resumes when it lands.";
+      } else {
+        // Say which precondition is missing. A drag that silently pans reads as
+        // "painting is broken", which is how this was first reported.
+        const blocked = strokeBlockedReason({
+          directPaint: directPaintToggle.checked,
+          accountId: walletAccount,
+          colorIndex: selectedColor,
+          contractOk: contractMetaOk,
+          sessionActive: walletAccount
+            ? canUseLocalDrawingSession(walletAccount, walletNetwork)
+            : false,
+          drawInFlight,
+          queueBusy: paintQueue.inFlight || paintQueueLength(paintQueue) > 0,
+        });
+        if (cell && !wantsPan && blocked) {
+          drawState.textContent = blocked;
+        }
       }
       lastX = pointerEvent.clientX;
       lastY = pointerEvent.clientY;

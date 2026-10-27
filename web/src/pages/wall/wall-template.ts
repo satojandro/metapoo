@@ -82,8 +82,10 @@ export function wallPageHtml(): string {
                     <p class="board-caption" aria-hidden="true">128 × 128 · INTERACTIVE CANVAS</p>
                     <p class="board-legend">
                       A filled square is painted on chain. A magenta corner dot
-                      means the paint was sent but not confirmed yet.
+                      means the paint was sent but not confirmed yet. The white
+                      ring marks the square you have selected.
                     </p>
+                    <p id="wall-contract-line" class="wall-contract-line"></p>
                   </div>
                   ${scenery.toiletHtml}
                 </div>

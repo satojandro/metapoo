@@ -10,6 +10,47 @@ export function planStrokeCommit(stroke: StrokeState, sessionActive: boolean) {
 export const WALLET_STROKE_COPY = "Authorize a drawing session for drag painting, or select a cell and use Place paint with wallet approval.";
 export const TRUNCATED_STROKE_COPY = `Stroke limited to ${MAX_STROKE_CELLS} cells. The rest of the drag was not submitted.`;
 
+/** Everything the pointer gate needs to know, minus the gesture itself. */
+export interface StrokeGate {
+  directPaint: boolean;
+  accountId: string | null;
+  colorIndex: number | null;
+  contractOk: boolean;
+  sessionActive: boolean;
+  drawInFlight: boolean;
+  queueBusy: boolean;
+}
+
+/**
+ * The single reason drag painting is unavailable, or null when it is available.
+ *
+ * A drag that silently pans is indistinguishable from painting being broken —
+ * that is what the first human test reported. This returns one actionable
+ * sentence per missing precondition, ordered so the most likely and most
+ * fixable comes first, instead of a single opaque "not available".
+ */
+export function strokeBlockedReason(gate: StrokeGate): string | null {
+  if (!gate.directPaint) {
+    return "Direct paint is off, so dragging moves the board. Turn it on in the dock to paint with a drag.";
+  }
+  if (!gate.accountId) {
+    return "Connect a wallet to paint.";
+  }
+  if (gate.colorIndex === null) {
+    return "Pick a colour first — drag painting needs one.";
+  }
+  if (!gate.contractOk) {
+    return "The board's on-chain metadata does not match this page, so painting is disabled. See About / details.";
+  }
+  if (!gate.sessionActive) {
+    return "Painting needs one approval first — press Unlock painting in the dock.";
+  }
+  if (gate.drawInFlight || gate.queueBusy) {
+    return "Paint still confirming — drag painting resumes when it lands.";
+  }
+  return null;
+}
+
 export function strokeResultCopy(stroke: StrokeState, result: LocalStrokeResult): string {
   const text = result.status === "confirmed"
     ? `${result.confirmedChunks} of ${result.totalChunks} batches confirmed. Each batch records one artist and one timestamp for its cells.`

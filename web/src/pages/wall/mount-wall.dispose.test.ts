@@ -903,6 +903,60 @@ describe("mountWall dispose", () => {
     });
     dispose();
   });
+  it("explains the contract and the board legend in plain language", async () => {
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+
+    const line = root.querySelector<HTMLElement>("#wall-contract-line")!;
+    await vi.waitFor(() => expect(line.textContent).toMatch(/board\.test\.near/));
+    expect(line.textContent).toMatch(/every square is stored/i);
+    expect(line.textContent).toMatch(/replaces the colour/i);
+    expect(line.textContent).toMatch(/which account painted it and when/i);
+
+    // The legend has to name the states a player can actually see.
+    const legend = root.querySelector(".board-legend")!.textContent ?? "";
+    expect(legend).toMatch(/magenta corner dot/i);
+    expect(legend).toMatch(/ring marks the square/i);
+    dispose();
+  });
+
+  it("tells you which precondition is missing when a drag does not paint", async () => {
+    const resizeCallbacks = new Set<ResizeObserverCallback>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(): void {
+          resizeCallbacks.add(this.callback);
+        }
+        disconnect(): void {
+          resizeCallbacks.delete(this.callback);
+        }
+        unobserve(): void {}
+      },
+    );
+    // No session here, so Direct paint is off and the drag will pan.
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(false);
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 512, bottom: 512, width: 512, height: 512,
+      toJSON: () => ({}),
+    } as DOMRect);
+    for (const callback of resizeCallbacks) callback([], {} as ResizeObserver);
+
+    touchPointer(viewport, "pointerdown", 1, 200, 200);
+
+    expect(root.querySelector("#draw-state")!.textContent).toMatch(
+      /direct paint is off/i,
+    );
+    expect(vi.mocked(signAndSendStrokeLocally)).not.toHaveBeenCalled();
+    dispose();
+  });
 });
 
 describe("mountWall board polling", () => {
