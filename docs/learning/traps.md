@@ -30,6 +30,39 @@ redeploy over live state bricked a board.
 
 ## Verification
 
+## Tooling credentials
+
+**The Codex CLI dies every time Hermes refreshes, and it is not a login problem.** The CLI
+(`~/.codex/auth.json`) and Hermes's `openai-codex` provider each hold a copy of the **same**
+ChatGPT OAuth chain. Refresh tokens rotate: when Hermes refreshes, the server invalidates every
+other copy, and the CLI then fails with:
+
+```
+ERROR: Failed to refresh token: your refresh token was already used.
+ERROR: workspace routing discovery unauthorized (401)
+```
+
+Symptom in the orchestrator: `blocked — budget_exhausted:max_retries` after four implement
+attempts with **`changed_files: []`**. It looks like an agent failure and is not one.
+
+Do not re-login. Do not "fix" the model or the workspace — the account is already the plus
+workspace (`chatgpt_plan_type: plus`, `alejandro@uxisnear.com`) and always has been. Seed the CLI
+from Hermes's copy:
+
+```bash
+~/.hermes/profiles/crypto-builder/bin/sync-codex-auth.sh --check   # exit 1 = stale
+~/.hermes/profiles/crypto-builder/bin/sync-codex-auth.sh           # seed it
+codex exec -m gpt-6.1-sol --skip-git-repo-check "PONG"             # prove it
+```
+
+**Always launch batches through `run-ao-batch.sh`**, which syncs the credential, pulls the
+orchestrator, resets the batch worktree to `origin/main`, links `web/node_modules` and wraps the
+run in `caffeinate -is`. Launching `run_batch.py` directly is how a stale credential becomes a
+wasted batch.
+
+Do not create a second `CODEX_HOME` copy of the credential either: two copies of one rotating
+refresh token fight each other, which is the bug, not the workaround.
+
 **`vitest` does not typecheck; `npm run build` does.** Both are required. Twice on
 2026-10-27 a change was green in vitest and red in `tsc` because a test fixture predated a
 new required field. If you only run tests, you ship a broken build.
