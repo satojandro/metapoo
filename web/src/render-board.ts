@@ -9,6 +9,15 @@ const EMPTY_A = "#242629";
 const EMPTY_B = "#292b2e";
 
 /**
+ * Marker for a cell whose paint is not confirmed on chain yet.
+ *
+ * Deliberately outside the eight palette colours: the marker must never be
+ * mistakable for art. `#ff2fd0` is far from every palette entry (the nearest,
+ * Grape `#6b4c7a`, is dark and desaturated).
+ */
+export const PENDING_MARK = "#ff2fd0";
+
+/**
  * Draw the board background, confirmed paints, then pending previews on top.
  *
  * The checker is only a background so empty squares are visible. It is not
@@ -16,8 +25,8 @@ const EMPTY_B = "#292b2e";
  *
  * Confirmed colors come from `pixels` — sparse list after authoritative reads.
  * Pending paints are a separate client-state layer. They use the chosen color
- * with a light inset marker, so they remain visibly distinct from chain-read
- * confirmed art without being written into the confirmed cache.
+ * and add a single-device-pixel corner mark, so they remain visibly distinct
+ * from chain-read confirmed art without being written into the confirmed cache.
  * Clicking a square must not invent a confirmed entry.
  */
 export function renderBoard(
@@ -63,13 +72,13 @@ export function renderBoard(
     }
     context.fillStyle = swatch.hex;
     context.fillRect(paint.x * CELL, paint.y * CELL, CELL, CELL);
-    // A one-device-pixel inset marker is deliberately visible even at the
-    // board's native 4px cell size. It is paint-preview chrome, never art.
-    context.strokeStyle = paint.phase === "confirmation_delayed"
-      ? "#f0d24a"
-      : "#f4efe4";
-    context.lineWidth = 1;
-    context.strokeRect(paint.x * CELL + 0.5, paint.y * CELL + 0.5, CELL - 1, CELL - 1);
+    // One device pixel in the cell's own top-left corner, never an outline.
+    // At CELL = 4 an inset 1px stroke leaves a 2x2 interior, so an unconfirmed
+    // cell reads as the marker's colour instead of the paint's — which is the
+    // "why is my pixel yellow" bug reported from live testing. The marker may
+    // mark a cell; it may never repaint one.
+    context.fillStyle = PENDING_MARK;
+    context.fillRect(paint.x * CELL, paint.y * CELL, 1, 1);
   }
 }
 
