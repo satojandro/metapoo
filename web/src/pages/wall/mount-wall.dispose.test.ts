@@ -744,6 +744,31 @@ describe("mountWall dispose", () => {
     window.dispatchEvent(new KeyboardEvent("keyup", { key: " " }));
     dispose();
   });
+  it("stops showing Place paint while Direct paint is armed, and keeps the unlock visible", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const place = root.querySelector<HTMLButtonElement>("#draw-button")!;
+    const unlocked = root.querySelector<HTMLElement>("#paint-unlocked")!;
+    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
+
+    // Armed: clicking a cell already paints, so a Place button contradicts the
+    // status line right above it.
+    await vi.waitFor(() => expect(place.hidden).toBe(true));
+    expect(unlocked.hidden).toBe(false);
+    expect(unlocked.textContent).toMatch(/no wallet popup per pixel/i);
+
+    // The one-approval prompt is gone after use, but the state must not be:
+    // a vanished prompt with no confirmation reads as "did that work?".
+
+    // Opting out of direct paint brings back the only pointer path.
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(place.hidden).toBe(false);
+    expect(unlocked.hidden).toBe(false);
+    dispose();
+  });
 });
 
 describe("mountWall board polling", () => {

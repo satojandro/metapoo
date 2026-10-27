@@ -236,6 +236,7 @@ export function mountWall(
   // session; the authorise/revoke panel stays in About / details for people
   // who want the details, but nobody should have to find it to start painting.
   const paintUnlock = mustFindIn<HTMLElement>(pageRoot, "#paint-unlock");
+  const paintUnlocked = mustFindIn<HTMLElement>(pageRoot, "#paint-unlocked");
   const unlockPaintButton = mustFindIn<HTMLButtonElement>(
     pageRoot,
     "#unlock-paint-button",
@@ -1990,6 +1991,21 @@ function updateDirectPaintAvailability(): void {
   );
   tapToPaintAffordance.hidden = !allowed;
   tapToPaintAnnouncement.hidden = !allowed;
+
+  // "Place paint" and "Direct paint is on" are two instructions for the same
+  // act. While painting is armed the button is redundant — clicking a cell
+  // already places the paint — so it steps aside instead of contradicting the
+  // status line. It returns the moment painting is not armed, which is when it
+  // is the only pointer path. Enter still places either way (board keydown).
+  drawButton.hidden = allowed && tapToPaintEnabled;
+
+  // A one-approval unlock that vanishes after use reads as "did it work?".
+  // Keep a quiet, permanent line while the session is live.
+  paintUnlocked.hidden = !allowed;
+  paintUnlocked.textContent = allowed
+    ? "Painting unlocked this browser. No wallet popup per pixel. Revoke it any time under About / details."
+    : "";
+
   tapToPaintAnnouncement.textContent = !allowed
     ? ""
     : tapToPaintEnabled

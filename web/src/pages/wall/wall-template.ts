@@ -113,6 +113,7 @@ export function wallPageHtml(): string {
             Direct paint
           </label>
           <p id="tap-to-paint-status" class="tap-to-paint-status" role="status" aria-live="polite" hidden></p>
+          <p id="paint-unlocked" class="paint-unlocked" role="status" aria-live="polite" hidden></p>
           <button id="draw-button" class="action place" type="button">Place paint</button>
           <p id="draw-state" class="draw-state" role="status" aria-live="polite"></p>
         </div>

@@ -85,6 +85,7 @@ summary { cursor:pointer; }
 .paint-unlock .action.unlock { flex:0 0 auto; min-height:44px; padding:12px 18px; border:0; border-radius:4px; background:#27252d; color:#f5d8e4; font-size:12px; }
 .paint-unlock .action.unlock:hover:not(:disabled) { background:#413748; }
 .tap-to-paint-status { flex:1 1 100%; margin:0; font-size:12px; line-height:1.35; color:#3d3943; }
+.paint-unlocked { flex:1 1 100%; margin:0; font-size:12px; line-height:1.35; color:#17623f; }
 .board-legend { margin:4px 0 0; font-size:10px; line-height:1.4; color:#8d8791; text-align:center; }
 .action.place { flex:0 0 auto; background:#27252d; color:#f5d8e4; border:0; padding:14px 24px; }
 .action.place:hover:not(:disabled) { background:#413748; }
