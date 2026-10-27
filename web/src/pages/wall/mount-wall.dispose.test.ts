@@ -836,6 +836,73 @@ describe("mountWall dispose", () => {
     await vi.waitFor(() => expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(2));
     dispose();
   });
+  it("stamps a confirmed stroke from its receipt, without waiting for a board read", async () => {
+    const resizeCallbacks = new Set<ResizeObserverCallback>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(): void {
+          resizeCallbacks.add(this.callback);
+        }
+        disconnect(): void {
+          resizeCallbacks.delete(this.callback);
+        }
+        unobserve(): void {}
+      },
+    );
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    // Hold every *subsequent* full board read open: anything visible in the
+    // cache below can only have come from the transaction receipt. The first
+    // read must resolve, or bootstrap never validates the contract metadata.
+    vi.mocked(fetchAllPaintedPixels)
+      .mockResolvedValueOnce({ pixels: [], blockHeight: 1 } as never)
+      .mockReturnValue(new Promise(() => undefined) as never);
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValue({
+      status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [],
+      failingChunk: null, executedBlocks: [{ chunkIndex: 0, blockHeight: 4321 }],
+    });
+
+    let api: WallMountTestApi | null = null;
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services, {
+      attachTestApi: (testApi) => {
+        api = testApi;
+      },
+    });
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 480, width: 200, height: 480,
+      toJSON: () => ({}),
+    } as DOMRect);
+    for (const callback of resizeCallbacks) callback([], {} as ResizeObserver);
+    root.querySelector<HTMLButtonElement>(".swatch")!.click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked,
+      ).toBe(true),
+    );
+
+    touchPointer(viewport, "pointerdown", 1, 60, 200);
+    touchPointer(viewport, "pointermove", 1, 80, 200);
+    touchPointer(viewport, "pointerup", 1, 100, 200);
+
+    await vi.waitFor(() =>
+      expect(vi.mocked(signAndSendStrokeLocally)).toHaveBeenCalledTimes(1),
+    );
+    const painted = vi.mocked(signAndSendStrokeLocally).mock.calls[0][0].cells;
+    expect(painted.length).toBeGreaterThan(1);
+
+    await vi.waitFor(() => {
+      // No pending marker left, and the cell reads back its colour at the
+      // executed block — with the authoritative read still outstanding.
+      expect(api!.pendingPaintCount()).toBe(0);
+      expect(api!.cachedPixelColor(painted[0])).toBe(0);
+    });
+    dispose();
+  });
 });
 
 describe("mountWall board polling", () => {

@@ -1807,6 +1807,30 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     // a pending marker. Never infer execution from matching pre-existing paint.
     const uncertain = outcome.failingChunk?.mayHaveBroadcast;
     const uncertainStart = outcome.confirmedChunks * MAX_BATCH;
+
+    // A confirmed chunk's receipt proves the write at a specific block. Stamp
+    // those cells now instead of leaving the board stale until the next full
+    // read: the read pages the whole wall (6 requests today, 64 on a full
+    // 16,384-cell board), and waiting for it is what made a finished stroke
+    // look unresolved. board-cache keeps the newer stamp if a snapshot from an
+    // older block arrives, so this cannot be rolled back by a slow read.
+    for (const { chunkIndex, blockHeight } of outcome.executedBlocks ?? []) {
+      const start = chunkIndex * MAX_BATCH;
+      for (const cell of stroke.state.cells.slice(start, start + MAX_BATCH)) {
+        rememberPixelAtBlock(
+          pixelCache,
+          {
+            x: cell.x,
+            y: cell.y,
+            colorIndex: stroke.color,
+            artistAccountId: stroke.accountId,
+            lastWriteTimestampNs: null,
+          },
+          blockHeight,
+        );
+      }
+    }
+
     for (const [i, cell] of stroke.state.cells.entries()) {
       if (uncertain && i >= uncertainStart && i < uncertainStart + MAX_BATCH) {
         setPendingPaint(pendingPaints, { ...cell, colorIndex: stroke.color,

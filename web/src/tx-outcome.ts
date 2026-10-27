@@ -11,6 +11,12 @@ export interface ParsedTxOutcome {
   status: TxStatus;
   transactionHash: string | null;
   failureMessage: string | null;
+  /**
+   * Block hash the transaction executed in, when the outcome carries one.
+   * Resolvable to a height, which is what lets a caller stamp the cells it
+   * just wrote instead of re-reading the whole board to find out.
+   */
+  blockHash: string | null;
 }
 
 /**
@@ -22,11 +28,12 @@ export interface ParsedTxOutcome {
  */
 export function parseTxOutcome(outcome: unknown): ParsedTxOutcome {
   if (!outcome || typeof outcome !== "object") {
-    return { status: "unknown", transactionHash: null, failureMessage: null };
+    return { status: "unknown", transactionHash: null, failureMessage: null, blockHash: null };
   }
 
   const record = outcome as Record<string, unknown>;
   const transactionHash = readHash(record);
+  const blockHash = readBlockHash(record);
   const statusValue = record.status;
 
   if (statusValue && typeof statusValue === "object") {
@@ -36,6 +43,7 @@ export function parseTxOutcome(outcome: unknown): ParsedTxOutcome {
         status: "failed",
         transactionHash,
         failureMessage: summarizeFailure(status.Failure),
+        blockHash,
       };
     }
     if ("SuccessValue" in status || "SuccessReceiptId" in status) {
@@ -43,6 +51,7 @@ export function parseTxOutcome(outcome: unknown): ParsedTxOutcome {
         status: "success",
         transactionHash,
         failureMessage: null,
+        blockHash,
       };
     }
   }
@@ -50,10 +59,35 @@ export function parseTxOutcome(outcome: unknown): ParsedTxOutcome {
   // Some wallets only return { transaction: { hash } } without a full status.
   // That is not enough to claim success in the UI.
   if (transactionHash) {
-    return { status: "unknown", transactionHash, failureMessage: null };
+    return { status: "unknown", transactionHash, failureMessage: null, blockHash };
   }
 
-  return { status: "unknown", transactionHash: null, failureMessage: null };
+  return { status: "unknown", transactionHash: null, failureMessage: null, blockHash };
+}
+
+/**
+ * The block a transaction executed in, from `transaction_outcome.block_hash`.
+ * Falls back to the last receipt, which is where the contract call ran.
+ */
+function readBlockHash(record: Record<string, unknown>): string | null {
+  const transactionOutcome = record.transaction_outcome;
+  if (transactionOutcome && typeof transactionOutcome === "object") {
+    const hash = (transactionOutcome as { block_hash?: unknown }).block_hash;
+    if (typeof hash === "string" && hash.length > 0) {
+      return hash;
+    }
+  }
+  const receipts = record.receipts_outcome;
+  if (Array.isArray(receipts) && receipts.length > 0) {
+    const last = receipts[receipts.length - 1] as { block_hash?: unknown };
+    if (typeof last?.block_hash === "string" && last.block_hash.length > 0) {
+      return last.block_hash;
+    }
+  }
+  if (typeof record.block_hash === "string" && record.block_hash.length > 0) {
+    return record.block_hash;
+  }
+  return null;
 }
 
 /**

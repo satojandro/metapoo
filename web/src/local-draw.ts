@@ -237,12 +237,42 @@ export function canUseLocalDrawingSession(
   return status.phase === "active";
 }
 
+/**
+ * Resolve an executed-transaction block hash to its height.
+ *
+ * Best-effort by design: if this fails, the caller simply falls back to the
+ * periodic full board read, which stays the reconciler regardless. It is never
+ * worth failing a confirmed stroke because a height lookup timed out.
+ */
+async function resolveExecutedBlockHeight(blockHash: string | null): Promise<number | null> {
+  if (!blockHash) {
+    return null;
+  }
+  try {
+    const block = (await provider().block({ blockId: blockHash })) as {
+      header?: { height?: unknown };
+    };
+    const height = Number(block.header?.height);
+    return Number.isFinite(height) && height > 0 ? height : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface LocalStrokeResult {
   status: "confirmed" | "partial";
   confirmedChunks: number;
   totalChunks: number;
   outcomes: FinalExecutionOutcome[];
   failingChunk: { index: number; mayHaveBroadcast: boolean; message: string } | null;
+  /**
+   * Block height each confirmed chunk actually executed in, resolved from the
+   * transaction receipt. The caller stamps its cells at these heights instead
+   * of waiting for a full board read to rediscover its own write. Best-effort:
+   * a chunk whose height cannot be resolved is simply absent, and the periodic
+   * full read remains the reconciler either way.
+   */
+  executedBlocks: Array<{ chunkIndex: number; blockHeight: number }>;
 }
 
 /** Submit sequential atomic batches. Never retry or switch paths after a failure. */
@@ -255,7 +285,7 @@ export async function signAndSendStrokeLocally(args: {
   const chunks = chunkCells([...args.cells]);
   const result: LocalStrokeResult = {
     status: "confirmed", confirmedChunks: 0, totalChunks: chunks.length,
-    outcomes: [], failingChunk: null,
+    outcomes: [], failingChunk: null, executedBlocks: [],
   };
   for (const [index, chunk] of chunks.entries()) {
     let mayHaveBroadcast = false;
@@ -291,6 +321,10 @@ export async function signAndSendStrokeLocally(args: {
         throw new Error(parsed.failureMessage ?? "Batch execution is still unconfirmed.");
       }
       result.confirmedChunks += 1;
+      const executedHeight = await resolveExecutedBlockHeight(parsed.blockHash);
+      if (executedHeight !== null) {
+        result.executedBlocks.push({ chunkIndex: index, blockHeight: executedHeight });
+      }
     } catch (error) {
       result.status = "partial";
       const message = error instanceof Error ? error.message : String(error);

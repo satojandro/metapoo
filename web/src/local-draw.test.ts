@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ call: vi.fn(), key: vi.fn(), price: vi.fn(), account: vi.fn() }));
+const mocks = vi.hoisted(() => ({ call: vi.fn(), key: vi.fn(), price: vi.fn(), account: vi.fn(), block: vi.fn() }));
 vi.mock("@near-js/accounts", () => ({ Account: class {
   constructor(accountId: string) { mocks.account(accountId); }
   getAccessKey = mocks.key;
   callFunctionRaw = mocks.call;
 } }));
-vi.mock("@near-js/providers", () => ({ JsonRpcProvider: class { gasPrice = mocks.price; } }));
+vi.mock("@near-js/providers", () => ({ JsonRpcProvider: class { gasPrice = mocks.price; block = mocks.block; } }));
 vi.mock("@near-js/crypto", () => ({ KeyPair: { fromString: vi.fn() } }));
 vi.mock("@near-js/signers", () => ({ KeyPairSigner: class {} }));
 vi.mock("./drawing-session", () => ({
@@ -21,6 +21,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.key.mockResolvedValue({ permission: { FunctionCall: { allowance: "1000000000000000000000000" } } });
   mocks.price.mockResolvedValue({ gas_price: "100000000" });
+  mocks.block.mockResolvedValue({ header: { height: 777 } });
   mocks.call.mockReset().mockResolvedValue(success);
 });
 describe("session stroke submission", () => {
@@ -86,5 +87,36 @@ describe("session stroke submission", () => {
       .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "0" } } });
     expect(await signAndSendStrokeLocally(args)).toMatchObject({ confirmedChunks: 1, failingChunk: { index: 1, mayHaveBroadcast: false } });
     expect(mocks.call).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves the executed block for every confirmed chunk", async () => {
+    // The receipt is the proof of the write. Resolving its block lets the caller
+    // stamp the cells it just painted instead of re-reading the whole board.
+    mocks.call.mockResolvedValue({
+      status: { SuccessValue: "" },
+      transaction: { hash: "tx" },
+      transaction_outcome: { block_hash: "BH1" },
+    });
+    const result = await signAndSendStrokeLocally(args);
+    expect(result.executedBlocks).toEqual([
+      { chunkIndex: 0, blockHeight: 777 },
+      { chunkIndex: 1, blockHeight: 777 },
+      { chunkIndex: 2, blockHeight: 777 },
+    ]);
+    expect(mocks.block).toHaveBeenCalledWith({ blockId: "BH1" });
+  });
+
+  it("stays confirmed when the executed block cannot be resolved", async () => {
+    // A height lookup is an optimisation, never a condition of success.
+    mocks.call.mockResolvedValue({
+      status: { SuccessValue: "" },
+      transaction: { hash: "tx" },
+      transaction_outcome: { block_hash: "BH1" },
+    });
+    mocks.block.mockRejectedValue(new Error("rpc down"));
+    const result = await signAndSendStrokeLocally(args);
+    expect(result.status).toBe("confirmed");
+    expect(result.confirmedChunks).toBe(3);
+    expect(result.executedBlocks).toEqual([]);
   });
 });
