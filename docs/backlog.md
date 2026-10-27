@@ -85,14 +85,23 @@ Baseline for this revision: `origin/main = 5b40b63`, 263 tests / 39 files, build
 | **T10** | Berry Club parity remainder | default-on shipped; single-tap-always is a consent decision |
 | **R1** | Sign once, paint forever | four decisions listed in `roadmap.md` R1 |
 
-## Not started — the economy
+## Payment stage — local work, deployment and UI pending (2026-10-28)
 
-**There is no paid contract.** `contracts/board/src/lib.rs` exposes `draw` and `draw_many`, schema 2,
-free. `web/src/paid-mode.ts`, `paid-paint.ts`, `pressure-quote.ts` are a **frontend shell with mock
-quotes**, off by default. MPOO is `mpoo.nearlytrade.near` on **mainnet**; the live board is
-`wall.berrywall1.testnet` — so the first paid slice needs a **testnet fungible token**, not the real one.
-Sequence and gates: `roadmap.md` R2 + the delivery-plan briefs (B–I), which need one revision pass
-before dispatch because they predate the working wall.
+Evidence: branch source `contracts/paid-board/src/lib.rs` and `payments.rs` on
+`codex/paint-credit-payments`; `new`, `buy_credits_near`, `ft_on_transfer`,
+`get_credits`, `get_payment_config` and `set_credit_prices` exist. Locate its implementation commit with `git log -- contracts/paid-board web/src/paint-wallet.ts`. Verification: 36 local tests and release WASM build passed;
+not a live settlement or cost result. `contracts/board` remains the free schema-2
+contract; `web/src/payment-provider.ts` remains an unused placeholder. Existing
+pressure quotes do not implement this new payment UI. Mainnet deployment: none,
+confirmed by owner. A testnet token is needed for the first paid rehearsal.
+
+| ID | Pending work | Evidence / completion gate |
+|---|---|---|
+| PAY-UI | Read-only display locally implemented; live paid-wallet verification and mobile visual review pending | `web/src/paint-wallet.ts`, `app/paint-wallet-panel.ts`; 9 focused tests, full 284 tests/build passed. Browser checked against free testnet board. Checkout not implemented. |
+| PAY-INTEGRATION | Paid schema-4 frontend and real testnet purchase → paint → refreshed balances | Local methods exist; no full-loop receipt evidence |
+| **PAY-COST** | **Reopen immediately after first mainnet paid-board deployment** | [Required cost matrix](payments/mainnet-cost-validation.md); all mainnet cases pending, keep open through owner acceptance |
+| PAY-UPGRADE | Select deployment authority and rehearse state-preserving upgrades before public paid launch | [Proposal/current gaps](payments/upgrade-policy.md); no migration/self-upgrade/pause implementation |
+| ECONOMY-LATER | TOILET, staking, longevity rewards, swaps, inventory shop | Deferred; older economy briefs require reconciliation before implementation |
 
 ## Open gates and scoped work
 

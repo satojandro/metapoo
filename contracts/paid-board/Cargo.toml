@@ -1,0 +1,21 @@
+[package]
+name = "metapoo-paid-board"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Meta Poo Open wall board contract. Paint credits purchased with native NEAR or mPOO."
+
+[lib]
+# cdylib is the WASM bundle NEAR would run. rlib lets `cargo test` call the code on this computer.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Release builds (the deployed WASM) must NOT enable `unit-testing`: that pulls
+# in the host test harness and inflates the contract, which the deployer pays
+# for in storage staking.
+near-sdk = "5.29.1"
+
+[dev-dependencies]
+# `unit-testing` gives `cargo test` a simulated chain on this computer.
+near-sdk = { version = "5.29.1", features = ["unit-testing"] }
+serde_json = "1"

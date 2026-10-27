@@ -1,3 +1,5 @@
+> Current-code correction (2026-10-28): this directory currently implements the free schema-2 board. The schema-3 description below is historical and does not describe `src/lib.rs`. New NEAR/mPOO credit work lives in [the schema-4 paid board](../paid-board/README.md).
+
 # Board contract (paid Open wall + pressure)
 
 Rust NEAR contract, **schema version 3**. Sparse 128×128 board, 8-color palette, Open wall (anyone may overwrite), regional pressure pricing, internal TOILET ledger, paint sessions, and `mpoo_board` **2.0.0** draw events.

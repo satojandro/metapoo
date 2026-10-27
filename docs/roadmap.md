@@ -92,3 +92,11 @@ function-call key allowances as a first-class pattern; fee/gas-market changes an
 held two files, both dated 2026-10-11 (the day the scaffold was written), until
 2026-10-27 — sixteen days of work with no record. See `docs/learning/README.md` for the
 rule and `docs/learning/2026-10-27-paint-session.md` for the first real entry.
+
+## Payment-stage release follow-up — 2026-10-28
+
+Accepted payment UI requirements are in [the frontend handoff](payments/frontend-handoff.md).
+**Mainnet has not been deployed.** At first paid deployment, reopen **PAY-COST**
+and complete [the mainnet cost matrix](payments/mainnet-cost-validation.md).
+Upgrade authority and migration design remain a pre-launch decision in
+[the upgrade proposal](payments/upgrade-policy.md); this roadmap does not approve a deployment.

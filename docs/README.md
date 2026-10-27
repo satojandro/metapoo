@@ -29,6 +29,7 @@ listed, the newest dated file wins and this map is missing an entry.
 |---|---|---|
 | product intent, wall + market + moments | `2026-10-12-product-prd.md` | planning baseline; economy sections are **not** live behaviour |
 | MVP scope and staged plan | `../02-mvp-scope-and-roadmap.md` | |
+| payment-stage UI and wallet balances | `payments/frontend-handoff.md` — read-only display local; checkout pending | supersedes older MPOO-only/TOILET purchase assumptions for this stage |
 | paint economy / swap / tokenomics | `2026-10-12-paint-economy-and-swap-plan.md` | future phase; nothing implemented or deployed |
 | pressure pricing and paid mode | `implementation/pressure-and-paint.md` | |
 | bounties | `implementation/art-bounties.md` | |
@@ -48,6 +49,9 @@ listed, the newest dated file wins and this map is missing an entry.
 
 | topic | authoritative document |
 |---|---|
+| paid board: local contract and API | `../contracts/paid-board/README.md` — schema 4, not deployed |
+| **mainnet cost tests: revisit on deployment** | **`payments/mainnet-cost-validation.md` — all pending; PAY-COST remains open** |
+| contract changes and upgrades | `payments/upgrade-policy.md` — proposal and current gaps |
 | board contract: deploy, storage, gas, frontend handoff | `../contracts/board/DEPLOY.md`, `STORAGE_AND_GAS.md`, `FRONTEND_HANDOFF.md` |
 | contract design seams | `../03-architecture-and-contract-seams.md`, `../contract/DESIGN.md` |
 | acceptance, security, QA | `../08-acceptance-security-and-qa.md` |

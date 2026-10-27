@@ -200,3 +200,17 @@ Automated suite: `cd web && npm test` (**mock** / unit). Production build:
 | `../shared/` | Shared board size, palette, and rule checks |
 
 Contract method names and JSON shapes: `contracts/board/FRONTEND_HANDOFF.md`.
+
+## Paint & wallet display
+
+Open **Paint & wallet** in the header for prices, credit balance and NEAR/mPOO
+wallet balances, plus **Buy mPOO on NEARLY** (external mainnet market). The panel
+uses the configured network/RPC and board. Schema 4 supplies live prices/credits;
+a free or unconfigured board shows the planned price and unavailable credits.
+NEAR availability accounts for storage backing and locked funds, before gas.
+Mainnet mPOO uses `mpoo.nearlytrade.near`; testnet token balances require a paid
+board's configured test token. No real mainnet mPOO is represented as testnet funds.
+
+This is read-only: no checkout, automatic swap, signatures or changed session-key
+permissions. See [the handoff](../docs/payments/frontend-handoff.md) for evidence
+and remaining paid integration work.

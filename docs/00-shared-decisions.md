@@ -1,8 +1,24 @@
 # Shared decisions
 
-Created: 11 October 2026. Updated: 12 October 2026.
+Created: 11 October 2026. Updated: 28 October 2026.
 
 This file is the integration record. The overwrite rule below is **accepted and implemented locally**. The economy decisions below describe the next phase, not live contract behavior.
+
+## Current payment stage — accepted 28 October 2026
+
+This stage supersedes the older MPOO-only / TOILET purchase mechanics below.
+Users buy non-transferable paint credits with **native NEAR or mPOO**. One credit
+pays for one pixel placement, with no expiry. The launch price is **0.0069 NEAR**;
+owner configuration remains supported and mPOO launch pricing is still unset.
+Start with **Buy mPOO on NEARLY**, not an embedded swap or inventory shop.
+The app must show pixel prices, available credits and NEAR/mPOO wallet balances;
+see the accepted [frontend handoff](payments/frontend-handoff.md).
+
+The separate schema-4 contract is local work, not deployed frontend behavior.
+The owner confirms **no mainnet deployment yet**. [Mainnet cost validation](payments/mainnet-cost-validation.md)
+is an open post-deployment gate. [Upgrade policy](payments/upgrade-policy.md) remains
+a proposal: migration/control mechanisms are not implemented. Staking, longevity,
+TOILET, revenue sharing and inventory trading remain a subsequent stage.
 
 ## Product expansion: approved direction, proposed mechanics
 
@@ -72,7 +88,7 @@ Read-only mainnet observations, not used by the current board code:
 
 Those identifiers are not the game contract. Do not point the pixel contract at the token account.
 
-### Confirmed next-phase direction
+### Historical economy direction — payment rules superseded above
 
 - Paid paint purchases use **MPOO only**, replacing the earlier NEAR/MPOO choice and its 20% price comparison.
 - Pixels earn bounded **TOILET**, which is spent/burned as paint. No third independent paint-credit currency is planned.

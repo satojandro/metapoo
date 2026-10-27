@@ -127,3 +127,13 @@ summary { cursor:pointer; }
 .wall-advanced .side { grid-template-columns:1fr; } .summary { font-size:11px; }
 }
 @media (prefers-reduced-motion:reduce) { .action,.stall-scene::before { transition:none; } }
+
+/* Balances stay inside the wallet disclosure instead of crowding the paint dock. */
+.paint-wallet-values { display:grid; gap:12px; margin:14px 0; }
+.paint-wallet-values > div { display:grid; gap:3px; }
+.paint-wallet-values dt { color:#bfc1c7; font-size:12px; }
+.paint-wallet-values dd { margin:0; font-size:14px; overflow-wrap:anywhere; }
+#paint-wallet-panel .paint-wallet-buy { display:inline-flex; margin-top:10px; text-decoration:none; min-height:44px; align-items:center; }
+#paint-wallet-panel .paint-wallet-refresh { min-height:44px; }
+#paint-wallet-panel p { overflow-wrap:anywhere; }
+.wallet-details[open] { max-height:calc(100dvh - 100px); overflow-y:auto; }

@@ -2,7 +2,18 @@
 
 Updated: 12 October 2026
 
-Status: current economy planning document. Product decisions are distinguished from proposed mechanics and unset parameters. No payment, staking, reward token, inventory shop or trading bot has been implemented or deployed by this work. The running board implementation remains a free Open wall; frontend changes are proceeding separately.
+Status: current economy planning document. Product decisions are distinguished from proposed mechanics and unset parameters. This original planning work did not implement payments. The 28 October override below records subsequent local payment work; staking, rewards, inventory shop and trading remain unimplemented by that work. The running board implementation remains a free Open wall; frontend changes are proceeding separately.
+
+## Payment-stage override — 28 October 2026
+
+The current stage accepts **NEAR and mPOO**, with one non-expiring internal paint
+credit per pixel placement and an initial price of **0.0069 NEAR**. The first mPOO
+acquisition UI is an external NEARLY link. Older MPOO-only, TOILET-pack and embedded
+swap requirements below are historical proposals, not current implementation instructions.
+Staking, longevity/rewards, TOILET and the inventory shop are deferred.
+The [paid contract](../contracts/paid-board/README.md) exists locally; no mainnet
+deployment has happened. Follow the [frontend handoff](payments/frontend-handoff.md),
+[mainnet cost gate](payments/mainnet-cost-validation.md) and [upgrade proposal](payments/upgrade-policy.md).
 
 ## Decisions and reading path
 
