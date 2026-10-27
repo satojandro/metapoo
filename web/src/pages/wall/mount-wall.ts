@@ -1488,7 +1488,6 @@ function readZoomState() {
     // board smaller than the viewport is only empty space with a picture in it.
     minimum: fitCellSize(viewport),
     maximum: MAX_CELL_PX,
-    fit: fittedCamera.cellSize,
     fitted,
   };
 }

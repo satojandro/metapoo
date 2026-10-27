@@ -2,8 +2,6 @@ export interface WallZoomState {
   current: number;
   minimum: number;
   maximum: number;
-  /** Cell size at which the whole board is visible. 100% on the readout. */
-  fit: number;
   fitted: boolean;
 }
 
@@ -33,14 +31,9 @@ export function mountWallZoomControls(
   controls.setAttribute("aria-label", "Wall zoom");
 
   const zoomOut = createButton("zoom-out", "Zoom out", "−");
-  const level = document.createElement("span");
-  level.id = "zoom-level";
-  level.className = "wall-zoom-level";
-  level.setAttribute("role", "status");
-  level.setAttribute("aria-live", "polite");
   const zoomIn = createButton("zoom-in", "Zoom in", "+");
   const fit = createButton("zoom-fit", "Fit wall to view", "Fit wall");
-  controls.append(zoomOut, level, zoomIn, fit);
+  controls.append(zoomOut, zoomIn, fit);
   container.prepend(controls);
 
   const cleanups: Array<() => void> = [];
@@ -73,14 +66,6 @@ export function mountWallZoomControls(
     zoomOut.disabled = !state || state.current <= state.minimum + LIMIT_EPSILON;
     zoomIn.disabled = !state || state.current >= state.maximum - LIMIT_EPSILON;
     fit.disabled = !state || state.fitted;
-    // 100% means "the whole board fits". Absolute cell size is meaningless to
-    // a player; "how much of the wall am I looking at" is the useful number.
-    level.textContent = state
-      ? `${Math.round((state.current / state.fit) * 100)}%`
-      : "—";
-    level.title = state
-      ? `Cell size ${state.current.toFixed(2)} px · fitted ${state.fit.toFixed(2)} px`
-      : "";
   };
 
   const requestZoom = (factor: number): void => {
