@@ -77,6 +77,15 @@ summary { cursor:pointer; }
 .swatch[aria-pressed=true] { outline:2px solid #25252b; outline-offset:0; background:#fff; }
 .swatch:hover { border-color:#696773; }
 .direct-paint-toggle { flex:0 0 auto; font-size:11px; color:#3d3943; }
+.paint-unlock { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; padding:10px 12px; border-radius:6px; background:#fff; border:1px solid #b9b2a6; }
+/* `display:flex` beats the UA `[hidden]` rule, so restate it explicitly. */
+.paint-unlock[hidden] { display:none; }
+.paint-unlock-title { flex:1 1 100%; margin:0; font-size:13px; font-weight:600; color:#25252b; }
+.paint-unlock-body { flex:1 1 300px; margin:0; font-size:12px; line-height:1.4; color:#4a4650; }
+.paint-unlock .action.unlock { flex:0 0 auto; min-height:44px; padding:12px 18px; border:0; border-radius:4px; background:#27252d; color:#f5d8e4; font-size:12px; }
+.paint-unlock .action.unlock:hover:not(:disabled) { background:#413748; }
+.tap-to-paint-status { flex:1 1 100%; margin:0; font-size:12px; line-height:1.35; color:#3d3943; }
+.board-legend { margin:4px 0 0; font-size:10px; line-height:1.4; color:#8d8791; text-align:center; }
 .action.place { flex:0 0 auto; background:#27252d; color:#f5d8e4; border:0; padding:14px 24px; }
 .action.place:hover:not(:disabled) { background:#413748; }
 .draw-state { flex:1 1 180px; margin:0; color:#46414a; font:10px/1.35 monospace; }

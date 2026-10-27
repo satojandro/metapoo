@@ -223,16 +223,23 @@ export function mountWall(
     throw new Error("The wall page is missing the tap-to-paint affordance.");
   }
   const tapToPaintAffordance = tapToPaintAffordanceCandidate;
-  // This control is deliberately mount-owned: merely revealing or toggling it
-  // must not connect a wallet or request a contract action.
-  tapToPaintAffordance.hidden = true;
-  const tapToPaintAnnouncement = document.createElement("p");
-  tapToPaintAnnouncement.id = "tap-to-paint-status";
-  tapToPaintAnnouncement.setAttribute("role", "status");
-  tapToPaintAnnouncement.setAttribute("aria-live", "polite");
-  tapToPaintAnnouncement.hidden = true;
-  tapToPaintAffordance.after(tapToPaintAnnouncement);
+  // The status line is presentation, so it lives in the template with a real
+  // class. It used to be created here with no styling at all, which is how a
+  // developer-facing sentence ended up as raw body text in the paint dock.
+  const tapToPaintAnnouncement = mustFindIn<HTMLElement>(
+    pageRoot,
+    "#tap-to-paint-status",
+  );
   directPaintToggle.setAttribute("aria-describedby", tapToPaintAnnouncement.id);
+
+  // One-approval unlock. This is the visible entry point to the drawing
+  // session; the authorise/revoke panel stays in About / details for people
+  // who want the details, but nobody should have to find it to start painting.
+  const paintUnlock = mustFindIn<HTMLElement>(pageRoot, "#paint-unlock");
+  const unlockPaintButton = mustFindIn<HTMLButtonElement>(
+    pageRoot,
+    "#unlock-paint-button",
+  );
 
   // Keep the current cell coordinates available when keyboard users reach Place.
   drawButton.setAttribute("aria-describedby", "selection-summary");
@@ -312,6 +319,10 @@ export function mountWall(
   let selected: Cell | null = null;
   let selectedColor: number | null = null;
   let tapToPaintEnabled = directPaintToggle.checked;
+  // Direct paint is a pre-approval, not a second permission: once a drawing
+  // session exists, clicking a square should just paint (Berry Club flow).
+  // `null` = follow the session; a boolean = the user has decided.
+  let tapToPaintUserChoice: boolean | null = null;
   let walletAccount: string | null = null;
   let walletNetwork: string | null = null;
   let drawInFlight = false;
@@ -453,8 +464,12 @@ export function mountWall(
   });
 
   listen(directPaintToggle, "change", () => {
-    tapToPaintEnabled = directPaintToggle.checked;
+    tapToPaintUserChoice = directPaintToggle.checked;
     updateDirectPaintAvailability();
+  });
+
+  listen(unlockPaintButton, "click", () => {
+    void onAuthorizeSessionClick();
   });
 
   listen(refreshButton, "click", () => {
@@ -1381,6 +1396,7 @@ async function onAuthorizeSessionClick(): Promise<void> {
     return;
   }
   authorizeSessionButton.disabled = true;
+  unlockPaintButton.disabled = true;
   try {
     await services.wallet.connect({ authorizeDrawingSession: true });
     setFlow(selected ? "editing" : "connected");
@@ -1395,6 +1411,7 @@ async function onAuthorizeSessionClick(): Promise<void> {
       );
     }
   } finally {
+    unlockPaintButton.disabled = false;
     showDrawingSession();
   }
 }
@@ -1911,21 +1928,32 @@ function clearPointerPreview(): void {
 function updateDirectPaintAvailability(): void {
   const allowed =
     canUseLocalDrawingSession(walletAccount, walletNetwork) && contractMetaOk;
-  const established = walletAccount !== null || allowed;
-  tapToPaintAffordance.hidden = !established;
-  tapToPaintAnnouncement.hidden = !established;
-  directPaintToggle.disabled = !allowed;
+  const connected = walletAccount !== null;
+
+  // A disabled checkbox is not an explanation. With no session there is
+  // nothing to toggle, so the toggle is hidden and the dock offers the single
+  // approval that turns painting on. With a session, Direct paint is on by
+  // default unless the user has explicitly turned it off.
+  tapToPaintEnabled = allowed && (tapToPaintUserChoice ?? true);
   directPaintToggle.checked = tapToPaintEnabled;
-  directPaintToggle.title = allowed
-    ? "Tap cells to queue paints through your drawing session (serialized, no auto-resubmit on uncertainty)"
-    : "Authorize a drawing session first to enable direct paint";
-  tapToPaintAnnouncement.textContent = !established
+  directPaintToggle.disabled = false;
+  directPaintToggle.title = tapToPaintEnabled
+    ? "Direct paint is on: click a square to paint it, with no wallet popup."
+    : "Direct paint is off: select a square, then press Place paint.";
+
+  paintUnlock.hidden = !(
+    connected &&
+    !allowed &&
+    contractMetaOk &&
+    isContractConfigured()
+  );
+  tapToPaintAffordance.hidden = !allowed;
+  tapToPaintAnnouncement.hidden = !allowed;
+  tapToPaintAnnouncement.textContent = !allowed
     ? ""
-    : allowed
-      ? tapToPaintEnabled
-        ? "Tap-to-paint mode on. A deliberate tap queues one paint through your drawing session."
-        : "Tap-to-paint is available. Turn it on to queue one paint per deliberate tap."
-      : "Tap-to-paint needs an authorized drawing session. No wallet request was made.";
+    : tapToPaintEnabled
+      ? "Direct paint is on. Click any square to paint it. No wallet popup."
+      : "Direct paint is off. Select a square, then press Place paint.";
 }
 
 /**

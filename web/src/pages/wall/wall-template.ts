@@ -80,6 +80,10 @@ export function wallPageHtml(): string {
                       </div>
                     </div>
                     <p class="board-caption" aria-hidden="true">128 × 128 · INTERACTIVE CANVAS</p>
+                    <p class="board-legend">
+                      A filled square is painted on chain. A magenta corner dot
+                      means the paint was sent but not confirmed yet.
+                    </p>
                   </div>
                   ${scenery.toiletHtml}
                 </div>
@@ -91,11 +95,24 @@ export function wallPageHtml(): string {
         </section>
 
         <div class="paint-dock">
+          <div id="paint-unlock" class="paint-unlock" hidden>
+            <p class="paint-unlock-title">Painting is read-only until you approve one drawing key.</p>
+            <p class="paint-unlock-body">
+              Approve once and this browser can place pixels without a wallet
+              popup for every square. The key can paint and nothing else — it
+              cannot move your funds. You can revoke it any time under
+              About / details.
+            </p>
+            <button id="unlock-paint-button" class="action unlock" type="button">
+              Unlock painting — one approval
+            </button>
+          </div>
           <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
           <label class="direct-paint-toggle" for="direct-paint-toggle">
             <input id="direct-paint-toggle" type="checkbox" />
             Direct paint
           </label>
+          <p id="tap-to-paint-status" class="tap-to-paint-status" role="status" aria-live="polite" hidden></p>
           <button id="draw-button" class="action place" type="button">Place paint</button>
           <p id="draw-state" class="draw-state" role="status" aria-live="polite"></p>
         </div>

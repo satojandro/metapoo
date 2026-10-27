@@ -216,9 +216,14 @@ describe("mountWall dispose", () => {
     } as DOMRect);
     root.querySelector<HTMLButtonElement>(".swatch")!.click();
     root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
-    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
-    toggle.checked = true;
-    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    // A drawing session exists, so Direct paint is on without a second
+    // decision (product decision 2026-10-27). Wait for it rather than poking
+    // the checkbox, so the negative assertions below stay meaningful.
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked,
+      ).toBe(true),
+    );
 
     touchPointer(viewport, "pointerdown", 1, 40, 40);
     touchPointer(viewport, "pointerup", 1, 40, 40);
@@ -241,9 +246,14 @@ describe("mountWall dispose", () => {
     } as DOMRect);
     root.querySelector<HTMLButtonElement>(".swatch")!.click();
     root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
-    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
-    toggle.checked = true;
-    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    // A drawing session exists, so Direct paint is on without a second
+    // decision (product decision 2026-10-27). Wait for it rather than poking
+    // the checkbox, so the negative assertions below stay meaningful.
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked,
+      ).toBe(true),
+    );
 
     touchPointer(viewport, "pointerdown", 1, 40, 40);
     touchPointer(viewport, "pointerdown", 2, 80, 80);
@@ -320,21 +330,26 @@ describe("mountWall dispose", () => {
     const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
     const affordance = toggle.closest<HTMLElement>("label")!;
 
-    await vi.waitFor(() => expect(toggle.disabled).toBe(false));
+    // Availability is no longer signalled by a disabled control: wait for the
+    // live status line that replaced it.
+    await vi.waitFor(() =>
+      expect(toggle.checked).toBe(true),
+    );
 
     expect(affordance.hidden).toBe(false);
-    toggle.checked = true;
-    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(toggle.disabled).toBe(false);
     window.dispatchEvent(new Event("online"));
 
     expect(toggle.checked).toBe(true);
-    expect(root.querySelector("#tap-to-paint-status")?.textContent).toMatch(/mode on/i);
+    expect(root.querySelector("#tap-to-paint-status")?.textContent).toMatch(
+      /click any square to paint it/i,
+    );
     expect(connect).not.toHaveBeenCalled();
     expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
     dispose();
   });
 
-  it("paint-zoom tap does not bypass the Direct paint consent toggle", async () => {
+  it("paint-zoom tap does not bypass an explicit Direct paint opt-out", async () => {
     const services = createAppServices();
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
@@ -342,10 +357,14 @@ describe("mountWall dispose", () => {
     const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
 
     // regression: isPaintZoom(camera) used to short-circuit the toggle check,
-    // letting a tap at >=16px cells submit without explicit consent.
+    // letting a tap at >=16px cells submit without consent.
+    // Direct paint now defaults ON whenever a drawing session exists (product
+    // decision 2026-10-27), so the guard under test is "an explicit opt-out is
+    // honoured", and an opt-out arrives as a change event, not a DOM poke.
     // Simulate paint zoom (cellSize >= PAINT_MIN_CELL_PX = 16).
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
     toggle.checked = false;
-    toggle.disabled = false;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     const tap = (x: number, y: number) => {
       for (const type of ["pointerdown", "pointerup"]) {
@@ -576,6 +595,78 @@ describe("mountWall dispose", () => {
     expect(
       stubServices.operations.list().some((op) => op.transactionId === "tx-pending-1"),
     ).toBe(true);
+  });
+
+  it("offers one-approval unlock in the dock instead of a dead Direct paint toggle", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(false);
+    const { services, connect } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+
+    const unlock = root.querySelector<HTMLElement>("#paint-unlock")!;
+    await vi.waitFor(() => expect(unlock.hidden).toBe(false));
+
+    // The affordance has to be where the user is painting. The whole reason it
+    // existed invisibly was that it lived inside <details>About / details.
+    expect(unlock.closest("details")).toBeNull();
+    expect(unlock.closest(".paint-dock")).not.toBeNull();
+
+    // A control that cannot be used must not sit there looking usable.
+    expect(
+      root.querySelector("#direct-paint-toggle")!.closest("label")!.hidden,
+    ).toBe(true);
+
+    // No developer-facing copy in the dock.
+    const dock = root.querySelector(".paint-dock")!;
+    expect(dock.textContent).not.toMatch(/no wallet request was made/i);
+    expect(dock.textContent).not.toMatch(/drawing session/i);
+
+    root.querySelector<HTMLButtonElement>("#unlock-paint-button")!.click();
+    await vi.waitFor(() =>
+      expect(connect).toHaveBeenCalledWith({ authorizeDrawingSession: true }),
+    );
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it("defaults Direct paint on once a session exists and keeps an override off", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const services = createAppServices();
+    type WalletListener = (session: {
+      accountId: string | null;
+      networkId: string | null;
+    }) => void;
+    let emit: WalletListener | null = null;
+    services.wallet = {
+      getSession: () => ({ accountId: "alice.testnet", networkId: "testnet" }),
+      connect: vi.fn(async () => undefined),
+      disconnect: async () => undefined,
+      subscribe: (listener) => {
+        emit = listener as WalletListener;
+        listener({ accountId: "alice.testnet", networkId: "testnet" });
+        return () => undefined;
+      },
+    };
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const toggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;
+    const status = root.querySelector<HTMLElement>("#tap-to-paint-status")!;
+
+    // A pre-approved session means painting is live without a second decision.
+    await vi.waitFor(() => expect(toggle.checked).toBe(true));
+    expect(root.querySelector<HTMLElement>("#paint-unlock")!.hidden).toBe(true);
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toMatch(/click any square to paint it/i);
+
+    // An explicit "no" is honoured, and survives a wallet re-emit.
+    toggle.checked = false;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    emit!({ accountId: "alice.testnet", networkId: "testnet" });
+    expect(toggle.checked).toBe(false);
+    expect(status.textContent).toMatch(/place paint/i);
+
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    dispose();
   });
 });
 
