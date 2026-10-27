@@ -1612,6 +1612,17 @@ function wirePointerGestures(): void {
         activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
           networkId: walletNetworkId(), color: selectedColor };
         render();
+      } else if (
+        cell && !wantsPan && directPaintToggle.checked &&
+        walletAccount && selectedColor !== null && contractMetaOk &&
+        canUseLocalDrawingSession(walletAccount, walletNetwork) &&
+        (drawInFlight || paintQueue.inFlight || paintQueueLength(paintQueue) > 0)
+      ) {
+        // Everything is armed except the wire, which is busy with the previous
+        // paint. Say so: a drag that silently pans here is indistinguishable
+        // from painting being broken.
+        drawState.textContent =
+          "Paint still confirming — drag painting resumes when it lands.";
       }
       lastX = pointerEvent.clientX;
       lastY = pointerEvent.clientY;
@@ -1859,8 +1870,12 @@ function maybeEnqueueDirectPaint(
   cell: Cell,
   options: { paintZoom: boolean } = { paintZoom: false },
 ): void {
+  // A deliberate tap is a user decision, so it is queued even while another
+  // paint is still confirming: `drainPaintQueue` is the serialiser and runs the
+  // next entry when this one settles. Dropping it here instead made the second
+  // click on a cell silently do nothing until the first transaction landed,
+  // which read as "painting stopped working".
   if (
-    drawInFlight ||
     !tapToPaintEnabled ||
     !canUseLocalDrawingSession(walletAccount, walletNetwork) ||
     selectedColor === null ||

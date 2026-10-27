@@ -769,6 +769,73 @@ describe("mountWall dispose", () => {
     expect(unlocked.hidden).toBe(false);
     dispose();
   });
+  it("queues a second tap while the first paint is still confirming", async () => {
+    const resizeCallbacks = new Set<ResizeObserverCallback>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(): void {
+          resizeCallbacks.add(this.callback);
+        }
+        disconnect(): void {
+          resizeCallbacks.delete(this.callback);
+        }
+        unobserve(): void {}
+      },
+    );
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const pixel = (x: number, y: number) => ({
+      x, y, colorIndex: 0, artistAccountId: "alice.testnet", lastWriteTimestampNs: "1",
+    });
+    const settled = {
+      status: "confirmed" as const, title: "Placed", message: "Placed",
+      transactionId: "tx", explorerUrl: null, validated_deposit: undefined,
+      pixel: pixel(1, 1), observedBlockHeight: 9,
+    };
+    let releaseFirst: (value: unknown) => void = () => undefined;
+    const firstInFlight = new Promise((resolve) => {
+      releaseFirst = resolve;
+    });
+    vi.mocked(submitDraw)
+      .mockReset()
+      .mockReturnValueOnce(firstInFlight as never)
+      .mockResolvedValue(settled as never);
+
+    const { services } = connectedWallServices();
+    const root = document.querySelector<HTMLElement>("#root")!;
+    const dispose = mountWall(root, services);
+    const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
+    Object.assign(viewport, { setPointerCapture: vi.fn() });
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 200, bottom: 480, width: 200, height: 480,
+      toJSON: () => ({}),
+    } as DOMRect);
+    for (const callback of resizeCallbacks) callback([], {} as ResizeObserver);
+    root.querySelector<HTMLButtonElement>(".swatch")!.click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked,
+      ).toBe(true),
+    );
+
+    const tap = (x: number, y: number) => {
+      touchPointer(viewport, "pointerdown", 1, x, y);
+      touchPointer(viewport, "pointerup", 1, x, y);
+    };
+
+    tap(60, 200);
+    await vi.waitFor(() => expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(1));
+    // Second deliberate tap arrives while the first transaction is unresolved.
+    // It must be queued, not dropped: dropping it made the board feel dead
+    // until the previous paint landed.
+    tap(90, 200);
+    expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(1);
+
+    releaseFirst(settled);
+    await vi.waitFor(() => expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(2));
+    dispose();
+  });
 });
 
 describe("mountWall board polling", () => {
