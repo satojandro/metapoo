@@ -58,17 +58,6 @@ import {
   setPendingPaint,
   clearPendingPaint,
 } from "../../pending-paint";
-import {
-  boardReportsPaidSchema,
-  isPaidPaintModeEnabled,
-  shouldUseMockPressureQuotes,
-} from "../../paid-mode";
-import { maxCostFromQuote } from "../../paid-paint";
-import {
-  getQuote,
-  MOCK_QUOTE_DEMO_LABEL,
-  type QuoteResult,
-} from "../../pressure-quote";
 import { renderBoard } from "../../render-board";
 import { createGestureState, updateGesture } from "../../gesture";
 import { moveSelection, type Cell } from "../../selection";
@@ -98,25 +87,11 @@ import type { AppServices } from "../../app/services";
 import { paintOperationId } from "../../app/operations";
 import { parseHelpPaintSearch } from "../bounties/deep-link";
 import { wallPageHtml } from "./wall-template";
-import {
-  createPressureOverlayHooks,
-  formatToiletAmount,
-  revalidateQueuedPaint,
-  summarizeQuoteTiming,
-  type PressureOverlayElements,
-} from "../../features/pressure";
-import type { QuoteView } from "@shared/protocol/board.ts";
 import { mountWallHint } from "../../wall-hint";
 import {
   createPlacementOutcomeController,
   mountPlacementOutcomeLayer,
 } from "./placement-outcome";
-
-/**
- * Fixture action_nonce when live get_account is not wired yet.
- * Paid contract requires last_action_nonce + 1; fresh accounts start at 0 → "1".
- */
-const FIXTURE_ACTION_NONCE = "1";
 
 /**
  * Lifecycle-safe wall mount.
@@ -211,16 +186,6 @@ export function mountWall(
   const hoverSummary = mustFindIn<HTMLElement>(pageRoot, "#hover-summary");
   const contractLine = mustFindIn<HTMLElement>(pageRoot, "#wall-contract-line");
   const directPaintToggle = mustFindIn<HTMLInputElement>(pageRoot, "#direct-paint-toggle");
-  const pressurePanel = mustFindIn<HTMLElement>(pageRoot, "#pressure-panel");
-  const pressureToggle = mustFindIn<HTMLInputElement>(pageRoot, "#pressure-toggle");
-  const pressureLegend = mustFindIn<HTMLElement>(pageRoot, "#pressure-legend");
-  const pressureQuoteSummary = mustFindIn<HTMLElement>(
-    pageRoot,
-    "#pressure-quote-summary",
-  );
-  const pressureDemoBanner = mustFindIn<HTMLElement>(pageRoot, "#pressure-demo-banner");
-  const placementQuote = mustFindIn<HTMLElement>(pageRoot, "#placement-quote");
-  const placementQuoteBody = mustFindIn<HTMLElement>(pageRoot, "#placement-quote-body");
   const tapToPaintAffordanceCandidate = directPaintToggle.closest<HTMLLabelElement>("label");
   if (!tapToPaintAffordanceCandidate) {
     throw new Error("The wall page is missing the tap-to-paint affordance.");
@@ -295,30 +260,6 @@ export function mountWall(
       ? `Board update failed; last ${freshness}`
       : `Board last updated ${freshness}`;
   }
-
-  /** Paid UI off until flag or paid schema detection; free path unchanged. */
-  let paidModeEnabled = isPaidPaintModeEnabled();
-  let boardLooksPaid = false;
-  let useMockQuotes = shouldUseMockPressureQuotes({
-    paidModeEnabled,
-    boardReportsPaid: boardLooksPaid,
-    liveQuoteAvailable: false,
-  });
-  let selectedQuote: QuoteView | null = null;
-  let selectedQuoteSource: QuoteResult["source"] | null = null;
-  let quoteFetchGeneration = 0;
-
-  const pressureElements: PressureOverlayElements = {
-    toggle: pressureToggle,
-    panel: pressurePanel,
-    legend: pressureLegend,
-    quoteSummary: pressureQuoteSummary,
-    demoBanner: pressureDemoBanner,
-  };
-  let pressureHooks = createPressureOverlayHooks(pressureElements, {
-    available: paidModeEnabled,
-  });
-  applyPaidModeChrome();
 
   let selected: Cell | null = null;
   let selectedColor: number | null = null;
@@ -574,7 +515,6 @@ export function mountWall(
       render();
       showSelection();
       void refreshSelectedPixel();
-      void refreshPlacementQuote();
     }
   });
 
@@ -590,10 +530,6 @@ export function mountWall(
     ) {
       activeStroke = null;
       cancelUnsentPaintQueue("Wallet account or network changed.");
-      // Account/network change invalidates quote authorization — fresh intent required.
-      selectedQuote = null;
-      selectedQuoteSource = null;
-      void refreshPlacementQuote();
     }
     if (!walletAccount) {
       setFlow("disconnected");
@@ -603,113 +539,6 @@ export function mountWall(
     showDrawingSession();
   });
   listenerCleanups.push(unsubWallet);
-
-function applyPaidModeChrome(): void {
-  pressurePanel.hidden = !paidModeEnabled;
-  placementQuote.hidden = !paidModeEnabled;
-  if (!paidModeEnabled) {
-    placementQuoteBody.textContent = "";
-    pressureDemoBanner.hidden = true;
-    return;
-  }
-  // Conspicuous demo label whenever fixture quotes are in use.
-  if (useMockQuotes) {
-    pressureDemoBanner.hidden = false;
-    pressureDemoBanner.textContent = MOCK_QUOTE_DEMO_LABEL;
-  } else {
-    pressureDemoBanner.hidden = true;
-  }
-}
-
-function rebuildPressureHooks(): void {
-  pressureHooks.dispose();
-  pressureHooks = createPressureOverlayHooks(pressureElements, {
-    available: paidModeEnabled,
-  });
-  applyPaidModeChrome();
-}
-
-function nowNsString(): string {
-  return `${BigInt(Date.now()) * 1_000_000n}`;
-}
-
-function renderPlacementQuotePanel(): void {
-  if (!paidModeEnabled) {
-    placementQuote.hidden = true;
-    placementQuoteBody.textContent = "";
-    return;
-  }
-  placementQuote.hidden = false;
-  if (!selected || selectedColor === null) {
-    placementQuoteBody.textContent =
-      "Select a square and a named color to see TOILET cost, balance, quote age, and your max authorized cost before Place.";
-    return;
-  }
-  if (!selectedQuote) {
-    placementQuoteBody.textContent = "Fetching placement quote…";
-    return;
-  }
-  const timing = summarizeQuoteTiming(selectedQuote, nowNsString());
-  const maxAuthorized = maxCostFromQuote(selectedQuote);
-  const lines = [
-    `Cost ${formatToiletAmount(selectedQuote.cost)}`,
-    `Balance ${formatToiletAmount(selectedQuote.balance)}`,
-    `Max authorized ${formatToiletAmount(maxAuthorized)}`,
-    `Quote ${timing.ageLabel}; ${timing.expiryLabel}`,
-    "Network gas is separate from TOILET paint cost.",
-  ];
-  if (useMockQuotes || selectedQuoteSource === "mock") {
-    lines.push(MOCK_QUOTE_DEMO_LABEL);
-  }
-  placementQuoteBody.textContent = lines.join(" · ");
-  pressureHooks.setSelectedQuote(selectedQuote, {
-    nowNs: nowNsString(),
-    demoLabel: useMockQuotes || selectedQuoteSource === "mock" ? MOCK_QUOTE_DEMO_LABEL : null,
-  });
-}
-
-async function refreshPlacementQuote(): Promise<void> {
-  if (disposed || !paidModeEnabled) {
-    selectedQuote = null;
-    selectedQuoteSource = null;
-    renderPlacementQuotePanel();
-    return;
-  }
-  if (!selected || selectedColor === null) {
-    selectedQuote = null;
-    selectedQuoteSource = null;
-    pressureHooks.setSelectedQuote(null);
-    renderPlacementQuotePanel();
-    return;
-  }
-  const generation = ++quoteFetchGeneration;
-  const accountId = walletAccount ?? "anonymous.demo";
-  try {
-    const result = await getQuote(
-      {
-        x: selected.x,
-        y: selected.y,
-        color: selectedColor,
-        accountId,
-      },
-      { useMock: useMockQuotes },
-    );
-    if (disposed || generation !== quoteFetchGeneration) {
-      return;
-    }
-    selectedQuote = result.quote;
-    selectedQuoteSource = result.source;
-    renderPlacementQuotePanel();
-  } catch (error) {
-    if (disposed || generation !== quoteFetchGeneration) {
-      return;
-    }
-    selectedQuote = null;
-    selectedQuoteSource = null;
-    const detail = error instanceof Error ? error.message : "Quote unavailable";
-    placementQuoteBody.textContent = `Could not load placement quote: ${detail}`;
-  }
-}
 
 /**
  * Apply Help-paint / bounty deep-link query after the wall mounts.
@@ -758,26 +587,6 @@ function applyRoutePaintingContext(): void {
   void refreshSelectedPixel();
 }
 
-function syncPaidModeFromBoard(board: unknown): void {
-  const hints = (board ?? null) as Parameters<typeof boardReportsPaidSchema>[0];
-  boardLooksPaid = boardReportsPaidSchema(hints);
-  const nextEnabled = isPaidPaintModeEnabled({ board: hints });
-  const nextMock = shouldUseMockPressureQuotes({
-    paidModeEnabled: nextEnabled,
-    boardReportsPaid: boardLooksPaid,
-    liveQuoteAvailable: false,
-  });
-  const changed =
-    nextEnabled !== paidModeEnabled || nextMock !== useMockQuotes;
-  paidModeEnabled = nextEnabled;
-  useMockQuotes = nextMock;
-  if (changed) {
-    rebuildPressureHooks();
-  } else {
-    applyPaidModeChrome();
-  }
-}
-
 /**
  * Re-run the `get_board` comparison after a failed load.
  *
@@ -820,7 +629,6 @@ async function revalidateContractMeta(): Promise<boolean> {
 async function bootstrapBoard(): Promise<void> {
   if (!isContractConfigured()) {
     contractMetaOk = true;
-    syncPaidModeFromBoard(null);
     evidence.textContent =
       "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
     contractLine.textContent =
@@ -832,14 +640,12 @@ async function bootstrapBoard(): Promise<void> {
     updateCompactStatus();
     updateDirectPaintAvailability();
     applyRoutePaintingContext();
-    void refreshPlacementQuote();
     return;
   }
 
   evidence.textContent = `Evidence: reading contract ${CONTRACT_ID} on ${PAGE_NETWORK}. Validating metadata, then loading painted cells…`;
   try {
     const board = await getBoard();
-    syncPaidModeFromBoard(board);
     const meta = validateContractMetadata(board);
     contractMetaOk = meta.ok;
     contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
@@ -863,7 +669,6 @@ async function bootstrapBoard(): Promise<void> {
       `records which account painted it and when.`;
     await refreshBoardFromContract();
     applyRoutePaintingContext();
-    void refreshPlacementQuote();
   } catch (error) {
     contractMetaOk = false;
     const detail = error instanceof Error ? error.message : "Unknown read error";
@@ -998,49 +803,6 @@ async function attemptDraw(
     return;
   }
 
-  // Fresh Place path: authorize at the current quote cost (never silently raise).
-  let placeAuthorization:
-    | {
-        maxCost: string;
-        expiresAtNs: string;
-        pricingVersion: string;
-        actionNonce: string;
-      }
-    | undefined;
-  if (!request && paidModeEnabled) {
-    await refreshPlacementQuote();
-    if (disposed) {
-      return;
-    }
-    if (!selectedQuote) {
-      setFlow(walletAccount ? "editing" : "disconnected");
-      fillBlock(
-        result,
-        "Quote required",
-        "A TOILET placement quote is required before Place. Select a square and color, wait for the quote, then try again.",
-      );
-      return;
-    }
-    const timing = summarizeQuoteTiming(selectedQuote, nowNsString());
-    if (timing.expired) {
-      setFlow("editing");
-      fillBlock(
-        result,
-        "Quote expired",
-        "This price quote expired. Review the refreshed cost, then Place again.",
-      );
-      void refreshPlacementQuote();
-      return;
-    }
-    placeAuthorization = {
-      maxCost: maxCostFromQuote(selectedQuote),
-      expiresAtNs: selectedQuote.expiresAtNs,
-      pricingVersion: selectedQuote.pricingVersion,
-      // Live path should use get_account.last_action_nonce + 1 when available.
-      actionNonce: FIXTURE_ACTION_NONCE,
-    };
-  }
-
   const frozen =
     request ??
     (selected && selectedColor !== null && walletAccount
@@ -1050,7 +812,6 @@ async function attemptDraw(
           colorIndex: selectedColor,
           accountId: walletAccount,
           networkId: walletNetworkId(),
-          ...(placeAuthorization ?? {}),
         })
       : null);
 
@@ -1099,55 +860,6 @@ async function attemptDraw(
     return;
   }
 
-  // Queued paid paints: revalidate quote vs frozen maxCost before signing.
-  if (request && paidModeEnabled && frozen.maxCost !== undefined) {
-    try {
-      const fresh = await getQuote(
-        {
-          x: frozen.x,
-          y: frozen.y,
-          color: frozen.colorIndex,
-          accountId: frozen.accountId,
-        },
-        { useMock: useMockQuotes },
-      );
-      if (disposed) {
-        return;
-      }
-      const check = revalidateQueuedPaint({
-        request: frozen,
-        quotedCost: fresh.quote.cost,
-        quoteExpiresAtNs: fresh.quote.expiresAtNs,
-        nowNs: nowNsString(),
-        quotePricingVersion: fresh.quote.pricingVersion,
-        paidMode: true,
-      });
-      if (!check.ok) {
-        clearPendingPaint(pendingPaints, frozen.x, frozen.y);
-        cancelUnsentPaintQueue(check.message);
-        setFlow("editing");
-        fillBlock(result, check.title, check.message);
-        selectedQuote = fresh.quote;
-        selectedQuoteSource = fresh.source;
-        renderPlacementQuotePanel();
-        render();
-        return;
-      }
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : "Quote unavailable";
-      clearPendingPaint(pendingPaints, frozen.x, frozen.y);
-      cancelUnsentPaintQueue(`Could not revalidate paint cost: ${detail}`);
-      setFlow("editing");
-      fillBlock(
-        result,
-        "Quote revalidation failed",
-        `Queued paint was not submitted. ${detail}`,
-      );
-      render();
-      return;
-    }
-  }
-
   // Keep UI selection in sync with the request, but never re-read color/account
   // from live UI state while this request is in flight.
   selected = { x: frozen.x, y: frozen.y };
@@ -1191,17 +903,9 @@ async function attemptDraw(
     "Waiting for your wallet",
     [
       `Approve draw at x=${frozen.x}, y=${frozen.y}, color=${frozen.colorIndex} (${colorName(frozen.colorIndex)}).`,
-      frozen.maxCost !== undefined
-        ? `Max authorized paint cost: ${formatToiletAmount(frozen.maxCost)}. The contract rejects a higher execution cost; this page never silently raises that limit.`
-        : "Your wallet may ask you to pay a small network gas fee. The game adds no application fee.",
-      frozen.maxCost !== undefined
-        ? "Network gas is separate from TOILET paint cost."
-        : null,
+      "Your wallet may ask you to pay a small network gas fee. The game adds no application fee.",
       sponsorship.message,
-      useMockQuotes && frozen.maxCost !== undefined ? MOCK_QUOTE_DEMO_LABEL : null,
-    ]
-      .filter((line): line is string => line !== null)
-      .join(" "),
+    ].join(" "),
   );
 
   try {
@@ -1211,21 +915,6 @@ async function attemptDraw(
       colorIndex: frozen.colorIndex,
       accountId: frozen.accountId,
       networkId: frozen.networkId,
-      ...(frozen.maxCost !== undefined &&
-      frozen.expiresAtNs !== undefined &&
-      frozen.pricingVersion !== undefined
-        ? {
-            paid: {
-              maxCost: frozen.maxCost,
-              expiresAtNs: frozen.expiresAtNs,
-              pricingVersion: frozen.pricingVersion,
-              actionNonce: frozen.actionNonce ?? FIXTURE_ACTION_NONCE,
-              ...(frozen.sessionId !== undefined
-                ? { sessionId: frozen.sessionId }
-                : {}),
-            },
-          }
-        : {}),
       onProgress: (progress) => {
         // Always record broadcast progress on the shared operations store.
         if (progress.phase === "pending" || progress.phase === "confirming") {
@@ -1950,17 +1639,12 @@ function selectAtClientPoint(clientX: number, clientY: number): void {
   showSelection();
   boardFocus.focus();
   void refreshSelectedPixel();
-  void refreshPlacementQuote().then(() => {
-    if (disposed) {
-      return;
-    }
-    // Paint zoom is the deliberate, r/place-style direct-placement mode. It
-    // relaxes the two-step form (tap = place), but NEVER the consent toggle:
-    // direct submission requires the user to have opted in, same as 2-step
-    // mode, plus the pre-authorized local drawing session. A gesture never
-    // routes through a form submission, and never submits unrequested.
-    maybeEnqueueDirectPaint(next, { paintZoom: isPaintZoom(camera) });
-  });
+  // Paint zoom is the deliberate, r/place-style direct-placement mode. It
+  // relaxes the two-step form (tap = place), but NEVER the consent toggle:
+  // direct submission requires the user to have opted in, same as 2-step
+  // mode, plus the pre-authorized local drawing session. A gesture never
+  // routes through a form submission, and never submits unrequested.
+  maybeEnqueueDirectPaint(next, { paintZoom: isPaintZoom(camera) });
 }
 
 function maybeEnqueueDirectPaint(
@@ -1983,46 +1667,12 @@ function maybeEnqueueDirectPaint(
     return;
   }
 
-  let paidFields: {
-    maxCost: string;
-    expiresAtNs: string;
-    pricingVersion: string;
-    actionNonce: string;
-  } | undefined;
-  if (paidModeEnabled) {
-    if (!selectedQuote) {
-      fillBlock(
-        result,
-        "Quote required",
-        "Direct paint waited for a TOILET quote before queueing. Try the cell again once the quote appears.",
-      );
-      return;
-    }
-    const timing = summarizeQuoteTiming(selectedQuote, nowNsString());
-    if (timing.expired) {
-      fillBlock(
-        result,
-        "Quote expired",
-        "Refresh the quote, then tap again. Queued paints never silently raise max cost.",
-      );
-      void refreshPlacementQuote();
-      return;
-    }
-    paidFields = {
-      maxCost: maxCostFromQuote(selectedQuote),
-      expiresAtNs: selectedQuote.expiresAtNs,
-      pricingVersion: selectedQuote.pricingVersion,
-      actionNonce: FIXTURE_ACTION_NONCE,
-    };
-  }
-
   const queued = createDrawRequest({
     x: cell.x,
     y: cell.y,
     colorIndex: selectedColor,
     accountId: walletAccount,
     networkId: walletNetworkId(),
-    ...(paidFields ?? {}),
   });
   // A direct tap gets a mount-local pending marker immediately, before the
   // serialized draw reaches the existing submit path. It is never a second
@@ -2364,11 +2014,6 @@ function fillRules(): void {
     sponsorship.flagEnabled
       ? "Sponsorship flag is on, but the submit path stays ordinary wallet until a sponsor service exists."
       : "Sponsorship is off. No cross-chain or paid checkout is offered on this page.",
-    paidModeEnabled
-      ? useMockQuotes
-        ? `Paint-cost UI is on (${MOCK_QUOTE_DEMO_LABEL}). Place builds contract-shaped paint_with_wallet / session draw args; live get_quote and get_account nonce still use fixtures until RPC views are wired.`
-        : "Paint-cost UI is on from paid board metadata. Place submits paint_with_wallet (or session draw) with max_cost, pricing_version, expires_at_ns, and action_nonce."
-      : "Paid-paint UI is off (VITE_PAID_PAINT unset/false and unpaid schema). Free-board Place path is unchanged.",
   ];
   const list = document.createElement("ul");
   for (const line of lines) {
@@ -2407,7 +2052,6 @@ function buildPalette(): void {
       }
       render();
       showSelection();
-      void refreshPlacementQuote();
     });
     palette.append(button);
   }
@@ -2496,8 +2140,6 @@ function walletNetworkId(): NetworkId {
     disposed = true;
     clearBoardPoll();
     loadAbort.abort();
-    quoteFetchGeneration += 1;
-    pressureHooks.dispose();
     wallHint.dispose();
     unmountPlacementOutcomes();
     // Drop unsent queue work; an in-flight attemptDraw may still settle into

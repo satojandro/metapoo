@@ -101,7 +101,6 @@ summary { cursor:pointer; }
 .side section,.about { border-radius:6px; background:#242329; color:#ddd7e2; border-color:#4a454f; }
 .about { grid-column:1 / -1; }
 .result { border-radius:6px; font-size:13px; }
-.pressure-panel,.placement-quote { border-radius:8px; }
 @media (max-width:1000px) {
 .app-shell { padding:0 22px 24px; } .app-shell-top { gap:12px; } .app-nav-list { gap:14px; } .nav-coming-soon { display:none; }
 .wallet-details[open] { right:22px; } .stall-scene { aspect-ratio:1.2; } .stall-scene::before { background-size:auto 100%; }

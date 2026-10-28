@@ -93,9 +93,9 @@ Evidence: branch source `contracts/paid-board/src/lib.rs` and `payments.rs` on
 `0e4eae5` and `34b1a84`. The `codex/paid-board-safety-toilet-token` safety implementation has 63 local
 tests and a passing release WASM build; see [contract verification](learning/2026-10-28-contract-safety-and-token.md).
 not a live settlement or cost result. `contracts/board` (schema 2) is **retired as a product**
-and kept only as the testnet fixture; deletion of `web/src/payment-provider.ts` and the
-schema-3 mock path is assigned in [the work queue](implementation/2026-10-28-work-queue.md). Existing
-pressure quotes do not implement this new payment UI. Mainnet deployment: none,
+and kept only as the testnet fixture. `web/src/payment-provider.ts` is already absent. The schema-3
+Journey C pressure modules are removed, so fixture quotes cannot render on the wall. Schema 4 credit
+display stays in `paint-wallet.ts`. Mainnet deployment: none,
 confirmed by owner. A testnet token is needed for the first paid rehearsal.
 
 | ID | Pending work | Evidence / completion gate |

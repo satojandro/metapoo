@@ -50,15 +50,6 @@ export interface LocalDrawArgs {
   x: number;
   y: number;
   color: number;
-  /**
-   * Paid board override from `buildPaidFunctionCall`.
-   * Session path uses method `draw` with snake_case paid args + session_id.
-   */
-  paidCall?: {
-    methodName: string;
-    args: Record<string, unknown>;
-    deposit: string;
-  };
 }
 
 export interface AccessKeyAllowanceInfo {
@@ -189,18 +180,14 @@ export async function signAndSendDrawLocally(
 
   // Once callFunctionRaw starts, a lost RPC response may still mean the tx
   // landed. Treat any error from this call as possibly-broadcast.
-  const methodName = args.paidCall?.methodName ?? "draw";
-  const callArgs =
-    args.paidCall?.args ??
-    ({ x: args.x, y: args.y, color: args.color } as Record<string, unknown>);
-  const deposit = args.paidCall?.deposit ?? DRAW_DEPOSIT;
+  const callArgs = { x: args.x, y: args.y, color: args.color } as Record<string, unknown>;
   try {
     return await account.callFunctionRaw({
       contractId: CONTRACT_ID,
-      methodName,
+      methodName: "draw",
       args: callArgs,
       gas: DRAW_GAS,
-      deposit,
+      deposit: DRAW_DEPOSIT,
       waitUntil: "EXECUTED_OPTIMISTIC",
     });
   } catch (error) {
