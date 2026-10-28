@@ -439,6 +439,25 @@ A bounded owner with a cooldown was the alternative. It was rejected because it 
 raise a holder's cost — the exact question listings and holders ask — and it needs a timelock to be
 honest, which is more machinery than deleting the setter.
 
+### Emission architecture — decided 2026-10-28 (D5)
+
+Emission is **claim-based**, and the reservation happens at accrual:
+
+| stage | what happens | where |
+|---|---|---|
+| accrual | emission per held cell accrues into a global accumulator; the total is **reserved against the 1B cap** | board |
+| reservation | `accrued_total <= CAP` always — a late claimer cannot find the cap gone | board |
+| claim | the player's claim is the only method that calls `mint` | board → token |
+| registration | the token auto-registers a first-time claimer from its own NEAR balance, refusing below a 1 NEAR reserve floor | token |
+
+Why not a payout batch: it needs an operator or a hot key, an N-recipient transaction with partial-failure
+semantics, and it pays registration for dust. Claiming pays only for engaged players, needs no infrastructure,
+and makes earning visible — which is a retention mechanism, not just a cost saving.
+
+The one thing this design forces: **unclaimed accrual is a real liability against the cap**, so it must be
+reserved at accrual and never re-derived at claim. A test that accrues past the cap and then claims must
+show earlier accruals still paying out.
+
 Technical constraint worth recording: NEARLY's factory **mints a new 1B token** and puts the whole
 supply in its own pool at 1,000 NEAR FDV. It cannot launch an existing token. A game-emitted TOILET
 therefore cannot be launched through NEARLY — it would need a pool created directly on Rhea with

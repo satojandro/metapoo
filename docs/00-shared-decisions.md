@@ -40,6 +40,14 @@ TOILET, revenue sharing and inventory trading remain a subsequent stage.
   single board passthrough (`board.set_toilet_paused(bool)`, board-owner gated) or the role lands on an
   EOA — which is the owner this decision just deleted. Without one, drop pause from v1 and say so.
   Rationale and the accepted cost are in [PR #15](https://github.com/satojandro/metapoo/pull/15).
+- **D5 — TOILET emission is claim-based, and reserved at accrual.** The board accrues emission per held
+  cell (MasterChef accumulator over `holders`), and **reserves it against the 1B cap when it accrues**, not
+  when it is claimed: `accrued_total <= CAP` at all times, so a late claimer can never find the cap gone.
+  The player's `claim_toilet` is the only path that mints. A first-time claimer is auto-registered by the
+  token from its own NEAR balance, bounded by a 1 NEAR reserve floor, so a player needs one action and the
+  game pays the 0.00125 NEAR storage only for people who actually claim. Chosen over a payout batch because
+  it needs no operator, no hot key and no N-recipient transaction — and because a visible "claim" badge
+  brings people back in a way invisible payouts do not.
 
 Evidence and the full contradiction list: [paid model v1 decisions](payments/2026-10-28-paid-model-decisions.md).
 

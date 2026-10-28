@@ -20,7 +20,9 @@ paints, and the paint is visible to someone else — on **testnet** first, then 
 | 5 | `toilet-token` — capped NEP-141, emitter-gated mint, venue tax | `toilet-token.task.json` | **Codex** | New crate, no dependencies, large but self-contained | nothing |
 | 6 | `payments.rs` security review | this doc, §Hermes | **Hermes** | Independent of whoever wrote it | nothing |
 | 7 | Testnet paid deployment rehearsal | this doc, §Hermes | **Hermes** | Scripts, keys, RPC, receipts — ops lane | #2, #3 |
-| 8 | `toilet-d4-immutable` — immutable tax, no owner, emitter-only authority, resolver fix | `toilet-d4-immutable.task.json` | **Codex** | **delivered → PR #16**; one review revert (the board's `upgrade()` was deleted, restored) | nothing |
+| 8 | `toilet-d4-immutable` — immutable tax, no owner, emitter-only authority, resolver fix | `toilet-d4-immutable.task.json` | **Codex** | **delivered → PR #16, merged `38cc262`**; one review revert (the board's `upgrade()` was deleted, restored) | nothing |
+| 9 | `toilet-accrual-claim` — accrual reserved against the 1B cap, claim mints, token auto-registers the first claimer | `toilet-accrual-claim.task.json` | **Codex** | D5; requires the board's `holders` layout, so it must land **before** any deploy | nothing |
+| 10 | Claim UI — "you have earned X, claim" + registration + receipt states | not written yet | **Cursor** | needs 9's views (`get_pending_toilet`, `get_toilet_emission`) | 9 |
 
 Two Codex tasks are deliberately independent of each other and of the frontend, so they can run in
 parallel with Cursor rather than queueing behind it.
@@ -43,9 +45,11 @@ restored — the board custodies credits and pixels and must stay repairable; th
 will. The README and the learning entry were corrected to match, and the lesson is recorded in the
 `writing-plans` skill.
 
-**Payout registration is a process decision, not a code defect.** Pick one and write it into the token
-README and the payout job: emitter-funded auto-registration with a per-call bound, registration at first
-paint, or an explicit pre-registration step.
+**Payout model decided (D5): claim-based, reserved at accrual.** No payout batch, no operator, no hot key.
+The board accrues per held cell and reserves against the 1B cap as it accrues; the player's claim is the
+only path that mints; the token auto-registers a first-time claimer from its own balance behind a 1 NEAR
+reserve floor. Task 9 implements it and must land before any deploy, because it replaces the board's
+`cells_owned` layout with `holders`.
 
 The branch was cut before the documentation cut, so `main` was merged into it (`3d214b8`) with the
 `docs/README.md` conflict resolved — its two rows folded into the one-page map. No code conflicts.
