@@ -71,20 +71,21 @@ impl Payments {
     ) -> Option<u128> {
         // Exact multiples avoid silently keeping dust or scheduling a second,
         // potentially taxed outgoing transfer. Invalid FT purchases refund all.
-        if amount == 0 || amount % price != 0 || minimum == 0 {
+        if amount == 0 || !amount.is_multiple_of(price) || minimum == 0 {
             return None;
         }
         let credits = amount / price;
         if credits < minimum {
             return None;
         }
-        if max_outstanding > 0 && self.outstanding.saturating_add(credits) > max_outstanding {
+        let outstanding = self.outstanding.checked_add(credits)?;
+        if max_outstanding > 0 && outstanding > max_outstanding {
             return None;
         }
         let previous = *self.balances.get(account)?;
         let next = previous.checked_add(credits)?;
         self.balances.insert(account.clone(), next);
-        self.outstanding = self.outstanding.saturating_add(credits);
+        self.outstanding = outstanding;
         Some(credits)
     }
 
@@ -94,10 +95,14 @@ impl Payments {
         }
         let balance = *self.balances.get(account).expect("AccountNotRegistered");
         let next = balance.checked_sub(count).expect("InsufficientCredits");
+        let outstanding = self
+            .outstanding
+            .checked_sub(count)
+            .expect("CreditInvariant");
         // ECONOMY NEXT: pressure pricing belongs here, after quote/max-cost checks.
         // A receipt failure rolls back this debit and all pixel writes together.
         self.balances.insert(account.clone(), next);
-        self.outstanding = self.outstanding.saturating_sub(count);
+        self.outstanding = outstanding;
     }
 }
 
@@ -114,8 +119,42 @@ impl Board {
             "OwnerOnly"
         );
         assert!(near_per_credit.0 > 0 && mpoo_per_credit.0 > 0, "ZeroPrice");
+        // Compare via differences rather than multiplication: even a u128::MAX
+        // price can be checked without wrapping at 2 × old_price.
+        for (old, new) in [
+            (self.payments.near_price, near_per_credit.0),
+            (self.payments.mpoo_price, mpoo_per_credit.0),
+        ] {
+            assert!(
+                if new >= old {
+                    new - old <= old
+                } else {
+                    old - new <= new
+                },
+                "PriceStepTooLarge"
+            );
+        }
+        let now = env::block_timestamp();
+        if let Some(last) = self.tunables.last_price_change_ns {
+            assert!(
+                now.checked_sub(last)
+                    .is_some_and(|elapsed| elapsed >= self.tunables.price_cooldown_ns),
+                "PriceCooldown"
+            );
+        }
+        Self::safety_event(
+            "price_changed",
+            near_sdk::serde_json::json!({
+                "old_near_per_credit": U128(self.payments.near_price),
+                "new_near_per_credit": near_per_credit,
+                "old_mpoo_per_credit": U128(self.payments.mpoo_price),
+                "new_mpoo_per_credit": mpoo_per_credit,
+                "changed_at_ns": now.to_string()
+            }),
+        );
         self.payments.near_price = near_per_credit.0;
         self.payments.mpoo_price = mpoo_per_credit.0;
+        self.tunables.last_price_change_ns = Some(now);
     }
 
     pub fn get_payment_config(&self) -> PaymentConfig {
@@ -156,13 +195,20 @@ impl Board {
     /// Attach native NEAR in yoctoNEAR; no wrap/swap/oracle is involved.
     #[payable]
     pub fn buy_credits_near(&mut self, min_credits: U128, expected_price: U128) -> U128 {
+        self.assert_unpaused();
         assert_eq!(expected_price.0, self.payments.near_price, "PriceChanged");
         let account = env::predecessor_account_id();
         let amount = env::attached_deposit().as_yoctonear();
         let cap = self.tunables.max_outstanding_credits;
         let credits = self
             .payments
-            .credit(&account, amount, self.payments.near_price, min_credits.0, cap)
+            .credit(
+                &account,
+                amount,
+                self.payments.near_price,
+                min_credits.0,
+                cap,
+            )
             .expect("InvalidPurchaseOrUnregisteredAccountOrFloatFull");
         Self::purchase_event(&account, "near", amount, credits);
         U128(credits)
@@ -176,6 +222,9 @@ impl Board {
             self.payments.token,
             "WrongToken"
         );
+        if self.tunables.paused {
+            return amount;
+        }
         // NEARLY taxes Rhea-bound transfers, not direct wallet transfers.
         // Reject routed deposits: do not interpret a gross DEX quote as receipts.
         // ECONOMY NEXT: a swap adapter needs independently verified net output,
@@ -242,6 +291,14 @@ mod tests {
     }
     fn message() -> String {
         r#"{"min_credits":"2","expected_price":"100"}"#.into()
+    }
+
+    #[test]
+    #[should_panic(expected = "PriceStepTooLarge")]
+    fn threefold_price_change_is_rejected() {
+        let mut board = setup();
+        context(0, 0, 1);
+        board.set_credit_prices(U128(30), U128(100));
     }
 
     #[test]
@@ -421,6 +478,19 @@ mod tests {
             board.ft_on_transfer(accounts(1), U128(200), message()),
             U128(200)
         );
+    }
+
+    #[test]
+    fn outstanding_overflow_refunds_without_changing_the_account() {
+        let mut board = setup();
+        board.payments.outstanding = u128::MAX;
+        context(5, 1, 0);
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(200), message()),
+            U128(200)
+        );
+        assert_eq!(board.get_credits(accounts(1)), Some(U128(0)));
+        assert_eq!(board.get_outstanding_credits(), U128(u128::MAX));
     }
 
     #[test]

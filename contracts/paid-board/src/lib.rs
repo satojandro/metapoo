@@ -12,6 +12,7 @@
 //! testnet or mainnet result.
 
 mod payments;
+mod safety;
 use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{env, near, AccountId, PanicOnDefault};
 use payments::Payments;
@@ -77,6 +78,13 @@ pub struct PaletteColor {
 #[near(serializers = [json, borsh])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tunables {
+    /// Emergency stop for painting and purchases. Views and upgrades stay open.
+    pub paused: bool,
+    /// Additional liquid NEAR retained after existing storage and credit obligations.
+    pub reserve_floor: near_sdk::json_types::U128,
+    pub price_cooldown_ns: u64,
+    /// None permits the first price change, including at timestamp zero.
+    pub last_price_change_ns: Option<u64>,
     /// A cell repainted within this many nanoseconds costs the "young" rate.
     pub repaint_young_ns: u64,
     pub repaint_young_credits: u32,
@@ -116,6 +124,14 @@ impl Tunables {
 
     fn validate(&self) {
         assert!(
+            self.reserve_floor.0 >= safety::MIN_RESERVE,
+            "ReserveFloorTooLow"
+        );
+        assert!(
+            self.price_cooldown_ns >= safety::MIN_COOLDOWN_NS,
+            "PriceCooldownTooShort"
+        );
+        assert!(
             self.repaint_base_credits > 0
                 && self.repaint_young_credits > 0
                 && self.repaint_mid_credits > 0,
@@ -134,12 +150,16 @@ impl Tunables {
 impl Default for Tunables {
     fn default() -> Self {
         Self {
-            repaint_young_ns: 600_000_000_000,    // 10 minutes
+            paused: false,
+            reserve_floor: near_sdk::json_types::U128(safety::MIN_RESERVE),
+            price_cooldown_ns: safety::MIN_COOLDOWN_NS,
+            last_price_change_ns: None,
+            repaint_young_ns: 600_000_000_000, // 10 minutes
             repaint_young_credits: 4,
-            repaint_mid_ns: 3_600_000_000_000,    // 60 minutes
+            repaint_mid_ns: 3_600_000_000_000, // 60 minutes
             repaint_mid_credits: 2,
             repaint_base_credits: 1,
-            max_outstanding_credits: 0,           // uncapped at launch
+            max_outstanding_credits: 0, // uncapped at launch
             quota_base: 32,
             quota_per_cell: 4,
             quota_max: 512,
@@ -295,7 +315,7 @@ impl Board {
     ///
     /// Call again with `next_from_index` until it is `null`.
     pub fn get_pixels(&self, from_index: u32, limit: u32) -> PixelsPage {
-        let total = self.pixels.len() as u32;
+        let total = self.pixels.len();
         let limit = limit.min(MAX_PIXELS_PAGE);
 
         let mut pixels = Vec::new();
@@ -349,6 +369,12 @@ impl Board {
             "OwnerOnly"
         );
         tunables.validate();
+        // This timestamp is history, not an owner-editable knob. Otherwise the
+        // general setter could silently defeat the price-change cooldown.
+        assert_eq!(
+            tunables.last_price_change_ns, self.tunables.last_price_change_ns,
+            "PriceHistoryImmutable"
+        );
         self.tunables = tunables;
     }
 
@@ -391,6 +417,7 @@ impl Board {
     /// On NEAR, a panic cancels the whole transaction. A successful return
     /// means the cell was stored for this call.
     pub fn draw(&mut self, x: u32, y: u32, color: u32) {
+        self.assert_unpaused();
         if let Err(code) = validate_draw_args(x, y, color) {
             reject(code);
         }
@@ -432,6 +459,7 @@ impl Board {
     /// The stroke is capped at `MAX_DRAW_BATCH` cells. Longer drags are
     /// split by the client into several calls, each of which is still atomic.
     pub fn draw_many(&mut self, cells: Vec<DrawCell>) {
+        self.assert_unpaused();
         if cells.is_empty() {
             reject("EmptyStroke");
         }
@@ -580,6 +608,8 @@ mod tests {
         for i in 0..6 {
             board.payments.balances.insert(accounts(i), 1000);
         }
+        // Fixture credits must also be included in the global liability counter.
+        board.payments.outstanding = 6000;
         board
     }
 
@@ -960,6 +990,7 @@ mod tests {
         board.draw(0, 0, 1);
         // Only 2 credits left; a young repaint costs 4.
         board.payments.balances.insert(accounts(0), 2);
+        board.payments.outstanding -= 997;
         paying_context(0, 0, 1_000 + 60_000_000_000);
         let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             board.draw(0, 0, 3);
@@ -1017,8 +1048,10 @@ mod tests {
     #[should_panic(expected = "ZeroRepaintCost")]
     fn a_free_repaint_is_rejected() {
         let mut board = setup();
-        let mut tunables = Tunables::default();
-        tunables.repaint_young_credits = 0;
+        let tunables = Tunables {
+            repaint_young_credits: 0,
+            ..Tunables::default()
+        };
         paying_context(0, 1, 1_000);
         board.set_tunables(tunables);
     }
@@ -1036,8 +1069,10 @@ mod tests {
     #[test]
     fn the_owner_can_retune_without_a_redeploy() {
         let mut board = setup();
-        let mut tunables = Tunables::default();
-        tunables.repaint_young_credits = 9;
+        let tunables = Tunables {
+            repaint_young_credits: 9,
+            ..Tunables::default()
+        };
         paying_context(0, 1, 1_000);
         board.set_tunables(tunables);
         assert_eq!(board.get_tunables().repaint_young_credits, 9);

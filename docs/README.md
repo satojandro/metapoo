@@ -50,6 +50,8 @@ listed, the newest dated file wins and this map is missing an entry.
 | topic | authoritative document |
 |---|---|
 | paid board: local contract and API | `../contracts/paid-board/README.md` — schema 4, not deployed |
+| paid board safety implementation | `implementation/paid-board-safety.task.json`; actual behavior and state-layout correction in `../contracts/paid-board/README.md` |
+| TOILET token implementation and tax/refund semantics | `../contracts/toilet/README.md` — local code/tests, not deployed; task in `implementation/toilet-token.task.json` |
 | **mainnet cost tests: revisit on deployment** | **`payments/mainnet-cost-validation.md` — all pending; PAY-COST remains open** |
 | contract changes and upgrades | `payments/upgrade-policy.md` — proposal and current gaps |
 | board contract: deploy, storage, gas, frontend handoff | `../contracts/board/DEPLOY.md`, `STORAGE_AND_GAS.md`, `FRONTEND_HANDOFF.md` |

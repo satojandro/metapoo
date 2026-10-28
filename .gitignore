@@ -20,3 +20,4 @@
 .orchestrator-worktree.json
 orchestrator-init.log
 /contracts/paid-board/target
+/contracts/toilet/target

@@ -15,14 +15,14 @@ integration remain pending.
   before general paid launch. Every measurement is still pending.
 - [Accepted frontend requirements](../../docs/payments/frontend-handoff.md): NEARLY
   link, pixel prices, credits, NEAR and mPOO balances implemented locally as read-only UI; checkout and live paid-state verification pending.
-- [Upgrade policy proposal](../../docs/payments/upgrade-policy.md): choose control
-  and migration design before deployment; current code has no migration/upgrade method.
+- [Upgrade policy proposal](../../docs/payments/upgrade-policy.md): owner-only upgrade
+  exists; migration design and a state-preserving rehearsal remain pending.
 
 ## Product rules
 
-One credit pays for one submitted pixel placement. Credits never expire and cannot
-be transferred, redeemed or withdrawn. A batch charges per entry (including
-repeated coordinates); recoloring or repainting also costs one credit per entry.
+Credits never expire and cannot be transferred, redeemed or withdrawn. A batch
+charges per entry (including repeated coordinates), using the 1/2/4-credit
+recency tiers described below; one credit is the default empty/old-cell cost.
 Invalid coordinates/colors and insufficient balances reject the entire stroke.
 Native NEAR and direct mPOO purchases are supported without a swap.
 
@@ -37,6 +37,44 @@ there is no automatic repricing. Test prices 10 and 100 are arithmetic fixtures,
 not economically valid launch prices. `set_credit_prices` changes prices with
 exactly 1 yoctoNEAR attached. Existing credits are unaffected. Buyers submit
 `expected_price` and `min_credits`; stale prices reject/refund.
+
+## Safety controls (local, 2026-10-28)
+
+- Owner-only `set_paused(paused)`, with 1 yoctoNEAR, stops `draw`, `draw_many`, and
+  native purchases with `Paused`. Authenticated FT purchases return the full unused
+  amount for refund. Views, upgrades and treasury withdrawals remain available.
+  `get_tunables().paused` exposes the state.
+- `set_credit_prices` permits each price to move only between half and double its
+  prior value (odd-number halving rounds up). The first change is allowed immediately;
+  subsequent changes require at least 24 hours. `price_changed` includes both old
+  and new prices. Invalid steps fail `PriceStepTooLarge`; early changes fail
+  `PriceCooldown`. Even a no-op update starts the cooldown.
+- `get_withdrawable_near()` returns the maximum available now, as a decimal string:
+  account balance minus current storage stake, minus outstanding credits ×
+  664,000,000,000,000,000,000 yoctoNEAR, minus the configured reserve floor.
+  Underfunding or arithmetic overflow returns zero.
+- Owner-only `withdraw_near(recipient, amount)` requires 1 yoctoNEAR and a positive
+  amount no greater than that view; excess fails `ReserveBreached`. The returned
+  transfer promise reserves funds immediately, preventing overlapping withdrawals
+  from counting them twice. `treasury_withdrawn` has `status: scheduled`: delivery
+  must be verified from the transfer receipt, not inferred from the event.
+- Reserve floor defaults to **5 NEAR** and cannot be configured below it. Cooldown
+  cannot be configured below 24 hours, and `last_price_change_ns` cannot be rewritten
+  through `set_tunables`. Its initial value is null, including at timestamp zero.
+  `reserve_floor` uses a JSON decimal string. Outstanding-credit additions and
+  deductions are checked so overflow cannot silently distort the reserve obligation.
+
+The pixel storage estimate comes from the recorded free-board measurement in
+[paid-model decisions §2](../../docs/payments/2026-10-28-paid-model-decisions.md):
+152,724 bytes / 2,301 painted cells ≈ 66.4 bytes at 10^19 yoctoNEAR/byte. It is not
+a paid-board benchmark or a guarantee of solvency; PAY-COST must measure the new
+layout and the operations reserve before launch. mPOO withdrawal is not included.
+
+**State-layout correction to the brief:** the four safety fields did not exist in
+the source revision's `Tunables`. Adding them changes Borsh serialization, even
+though no direct `Board` or `Payments` fields were added. This build is for fresh
+initialization; it is **not a migration-free upgrade** of an already initialized
+older schema-4 board. An explicit migration and rehearsal are still required.
 
 For automatic dollar pricing, add a trusted quote publisher or oracle with expiry,
 confidence bounds and deviation limits. A thin mPOO pool's spot price is not a
@@ -113,11 +151,11 @@ Benchmark single draws, 64-cell strokes, registrations, purchases and refunds in
 a sandbox/testnet; then calculate margin with gas sponsorship (if added), storage,
 conversion costs, tax and a reserve. A 0.0069 NEAR price alone cannot guarantee profit.
 
-`ECONOMY NEXT` comments mark the extension points. This stage has no staking,
-TOILET issuance, longevity rewards, buybacks, burns, swaps, withdrawals or treasury
-distribution. Proceeds stay in the contract. Before treasury withdrawals, account
-for outstanding-credit service obligations, storage reserves, tax and pending
-transfers. Never distribute staked principal or outstanding refund liabilities.
+`ECONOMY NEXT` comments mark the extension points. This board has no staking,
+TOILET issuance, longevity rewards, buybacks, burns or swaps. Native treasury
+withdrawals use the safeguards above; mPOO proceeds remain in the contract.
+Future distribution must account for tax and pending liabilities, and must never
+distribute staked principal or outstanding refund liabilities.
 
 ## Checks
 
