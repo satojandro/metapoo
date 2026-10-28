@@ -1,6 +1,6 @@
 # Learning records
 
-One file per focused session. Template: `09-learning-journal.md` at the repo root.
+One file per focused session, using the headings below. The original template is archived at `../archive/foundation/09-learning-journal.md`.
 
 ## Why this exists
 

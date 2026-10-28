@@ -38,7 +38,7 @@ Evidence and the full contradiction list: [paid model v1 decisions](payments/202
 
 The user selected three product pillars: demand-sensitive placement pricing, chosen historical NFT prints, and funded **Art Bounties** that communities rally around. Mystery cards are explicitly excluded. Audience order is mPOO/NEAR communities, other crypto communities, then broader pixel-art audiences. Creation builds attachment; defence supports return visits. Creative freedom remains compatible with mPOO's cheeky rivalry with Meta Pool.
 
-The [full PRD](2026-10-12-product-prd.md) and [agent delivery plan](implementation/delivery-plan.md) now own the expansion scope. Regional pressure parameters, numbered print policies, sponsor-judged escrow mechanics and service trust choices are **proposed prototype defaults**, not separately confirmed mainnet settings. R1 stages the existing economy: paint purchase/spending first, with longevity/staking/shop implementation deferred rather than cancelled. No new product capability is enabled by this documentation update.
+The [full PRD](archive/planning-2026-10/2026-10-12-product-prd.md) and [agent delivery plan](archive/specs/delivery-plan.md) own the expansion scope (both archived 2026-10-28). Regional pressure parameters, numbered print policies, sponsor-judged escrow mechanics and service trust choices are **proposed prototype defaults**, not separately confirmed mainnet settings. R1 stages the existing economy: paint purchase/spending first, with longevity/staking/shop implementation deferred rather than cancelled. No new product capability is enabled by this documentation update.
 
 ## Repository at the start of this work
 
@@ -98,7 +98,7 @@ Read-only mainnet observations, not used by the current board code:
 - MPOO account: `mpoo.nearlytrade.near`
 - MPOO launch creator: `meta-poo-shitcoin.near` (not proof of the game deployer)
 - Intended network: NEAR mainnet
-- Configured tax: 2% buy / 3% sell; burn and holder allocations recorded in the [MPOO evidence](research/2026-10-12-mpoo-live-contract-readout.json). Actual transfers/refunds/burns have not been trialled.
+- Configured tax: 2% buy / 3% sell; burn and holder allocations recorded in the [MPOO evidence](archive/research/2026-10-12-mpoo-live-contract-readout.json). Actual transfers/refunds/burns have not been trialled.
 
 Those identifiers are not the game contract. Do not point the pixel contract at the token account.
 
@@ -110,7 +110,7 @@ Those identifiers are not the game contract. Do not point the pixel contract at 
 - Competitive repeated painting should consume more paint units than pixels issue. The economy must also have explicit reward caps for quiet/cooperative/bot-dominated play.
 - A separate NEAR-to-MPOO premium inventory shop and bounded replenishment executor are under investigation. NEAR buys MPOO there; it does not directly buy game paint. No premium, budget or live execution configuration is chosen.
 
-The [economy plan](2026-10-12-paint-economy-and-swap-plan.md) is the single implementation-planning document. It contains contract boundaries, interfaces to specify, migration, failure recovery, tests and unset economics. Updating these product decisions does not enable payments in the current free contract.
+The [economy plan](archive/planning-2026-10/2026-10-12-paint-economy-and-swap-plan.md) was the single implementation-planning document; its payment rules are superseded by [paid model v1](payments/2026-10-28-paid-model-decisions.md). It contains contract boundaries, interfaces to specify, migration, failure recovery, tests and unset economics. Updating these product decisions does not enable payments in the current free contract.
 
 ## Interface (accepted for Open wall)
 

@@ -1,97 +1,63 @@
 # Meta Poo
 
-This pack gives a small team a shared product brief, technical boundaries, staged plan, parallel Cursor workflow, focused agent assignments, and learning record. The first milestone is a working, free pixel-graffiti board on NEAR with wallet connection and transparent transaction status.
+A communal pixel wall on NEAR: 128×128, eight colours, open wall — whoever paints a square last owns
+its colour, and every square records who painted it and when. Berry Club is the technical reference;
+r/place is the interaction reference.
 
-The project was scaffolded from the original agent pack. Berry Club / NEAR Place is a technical reference for communal board patterns (batching, refresh, drawing sessions) as well as product inspiration. Reddit r/place is the primary interaction reference for zoom, pan, and precise placement.
+## Where the project actually is
 
-## Current reading path
+| piece | state | evidence |
+|---|---|---|
+| **Free wall** (`contracts/board`, schema 2) | **Live on testnet** at `wall.berrywall1.testnet` — drag strokes, drawing sessions, 2,301 painted cells | `get_board` / `get_pixels` on testnet |
+| **Paid wall** (`contracts/paid-board`, schema 4) | **On `main`, not deployed.** Prepaid credits bought with NEAR or direct mPOO; repaint pricing 1/2/4 credits by cell age; 54 contract tests | `main` = `0a3e284`; `cargo test` |
+| **Checkout + repaint UI** | **Not built.** The panel is read-only. Task orders in `docs/implementation/` | `pay-checkout.task.json`, `pay-recency-ui.task.json` |
+| **TOILET economy** | **Specified, not built.** Fixed cap, issuance, staking claim, burns | `docs/economy/` |
+| **Mainnet** | **Nothing deployed.** | owner decision 2026-10-28 |
 
-Start with the [core pixel-board handoff](docs/implementation/core-board.md): established rules, implemented modules, remaining live checks, and what agents must preserve. Then read the [full product PRD](docs/2026-10-12-product-prd.md) for **pressure-priced painting, historical prints and Art Bounties**, and the [agent delivery plan](docs/implementation/delivery-plan.md). These specifications include user journeys, magic moments, the missing-feature inventory, domain interfaces and implementation handoffs. They describe the next product, not shipped features; mystery cards are excluded.
+A pixel currently costs **0.0069 NEAR** on the paid board (owner-configurable), with a repaint costing
+more the sooner it happens: 1 credit for an empty cell or one untouched for an hour, 2 at 10–60 minutes,
+4 under 10 minutes.
 
-1. [Shared decisions](docs/00-shared-decisions.md) — implemented Open wall rules and confirmed next-phase economy decisions.
-2. [Frontend guide](web/README.md) and [board contract guide](contracts/board/README.md) — running code, interfaces and verification limits.
-3. [Paid payment stage](contracts/paid-board/README.md) — local schema-4 contract; NEAR/mPOO credits at an initial 0.0069 NEAR per pixel. [Frontend requirements](docs/payments/frontend-handoff.md), [pending mainnet cost tests](docs/payments/mainnet-cost-validation.md), and [upgrade policy proposal](docs/payments/upgrade-policy.md).
-4. [Economy plan](docs/2026-10-12-paint-economy-and-swap-plan.md) — later token-economy planning for TOILET, staking/payouts and the optional inventory shop; its older purchase rules are superseded for the current payment stage.
-5. [MPOO mainnet evidence](docs/research/2026-10-12-mpoo-live-contract-readout.json) — exact observed settings and block references; no transfer trial.
+## Read next
 
-The existing board/frontend remain free. A separate paid contract is locally implemented on `codex/paint-credit-payments`; it is not deployed. The frontend has a read-only price/balance panel and NEARLY link; paid checkout and painting integration remain pending. The owner confirmed no Meta Poo mainnet deployment on 2026-10-28. Reopen **PAY-COST** immediately after the first paid mainnet deployment; do not treat local tests as cost or settlement evidence. Later token-economy work remains deferred.
+- [`AGENT.md`](AGENT.md) — the entry point for any agent, and the definition of done.
+- [`docs/README.md`](docs/README.md) — the map: one authoritative document per topic.
+- [`docs/backlog.md`](docs/backlog.md) — what is left, each row with its proof.
+- [`docs/learning/traps.md`](docs/learning/traps.md) — mistakes that already cost this project time.
+- [`docs/payments/`](docs/payments/) — the paid model, its decisions, and the mainnet cost gate.
 
-October 2026 board work (viewport, shared updates, drawing session, 3D stall):
+Everything else is in [`docs/archive/`](docs/archive/README.md). Nothing there is instruction.
 
-- Assessment / plan: `docs/2026-10-12-board-review-and-next-steps.md` (archived — see `docs/archive/`)
-- Interaction brief: `docs/2026-10-12-viewport-and-interaction-brief.md`
-- Stall visual references: `docs/2026-10-12-stall-visual-references.md`
-- Saturated palette proposal (not shipped): `docs/2026-10-12-palette-proposal.md`
-- Frontend how-to and known limits: `web/README.md`
-
-## Original agent pack
-
-These files preserve the original free-MVP scope, assignments and longer-term ideas. For current decisions and economy scope, use the reading path above.
-
-1. [Product requirements](01-product-requirements.md)
-2. [MVP scope and roadmap](02-mvp-scope-and-roadmap.md)
-3. [Architecture and contracts](03-architecture-and-contract-seams.md)
-4. [Cursor orchestration](04-cursor-parallel-agent-orchestration.md)
-5. [Contract agent brief](05-agent-brief-contract.md)
-6. [Frontend agent brief](06-agent-brief-frontend.md)
-7. [Chain abstraction research brief](07-agent-brief-chain-abstraction-research.md)
-8. [Acceptance security and QA](08-acceptance-security-and-qa.md)
-9. [Learning journal](09-learning-journal.md)
-10. [Documentation map — which doc is authoritative](docs/README.md)
-11. [Roadmap — open product decisions](docs/roadmap.md)
-12. [Learning records](docs/learning/README.md) · [traps](docs/learning/traps.md)
-
-## Evidence labels
-
-- Supplied context: facts or directions provided in the referenced conversation or this request. They have not been independently checked against chain state.
-- Design assumption: a provisional product or engineering choice to make the MVP implementable.
-- Open question: a choice or fact that must be resolved before the affected phase.
-- Verified research: a technical statement checked against linked primary documentation on 11 October 2026. This does not verify any project-specific contract or deployment.
-
-## Important boundary
-
-Pixel takeover is accepted as **Open wall**. Continuous tenure, payments and rewards are next-phase work, with rules and unset parameters in the economy plan. The implemented contract records the latest write time, not a separate continuous-tenure clock.
-
-Read-only mainnet queries identified MPOO at `mpoo.nearlytrade.near`, its launch creator `meta-poo-shitcoin.near`, 18 decimals and configured 2% buy / 3% sell tax. The linked readout records exact blocks and tax allocations. Transfer/refund/burn behavior has not been trialled, and no live game deployment is established by that token inspection. Token transfers remain outside the implemented free MVP.
-
-## Code in this repository
-
-The files above are the product pack. The overwrite rule is **accepted: Open wall**. The contract can paint in local tests. The page still will not send a draw until a contract account id is configured.
-
-Start here:
-
-1. `docs/00-shared-decisions.md` — accepted Open wall rule, ride-along choices, interface
-2. `docs/threat-sketch.md` — what this scaffold protects against
-3. `contract/DESIGN.md` — broader contract notes
-
-Runnable pieces:
-
-- `shared/board.json` — board size, palette, and `overwrite_rule: "open_wall"`
-- `shared/` — TypeScript checks and types shared with the page
-- `contracts/board` — Rust contract: sparse pixels, Open wall `draw`, local unit tests
-- `web` — Vite page: read-only board without a wallet, paginated `get_pixels` load/refresh, connect/disconnect on testnet, palette + keyboard selection, `draw` via wallet when `VITE_CONTRACT_ID` is set, success only after tx id + `get_pixel`
-
-### Local checks
+## Run it
 
 ```bash
-# Shared rule tests
-node --test shared/board-rules.test.ts
-
-# Page tests and production build
+# page: tests + production build
 cd web && npm install && npm test && npm run build
 
-# Contract unit tests (local only; not a NEAR node)
+# contracts (local tests only — not a chain)
 cd contracts/board && cargo test
+cd contracts/paid-board && cargo test
 ```
 
-Point the page at a deploy: copy `web/.env.example` → `web/.env` and set `VITE_CONTRACT_ID` (see `web/README.md`). Nothing here has been deployed by default. The token accounts named above are not used by this code.
+Point the page at a deployment by copying `web/.env.example` to `web/.env` and setting
+`VITE_CONTRACT_ID` (see [`web/README.md`](web/README.md)). The free board's testnet id is already the
+default in `.env.example`; the paid board has never been deployed.
 
-## Next agents
+## Repository
 
-| Agent | Role | Status |
-|---|---|---|
-| **05 Contract** | Smart contract logic, tests, example calls, deploy docs | **Done in-repo** (local tests). See `contracts/board/`. Testnet deploy is a human step via `contracts/board/DEPLOY.md`. |
-| **06 Frontend** | Wire wallet + board UI to a configured contract | **Done in-repo** (mock/unit + build). Live testnet draw needs your `VITE_CONTRACT_ID`. See `web/README.md`. |
-| **07 Research** | Chain-abstraction memo only | Ready anytime; no MVP code edits. |
+```
+contracts/board        free schema-2 wall (testnet fixture)
+contracts/paid-board   paid schema-4 wall, credits + repaint pricing
+contracts/bounties     art-bounty escrow (separate, not wired to payments)
+contracts/prints       historical print mints (separate)
+shared/                board.json + TypeScript rules the page and contracts both enforce
+web/                   Vite + TypeScript page
+docs/                  decisions, roadmap, backlog, payments, economy, learning records
+```
 
-Contract logic lives under `contracts/board/`. Frontend work is separate under `web/`.
+## Evidence boundary
+
+Prices, balances and settlement claims in this repository are **local test results or on-chain reads
+named at the point of use**. No paid flow has been settled on testnet yet, no mainnet deployment exists,
+and the mainnet cost matrix (`docs/payments/mainnet-cost-validation.md`) is entirely pending. Do not
+treat a green test run as evidence that a transaction happened.
