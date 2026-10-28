@@ -418,6 +418,27 @@ Three consequences for the plan:
    and TOILET staking a third. This is why TOILET should hold the game-revenue claim and mPOO should keep
    the trade-tax payout it already has.
 
+### Decided 2026-10-28: the tax is immutable, and the token has no owner
+
+The authority question — who can change what a holder pays — was answered by removing the power rather
+than bounding it. Rates, split, treasury and the exempt list are set in `new()` with no setter, and
+`mint`, `set_paused` and the handoff of the emitter role are emitter-only. The only account with any
+authority over the token is the game contract, whose own authority is already documented.
+
+Three consequences worth stating before anyone builds against it:
+
+1. **The AMM/sandbox tax rehearsal must pass before the deploy**, because the rates are frozen at deploy.
+   This inverts the usual order and is the single schedule risk of the decision.
+2. **A bug in v1 is fixed by redeploying a new token, not by an upgrade.** Acceptable only while issued
+   supply is small; revisit before emission reaches meaningful volume and record the trigger in the
+   contract README.
+3. **The 34/33/33-style split cannot be tuned after launch.** Pick it from the burn-page story, not from
+   a guess that can be corrected later.
+
+A bounded owner with a cooldown was the alternative. It was rejected because it still means someone can
+raise a holder's cost — the exact question listings and holders ask — and it needs a timelock to be
+honest, which is more machinery than deleting the setter.
+
 Technical constraint worth recording: NEARLY's factory **mints a new 1B token** and puts the whole
 supply in its own pool at 1,000 NEAR FDV. It cannot launch an existing token. A game-emitted TOILET
 therefore cannot be launched through NEARLY — it would need a pool created directly on Rhea with
