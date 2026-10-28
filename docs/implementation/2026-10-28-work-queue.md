@@ -20,28 +20,26 @@ paints, and the paint is visible to someone else — on **testnet** first, then 
 | 5 | `toilet-token` — capped NEP-141, emitter-gated mint, venue tax | `toilet-token.task.json` | **Codex** | New crate, no dependencies, large but self-contained | nothing |
 | 6 | `payments.rs` security review | this doc, §Hermes | **Hermes** | Independent of whoever wrote it | nothing |
 | 7 | Testnet paid deployment rehearsal | this doc, §Hermes | **Hermes** | Scripts, keys, RPC, receipts — ops lane | #2, #3 |
+| 8 | `toilet-d4-immutable` — immutable tax, no owner, emitter-only authority, resolver fix | `toilet-d4-immutable.task.json` | **Codex** | the only remaining merge-gate item from PR #15 (now merged) | nothing |
 
 Two Codex tasks are deliberately independent of each other and of the frontend, so they can run in
 parallel with Cursor rather than queueing behind it.
 
 ## Review status — 2026-10-28
 
-Codex delivered both contract tasks on `codex/paid-board-safety-toilet-token` → **PR #15**. Verified
-locally: 63 paid-board tests (was 54), 18 TOILET tests, both release wasms build, `web/` untouched.
+Codex delivered both contract tasks on `codex/paid-board-safety-toilet-token` → **PR #15, merged as
+`1790873`**. Verified locally after the merge: 63 paid-board tests, 18 TOILET tests, both release wasms
+build, `web/` untouched (284 tests). The merge brought in two review corrections from the branch owner: the
+refund example in the first review was wrong (a full rejection returns the retained tax, `tests.rs:183`),
+and requiring registration before mint is intentional and documented.
 
-**Merge gate — one should-fix, one decided change, one process decision:**
+**Remaining merge gate — one item, Codex, task 8 above:** the resolver returns `used + tax`, which mixes
+protocol-retained tax into a field that means "consumed by the receiver". Return `used`. D4 is recorded and
+becomes the same task's main scope.
 
-1. `ft_resolve_transfer` returns `used + tax`, mixing protocol-retained tax into a field that means
-   "consumed by the receiver": it exceeds the net `amount` argument when everything is consumed, and it
-   returns the tax when nothing is. Return `used`; report gross in the event. *An earlier version of this
-   note claimed a full rejection returned the full gross — that was wrong; `tests.rs:183` shows the tax.*
-2. **Decided 2026-10-28 (owner): TOILET is immutable at launch, with no owner.** Rates, split, treasury and
-   the exempt list are set in `new()` with no setter; `set_emitter` and `set_paused` become emitter-only;
-   no upgrade entrypoint. Consequence: the AMM/sandbox tax test must happen **before** the token deploy,
-   because the rates are frozen at deploy.
-3. Payout registration is a **process decision, not a code defect** (requiring registration is intentional
-   and documented). Choose emitter-funded auto-registration, registration at first paint, or a
-   pre-registration step in the payout job — and write it into the token README and the payout job.
+**Payout registration is a process decision, not a code defect.** Pick one and write it into the token
+README and the payout job: emitter-funded auto-registration with a per-call bound, registration at first
+paint, or an explicit pre-registration step.
 
 The branch was cut before the documentation cut, so `main` was merged into it (`3d214b8`) with the
 `docs/README.md` conflict resolved — its two rows folded into the one-page map. No code conflicts.
