@@ -20,7 +20,7 @@ paints, and the paint is visible to someone else — on **testnet** first, then 
 | 5 | `toilet-token` — capped NEP-141, emitter-gated mint, venue tax | `toilet-token.task.json` | **Codex** | New crate, no dependencies, large but self-contained | nothing |
 | 6 | `payments.rs` security review | this doc, §Hermes | **Hermes** | Independent of whoever wrote it | nothing |
 | 7 | Testnet paid deployment rehearsal | this doc, §Hermes | **Hermes** | Scripts, keys, RPC, receipts — ops lane | #2, #3 |
-| 8 | `toilet-d4-immutable` — immutable tax, no owner, emitter-only authority, resolver fix | `toilet-d4-immutable.task.json` | **Codex** | the only remaining merge-gate item from PR #15 (now merged) | nothing |
+| 8 | `toilet-d4-immutable` — immutable tax, no owner, emitter-only authority, resolver fix | `toilet-d4-immutable.task.json` | **Codex** | **delivered → PR #16**; one review revert (the board's `upgrade()` was deleted, restored) | nothing |
 
 Two Codex tasks are deliberately independent of each other and of the frontend, so they can run in
 parallel with Cursor rather than queueing behind it.
@@ -33,9 +33,15 @@ build, `web/` untouched (284 tests). The merge brought in two review corrections
 refund example in the first review was wrong (a full rejection returns the retained tax, `tests.rs:183`),
 and requiring registration before mint is intentional and documented.
 
-**Remaining merge gate — one item, Codex, task 8 above:** the resolver returns `used + tax`, which mixes
-protocol-retained tax into a field that means "consumed by the receiver". Return `used`. D4 is recorded and
-becomes the same task's main scope.
+**Task 8 delivered → PR #16** (`codex/toilet-d4-immutable`): D4 implemented (no owner, no `set_tax`,
+emitter-only controls), the resolver now returns `used`, and the board forwards the pause to the token.
+Verified here: **65 board tests, 22 token tests**, both release wasms, clippy `-D warnings` clean.
+
+**One review revert:** the run also deleted the board's `upgrade()` and documented it, reading "do not add an
+upgrade entrypoint to either contract" as "remove the existing one". That was my wording's fault. It is
+restored — the board custodies credits and pixels and must stay repairable; the token does not and never
+will. The README and the learning entry were corrected to match, and the lesson is recorded in the
+`writing-plans` skill.
 
 **Payout registration is a process decision, not a code defect.** Pick one and write it into the token
 README and the payout job: emitter-funded auto-registration with a per-call bound, registration at first
