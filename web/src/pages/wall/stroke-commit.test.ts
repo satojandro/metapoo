@@ -23,6 +23,7 @@ describe("strokeBlockedReason", () => {
     accountId: "alice.testnet",
     colorIndex: 3,
     contractOk: true,
+    priceOk: true,
     sessionActive: true,
     drawInFlight: false,
     queueBusy: false,
@@ -38,6 +39,7 @@ describe("strokeBlockedReason", () => {
       [{ ...ready, accountId: null }, /connect a wallet/i],
       [{ ...ready, colorIndex: null }, /pick a colour/i],
       [{ ...ready, contractOk: false }, /metadata does not match/i],
+      [{ ...ready, priceOk: false }, /price unavailable/i],
       [{ ...ready, sessionActive: false }, /one approval first/i],
       [{ ...ready, drawInFlight: true }, /still confirming/i],
     ];
@@ -46,7 +48,7 @@ describe("strokeBlockedReason", () => {
       expect(reason).not.toBeNull();
       expect(reason!).toMatch(pattern);
     }
-    // Six distinct reasons for six distinct situations, or the sentence is noise.
+    // One distinct sentence per missing precondition, or the sentence is noise.
     const distinct = new Set(cases.map(([gate]) => strokeBlockedReason(gate)));
     expect(distinct.size).toBe(cases.length);
   });

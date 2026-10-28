@@ -16,6 +16,8 @@ export interface StrokeGate {
   accountId: string | null;
   colorIndex: number | null;
   contractOk: boolean;
+  /** False when a schema-4 price read failed. Free boards leave this true. */
+  priceOk: boolean;
   sessionActive: boolean;
   drawInFlight: boolean;
   queueBusy: boolean;
@@ -41,6 +43,9 @@ export function strokeBlockedReason(gate: StrokeGate): string | null {
   }
   if (!gate.contractOk) {
     return "The board's on-chain metadata does not match this page, so painting is disabled. See About / details.";
+  }
+  if (!gate.priceOk) {
+    return "price unavailable. The repaint cost could not be read, so this stroke was not submitted.";
   }
   if (!gate.sessionActive) {
     return "Painting needs one approval first — press Unlock painting in the dock.";

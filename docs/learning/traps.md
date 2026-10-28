@@ -123,9 +123,10 @@ break at runtime. Treat that build warning as a real defect, not noise.
 **Do not put fixture quotes back on the wall.** Schema 3 pressure quotes were a prototype.
 Nothing deployed reports that schema, and the quote numbers were fixtures. Rendering them
 next to a credit board showed a made-up price on a money screen. The modules are gone
-(`paid-mode`, `paid-paint`, `pressure-quote`, `features/pressure`). Schema 4 prices come
-from `get_cell_cost` / `get_tunables` when that UI is built, not from a local quote fixture.
-`contract-meta.ts` still rejects schema 3 by name.
+(`paid-mode`, `paid-paint`, `pressure-quote`, `features/pressure`). Schema 4 prices are
+read from `get_cell_cost` and `get_tunables` (`web/src/pages/wall/repaint-price.ts`). If either
+view fails, show `price unavailable` and disable submit. Never fall back to 1 credit, and do
+not re-implement the 1 / 2 / 4 tiers in TypeScript. `contract-meta.ts` still rejects schema 3 by name.
 
 **A stroke needs an armed session; a tap is a different path.** `commitStroke` submits
 `draw_many` chunks through `signAndSendStrokeLocally`; a single tap goes through

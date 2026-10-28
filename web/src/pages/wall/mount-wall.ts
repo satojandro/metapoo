@@ -31,7 +31,15 @@ import {
   getPixelWithBlock,
   isContractConfigured,
 } from "../../contract";
-import { contractMetaBlockCopy, validateContractMetadata, type ContractMetaIssue } from "../../contract-meta";
+import { contractMetaBlockCopy, PAID_BOARD_SCHEMA_VERSION, validateContractMetadata, type ContractMetaIssue } from "../../contract-meta";
+import {
+  chainRepaintReaders,
+  creditShortfall,
+  quoteRepaint,
+  showPriceUnavailable,
+  showRepaintQuote,
+  type RepaintChrome,
+} from "./repaint-price";
 import { prepareDraw } from "../../draw-policy";
 import {
   describeDrawingSession,
@@ -159,6 +167,12 @@ export function mountWall(
   const preview = mustFindIn<HTMLElement>(pageRoot, "#selection-preview");
   const palette = mustFindIn<HTMLElement>(pageRoot, "#palette");
   const drawButton = mustFindIn<HTMLButtonElement>(pageRoot, "#draw-button");
+  const repaintChrome: RepaintChrome = {
+    legend: mustFindIn<HTMLElement>(pageRoot, "#repaint-legend"),
+    badge: mustFindIn<HTMLElement>(pageRoot, "#cell-price"),
+    strokeTotal: mustFindIn<HTMLElement>(pageRoot, "#stroke-total"),
+    submit: drawButton,
+  };
   const drawState = mustFindIn<HTMLElement>(pageRoot, "#draw-state");
   const result = mustFindIn<HTMLElement>(pageRoot, "#result");
   const rules = mustFindIn<HTMLElement>(pageRoot, "#rules");
@@ -211,7 +225,7 @@ export function mountWall(
   );
 
   // Keep the current cell coordinates available when keyboard users reach Place.
-  drawButton.setAttribute("aria-describedby", "selection-summary");
+  drawButton.setAttribute("aria-describedby", "selection-summary cell-price stroke-total");
 
   // The pointer preview is mount-owned so the wall template remains presentation-only.
   // It is deliberately separate from selection: moving or dragging never paints.
@@ -277,6 +291,14 @@ export function mountWall(
   let boardLoadInFlight = false;
   /** False until get_board metadata matches shared constants (or mock mode). */
   let contractMetaOk = !isContractConfigured();
+  /** Schema from the last successful get_board. 4 means paid credits. */
+  let boardSchema: number | null = null;
+  /** A failed get_cell_cost / get_tunables read. Submit stays off until a later read works. */
+  let priceUnavailable = false;
+  let pricedCellKey: string | null = null;
+  let priceRequest = 0;
+  let submitQuoteInFlight = false;
+  const repaintReaders = chainRepaintReaders();
   // A failed *read* and a real metadata *mismatch* both leave contractMetaOk
   // false, and the draw path used to report both as "did not match the shared
   // schema". They need different advice: one is "try again", the other is
@@ -427,6 +449,9 @@ export function mountWall(
     // reload, because nothing re-ran the metadata check. Refresh now does.
     if (!contractMetaOk) {
       void revalidateContractMeta();
+    } else if (paidBoard()) {
+      pricedCellKey = null;
+      void refreshPaidLegend();
     }
     void refreshBoardFromContract();
   });
@@ -599,6 +624,7 @@ async function revalidateContractMeta(): Promise<boolean> {
   if (!isContractConfigured()) {
     contractMetaOk = true;
     contractMetaIssue = null;
+    rememberBoardSchema(null);
     updateDirectPaintAvailability();
     return true;
   }
@@ -607,6 +633,7 @@ async function revalidateContractMeta(): Promise<boolean> {
     const meta = validateContractMetadata(board);
     contractMetaOk = meta.ok;
     contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
+    rememberBoardSchema(meta.ok ? board.schema_version : null);
     if (meta.ok) {
       contractLine.textContent =
         `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
@@ -620,6 +647,7 @@ async function revalidateContractMeta(): Promise<boolean> {
     contractMetaOk = false;
     const detail = error instanceof Error ? error.message : "Unknown read error";
     contractMetaIssue = { kind: "read", detail };
+    rememberBoardSchema(null);
     return false;
   } finally {
     updateDirectPaintAvailability();
@@ -629,6 +657,7 @@ async function revalidateContractMeta(): Promise<boolean> {
 async function bootstrapBoard(): Promise<void> {
   if (!isContractConfigured()) {
     contractMetaOk = true;
+    rememberBoardSchema(null);
     evidence.textContent =
       "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
     contractLine.textContent =
@@ -649,6 +678,7 @@ async function bootstrapBoard(): Promise<void> {
     const meta = validateContractMetadata(board);
     contractMetaOk = meta.ok;
     contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
+    rememberBoardSchema(meta.ok ? board.schema_version : null);
     if (!meta.ok) {
       evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK} failed metadata checks — ${meta.message}`;
       fillBlock(result, meta.title, meta.message);
@@ -673,6 +703,7 @@ async function bootstrapBoard(): Promise<void> {
     contractMetaOk = false;
     const detail = error instanceof Error ? error.message : "Unknown read error";
     contractMetaIssue = { kind: "read", detail };
+    rememberBoardSchema(null);
     evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but the initial board read failed: ${detail}. You can still look at the local empty picture and try Refresh. Drawing stays blocked until metadata validates.`;
     contractLine.textContent =
       "The board contract could not be read, so nothing here is confirmed chain state.";
@@ -710,6 +741,8 @@ async function refreshBoardFromContract(options?: {
     markBoardLoadApplied(boardSync, loadId, snapshot.blockHeight, Date.now());
     showBoardFreshness();
     render();
+    // A refresh can change how old a cell is, so the last quoted price is stale.
+    pricedCellKey = null;
     showSelection();
     boardLoadStatus.textContent = `Board load: ${snapshot.pixels.length} painted cell${
       snapshot.pixels.length === 1 ? "" : "s"
@@ -860,12 +893,32 @@ async function attemptDraw(
     return;
   }
 
+  // Price before any pending mark or wallet prompt. A failed read must not
+  // leave a stripe on the board or open a signature request.
+  drawInFlight = true;
+  drawButton.disabled = true;
+  const priced = await ensurePaidQuote(
+    [{ x: frozen.x, y: frozen.y }],
+    frozen.accountId,
+  );
+  if (!priced || disposed) {
+    drawInFlight = false;
+    if (frozen) {
+      clearPendingPaint(pendingPaints, frozen.x, frozen.y);
+      if (queuedPlacementOutcomeId) {
+        placementOutcomes.discard(queuedPlacementOutcomeId);
+      }
+    }
+    if (!disposed) {
+      render();
+      syncSubmitEnabled();
+    }
+    return;
+  }
+
   // Keep UI selection in sync with the request, but never re-read color/account
   // from live UI state while this request is in flight.
   selected = { x: frozen.x, y: frozen.y };
-
-  drawInFlight = true;
-  drawButton.disabled = true;
   setFlow("wallet_prompt");
   const opId = paintOperationId({
     accountId: frozen.accountId,
@@ -1124,7 +1177,7 @@ async function attemptDraw(
   } finally {
     drawInFlight = false;
     if (!disposed) {
-      drawButton.disabled = false;
+      syncSubmitEnabled();
       showDrawingSession();
     }
   }
@@ -1363,6 +1416,7 @@ function wirePointerGestures(): void {
         beganOnPanSurface;
       if (cell && !wantsPan && directPaintToggle.checked &&
           walletAccount && selectedColor !== null && contractMetaOk &&
+          (!paidBoard() || !priceUnavailable) &&
           !drawInFlight && !paintQueue.inFlight && !paintQueueLength(paintQueue) &&
           canUseLocalDrawingSession(walletAccount, walletNetwork)) {
         activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
@@ -1379,6 +1433,7 @@ function wirePointerGestures(): void {
           sessionActive: walletAccount
             ? canUseLocalDrawingSession(walletAccount, walletNetwork)
             : false,
+          priceOk: !paidBoard() || !priceUnavailable,
           drawInFlight,
           queueBusy: paintQueue.inFlight || paintQueueLength(paintQueue) > 0,
         });
@@ -1547,8 +1602,19 @@ function cellAtClientPoint(clientX: number, clientY: number): Cell | null {
 async function commitStroke(stroke: AnchoredStroke): Promise<void> {
   if (disposed || drawInFlight || stroke.accountId !== walletAccount ||
       stroke.networkId !== walletNetworkId() || !directPaintToggle.checked) return;
+  drawInFlight = true;
+  drawButton.disabled = true;
+  const priced = await ensurePaidQuote(stroke.state.cells, stroke.accountId);
+  if (!priced || disposed || stroke.accountId !== walletAccount ||
+      stroke.networkId !== walletNetworkId() || !directPaintToggle.checked) {
+    drawInFlight = false;
+    if (!disposed) syncSubmitEnabled();
+    return;
+  }
   const plan = planStrokeCommit(stroke.state, canUseLocalDrawingSession(walletAccount, walletNetwork));
   if (plan.kind === "wallet_approval") {
+    drawInFlight = false;
+    if (!disposed) syncSubmitEnabled();
     fillBlock(result, "Drawing session needed", WALLET_STROKE_COPY);
     return;
   }
@@ -1621,7 +1687,10 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     await refreshBoardFromContract({ reason: "after_draw" });
   } finally {
     drawInFlight = false;
-    if (!disposed) render();
+    if (!disposed) {
+      syncSubmitEnabled();
+      render();
+    }
   }
 }
 
@@ -1647,6 +1716,17 @@ function selectAtClientPoint(clientX: number, clientY: number): void {
   maybeEnqueueDirectPaint(next, { paintZoom: isPaintZoom(camera) });
 }
 
+function directPaintReady(): boolean {
+  return (
+    tapToPaintEnabled &&
+    canUseLocalDrawingSession(walletAccount, walletNetwork) &&
+    selectedColor !== null &&
+    walletAccount !== null &&
+    contractMetaOk &&
+    !disposed
+  );
+}
+
 function maybeEnqueueDirectPaint(
   cell: Cell,
   options: { paintZoom: boolean } = { paintZoom: false },
@@ -1656,15 +1736,26 @@ function maybeEnqueueDirectPaint(
   // next entry when this one settles. Dropping it here instead made the second
   // click on a cell silently do nothing until the first transaction landed,
   // which read as "painting stopped working".
-  if (
-    !tapToPaintEnabled ||
-    !canUseLocalDrawingSession(walletAccount, walletNetwork) ||
-    selectedColor === null ||
-    !walletAccount ||
-    !contractMetaOk ||
-    disposed
-  ) {
+  if (!directPaintReady()) {
     return;
+  }
+  void enqueuePricedDirectPaint(cell, options);
+}
+
+async function enqueuePricedDirectPaint(
+  cell: Cell,
+  _options: { paintZoom: boolean },
+): Promise<void> {
+  if (!directPaintReady() || !walletAccount || selectedColor === null) {
+    return;
+  }
+  // Paid boards quote before the pending stripe. A failed read must not
+  // leave chrome for a paint that will not be sent.
+  if (paidBoard()) {
+    const priced = await ensurePaidQuote([cell], walletAccount);
+    if (!priced || !directPaintReady() || !walletAccount || selectedColor === null) {
+      return;
+    }
   }
 
   const queued = createDrawRequest({
@@ -1722,6 +1813,7 @@ function updatePointerPreview(event: PointerEvent): void {
   pointerPreview.style.width = `${cellRect.width}px`;
   pointerPreview.style.height = `${cellRect.height}px`;
   hoverSummary.textContent = `x ${cell.x} · y ${cell.y}`;
+  requestCellPrice(cell);
 }
 
 function clearPointerPreview(): void {
@@ -1879,6 +1971,153 @@ async function onRevokeSessionClick(): Promise<void> {
   }
 }
 
+function chainNowNs(): bigint {
+  return BigInt(Date.now()) * 1_000_000n;
+}
+
+function paidBoard(): boolean {
+  return boardSchema === PAID_BOARD_SCHEMA_VERSION;
+}
+
+function syncSubmitEnabled(): void {
+  drawButton.disabled = drawInFlight || (paidBoard() && priceUnavailable);
+}
+
+function rememberBoardSchema(schema: number | null): void {
+  boardSchema = schema;
+  if (!paidBoard()) {
+    priceUnavailable = false;
+    pricedCellKey = null;
+    repaintChrome.legend.hidden = true;
+    repaintChrome.legend.textContent = "";
+    repaintChrome.badge.textContent = "";
+    repaintChrome.strokeTotal.textContent = "";
+    syncSubmitEnabled();
+    return;
+  }
+  void refreshPaidLegend();
+}
+
+/** Legend only. An empty cell list still proves get_tunables answered. */
+async function refreshPaidLegend(): Promise<void> {
+  if (!paidBoard()) {
+    return;
+  }
+  const request = ++priceRequest;
+  const quote = await quoteRepaint({
+    readers: repaintReaders,
+    cells: [],
+    nowNs: chainNowNs(),
+  });
+  if (disposed || request !== priceRequest || submitQuoteInFlight) {
+    return;
+  }
+  if (!quote.ok) {
+    priceUnavailable = true;
+    showPriceUnavailable(repaintChrome);
+    syncSubmitEnabled();
+    return;
+  }
+  priceUnavailable = false;
+  showRepaintQuote(repaintChrome, quote);
+  syncSubmitEnabled();
+}
+
+function requestCellPrice(cell: Cell): void {
+  if (!paidBoard() || submitQuoteInFlight || drawInFlight) {
+    return;
+  }
+  const key = `${cell.x},${cell.y}`;
+  if (pricedCellKey === key) {
+    return;
+  }
+  pricedCellKey = key;
+  const request = ++priceRequest;
+  void quoteRepaint({
+    readers: repaintReaders,
+    cells: [cell],
+    nowNs: chainNowNs(),
+  }).then((quote) => {
+    if (disposed || request !== priceRequest || submitQuoteInFlight) {
+      return;
+    }
+    if (!quote.ok) {
+      priceUnavailable = true;
+      showPriceUnavailable(repaintChrome);
+      syncSubmitEnabled();
+      return;
+    }
+    priceUnavailable = false;
+    showRepaintQuote(repaintChrome, quote);
+    syncSubmitEnabled();
+  });
+}
+
+/**
+ * Price a stroke before anything is marked pending or sent to a wallet.
+ * Returns false when the read failed or the account cannot afford the total.
+ */
+async function ensurePaidQuote(cells: Cell[], accountId: string | null): Promise<boolean> {
+  if (!paidBoard()) {
+    return true;
+  }
+  submitQuoteInFlight = true;
+  const request = ++priceRequest;
+  try {
+    const quote = await quoteRepaint({
+      readers: repaintReaders,
+      cells,
+      nowNs: chainNowNs(),
+    });
+    if (disposed || request !== priceRequest) {
+      return false;
+    }
+    if (!quote.ok) {
+      priceUnavailable = true;
+      showPriceUnavailable(repaintChrome);
+      fillBlock(
+        result,
+        "Price unavailable",
+        "The repaint price could not be read, so nothing was submitted. Refresh the board and try again.",
+      );
+      syncSubmitEnabled();
+      return false;
+    }
+    priceUnavailable = false;
+    showRepaintQuote(repaintChrome, quote);
+    syncSubmitEnabled();
+    if (!accountId) {
+      return true;
+    }
+    let have: bigint | null;
+    try {
+      have = await repaintReaders.credits(accountId);
+    } catch {
+      priceUnavailable = true;
+      showPriceUnavailable(repaintChrome);
+      fillBlock(
+        result,
+        "Price unavailable",
+        "The credit balance could not be read, so nothing was submitted. Refresh the board and try again.",
+      );
+      syncSubmitEnabled();
+      return false;
+    }
+    if (disposed || request !== priceRequest) {
+      return false;
+    }
+    const shortfall = creditShortfall(have, quote.totalCredits);
+    if (shortfall) {
+      repaintChrome.strokeTotal.textContent = `${quote.strokeText}. ${shortfall}`;
+      fillBlock(result, "Not enough credits", shortfall);
+      return false;
+    }
+    return true;
+  } finally {
+    submitQuoteInFlight = false;
+  }
+}
+
 function showSelection(): void {
   const colorLabel =
     selectedColor === null ? "none yet" : `${colorName(selectedColor)} (index ${selectedColor})`;
@@ -1890,6 +2129,8 @@ function showSelection(): void {
     selectionSummary.textContent = `No square selected. Chosen paint: ${colorLabel}. Unpainted squares have no artist.`;
     return;
   }
+  // Touch has no hover. Selecting a square is how a finger reads the price.
+  requestCellPrice(selected);
 
   const cached = getCachedPixel(pixelCache, selected.x, selected.y);
   let cellText: string;
