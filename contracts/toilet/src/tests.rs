@@ -409,9 +409,9 @@ fn emitter_controls_deposits_registration_and_callback_are_enforced() {
     context(1, 0);
     rejected("EmitterOnly", || token.mint(accounts(2), U128(1)));
     context(0, 0);
-    rejected("AccountNotRegistered", || {
-        token.mint("unregistered.near".parse().unwrap(), U128(1))
-    });
+    let player: AccountId = "unregistered.near".parse().unwrap();
+    token.mint(player.clone(), U128(1));
+    assert_eq!(token.ft_balance_of(player), U128(1));
 }
 
 #[test]
@@ -523,4 +523,42 @@ fn invalid_transfers_do_not_debit_any_balance_or_supply() {
     });
     assert_eq!(balance(&token, 2), 1000);
     invariant(&token);
+}
+
+#[test]
+fn claim_auto_registers_an_unregistered_player() {
+    let mut token = setup();
+    let player: AccountId = "new-player.near".parse().unwrap();
+    assert!(token.storage_balance_of(player.clone()).is_none());
+    context(1, 0);
+    token.mint(player.clone(), U128(70));
+    assert_eq!(token.ft_balance_of(player.clone()), U128(70));
+    assert!(token.storage_balance_of(player.clone()).is_some());
+    assert!(get_logs().iter().any(|log| log.contains("account_auto_registered") && log.contains(player.as_str())));
+    context(1, 0);
+    token.mint(player, U128(3));
+    assert!(!get_logs().iter().any(|log| log.contains("account_auto_registered")));
+    assert!(get_created_receipts().is_empty());
+}
+
+#[test]
+fn token_refuses_auto_registration_below_the_reserve() {
+    let mut token = setup();
+    let player: AccountId = "new-player.near".parse().unwrap();
+    let mut builder = context(1, 0);
+    let storage_usage = 10_000;
+    let boundary = MIN_REGISTRATION_RESERVE
+        + u128::from(storage_usage) * env::storage_byte_cost().as_yoctonear()
+        + token.storage_balance_bounds().min.as_yoctonear();
+    builder.storage_usage(storage_usage).account_balance(NearToken::from_yoctonear(boundary - 1));
+    testing_env!(builder.build());
+    rejected("RegistrationReserveLow", || token.mint(player.clone(), U128(70)));
+    assert!(token.storage_balance_of(player.clone()).is_none());
+    assert_eq!(token.get_supply_info().issued_total, U128(0));
+    // An existing recipient needs no further registration reserve.
+    token.mint(accounts(2), U128(1));
+    builder.account_balance(NearToken::from_yoctonear(boundary));
+    testing_env!(builder.build());
+    token.mint(player.clone(), U128(70));
+    assert_eq!(token.ft_balance_of(player), U128(70));
 }

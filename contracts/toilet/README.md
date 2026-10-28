@@ -2,15 +2,15 @@
 
 Implements [toilet-token](../../docs/implementation/toilet-token.task.json) as a new,
 independent Rust contract. **Not deployed, independently audited, or AMM-tested.**
-No staking vault, emission schedule, board reward accumulator or holder payouts are
-included. The board only exposes the pause passthrough; it does not mint rewards yet.
+No staking vault or autonomous payouts are included. The paid board reserves
+emission during accrual; tokens arrive only when a player calls its claim method.
 
 ## Supply and authority
 
 `new(emitter, tax)` starts at zero supply. TOILET has no owner or admin account. It has
 18 decimals and a lifetime issuance cap of 1,000,000,000 tokens (10^27 atomic units).
-Only `emitter` can call `mint(account, amount)`; the recipient must already be
-registered. Only the current emitter can call `set_emitter(emitter)` or
+Only `emitter` can call `mint(account, amount)`; a missing recipient is automatically
+registered using the token contract's own NEAR balance. Only the current emitter can call `set_emitter(emitter)` or
 `set_paused(paused)`, each with exactly 1 yoctoNEAR. Handoff immediately removes
 the previous emitter's authority. The intended emitter is the game contract;
 the paid board exposes an owner-gated pause passthrough so that circuit breaker
@@ -19,9 +19,8 @@ not implemented in this task.
 
 D4 freezes the entire validated `Tax` exactly as supplied to `new()`: rates,
 exchange, treasury, split and exempt list have no mutating path. There is no
-`set_tax`, no token owner and no upgrade entrypoint in either contract. Removing
-the old owner field changes Borsh state. This token is **fresh-init only**;
-there is no migration for an initialized older token.
+`set_tax`, no token owner and no token upgrade entrypoint. The board retains `upgrade`. Removing
+the old owner field changes Borsh state. This token is **fresh init only, no migration** for an initialized older token.
 
 `burn(amount)` removes the caller's tokens. `issued_total` never falls when tokens
 burn. For example, issuing all 1 billion and burning half leaves 500 million in
@@ -84,8 +83,8 @@ configuration. It cannot change after initialization.
 - `storage_withdraw(amount?)` accepts zero/omitted amounts only. To recover the
   registration deposit, use `storage_unregister(force?)`; forcing removal burns
   any remaining tokens. Standard-library storage errors retain its standard text.
-- The initial treasury record is funded by the deployer. Other accounts pay their
-  own registration. Unregistering the fixed treasury blocks transfers with a
+- The initial treasury record is funded by the deployer. Explicit storage registration remains available; first-time mint recipients
+  are registered automatically from the token's balance. Unregistering the fixed treasury blocks transfers with a
   treasury tax until it registers again.
 - `ft_transfer`, `ft_transfer_call`, `burn`, storage withdrawal/removal,
   `set_emitter` and `set_paused` require exactly **1 yoctoNEAR**. `mint` is nonpayable.
@@ -94,6 +93,15 @@ configuration. It cannot change after initialization.
 - `ft_balance_of(account_id)`, `ft_total_supply()`, `ft_metadata()`, `get_emitter()`
   and the supply/tax views are read-only. Token amounts are JSON decimal strings.
 - Standard mint/transfer/burn events and custom tax/emitter/pause/resolver events are emitted.
+- A missing mint recipient uses the standard internal account registration and emits
+  `account_auto_registered{account_id}`. Before registering, the contract protects
+  existing storage stake, the new registration's minimum storage cost, and
+  `MIN_REGISTRATION_RESERVE = 1 NEAR` of liquid balance. Insufficient funds panic
+  `RegistrationReserveLow`; exactly the protected boundary succeeds. This subsidy
+  attaches no deposit to `mint`, and explicit registration/refund paths stay intact.
+  Already registered recipients need no new registration reserve. Replenish the
+  token's NEAR balance before claims exhaust the reserve. Auto-registered players
+  have the standard storage-unregister/refund behavior, including forced burns.
 
 ## Verification
 
@@ -101,7 +109,7 @@ Run `cargo test --locked --manifest-path contracts/toilet/Cargo.toml`.
 Build with `cargo build --locked --release --target wasm32-unknown-unknown
 --manifest-path contracts/toilet/Cargo.toml`.
 
-22 local tests cover cap permanence, authority, supply conservation, tax rounding,
+Local tests cover cap permanence, authority, supply conservation, tax rounding,
 exemptions, storage refunds, pause, full/partial/failed receiver handling, spent
 receiver balances, and deleted-sender refund burns. Promise payloads are inspected
 in the mocked NEAR runtime. These are not executed cross-contract receipts on a
