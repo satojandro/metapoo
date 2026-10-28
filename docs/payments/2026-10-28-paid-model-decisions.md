@@ -145,3 +145,41 @@ before the owner had ratified anything. Both are now consistent.
 - M3 is unchanged: bounded mainnet launch.
 - M4 explicitly includes the retired pressure design and any TOILET mechanics, as
   options — not commitments.
+
+---
+
+## 7. Capping the credit float (owner proposal, 2026-10-28)
+
+Owner's idea: put a ceiling on how many credits can exist at once, so scarcity makes people buy ahead
+of need. Worth doing, with one correction to the reasoning and two guardrails.
+
+### The correction: outstanding credits are not a cash liability
+
+Credits are **prepaid, non-refundable service**. The contract does not owe a refund; it owes a pixel,
+whose real cost is storage (0.000664 NEAR) plus gas. So 1 M outstanding credits are ~660 NEAR of future
+cost against 2,500 NEAR already collected. **A cap is a game mechanic, not a solvency tool** — which is
+good news, because hoarding is cash-positive for the treasury rather than a risk to it.
+
+### What a cap can and cannot do
+
+| | |
+|---|---|
+| ✅ creates urgency, seasonal sell-outs, a visible "sold out" state | ❌ cannot create resale value: credits are non-transferable, so scarcity buys *access*, not profit |
+| ✅ caps how much of the board one wallet can pre-buy | ❌ does not stop a whale cornering the float to deny others |
+| ✅ adds a headline number to the transparency page | ❌ becomes a growth ceiling the moment it binds in a real rush |
+
+### Design
+
+- **Cap the outstanding float**, not lifetime issuance: purchases are blocked while
+  `outstanding_credits ≥ cap`, and painting drains the float, so buying resumes naturally. It binds only
+  during a rush — exactly the intended dynamic.
+- **Size it at ~90 days of consumption.** At 100 users × 128 paints/day = 12,800/day that is
+  **≈1.15 M credits** (≈2,875 NEAR, ≈$13.3 k of prepaid paint). Revisit monthly; publish the number.
+- **Per-account holding cap** (e.g. 20,000 credits ≈ 50 NEAR ≈ $232) so one wallet cannot empty the
+  float and strand everyone else.
+- **Seasonal variant** if you want launch moments: reset the cap each season and announce it.
+- Contract state: `outstanding_credits` (increment on purchase, decrement on spend) beside the existing
+  `balances` map — two lines in `payments.rs` plus one test per boundary.
+
+Pairs with the repaint multiplier in the economy doc §13: the cap makes *credits* scarce; recency
+pricing makes *cells* scarce. Different shortages — do not blur them in UI copy.

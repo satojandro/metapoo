@@ -302,3 +302,110 @@ objective, that point deserves a deliberate answer, not a hand-wave.
 
 **Still blocking either choice:** revenue cannot leave the contract. No withdraw/treasury method exists,
 so there is nothing to distribute until M2 adds one with an outstanding-credit liability rule.
+
+---
+
+## 13. Capital dominance: the bot is expensive, and the community can tax it
+
+Owner's question: how much can a bot realistically spend? Answer: **the same as the community, plus a
+speed premium.** Overwriting costs exactly what painting costs, so dominance is priced 1:1 with
+resistance. There is no cheap way to entrench ownership.
+
+At 0.0025 NEAR/pixel ($0.0116), full board = 16,384 cells = 41 NEAR = **$190**:
+
+| community | paints/day | community spend/day | bot must match/day | bot per year |
+|---|---|---|---|---|
+| 25 users × 32/day | 800 | $9 | $9 | $3,380 |
+| 100 users × 32/day | 3,200 | $37 | $37 | $13,520 |
+| 100 users × 128/day | 12,800 | $148 | $148 | $54,078 |
+| 500 users × 512/day | 256,000 | $2,963 | $2,963 | $1,081,568 |
+
+So a determined whale can suppress a small community for four figures a year. That is cheap enough to
+be a real risk, and the quota does **not** fix it:
+
+> **The daily quota is a 15 % surcharge, not a wall.** Bypassing it costs one registered account
+> (0.01 NEAR fee + ~0.0018 NEAR storage ≈ $0.055) for 32 extra paints/day worth $0.37. Sybil is
+> cheap; the quota merely taxes the whale's volume.
+
+The bot's only genuine advantages are **uptime and reaction speed** — it repaints within seconds, humans
+sleep. Price that advantage directly and it disappears:
+
+### Repaint multiplier — the anti-dominance mechanic (uses state we already have)
+
+`PixelRecord.written_at_ns` already stores when a cell was last painted, so the cost can be a function
+of recency with **no new contract field**:
+
+| time since the cell was last painted | credit cost |
+|---|---|
+| more than 60 min | 1 credit |
+| 10–60 min | 2 credits |
+| under 10 min | 4 credits |
+
+Consequences:
+
+- A human painting fresh territory pays 1×. A bot reacting instantly pays 4×.
+- The community can **deliberately tax the bot**: every cheap poke forces a 4× response. 100 users
+  spending $37/day of pokes force the bot to spend $148/day. The war becomes a mechanism where being
+  annoying is a winning strategy — which is exactly the communal dynamic the owner described, and it is
+  funny rather than unfair.
+- It also restores, in a minimal and honest form, the pressure-pricing idea retired in D1. Not global
+  region heat — just per-cell recency.
+
+Product surface for it: a **contested cells** counter (cells repainted in the last hour) and a "poked
+the bot" leaderboard. Cheap to compute from data already on chain.
+
+## 14. Splitting revenue: 70 % stakers / 30 % mPOO — make the 30 % a rule, not discretion
+
+Owner's proposal: 70 % to TOILET stakers, 30 % to burn mPOO or an mPOO treasury with discretion to
+burn or fund a TOILET/mPOO liquidity pool.
+
+Recommendation: **three named buckets with fixed, published rules** rather than owner discretion:
+
+| bucket | share | rule |
+|---|---|---|
+| TOILET stakers | 70 % | paid pro rata to staked weight, monthly batch |
+| mPOO burn | 15 % | automatic burn of mPOO receipts; no discretion, no swap needed |
+| treasury / LP incentives | 15 % | published policy, capped, reported on the page |
+
+Why not discretion: the burn page's credibility *is* the product. "30 % at owner discretion" is
+indistinguishable from "30 % to the team" to anyone auditing it. A rule that is observable on chain is
+worth more than a promise of good judgement — and it costs nothing to implement.
+
+### What NEARLY actually allows (verified 2026-10-28, nearly.trade/docs)
+
+| item | rule |
+|---|---|
+| tax | **0–4 % per side**, fixed at launch, written into the token, **cannot be changed afterwards** |
+| total cost per trade | tax + 1 % Rhea DCL pool fee = at most 5 % |
+| tax currency | taken **in the token** |
+| destinations | creator (sold for NEAR) · **buyback and burn** · **holders (pro rata balance payouts)** |
+| holder payouts | automatic ~every 15 min once ≥ $0.10 is owed |
+| wallet-to-wallet | **never taxed** |
+
+Three consequences for the plan:
+
+1. **A 10 % trade tax is impossible on NEARLY.** The 10 % "paperhand" tax can only be a vault-exit
+   rule in our own staking contract. Cap it at one application per position or it is a burn-metric
+   factory.
+2. **"Buyback and burn" already exists as a launch parameter** — if TOILET is launched through NEARLY,
+   a 0–4 % buy/sell burn comes free, with no purchase required, because the tax is already in the token.
+3. **NEARLY's "holders" destination pays pro rata balances automatically.** That is already a
+   revenue-share mechanic, and it competes with TOILET staking: if mPOO's tax pays its holders, then
+   giving mPOO stakers game revenue too would be a third claim stack.
+
+Technical constraint worth recording: NEARLY's factory **mints a new 1B token** and puts the whole
+supply in its own pool at 1,000 NEAR FDV. It cannot launch an existing token. A game-emitted TOILET
+therefore cannot be launched through NEARLY — it would need a pool created directly on Rhea with
+liquidity we supply. Decide that before promising "TOILET/mPOO LP incentives", because those incentives
+require a pool that does not exist yet.
+
+## 15. Paying in mPOO costs about 5 % to convert
+
+Owner's flywheel includes converting NEAR revenue into mPOO before distributing. Verified cost:
+1 % pool fee + up to 4 % tax + slippage on each conversion. On $27 k/yr of revenue that is roughly
+**$1,350/yr** burned in friction — acceptable if volume is the point, but it must be disclosed, and it
+means stakers receive ~95 % of the headline share.
+
+Cheaper alternative with the same volume effect on the buy side: burn the mPOO you receive directly
+(no swap), and pay stakers in NEAR. Choose deliberately; both are defensible, but "70 % of revenue"
+should name whether that is before or after conversion.
