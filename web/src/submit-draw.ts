@@ -11,10 +11,6 @@ import {
   LocalDrawError,
   signAndSendDrawLocally,
 } from "./local-draw";
-import {
-  buildPaidFunctionCall,
-  type PaidFunctionCall,
-} from "./paid-paint";
 import { describeSponsorship } from "./sponsorship";
 import {
   hasRecognizedTxSuccess,
@@ -98,16 +94,6 @@ export type SubmitDrawResult =
       pixel: null;
     };
 
-/** Paid paint fields frozen at Place / queue time (Journey C). */
-export interface SubmitDrawPaidFields {
-  maxCost: string;
-  pricingVersion: string;
-  expiresAtNs: string;
-  actionNonce: string;
-  /** When set, session `draw` with deposit 0; otherwise paint_with_wallet. */
-  sessionId?: string;
-}
-
 export interface SubmitDrawInput {
   x: number;
   y: number;
@@ -115,30 +101,6 @@ export interface SubmitDrawInput {
   accountId: string;
   networkId: NetworkId;
   onProgress?: (progress: DrawProgress) => void;
-  /**
-   * When present, submit via paid board methods (schema 3).
-   * Free schema 2 omits this and keeps legacy draw({x,y,color}).
-   */
-  paid?: SubmitDrawPaidFields;
-}
-
-/** Resolve the FunctionCall for a paid submit (pure; used by tests too). */
-export function resolvePaidSubmitCall(
-  input: Pick<SubmitDrawInput, "x" | "y" | "colorIndex" | "paid">,
-): PaidFunctionCall | null {
-  if (!input.paid) {
-    return null;
-  }
-  return buildPaidFunctionCall({
-    x: input.x,
-    y: input.y,
-    colorIndex: input.colorIndex,
-    maxCost: input.paid.maxCost,
-    pricingVersion: input.paid.pricingVersion,
-    expiresAtNs: input.paid.expiresAtNs,
-    actionNonce: input.paid.actionNonce,
-    sessionId: input.paid.sessionId,
-  });
 }
 
 export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResult> {
@@ -157,20 +119,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
   // Read sponsorship so the prompt text stays honest. Path is always ordinary
   // wallet in MVP (see sponsorship.ts).
   const sponsorship = describeSponsorship();
-  const paidCall = resolvePaidSubmitCall(input);
-  // Paid session draw needs a registered board session_id. Until
-  // register_paint_session is wired, local FC-key sessions only cover free
-  // draw or paid draw when sessionId is already present on the request.
-  const canLocalPaidSession =
-    paidCall !== null &&
-    paidCall.methodName === "draw" &&
-    Boolean(input.paid?.sessionId);
-  const canLocalFree =
-    paidCall === null &&
-    canUseLocalDrawingSession(input.accountId, input.networkId);
-  const tryLocal =
-    (canLocalPaidSession || canLocalFree) &&
-    canUseLocalDrawingSession(input.accountId, input.networkId);
+  const tryLocal = canUseLocalDrawingSession(input.accountId, input.networkId);
 
   let outcome: unknown;
   let usedLocalSession = false;
@@ -188,15 +137,6 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
         x: input.x,
         y: input.y,
         color: input.colorIndex,
-        ...(paidCall
-          ? {
-              paidCall: {
-                methodName: paidCall.methodName,
-                args: paidCall.args as unknown as Record<string, unknown>,
-                deposit: paidCall.deposit,
-              },
-            }
-          : {}),
       });
       usedLocalSession = true;
     } catch (error) {
@@ -235,7 +175,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
           detail: [
             "Local drawing session could not start this paint.",
             error.message,
-            walletPromptExplanation(input, sponsorship.message, paidCall),
+            walletPromptExplanation(input, sponsorship.message),
           ].join(" "),
         });
       } else {
@@ -244,7 +184,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
           detail: [
             "Local drawing session could not start this paint.",
             error instanceof Error ? error.message : "Unknown local-sign error.",
-            walletPromptExplanation(input, sponsorship.message, paidCall),
+            walletPromptExplanation(input, sponsorship.message),
           ].join(" "),
         });
       }
@@ -254,7 +194,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
   if (!usedLocalSession) {
     input.onProgress?.({
       phase: "wallet_prompt",
-      detail: walletPromptExplanation(input, sponsorship.message, paidCall),
+      detail: walletPromptExplanation(input, sponsorship.message),
     });
     try {
       outcome = await signAndSendDraw({
@@ -264,15 +204,6 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
         color: input.colorIndex,
         gas: DRAW_GAS,
         deposit: DRAW_DEPOSIT,
-        ...(paidCall
-          ? {
-              paidCall: {
-                methodName: paidCall.methodName,
-                args: paidCall.args as unknown as Record<string, unknown>,
-                deposit: paidCall.deposit,
-              },
-            }
-          : {}),
       });
     } catch (error) {
       if (isUserRejection(error)) {
@@ -417,22 +348,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
 function walletPromptExplanation(
   input: SubmitDrawInput,
   sponsorshipMessage: string,
-  paidCall: PaidFunctionCall | null,
 ): string {
-  if (paidCall) {
-    return [
-      "Your wallet will ask you to approve one function call:",
-      `method ${paidCall.methodName} on contract ${CONTRACT_ID},`,
-      `with arguments x=${input.x}, y=${input.y}, color=${input.colorIndex},`,
-      `max_cost=${paidCall.args.max_cost}, pricing_version=${paidCall.args.pricing_version},`,
-      `expires_at_ns=${paidCall.args.expires_at_ns}, action_nonce=${paidCall.args.action_nonce}.`,
-      paidCall.methodName === "paint_with_wallet"
-        ? "Deposit is 1 yoctoNEAR (paid wallet paint)."
-        : "Deposit is 0 (paid session draw).",
-      "That paints one square under the Open wall rule. TOILET cost is separate from network gas.",
-      sponsorshipMessage,
-    ].join(" ");
-  }
   return [
     "Your wallet will ask you to approve one function call:",
     `method draw on contract ${CONTRACT_ID},`,

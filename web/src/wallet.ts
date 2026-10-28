@@ -256,22 +256,11 @@ export interface DrawCallArgs {
   color: number;
   gas: string;
   deposit: string;
-  /**
-   * Paid board override. When set, methodName/args/deposit come from
-   * `buildPaidFunctionCall` (paint_with_wallet or session draw).
-   * Free schema 2 keeps legacy `draw({x,y,color})` with deposit 0.
-   */
-  paidCall?: {
-    methodName: string;
-    args: Record<string, unknown>;
-    deposit: string;
-  };
 }
 
 /**
  * Ask the connected wallet to sign and send one paint FunctionCall.
- * Free boards: `draw` with {x,y,color}. Paid boards: `paint_with_wallet`
- * (or session `draw`) via `paidCall`.
+ * The call is `draw` with `{x, y, color}`.
  * Returns the wallet's execution outcome (hash + status), or throws if the
  * user rejects / the wallet errors. This function does not update the picture.
  *
@@ -281,25 +270,21 @@ export interface DrawCallArgs {
 export async function signAndSendDraw(args: DrawCallArgs): Promise<unknown> {
   const current = ensureConnector();
   const wallet = await current.wallet();
-  const methodName = args.paidCall?.methodName ?? "draw";
-  const callArgs =
-    args.paidCall?.args ??
-    ({
-      x: args.x,
-      y: args.y,
-      color: args.color,
-    } as Record<string, unknown>);
-  const deposit = args.paidCall?.deposit ?? args.deposit;
+  const callArgs = {
+    x: args.x,
+    y: args.y,
+    color: args.color,
+  } as Record<string, unknown>;
   return wallet.signAndSendTransaction({
     receiverId: args.contractId,
     actions: [
       {
         type: "FunctionCall",
         params: {
-          methodName,
+          methodName: "draw",
           args: callArgs,
           gas: args.gas,
-          deposit,
+          deposit: args.deposit,
         },
       },
     ],

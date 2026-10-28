@@ -129,24 +129,6 @@ export function wallPageHtml(): string {
         <p id="hover-summary" class="summary hover-summary" aria-live="polite"></p>
         <div id="selection-preview" class="selection-preview" aria-live="polite"></div>
 
-        <section id="pressure-panel" class="pressure-panel" hidden aria-labelledby="pressure-heading">
-          <div class="pressure-panel-header">
-            <h2 id="pressure-heading" class="pressure-heading">Paint cost</h2>
-            <label class="pressure-toggle" for="pressure-toggle">
-              <input id="pressure-toggle" type="checkbox" disabled />
-              Paint cost
-            </label>
-          </div>
-          <p id="pressure-demo-banner" class="pressure-demo-banner" role="status" hidden></p>
-          <div id="pressure-legend" class="pressure-legend"></div>
-          <p id="pressure-quote-summary" class="pressure-quote-summary" aria-live="polite"></p>
-        </section>
-
-        <section id="placement-quote" class="placement-quote" hidden aria-live="polite">
-          <h2 class="placement-quote-heading">Placement quote</h2>
-          <p id="placement-quote-body" class="placement-quote-body"></p>
-        </section>
-
         <section id="result" class="result" role="status" aria-live="polite" aria-atomic="true"></section>
 
         <details class="wall-advanced about wall-about">

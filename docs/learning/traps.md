@@ -120,6 +120,13 @@ break at runtime. Treat that build warning as a real defect, not noise.
 
 ## Painting model
 
+**Do not put fixture quotes back on the wall.** Schema 3 pressure quotes were a prototype.
+Nothing deployed reports that schema, and the quote numbers were fixtures. Rendering them
+next to a credit board showed a made-up price on a money screen. The modules are gone
+(`paid-mode`, `paid-paint`, `pressure-quote`, `features/pressure`). Schema 4 prices come
+from `get_cell_cost` / `get_tunables` when that UI is built, not from a local quote fixture.
+`contract-meta.ts` still rejects schema 3 by name.
+
 **A stroke needs an armed session; a tap is a different path.** `commitStroke` submits
 `draw_many` chunks through `signAndSendStrokeLocally`; a single tap goes through
 `maybeEnqueueDirectPaint` and the queue. Two concurrent submissions on one access key risk a

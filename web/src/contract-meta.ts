@@ -2,7 +2,9 @@ import board from "@shared/board.json";
 import { PALETTE } from "@shared/palette.ts";
 import { BOARD_HEIGHT, BOARD_WIDTH } from "@shared/types.ts";
 import type { ChainBoardView } from "./contract";
-import { FREE_BOARD_SCHEMA_VERSION } from "./paid-mode";
+
+/** Free board contract schema (`shared/board.json` schema_version). */
+export const FREE_BOARD_SCHEMA_VERSION = 2;
 
 /**
  * Compare on-chain `get_board` metadata to the page's shared constants.
