@@ -475,9 +475,15 @@ The owner read "uses state we already have" as "already in the code". It is not.
 | `PixelRecord.written_at_ns` — when the cell was last painted | ✅ already stored and returned by `get_pixel`/`get_pixels` |
 | `draw` charging **1 credit** | ✅ current behaviour, flat |
 | `draw_many` charging **`cells.len()`** | ✅ current behaviour, flat |
-| recency-based pricing | ❌ **not implemented** — needs the change below |
+| recency-based pricing | ✅ **implemented 2026-10-28** — `Tunables` + per-cell cost in `draw`/`draw_many` |
 
-The change is small but real:
+Shipped with **54 contract tests** and a 365 KB wasm. Defaults: **1 credit** for an empty cell or a
+repaint older than 60 min, **2 credits** at 10–60 min, **4 credits** under 10 min. `draw_many` prices every
+entry and charges a single debit, so a rejected stroke stores nothing and costs nothing; a cell repeated
+inside one drag pays the repaint rate on its second entry. `get_cell_cost(x, y)` returns the live price
+and `get_tunables()` returns every knob — the page never re-implements the rule.
+
+The original change list, for the record:
 
 1. In `draw`/`draw_many`, read the existing record for each cell, compute `now − written_at_ns`, map it to
    a tier, and charge the sum instead of `1` / `len()`. Cost is bounded by `MAX_DRAW_BATCH = 64` extra
@@ -510,7 +516,12 @@ question is state compatibility, not deployment:
 | new counters (`cells_owned`, `outstanding_credits`, `issued_total`) | code upgrade **plus a migration** — adding Borsh fields breaks deserialization of old state |
 | changing the credit ledger's meaning or key prefix | migration + explicit review; the highest-risk class |
 
-Therefore the decisions that must be taken **before** the mainnet deploy:
+Status, 2026-10-28: **items 1, 2 and 4 are implemented in `contracts/paid-board`.** `upgrade(code)` is
+owner-only, `Tunables` holds every knob including the ones disabled at launch, and `cells_owned` +
+`outstanding_credits` ship from the first deployment. Item 3 — a rehearsed migration — remains open, and
+it is the only one that still blocks mainnet money.
+
+The decisions, for the record:
 
 1. **Keep a documented upgrade path** — a full-access key or a self-upgrade method. The paid contract
    currently has neither, and without one every item in the table means redeploying to a new account and

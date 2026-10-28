@@ -12,7 +12,7 @@
 //! testnet or mainnet result.
 
 mod payments;
-use near_sdk::store::IterableMap;
+use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{env, near, AccountId, PanicOnDefault};
 use payments::Payments;
 
@@ -66,6 +66,86 @@ pub struct PaletteColor {
     pub index: u32,
     pub name: String,
     pub hex: String,
+}
+
+/// Every knob the game is expected to tune. Stored from the first deployment so
+/// changing a rule is an owner call, not a contract upgrade plus a migration.
+/// A limit of `0` disables that optional rule.
+///
+/// `max_outstanding_credits` is deliberately a plain `u128`: it counts credits,
+/// not token amounts, so it stays far inside JavaScript's safe integer range.
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Tunables {
+    /// A cell repainted within this many nanoseconds costs the "young" rate.
+    pub repaint_young_ns: u64,
+    pub repaint_young_credits: u32,
+    /// A cell repainted within this many nanoseconds costs the "mid" rate.
+    pub repaint_mid_ns: u64,
+    pub repaint_mid_credits: u32,
+    /// First paint of an empty cell, and any repaint older than `repaint_mid_ns`.
+    pub repaint_base_credits: u32,
+    /// Ceiling on credits sold and not yet spent. 0 = uncapped.
+    pub max_outstanding_credits: u128,
+    /// Daily paint allowance: `min(quota_max, quota_base + quota_per_cell × cells_owned)`.
+    /// Stored now, enforced by the quota change; `quota_max = 0` disables it.
+    pub quota_base: u32,
+    pub quota_per_cell: u32,
+    pub quota_max: u32,
+    /// Cells that accrue TOILET emission per account. 0 = uncapped.
+    pub max_earning_cells: u32,
+}
+
+impl Tunables {
+    /// Credits needed to paint a cell last written at `written_at`, evaluated at
+    /// `now`. An empty cell always costs the base rate: claiming new ground is
+    /// never the expensive action, hammering a cell someone just painted is.
+    pub fn cost(&self, now: u64, written_at: Option<u64>) -> u32 {
+        let Some(written_at) = written_at else {
+            return self.repaint_base_credits;
+        };
+        let age = now.saturating_sub(written_at);
+        if age < self.repaint_young_ns {
+            self.repaint_young_credits
+        } else if age < self.repaint_mid_ns {
+            self.repaint_mid_credits
+        } else {
+            self.repaint_base_credits
+        }
+    }
+
+    fn validate(&self) {
+        assert!(
+            self.repaint_base_credits > 0
+                && self.repaint_young_credits > 0
+                && self.repaint_mid_credits > 0,
+            "ZeroRepaintCost"
+        );
+        assert!(
+            self.repaint_young_ns <= self.repaint_mid_ns,
+            "RepaintTiersOutOfOrder"
+        );
+        if self.quota_max > 0 {
+            assert!(self.quota_base <= self.quota_max, "QuotaBaseAboveMax");
+        }
+    }
+}
+
+impl Default for Tunables {
+    fn default() -> Self {
+        Self {
+            repaint_young_ns: 600_000_000_000,    // 10 minutes
+            repaint_young_credits: 4,
+            repaint_mid_ns: 3_600_000_000_000,    // 60 minutes
+            repaint_mid_credits: 2,
+            repaint_base_credits: 1,
+            max_outstanding_credits: 0,           // uncapped at launch
+            quota_base: 32,
+            quota_per_cell: 4,
+            quota_max: 512,
+            max_earning_cells: 128,
+        }
+    }
 }
 
 /// What `get_board` returns. Field names stay snake_case, matching NEAR's usual JSON.
@@ -138,8 +218,14 @@ pub struct PixelRecord {
 pub struct Board {
     schema_version: u32,
     payments: Payments,
+    /// Every tunable rule. Everything here can change without a code upgrade.
+    tunables: Tunables,
     /// Key is `y * WIDTH + x`. Only painted cells appear here.
     pixels: IterableMap<u32, PixelRecord>,
+    /// Cells each account currently holds. Maintained on every write so the
+    /// paint quota, the earning cap and any future emission accumulator never
+    /// need a separate index — and never need a migration to bootstrap one.
+    cells_owned: LookupMap<AccountId, u32>,
 }
 
 #[near]
@@ -151,7 +237,9 @@ impl Board {
         Self {
             schema_version: SCHEMA_VERSION,
             payments: Payments::new(mpoo_token, payments::INITIAL_NEAR_PRICE, mpoo_per_credit.0),
+            tunables: Tunables::default(),
             pixels: IterableMap::new(b"p"),
+            cells_owned: LookupMap::new(b"o"),
         }
     }
 
@@ -245,6 +333,59 @@ impl Board {
         }
     }
 
+    /// Every tunable rule, including the ones disabled at launch.
+    pub fn get_tunables(&self) -> Tunables {
+        self.tunables.clone()
+    }
+
+    /// Owner-only. Changing a game rule is a transaction, not a redeployment and
+    /// not a migration — that is the whole point of storing the knobs on chain.
+    #[payable]
+    pub fn set_tunables(&mut self, tunables: Tunables) {
+        near_sdk::assert_one_yocto();
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.payments.owner,
+            "OwnerOnly"
+        );
+        tunables.validate();
+        self.tunables = tunables;
+    }
+
+    /// What this cell costs to paint right now. The page must display this rather
+    /// than re-implement the tier rule in JavaScript, or the two will drift.
+    pub fn get_cell_cost(&self, x: u32, y: u32) -> u32 {
+        if let Err(code) = check_coordinate(x, y) {
+            reject(code);
+        }
+        self.tunables
+            .cost(env::block_timestamp(), read_cell(self, pixel_key(x, y)).1)
+    }
+
+    /// Cells an account currently holds: the input to the paint quota and to the
+    /// emission earning cap.
+    pub fn get_cells_owned(&self, account_id: AccountId) -> u32 {
+        self.cells_owned.get(&account_id).copied().unwrap_or(0)
+    }
+
+    /// Replace this contract's code. Owner-only, one yocto attached.
+    ///
+    /// A logic-only change (the repaint tiers, pricing rules, a quota check) needs
+    /// no migration because the state layout is unchanged. Changing the layout —
+    /// adding a field to `Board` or `Payments` — needs an `#[init(ignore_state)]`
+    /// migration written and rehearsed first. Never call `new` over live state.
+    #[payable]
+    pub fn upgrade(&mut self, code: near_sdk::json_types::Base64VecU8) {
+        near_sdk::assert_one_yocto();
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.payments.owner,
+            "OwnerOnly"
+        );
+        // The promise is the action itself; its result is observable on chain.
+        let _deploy = near_sdk::Promise::new(env::current_account_id()).deploy_contract(code.0);
+    }
+
     /// Paint one cell. Any predecessor may overwrite any cell (Open wall).
     ///
     /// On NEAR, a panic cancels the whole transaction. A successful return
@@ -255,9 +396,11 @@ impl Board {
         }
 
         let artist = env::predecessor_account_id();
-        self.payments.spend(&artist, 1);
         let written_at_ns = env::block_timestamp();
         let key = pixel_key(x, y);
+        let (prior_artist, prior_written) = read_cell(self, key);
+        let cost = u128::from(self.tunables.cost(written_at_ns, prior_written));
+        self.payments.spend(&artist, cost);
         self.pixels.insert(
             key,
             PixelRecord {
@@ -266,10 +409,16 @@ impl Board {
                 written_at_ns,
             },
         );
+        if prior_artist.as_ref() != Some(&artist) {
+            if let Some(previous) = prior_artist {
+                bump_cells_owned(self, &previous, -1);
+            }
+            bump_cells_owned(self, &artist, 1);
+        }
 
         // Simple log for indexers / debugging. Not a full NEP event schema yet.
         env::log_str(&format!(
-            "EVENT_JSON:{{\"standard\":\"mpoo_board\",\"version\":\"1.0.0\",\"event\":\"draw\",\"data\":[{{\"x\":{x},\"y\":{y},\"color\":{color},\"artist\":\"{artist}\",\"written_at_ns\":{written_at_ns}}}]}}"
+            "EVENT_JSON:{{\"standard\":\"mpoo_board\",\"version\":\"1.0.0\",\"event\":\"draw\",\"data\":[{{\"x\":{x},\"y\":{y},\"color\":{color},\"artist\":\"{artist}\",\"written_at_ns\":{written_at_ns},\"credits\":{cost}}}]}}"
         ));
     }
 
@@ -296,11 +445,34 @@ impl Board {
         }
 
         let artist = env::predecessor_account_id();
-        self.payments.spend(&artist, cells.len() as u128);
         let written_at_ns = env::block_timestamp();
+
+        // Price the stroke entry by entry. A cell that appears twice in one drag
+        // was just repainted by the earlier entry, so it pays the repaint rate.
+        let mut charged: Vec<(u32, Option<AccountId>)> = Vec::with_capacity(cells.len());
+        let mut costs: Vec<u128> = Vec::with_capacity(cells.len());
+        let mut total: u128 = 0;
+        for cell in cells.iter() {
+            let key = pixel_key(cell.x, cell.y);
+            let (previous_owner, written) = match charged.iter().find(|(k, _)| *k == key) {
+                Some(_) => (None, Some(written_at_ns)),
+                None => read_cell(self, key),
+            };
+            let cost = u128::from(self.tunables.cost(written_at_ns, written));
+            total = total.saturating_add(cost);
+            costs.push(cost);
+            if !charged.iter().any(|(k, _)| *k == key) {
+                charged.push((key, previous_owner));
+            }
+        }
+
+        // One debit for the whole stroke: a rejected stroke stores nothing and
+        // costs nothing, because a panic rolls back the debit and the writes.
+        self.payments.spend(&artist, total);
+
         let mut events: Vec<String> = Vec::with_capacity(cells.len());
 
-        for cell in cells.iter() {
+        for (index, cell) in cells.iter().enumerate() {
             self.pixels.insert(
                 pixel_key(cell.x, cell.y),
                 PixelRecord {
@@ -310,9 +482,20 @@ impl Board {
                 },
             );
             events.push(format!(
-                "{{\"x\":{},\"y\":{},\"color\":{},\"artist\":\"{artist}\",\"written_at_ns\":{written_at_ns}}}",
-                cell.x, cell.y, cell.color
+                "{{\"x\":{},\"y\":{},\"color\":{},\"artist\":\"{artist}\",\"written_at_ns\":{written_at_ns},\"credits\":{}}}",
+                cell.x, cell.y, cell.color, costs[index]
             ));
+        }
+
+        // Ownership counts move once per distinct cell, from whoever held it
+        // before this stroke to the artist who just took it.
+        for (_, previous_owner) in charged.iter() {
+            if previous_owner.as_ref() != Some(&artist) {
+                if let Some(previous) = previous_owner {
+                    bump_cells_owned(self, previous, -1);
+                }
+                bump_cells_owned(self, &artist, 1);
+            }
         }
 
         // One event per stroke keeps an indexer's work proportional to drags,
@@ -326,6 +509,31 @@ impl Board {
 
 fn pixel_key(x: u32, y: u32) -> u32 {
     y * WIDTH + x
+}
+
+/// Read a cell's current owner and write time without holding a borrow, so the
+/// caller can mutate payments and ownership counts in the same function.
+fn read_cell(board: &Board, key: u32) -> (Option<AccountId>, Option<u64>) {
+    match board.pixels.get(&key) {
+        Some(record) => (Some(record.artist.clone()), Some(record.written_at_ns)),
+        None => (None, None),
+    }
+}
+
+/// Keep `cells_owned` exact. It is the input to the paint quota and the emission
+/// earning cap, so an off-by-one here would be a payout bug, not a cosmetic one.
+fn bump_cells_owned(board: &mut Board, account: &AccountId, delta: i32) {
+    let current = board.cells_owned.get(account).copied().unwrap_or(0);
+    let next = if delta >= 0 {
+        current.saturating_add(delta as u32)
+    } else {
+        current.saturating_sub(delta.unsigned_abs())
+    };
+    if next == 0 {
+        board.cells_owned.remove(account);
+    } else {
+        board.cells_owned.insert(account.clone(), next);
+    }
 }
 
 fn validate_draw_args(x: u32, y: u32, color: u32) -> Result<(), &'static str> {
@@ -662,5 +870,188 @@ mod tests {
         board.draw_many(stroke(&[(9, 9, 5), (10, 9, 5)]));
         assert_eq!(board.get_pixel(9, 9).color, Some(5));
         assert_eq!(board.get_pixels(0, 256).total, 2);
+    }
+
+    // --- repaint pricing -------------------------------------------------
+    // These pin the rule the frontend must display: claiming empty ground is
+    // always cheapest, and hammering a cell someone just painted costs more.
+
+    fn paying_context(caller: usize, deposit: u128, ts: u64) {
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(accounts(4))
+            .predecessor_account_id(accounts(caller))
+            .attached_deposit(near_sdk::NearToken::from_yoctonear(deposit))
+            .block_timestamp(ts)
+            .build());
+    }
+
+    fn balance_of(board: &Board, who: usize) -> u128 {
+        board.get_credits(accounts(who)).map(|v| v.0).unwrap_or(0)
+    }
+
+    #[test]
+    fn an_empty_cell_costs_the_base_rate() {
+        let board = setup();
+        assert_eq!(board.get_cell_cost(3, 3), 1);
+        assert_eq!(board.get_tunables().repaint_base_credits, 1);
+    }
+
+    #[test]
+    fn repaint_within_ten_minutes_costs_four_credits() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw(0, 0, 1);
+        assert_eq!(balance_of(&board, 0), 999);
+        paying_context(0, 0, 1_000 + 60_000_000_000); // 60 s later
+        assert_eq!(board.get_cell_cost(0, 0), 4);
+        board.draw(0, 0, 2);
+        assert_eq!(balance_of(&board, 0), 995);
+    }
+
+    #[test]
+    fn repaint_between_ten_and_sixty_minutes_costs_two_credits() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw(0, 0, 1);
+        paying_context(0, 0, 1_000 + 900_000_000_000); // 15 min later
+        assert_eq!(board.get_cell_cost(0, 0), 2);
+        board.draw(0, 0, 2);
+        assert_eq!(balance_of(&board, 0), 997);
+    }
+
+    #[test]
+    fn repaint_after_an_hour_costs_the_base_rate_again() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw(0, 0, 1);
+        paying_context(0, 0, 1_000 + 3_601_000_000_000); // just over 60 min later
+        assert_eq!(board.get_cell_cost(0, 0), 1);
+        board.draw(0, 0, 2);
+        assert_eq!(balance_of(&board, 0), 998);
+    }
+
+    #[test]
+    fn a_stroke_prices_every_cell_and_debits_once() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw_many(stroke(&[(0, 0, 1), (1, 0, 1)]));
+        assert_eq!(balance_of(&board, 0), 998);
+        paying_context(0, 0, 1_000 + 300_000_000_000); // 5 min later
+        board.draw_many(stroke(&[(0, 0, 2), (1, 0, 2)]));
+        // Both cells are young, so 4 + 4.
+        assert_eq!(balance_of(&board, 0), 990);
+    }
+
+    #[test]
+    fn a_duplicate_cell_inside_one_stroke_pays_the_repaint_rate() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw_many(stroke(&[(0, 0, 1), (0, 0, 2)]));
+        // First entry claims empty ground (1), the second repaints it (4).
+        assert_eq!(balance_of(&board, 0), 995);
+        assert_eq!(board.get_pixel(0, 0).color, Some(2));
+        assert_eq!(board.get_pixels(0, 256).total, 1);
+    }
+
+    #[test]
+    fn young_repaint_rejection_is_all_or_nothing() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw(0, 0, 1);
+        // Only 2 credits left; a young repaint costs 4.
+        board.payments.balances.insert(accounts(0), 2);
+        paying_context(0, 0, 1_000 + 60_000_000_000);
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            board.draw(0, 0, 3);
+        }));
+        assert!(rejected.is_err());
+        assert_eq!(board.get_pixel(0, 0).color, Some(1));
+        assert_eq!(balance_of(&board, 0), 2);
+    }
+
+    // --- ownership counts ------------------------------------------------
+
+    #[test]
+    fn cells_owned_follows_the_artist_on_overwrite() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw(4, 4, 1);
+        assert_eq!(board.get_cells_owned(accounts(0)), 1);
+        assert_eq!(board.get_cells_owned(accounts(1)), 0);
+
+        paying_context(4, 0, 2_000);
+        board.draw(4, 4, 2);
+        assert_eq!(board.get_cells_owned(accounts(0)), 0);
+        assert_eq!(board.get_cells_owned(accounts(4)), 1);
+    }
+
+    #[test]
+    fn a_stroke_does_not_count_a_cell_twice() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw_many(stroke(&[(0, 0, 1), (0, 0, 2), (1, 0, 1)]));
+        assert_eq!(board.get_cells_owned(accounts(0)), 2);
+    }
+
+    #[test]
+    fn the_same_artist_repainting_keeps_its_count() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw(2, 2, 1);
+        paying_context(0, 0, 2_000);
+        board.draw(2, 2, 3);
+        assert_eq!(board.get_cells_owned(accounts(0)), 1);
+    }
+
+    // --- owner controls --------------------------------------------------
+
+    #[test]
+    #[should_panic(expected = "OwnerOnly")]
+    fn tunables_are_owner_only() {
+        let mut board = setup();
+        paying_context(1, 1, 1_000);
+        board.set_tunables(Tunables::default());
+    }
+
+    #[test]
+    #[should_panic(expected = "ZeroRepaintCost")]
+    fn a_free_repaint_is_rejected() {
+        let mut board = setup();
+        let mut tunables = Tunables::default();
+        tunables.repaint_young_credits = 0;
+        paying_context(0, 1, 1_000);
+        board.set_tunables(tunables);
+    }
+
+    #[test]
+    #[should_panic(expected = "RepaintTiersOutOfOrder")]
+    fn inverted_repaint_tiers_are_rejected() {
+        let mut board = setup();
+        let mut tunables = Tunables::default();
+        tunables.repaint_young_ns = tunables.repaint_mid_ns + 1;
+        paying_context(0, 1, 1_000);
+        board.set_tunables(tunables);
+    }
+
+    #[test]
+    fn the_owner_can_retune_without_a_redeploy() {
+        let mut board = setup();
+        let mut tunables = Tunables::default();
+        tunables.repaint_young_credits = 9;
+        paying_context(0, 1, 1_000);
+        board.set_tunables(tunables);
+        assert_eq!(board.get_tunables().repaint_young_credits, 9);
+        paying_context(0, 0, 1_000);
+        board.draw(0, 0, 1);
+        paying_context(0, 0, 1_000 + 60_000_000_000);
+        assert_eq!(board.get_cell_cost(0, 0), 9);
+    }
+
+    #[test]
+    #[should_panic(expected = "OwnerOnly")]
+    fn upgrade_requires_owner() {
+        let mut board = setup();
+        paying_context(1, 1, 1_000);
+        board.upgrade(near_sdk::json_types::Base64VecU8(Vec::new()));
     }
 }

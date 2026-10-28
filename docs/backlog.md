@@ -100,8 +100,9 @@ confirmed by owner. A testnet token is needed for the first paid rehearsal.
 |---|---|---|
 | PAY-UI | Read-only display locally implemented; live paid-wallet verification and mobile visual review pending | `web/src/paint-wallet.ts`, `app/paint-wallet-panel.ts`; 9 focused tests, full 284 tests/build passed. Browser checked against free testnet board. Checkout not implemented. |
 | PAY-INTEGRATION | Paid schema-4 frontend and real testnet purchase → paint → refreshed balances | Local methods exist; no full-loop receipt evidence |
+| **PAY-RECENCY-UI** | Show the repaint price before the user commits: per-cell cost, stroke total, one-line legend | **Contract shipped 2026-10-28** (`get_cell_cost`, `get_tunables`); the page still shows a flat price |
 | **PAY-COST** | **Reopen immediately after first mainnet paid-board deployment** | [Required cost matrix](payments/mainnet-cost-validation.md); all mainnet cases pending, keep open through owner acceptance |
-| PAY-UPGRADE | Select deployment authority and rehearse state-preserving upgrades before public paid launch | [Proposal/current gaps](payments/upgrade-policy.md); no migration/self-upgrade/pause implementation |
+| PAY-UPGRADE | Select deployment authority and rehearse state-preserving upgrades before public paid launch | **Owner-only `upgrade()` shipped 2026-10-28**; still missing: pause, migration path, rehearsed testnet upgrade |
 | ECONOMY-LATER | TOILET, staking, longevity rewards, swaps, inventory shop | Deferred; older economy briefs require reconciliation before implementation |
 
 ## Open gates and scoped work

@@ -111,3 +111,12 @@ no way for revenue to leave the paid contract, there is no profit to stake again
 Open decisions there: staking asset (TOILET vs MPOO, and only one can claim revenue), emission model
 (revenue-keyed with a 1B cap is recommended), TOILET tradeability, and a per-account earning cap
 (the entire board costs $190 at 0.0025 NEAR/pixel, so uncapped emission is capturable by one wallet).
+
+## Implemented in the contract, 2026-10-28
+
+Repaint tiers (1 / 2 / 4 credits by cell age), an on-chain `Tunables` struct for every game knob, the
+`cells_owned` and `outstanding_credits` counters, and an owner-only `upgrade` method — so post-launch
+tuning is a transaction and a logic change needs no migration. 54 contract tests pass.
+
+Still open: the **frontend price display** (per-cell cost, stroke total, one-line legend — the page
+currently shows a flat price), and one rehearsed migration on testnet state before mainnet money.

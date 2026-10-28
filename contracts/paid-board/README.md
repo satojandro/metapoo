@@ -55,7 +55,27 @@ including liquidity, slippage and tax, not nominal market capitalization.
   `receiver_id`, an exact price multiple as `amount`, and a JSON-encoded `msg`
   such as `{"min_credits":"2","expected_price":"100"}`. Follow the token's
   required 1 yoctoNEAR attachment and allow enough gas for receiver and resolver.
-- `draw(x,y,color)` / `draw_many(cells)`: no deposit; debit caller's balance atomically.
+- `draw(x,y,color)` / `draw_many(cells)`: no deposit; debit the caller's balance atomically. **Cost is
+  per cell and depends on how recently that cell was painted**: 1 credit for an empty cell or one last
+  painted more than 60 minutes ago, 2 credits at 10–60 minutes, 4 credits under 10 minutes. A stroke is
+  priced entry by entry and charged in one debit, so a rejected stroke costs and stores nothing.
+
+## Game rules on chain (2026-10-28)
+
+Every rule the game is expected to tune lives in a `Tunables` struct, so retuning is an owner
+transaction rather than a redeploy plus a migration:
+
+- `get_tunables()` / `set_tunables(tunables)` — owner-only, one yocto. Holds the repaint tiers, the paint
+  quota (`quota_base`, `quota_per_cell`, `quota_max`), the credit float cap (`max_outstanding_credits`)
+  and the emission cap (`max_earning_cells`). **The quota and the emission cap are stored but not yet
+  enforced** — a zero limit disables that rule.
+- `get_cell_cost(x, y)` — what that cell costs right now. The page must display this rather than
+  re-implementing the tier rule in JavaScript.
+- `get_cells_owned(account_id)` — cells an account holds; the input to the quota and the earning cap.
+- `get_outstanding_credits()` — credits sold and not yet spent. Prepaid service, never profit.
+- `upgrade(code)` — owner-only, one yocto. A logic-only change needs no migration; adding a field to
+  `Board` or `Payments` does, so it needs an `#[init(ignore_state)]` migration rehearsed against testnet
+  state first. Never call `new` over live state.
 
 The board account must also be registered on the mPOO token before receiving it.
 The board credit-registration fee does not perform that token registration.

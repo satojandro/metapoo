@@ -16,11 +16,16 @@ const REGISTRATION: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
 
 #[near(serializers = [borsh])]
 pub(crate) struct Payments {
-    owner: AccountId,
+    pub(crate) owner: AccountId,
     token: AccountId,
     near_price: u128,
     mpoo_price: u128,
     pub(crate) balances: LookupMap<AccountId, u128>,
+    /// Credits sold but not yet spent. Prepaid service, not free revenue: each
+    /// unspent credit still owes one storage-backed pixel. Tracked from the first
+    /// deployment so the float cap and any future distribution rule never need a
+    /// state migration to discover it.
+    pub(crate) outstanding: u128,
 }
 
 #[near(serializers = [json])]
@@ -50,15 +55,19 @@ impl Payments {
             near_price,
             mpoo_price,
             balances: LookupMap::new(b"c"),
+            outstanding: 0,
         }
     }
 
+    /// `max_outstanding` of 0 means uncapped. The cap is a game rule (scarcity),
+    /// not a solvency rule: credits are non-refundable prepaid service.
     fn credit(
         &mut self,
         account: &AccountId,
         amount: u128,
         price: u128,
         minimum: u128,
+        max_outstanding: u128,
     ) -> Option<u128> {
         // Exact multiples avoid silently keeping dust or scheduling a second,
         // potentially taxed outgoing transfer. Invalid FT purchases refund all.
@@ -69,18 +78,26 @@ impl Payments {
         if credits < minimum {
             return None;
         }
+        if max_outstanding > 0 && self.outstanding.saturating_add(credits) > max_outstanding {
+            return None;
+        }
         let previous = *self.balances.get(account)?;
         let next = previous.checked_add(credits)?;
         self.balances.insert(account.clone(), next);
+        self.outstanding = self.outstanding.saturating_add(credits);
         Some(credits)
     }
 
     pub(crate) fn spend(&mut self, account: &AccountId, count: u128) {
+        if count == 0 {
+            return;
+        }
         let balance = *self.balances.get(account).expect("AccountNotRegistered");
         let next = balance.checked_sub(count).expect("InsufficientCredits");
         // ECONOMY NEXT: pressure pricing belongs here, after quote/max-cost checks.
         // A receipt failure rolls back this debit and all pixel writes together.
         self.balances.insert(account.clone(), next);
+        self.outstanding = self.outstanding.saturating_sub(count);
     }
 }
 
@@ -110,6 +127,12 @@ impl Board {
         }
     }
 
+    /// Credits sold and not yet spent. With the float cap set, this is the number
+    /// the page shows as "paint still owed", never as profit.
+    pub fn get_outstanding_credits(&self) -> U128 {
+        U128(self.payments.outstanding)
+    }
+
     pub fn get_credits(&self, account_id: AccountId) -> Option<U128> {
         self.payments.balances.get(&account_id).copied().map(U128)
     }
@@ -136,10 +159,11 @@ impl Board {
         assert_eq!(expected_price.0, self.payments.near_price, "PriceChanged");
         let account = env::predecessor_account_id();
         let amount = env::attached_deposit().as_yoctonear();
+        let cap = self.tunables.max_outstanding_credits;
         let credits = self
             .payments
-            .credit(&account, amount, self.payments.near_price, min_credits.0)
-            .expect("InvalidPurchaseOrUnregisteredAccount");
+            .credit(&account, amount, self.payments.near_price, min_credits.0, cap)
+            .expect("InvalidPurchaseOrUnregisteredAccountOrFloatFull");
         Self::purchase_event(&account, "near", amount, credits);
         U128(credits)
     }
@@ -165,11 +189,13 @@ impl Board {
         if purchase.expected_price.0 != self.payments.mpoo_price {
             return amount;
         }
+        let cap = self.tunables.max_outstanding_credits;
         match self.payments.credit(
             &sender_id,
             amount.0,
             self.payments.mpoo_price,
             purchase.min_credits.0,
+            cap,
         ) {
             Some(credits) => {
                 Self::purchase_event(&sender_id, "mpoo", amount.0, credits);
@@ -395,5 +421,51 @@ mod tests {
             board.ft_on_transfer(accounts(1), U128(200), message()),
             U128(200)
         );
+    }
+
+    #[test]
+    fn outstanding_rises_on_purchase_and_falls_on_spend() {
+        let mut board = setup();
+        assert_eq!(board.get_outstanding_credits(), U128(0));
+        context(1, 1, 30);
+        board.buy_credits_near(U128(3), U128(10));
+        assert_eq!(board.get_outstanding_credits(), U128(3));
+        context(1, 1, 0);
+        board.draw(0, 0, 1);
+        assert_eq!(board.get_outstanding_credits(), U128(2));
+        board.draw(1, 0, 1);
+        assert_eq!(board.get_outstanding_credits(), U128(1));
+    }
+
+    #[test]
+    fn float_cap_blocks_purchases_until_paint_frees_room() {
+        let mut board = setup();
+        let mut tunables = board.get_tunables();
+        tunables.max_outstanding_credits = 2;
+        context(0, 0, 1);
+        board.set_tunables(tunables);
+        context(1, 1, 20);
+        assert_eq!(board.buy_credits_near(U128(2), U128(10)), U128(2));
+        // At the cap the whole call is rejected; its deposit reverts with it.
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            board.buy_credits_near(U128(1), U128(10));
+        }));
+        assert!(rejected.is_err());
+        assert_eq!(board.get_credits(accounts(1)), Some(U128(2)));
+        // Painting consumes the float, so room exists again.
+        context(1, 1, 0);
+        board.draw(0, 0, 1);
+        context(1, 1, 10);
+        assert_eq!(board.buy_credits_near(U128(1), U128(10)), U128(1));
+        assert_eq!(board.get_outstanding_credits(), U128(2));
+    }
+
+    #[test]
+    fn float_cap_of_zero_means_uncapped() {
+        let mut board = setup();
+        assert_eq!(board.get_tunables().max_outstanding_credits, 0);
+        context(1, 1, 100);
+        board.buy_credits_near(U128(10), U128(10));
+        assert_eq!(board.get_outstanding_credits(), U128(10));
     }
 }
