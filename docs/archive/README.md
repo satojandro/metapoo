@@ -8,6 +8,9 @@ Moved here on 2026-10-28 in a documentation cut: the live set is now the map in 
 everything below was either shipped, superseded, or written for a phase that has not started. Original
 paths are given so commit messages and older discussions still resolve.
 
+Cross-links *between* archived documents may be stale — they were correct when written, and nothing here
+is maintained.
+
 ## The September agent pack → `foundation/`
 
 The scaffold's original nine documents. Superseded by `../00-shared-decisions.md`, `../roadmap.md`,
