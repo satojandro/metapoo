@@ -18,8 +18,8 @@ not a migration of schema 2. A schema version number alone does not implement mi
 
 `contracts/paid-board/src/lib.rs` stores schema, payments and pixel collections.
 `payments.rs` stores owner, token, prices and a non-iterable `LookupMap` of balances.
-It has owner-only price changes but **no migration, self-upgrade, pause, ownership
-transfer, timelock or multisig enforcement**. Whether deployment is possible will
+It has owner-only price changes and, since 2026-10-28, an owner-only `upgrade()` self-deploy, but **no
+migration, pause, ownership transfer, timelock or multisig enforcement**. Whether deployment is possible will
 depend on the keys/control model selected for the eventual contract account.
 The pricing owner is not automatically the account's deployment-key holder.
 
