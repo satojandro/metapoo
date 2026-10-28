@@ -1,73 +1,60 @@
 # Documentation map
 
-One question this file answers: **for a given topic, which document is authoritative?**
+One job: **for a given topic, which single document is authoritative.** If two documents disagree, the
+one listed here wins. If a topic is not listed, this map is out of date — fix the map, not the reader.
 
-The repository accumulated overlapping docs across several planning waves. Most are still
-current; some described work that has since shipped or been superseded. Rather than rely on
-dates, use this map.
-
-Rule: if two documents disagree, the one listed as authoritative here wins. If neither is
-listed, the newest dated file wins and this map is missing an entry.
-
----
+Everything not listed here lives in [`archive/`](archive/README.md) and is history, not instruction.
 
 ## Read first
 
-| topic | authoritative document |
+| question | document |
 |---|---|
-| what to do before changing code | `../AGENT.md` |
-| **what is left to build** | **`backlog.md`** — verified state; agents keep it current, every row carries its proof |
-| traps that have already cost time | `learning/traps.md` |
-| open product decisions (R1–R5) | `roadmap.md` |
-| decisions already taken | `00-shared-decisions.md` |
-| how agents should decide (judgement) | `2026-10-14-product-judgment.md` |
-| session history of what was tried | `learning/` |
+| what do I do before changing code? | [`../AGENT.md`](../AGENT.md) |
+| what is left to build? | [`backlog.md`](backlog.md) — every row carries its proof |
+| what has already gone wrong here? | [`learning/traps.md`](learning/traps.md) |
+| what is decided vs still open? | [`00-shared-decisions.md`](00-shared-decisions.md), [`roadmap.md`](roadmap.md) |
+| how should a judgement call be made? | [`2026-10-14-product-judgment.md`](2026-10-14-product-judgment.md) |
 
-## Product and scope
+## Payments (the money path)
 
-| topic | authoritative document | notes |
+| topic | document | status |
 |---|---|---|
-| product intent, wall + market + moments | `2026-10-12-product-prd.md` | planning baseline; economy sections are **not** live behaviour |
-| MVP scope and staged plan | `../02-mvp-scope-and-roadmap.md` | |
-| payment-stage UI and wallet balances | `payments/frontend-handoff.md` — read-only display local; checkout pending | supersedes older MPOO-only/TOILET purchase assumptions for this stage |
-| paint economy / swap / tokenomics | `2026-10-12-paint-economy-and-swap-plan.md` | future phase; nothing implemented or deployed |
-| pressure pricing and paid mode | `implementation/pressure-and-paint.md` | |
-| bounties | `implementation/art-bounties.md` | |
-| history and prints | `implementation/history-and-prints.md` | |
+| the paid model: credits, schema 4, the 15 contradictions it resolved | [`payments/2026-10-28-paid-model-decisions.md`](payments/2026-10-28-paid-model-decisions.md) | **authoritative** |
+| what the purchase UI must do and show | [`payments/frontend-handoff.md`](payments/frontend-handoff.md) | current; checkout unbuilt |
+| mainnet cost measurement | [`payments/mainnet-cost-validation.md`](payments/mainnet-cost-validation.md) | **all pending** — reopens on first deploy |
+| upgrade authority and migration | [`payments/upgrade-policy.md`](payments/upgrade-policy.md) | `upgrade()` exists; migration + pause missing |
+| the contract itself | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | schema 4, not deployed |
+| pause, treasury withdrawal, bounded price change | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) + [`implementation/paid-board-safety.task.json`](implementation/paid-board-safety.task.json) | **on the review branch**, not on main yet |
 
-## Interaction, visuals, and viewport
+## Economy
 
-| topic | authoritative document | notes |
+| topic | document | status |
 |---|---|---|
-| viewport, zoom, selection behaviour | `2026-10-12-viewport-and-interaction-brief.md` | partially superseded by practice: paint zoom is no longer a precondition for painting (`learning/traps.md`) |
-| stall scene geometry | `2026-10-12-visual-concept.md` | "geometry spec kept" |
-| visual direction and rejected work | `2026-10-12-visual-redesign-agent-brief.md` | the newest of the three visual docs; start here |
-| reference imagery | `2026-10-12-stall-visual-references.md` | references only; the flat-toilet implementation was rejected |
-| palette | `2026-10-12-palette-proposal.md` | **not implemented**; changing hex values for existing indices would recolour stored art and needs a schema bump |
+| TOILET: issuance, staking, burns, burn page | [`economy/2026-10-28-toilet-economy-v1.md`](economy/2026-10-28-toilet-economy-v1.md) | **proposed** — four decisions open |
+| TOILET token: supply, tax, refund semantics | [`../contracts/toilet/README.md`](../contracts/toilet/README.md) + [`implementation/toilet-token.task.json`](implementation/toilet-token.task.json) | **on the review branch**, not deployed |
 
-## Contracts
+## Work in flight
 
-| topic | authoritative document |
+| topic | document |
 |---|---|
-| paid board: local contract and API | `../contracts/paid-board/README.md` — schema 4, not deployed |
-| paid board safety implementation | `implementation/paid-board-safety.task.json`; actual behavior and state-layout correction in `../contracts/paid-board/README.md` |
-| TOILET token implementation and tax/refund semantics | `../contracts/toilet/README.md` — local code/tests, not deployed; task in `implementation/toilet-token.task.json` |
-| **mainnet cost tests: revisit on deployment** | **`payments/mainnet-cost-validation.md` — all pending; PAY-COST remains open** |
-| contract changes and upgrades | `payments/upgrade-policy.md` — proposal and current gaps |
-| board contract: deploy, storage, gas, frontend handoff | `../contracts/board/DEPLOY.md`, `STORAGE_AND_GAS.md`, `FRONTEND_HANDOFF.md` |
-| contract design seams | `../03-architecture-and-contract-seams.md`, `../contract/DESIGN.md` |
-| acceptance, security, QA | `../08-acceptance-security-and-qa.md` |
-| threat sketch | `threat-sketch.md` — a design sketch, not an audit |
+| who is doing what, and in what order | [`implementation/2026-10-28-work-queue.md`](implementation/2026-10-28-work-queue.md) |
+| Cursor: repaint price display | [`implementation/pay-recency-ui.task.json`](implementation/pay-recency-ui.task.json) |
+| Cursor: checkout flow | [`implementation/pay-checkout.task.json`](implementation/pay-checkout.task.json) |
+| Codex: pause, treasury, bounded price change | [`implementation/paid-board-safety.task.json`](implementation/paid-board-safety.task.json) |
+| Codex: TOILET token | [`implementation/toilet-token.task.json`](implementation/toilet-token.task.json) |
 
-## Loose but still live
+## Code and security
 
-| file | what it is | why it is not archived |
-|---|---|---|
-| `../fix_plan.md` | three unresolved P5 review findings against the renderer-crispness goal | still actionable; they are acceptance criteria for the crisp-paint work, not history |
-| `research/2026-10-11-near-intents-memo.md` | research memo | unbuilt feature, still a valid input |
-| `implementation/core-board.md`, `delivery-plan.md`, `frontend-journeys.md` | implementation specs | current references |
+| topic | document |
+|---|---|
+| running the page, known limits | [`../web/README.md`](../web/README.md) |
+| free board contract: deploy, storage, gas, frontend handoff | [`../contracts/board/`](../contracts/board/) |
+| what the scaffold protects against | [`threat-sketch.md`](threat-sketch.md) |
+| session lessons, one file per session | [`learning/`](learning/README.md) |
 
-## Archived
+## Archived (2026-10-28)
 
-`archive/` holds documents that describe work which has since shipped, or planning waves whose
-output is now in the code and in `learning/traps.md`. See `archive/README.md`.
+The 12 October planning wave, the September agent pack, the expansion specs (bounties, prints,
+history), the pressure-pricing protocol, the original PRD and economy plan, the visual direction, and
+completed task orders all moved to [`archive/`](archive/README.md). They are kept for the reasoning they
+record, not for instruction. If one becomes relevant again, move it back and add it here.

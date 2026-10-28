@@ -88,7 +88,7 @@ function-call key allowances as a first-class pattern; fee/gas-market changes an
 
 ## R5. Learning records — [Verified research] currently unmaintained
 
-`README.md` item 9 and `09-learning-journal.md` define a learning record. `docs/learning/`
+The original agent pack's item 9 (`archive/foundation/09-learning-journal.md`) defines a learning record. `docs/learning/`
 held two files, both dated 2026-10-11 (the day the scaffold was written), until
 2026-10-27 — sixteen days of work with no record. See `docs/learning/README.md` for the
 rule and `docs/learning/2026-10-27-paint-session.md` for the first real entry.
