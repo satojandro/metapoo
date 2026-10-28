@@ -384,20 +384,51 @@ worth more than a promise of good judgement — and it costs nothing to implemen
 
 Three consequences for the plan:
 
-1. **A 10 % trade tax is impossible on NEARLY.** The 10 % "paperhand" tax can only be a vault-exit
-   rule in our own staking contract. Cap it at one application per position or it is a burn-metric
-   factory.
-2. **"Buyback and burn" already exists as a launch parameter** — if TOILET is launched through NEARLY,
-   a 0–4 % buy/sell burn comes free, with no purchase required, because the tax is already in the token.
-3. **NEARLY's "holders" destination pays pro rata balances automatically.** That is already a
-   revenue-share mechanic, and it competes with TOILET staking: if mPOO's tax pays its holders, then
-   giving mPOO stakers game revenue too would be a third claim stack.
+1. **The 4 % ceiling is a NEARLY-launch constraint, not a TOILET constraint.** TOILET is a separate
+   token, so its tax is whatever we code — there is no 4 % cap on it. But a token-level transfer tax
+   makes TOILET a fee-on-transfer asset, which breaks pooling on standard AMMs (LPs mis-account the
+   deposit). If TOILET must trade on Rhea, the burn belongs in **our** exit paths, not in `ft_transfer`.
+2. **"Buyback and burn" already exists as a launch parameter** — it is live on mPOO today. Verified from
+   the token page: **2 % buy / 3 % sell, split 34 % holders · 33 % creator · 33 % burn**.
+3. **mPOO holders already receive a pro-rata payout** (34 % of every tax, paid automatically). That is a
+   live claim stack. Adding mPOO *staking* for game revenue would be a second claim on the same token,
+   and TOILET staking a third. This is why TOILET should hold the game-revenue claim and mPOO should keep
+   the trade-tax payout it already has.
 
 Technical constraint worth recording: NEARLY's factory **mints a new 1B token** and puts the whole
 supply in its own pool at 1,000 NEAR FDV. It cannot launch an existing token. A game-emitted TOILET
 therefore cannot be launched through NEARLY — it would need a pool created directly on Rhea with
 liquidity we supply. Decide that before promising "TOILET/mPOO LP incentives", because those incentives
 require a pool that does not exist yet.
+
+### The constraint nobody has priced: revenue dwarfs the mPOO market
+
+Verified from the token page, 2026-10-28:
+
+| mPOO metric | value |
+|---|---|
+| market cap | **$16.5 K** |
+| price | $0.0000165 |
+| liquidity | $7.0 K ($3.0 K of it in DIARHEA) |
+| 24 h volume | $1.2 K |
+| holders | 153 |
+| ATH → now | $55.5 K → $16.5 K (−70 %) |
+| tax | 2 % buy / 3 % sell, 34 % holders · 33 % creator · 33 % burn |
+
+At those numbers **the game's projected revenue is larger than the entire mPOO market cap**: $27 k/yr
+is 1.6× the token, and a single monthly distribution ($2,250) is 32 % of the pool's liquidity. A
+"buy mPOO with NEAR revenue" step is therefore not a small friction cost — at any real revenue it is a
+price-moving event every month, and TOILET stakers paid in mPOO would be dumping into a $7 K pool.
+
+Two honest readings:
+
+- **If the goal is volume and attention on mPOO**, this is a feature: monthly revenue buys would be the
+  largest recurring buy pressure the token has ever had. Say so explicitly and size the batches.
+- **If the goal is stakers receiving a stable claim**, pay in NEAR. Converting to mPOO adds pool fee,
+  tax, slippage, and a price impact that grows with success.
+
+Also note mPOO holders already earn roughly `$1.2 K × 2.5 % × 34 % ≈ $10/day` from trade tax. That is a
+live, working holder payout — not something to duplicate.
 
 ## 15. Paying in mPOO costs about 5 % to convert
 
@@ -409,3 +440,69 @@ means stakers receive ~95 % of the headline share.
 Cheaper alternative with the same volume effect on the buy side: burn the mPOO you receive directly
 (no swap), and pay stakers in NEAR. Choose deliberately; both are defensible, but "70 % of revenue"
 should name whether that is before or after conversion.
+
+---
+
+## 16. Repaint multiplier — implementation status (not built yet)
+
+The owner read "uses state we already have" as "already in the code". It is not. Precise status:
+
+| piece | status |
+|---|---|
+| `PixelRecord.written_at_ns` — when the cell was last painted | ✅ already stored and returned by `get_pixel`/`get_pixels` |
+| `draw` charging **1 credit** | ✅ current behaviour, flat |
+| `draw_many` charging **`cells.len()`** | ✅ current behaviour, flat |
+| recency-based pricing | ❌ **not implemented** — needs the change below |
+
+The change is small but real:
+
+1. In `draw`/`draw_many`, read the existing record for each cell, compute `now − written_at_ns`, map it to
+   a tier, and charge the sum instead of `1` / `len()`. Cost is bounded by `MAX_DRAW_BATCH = 64` extra
+   storage reads per stroke.
+2. Insufficient credits must reject the whole stroke before any write (the existing all-or-nothing
+   property must survive).
+3. `get_pixel` should return the current price tier so the page never has to duplicate the rule.
+
+Front-end requirement (owner asked for clarity — this is the part that decides whether it feels fair):
+
+- **Per-cell badge** on hover/tap: "repaint 2 min ago · 4 credits".
+- **Stroke total before submit**: "this stroke: 23 cells · 31 credits". A mixed-age drag costs a mixed
+  amount, so a single price shown in the dock would be a lie.
+- **A one-line legend in the default view**, not behind `About`: "Fresh cells cost more to repaint.
+  Wait an hour and it is 1 credit again."
+- **Never** show the multiplier only as a rejection message after the user has committed the gesture.
+
+## 17. Can these dynamics change after mainnet launch? What must be decided now?
+
+Short answer: **most of them can, if and only if we keep an upgrade path and put the tunables in
+storage now.** The dynamics themselves do not have to be decided today; the *upgradeability* does.
+
+On NEAR, contract code can be replaced on the same account while the state persists, so the real
+question is state compatibility, not deployment:
+
+| change | cost after launch |
+|---|---|
+| price, repaint tiers, quota, caps, earning cap — **if stored as parameters** | owner transaction, no code change |
+| pure logic change that reads existing fields (e.g. the repaint multiplier) | code upgrade, **no migration** — layout unchanged |
+| new counters (`cells_owned`, `outstanding_credits`, `issued_total`) | code upgrade **plus a migration** — adding Borsh fields breaks deserialization of old state |
+| changing the credit ledger's meaning or key prefix | migration + explicit review; the highest-risk class |
+
+Therefore the decisions that must be taken **before** the mainnet deploy:
+
+1. **Keep a documented upgrade path** — a full-access key or a self-upgrade method. The paid contract
+   currently has neither, and without one every item in the table means redeploying to a new account and
+   abandoning all credits and pixels.
+2. **Ship a `Tunables`/`Config` struct from day one** holding price, repaint tier boundaries and
+   multipliers, quota base/multiplier/cap, float cap, earning cap — even the ones disabled at launch.
+   This is the cheapest possible insurance: ~30 lines and a few tests now, versus a migration for every
+   knob later.
+3. **Rehearse one migration on testnet state** before mainnet money, so the first real one is not the
+   first one ever attempted.
+4. **Decide `cells_owned` and `outstanding_credits` now, or accept a migration later.** They are needed
+   by the quota, the earning cap, the MasterChef accumulator and the float cap — four features sharing
+   two counters. Adding them at launch costs almost nothing; adding them after is a migration of the
+   whole state.
+
+Rule of thumb for the owner's "reversible choices advance" criterion: **anything we expect to tune
+should be a parameter, and anything we expect to add should be additive state planned now.** The game
+dynamics are then post-launch work, not a post-launch crisis.
