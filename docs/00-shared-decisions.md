@@ -32,11 +32,14 @@ TOILET, revenue sharing and inventory trading remain a subsequent stage.
   cannot cover a full-length drag. Launch price comes from the table in the decision record.
   The free-paint-window idea is recorded there in its safe form (empty cells only, per-account cap).
 - **D4 — TOILET is immutable at launch, and has no owner.** Buy/sell rates, the burn/treasury split, the
-  treasury account and the exempt list are fixed in `new()`; there is no `set_tax`. `mint`, `set_paused`
-  and handing off the emitter role move to **emitter-only** authority, so the only account with power over
-  the token is the game contract. No upgrade entrypoint in v1. Consequence: the AMM/sandbox tax test must
-  pass **before** the deploy, because the rates are frozen at deploy. Rationale and the accepted cost are
-  in [PR #15](https://github.com/satojandro/metapoo/pull/15).
+  treasury account and the exempt list are fixed in `new()`; there is no `set_tax`. `mint` and the handoff
+  of the emitter role move to **emitter-only** authority, so the only account with power over the token is
+  the game contract. No upgrade entrypoint in v1. Consequence: the AMM/sandbox tax test must pass
+  **before** the deploy, because the rates are frozen at deploy.
+  **Implementation note:** emitter-only authority is unreachable unless the board exposes it. Pause needs a
+  single board passthrough (`board.set_toilet_paused(bool)`, board-owner gated) or the role lands on an
+  EOA — which is the owner this decision just deleted. Without one, drop pause from v1 and say so.
+  Rationale and the accepted cost are in [PR #15](https://github.com/satojandro/metapoo/pull/15).
 
 Evidence and the full contradiction list: [paid model v1 decisions](payments/2026-10-28-paid-model-decisions.md).
 
