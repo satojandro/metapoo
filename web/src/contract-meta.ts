@@ -8,27 +8,22 @@ import { FREE_BOARD_SCHEMA_VERSION } from "./paid-mode";
  * Compare on-chain `get_board` metadata to the page's shared constants.
  * Drawing stays blocked when the contract is incompatible.
  *
- * Accepts free schema 2 (shared/board.json) or paid schema 3 when size,
- * origin, overwrite rule, and palette still match. Schema 3 must report at
- * least one paid marker (pricing_version / pressure / ledger_unit). Schema 2
- * free boards are never rejected for missing those fields.
+ * Accepts free schema 2 (`shared/board.json`) and paid schema 4 (`contracts/paid-board`).
+ * Schema 3 was the pressure-pricing prototype and is retired: nothing deployed reports it,
+ * and accepting it kept a mock pricing path alive next to the real credit ledger. Schema 4
+ * needs no "paid marker" — the schema number plus `get_payment_config` is the marker, and
+ * `get_board` deliberately keeps the same shape as the free board.
  */
 
-/** Paid board contract schema (contracts/board SCHEMA_VERSION). */
-export const PAID_BOARD_SCHEMA_VERSION = 3;
+/** Paid board contract schema (`contracts/paid-board` SCHEMA_VERSION). */
+export const PAID_BOARD_SCHEMA_VERSION = 4;
+
+/** Retired pressure prototype. Named only so the rejection can say what it was. */
+export const RETIRED_PRESSURE_SCHEMA_VERSION = 3;
 
 export type ContractMetaStatus =
   | { ok: true; summary: string }
   | { ok: false; title: string; message: string };
-
-function hasPaidMarker(view: ChainBoardView): boolean {
-  const pricing =
-    typeof view.pricing_version === "string" && view.pricing_version.length > 0;
-  const pressure = view.pressure != null && typeof view.pressure === "object";
-  const ledger =
-    typeof view.ledger_unit === "string" && view.ledger_unit.length > 0;
-  return pricing || pressure || ledger;
-}
 
 export function validateContractMetadata(view: ChainBoardView): ContractMetaStatus {
   const schema = view.schema_version;
@@ -38,16 +33,10 @@ export function validateContractMetadata(view: ChainBoardView): ContractMetaStat
     return {
       ok: false,
       title: "Incompatible contract schema",
-      message: `This page accepts schema ${FREE_BOARD_SCHEMA_VERSION} (free) or ${PAID_BOARD_SCHEMA_VERSION} (paid), but the contract reported ${schema}. Drawing stays disabled until they match.`,
-    };
-  }
-
-  if (schema === PAID_BOARD_SCHEMA_VERSION && !hasPaidMarker(view)) {
-    return {
-      ok: false,
-      title: "Incomplete paid board metadata",
       message:
-        "Schema 3 requires at least one paid marker (pricing_version, pressure, or ledger_unit). Drawing stays disabled until get_board reports them.",
+        schema === RETIRED_PRESSURE_SCHEMA_VERSION
+          ? `Schema 3 was the retired pressure prototype. This page accepts schema ${FREE_BOARD_SCHEMA_VERSION} (free) or ${PAID_BOARD_SCHEMA_VERSION} (paid credits). Drawing stays disabled.`
+          : `This page accepts schema ${FREE_BOARD_SCHEMA_VERSION} (free) or ${PAID_BOARD_SCHEMA_VERSION} (paid), but the contract reported ${schema}. Drawing stays disabled until they match.`,
     };
   }
 

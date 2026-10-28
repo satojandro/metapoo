@@ -23,27 +23,32 @@ export interface PaidSchemaHints {
   pressure?: unknown;
 }
 
+/** Schema 3 was the pressure prototype. Nothing deployed reports it. */
+const PRESSURE_SCHEMA_VERSION = 3;
+
+/**
+ * Whether `get_board` reports the retired pressure schema.
+ *
+ * Schema 4 must return false. Treating *any* schema bump as "paid pressure mode"
+ * is what pointed the Journey C quote UI at a credit board — and the quotes it
+ * then rendered were fabricated prices in a money screen.
+ */
 export function boardReportsPaidSchema(board: PaidSchemaHints | null | undefined): boolean {
   if (!board) {
     return false;
   }
-  const pricing =
-    (typeof board.pricingVersion === "string" && board.pricingVersion.length > 0) ||
-    (typeof board.pricing_version === "string" && board.pricing_version.length > 0);
-  const hasPressure = board.pressure != null && typeof board.pressure === "object";
   const schema =
     typeof board.schemaVersion === "number"
       ? board.schemaVersion
       : typeof board.schema_version === "number"
         ? board.schema_version
         : null;
-  const schemaBump = schema !== null && schema > FREE_BOARD_SCHEMA_VERSION;
-  return pricing || hasPressure || schemaBump;
+  return schema === PRESSURE_SCHEMA_VERSION;
 }
 
 /**
- * Whether Journey C paid-paint UI (quotes, max-cost, pressure overlay) is active.
- * Free path remains when the flag is off and the board is unpaid schema.
+ * Legacy Journey C switch. Flag-only now (a schema-4 board never turns it on), and
+ * the whole path is slated for deletion — see the recency-UI task.
  */
 export function isPaidPaintModeEnabled(options?: {
   flagEnabled?: boolean;
@@ -57,18 +62,14 @@ export function isPaidPaintModeEnabled(options?: {
 }
 
 /**
- * True when the UI should use fixture/mock quotes instead of a live contract view.
+ * Journey C presentations are retired (D1). A fixture quote is a fabricated price,
+ * and a fabricated price in a money UI is worse than no UI, so this is false
+ * unconditionally until the pressure path is deleted outright.
  */
-export function shouldUseMockPressureQuotes(options: {
+export function shouldUseMockPressureQuotes(_options: {
   paidModeEnabled: boolean;
   boardReportsPaid: boolean;
   liveQuoteAvailable?: boolean;
 }): boolean {
-  if (!options.paidModeEnabled) {
-    return false;
-  }
-  if (options.liveQuoteAvailable === true && options.boardReportsPaid) {
-    return false;
-  }
-  return true;
+  return false;
 }

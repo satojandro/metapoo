@@ -131,38 +131,34 @@ describe("paid paint adapter argument mapping", () => {
 });
 
 describe("paid mode gate", () => {
-  it("stays off by default without flag or paid schema", () => {
+  it("stays off by default without flag or the retired pressure schema", () => {
     expect(isPaidPaintModeEnabled({ flagEnabled: false, board: null })).toBe(
       false,
     );
     expect(boardReportsPaidSchema({ schema_version: 2 })).toBe(false);
   });
 
-  it("enables from flag or paid schema hints", () => {
-    expect(isPaidPaintModeEnabled({ flagEnabled: true })).toBe(true);
-    expect(
-      boardReportsPaidSchema({
-        pricing_version: "pressure-v1-fixture",
-      }),
-    ).toBe(true);
+  it("recognises only the retired pressure schema, never the credit board", () => {
     expect(boardReportsPaidSchema({ schemaVersion: 3 })).toBe(true);
+    // The regression this pins: any schema bump used to switch Journey C on, so
+    // pointing the page at the schema-4 credit board turned on a quote UI - with
+    // fixture prices in it.
+    expect(boardReportsPaidSchema({ schemaVersion: 4 })).toBe(false);
+    expect(
+      boardReportsPaidSchema({ pricing_version: "pressure-v1-fixture" }),
+    ).toBe(false);
   });
 
-  it("uses mock quotes when paid UI is on but live quotes are unavailable", () => {
-    expect(
-      shouldUseMockPressureQuotes({
-        paidModeEnabled: true,
-        boardReportsPaid: false,
-        liveQuoteAvailable: false,
-      }),
-    ).toBe(true);
-    expect(
-      shouldUseMockPressureQuotes({
-        paidModeEnabled: true,
-        boardReportsPaid: true,
-        liveQuoteAvailable: true,
-      }),
-    ).toBe(false);
+  it("never renders fixture quotes, whatever the flags say", () => {
+    // A fabricated price in a money UI is worse than no UI (D1).
+    const cases = [
+      { paidModeEnabled: true, boardReportsPaid: false, liveQuoteAvailable: false },
+      { paidModeEnabled: true, boardReportsPaid: true, liveQuoteAvailable: true },
+      { paidModeEnabled: false, boardReportsPaid: false, liveQuoteAvailable: false },
+    ];
+    for (const args of cases) {
+      expect(shouldUseMockPressureQuotes(args)).toBe(false);
+    }
   });
 });
 
@@ -200,109 +196,11 @@ describe("pressure quote mock adapter", () => {
   });
 });
 
-/**
- * Critical F↔B shape test: schema-3 board view + quote fixture → FunctionCall
- * matching contracts/board `paint_with_wallet` / session `draw` signatures.
+/*
+ * Removed 2026-10-28 (D1). This block asserted that a schema-3 board plus a quote
+ * fixture produced a `paint_with_wallet` FunctionCall. Nothing implements
+ * `paint_with_wallet`: `contracts/paid-board` exposes `draw`/`draw_many` against
+ * prepaid credits, and schema 3 is retired. The shape it pinned was a speculative
+ * interface, not a deployed contract. The Journey C modules themselves go with the
+ * recency-UI task; this is the test half of that removal.
  */
-describe("paid FunctionCall F↔B integration", () => {
-  const schema3Board: ChainBoardView = {
-    schema_version: 3,
-    width: 128,
-    height: 128,
-    origin: "top-left",
-    overwrite_rule: "open_wall",
-    sponsorship_enabled: false,
-    pricing_version: "pressure-v1-fixture",
-    ledger_unit: "TOILET",
-    pressure: { version: "pressure-v1-fixture", max_cost: "50" },
-    palette: [
-      { index: 0, name: "Ink", hex: "#1c1917" },
-      { index: 1, name: "Paper", hex: "#f4efe4" },
-      { index: 2, name: "Brick", hex: "#b23a2f" },
-      { index: 3, name: "Marigold", hex: "#e0a100" },
-      { index: 4, name: "Moss", hex: "#3d7a4a" },
-      { index: 5, name: "River", hex: "#2f6f8f" },
-      { index: 6, name: "Grape", hex: "#6b4c7a" },
-      { index: 7, name: "Clay", hex: "#c47b5a" },
-    ],
-  };
-
-  const fixtureQuote = (quoteSuccessFixture as { quote: QuoteView }).quote;
-
-  it("connects schema-3 board + quote fixture to paint_with_wallet FunctionCall args", () => {
-    const meta = validateContractMetadata(schema3Board);
-    expect(meta.ok).toBe(true);
-
-    const request = (quoteSuccessFixture as { request: { x: number; y: number; color: number } })
-      .request;
-    const call = buildPaidFunctionCall({
-      x: request.x,
-      y: request.y,
-      colorIndex: request.color,
-      maxCost: maxCostFromQuote(fixtureQuote),
-      pricingVersion: fixtureQuote.pricingVersion,
-      expiresAtNs: fixtureQuote.expiresAtNs,
-      actionNonce: "1",
-    });
-
-    // Matches contracts/board/src/lib.rs paint_with_wallet(...)
-    expect(call.methodName).toBe("paint_with_wallet");
-    expect(call.deposit).toBe(PAINT_WITH_WALLET_DEPOSIT);
-    expect(call.args).toEqual({
-      x: 0,
-      y: 0,
-      color: 2,
-      max_cost: "10",
-      pricing_version: "pressure-v1-fixture",
-      expires_at_ns: "130000000000",
-      action_nonce: "1",
-    });
-    expect(call.args).not.toHaveProperty("session_id");
-    expect(Object.keys(call.args).sort()).toEqual(
-      [
-        "action_nonce",
-        "color",
-        "expires_at_ns",
-        "max_cost",
-        "pricing_version",
-        "x",
-        "y",
-      ].sort(),
-    );
-
-    const fromSubmit = resolvePaidSubmitCall({
-      x: request.x,
-      y: request.y,
-      colorIndex: request.color,
-      paid: {
-        maxCost: fixtureQuote.cost,
-        pricingVersion: fixtureQuote.pricingVersion,
-        expiresAtNs: fixtureQuote.expiresAtNs,
-        actionNonce: "1",
-      },
-    });
-    expect(fromSubmit).toEqual(call);
-  });
-
-  it("builds session draw FunctionCall with session_id and zero deposit", () => {
-    const call = buildPaidFunctionCall({
-      x: 0,
-      y: 0,
-      colorIndex: 2,
-      maxCost: fixtureQuote.cost,
-      pricingVersion: fixtureQuote.pricingVersion,
-      expiresAtNs: fixtureQuote.expiresAtNs,
-      actionNonce: "1",
-      sessionId: "alice:1",
-    });
-
-    // Matches contracts/board/src/lib.rs draw(..., session_id)
-    expect(call.methodName).toBe("draw");
-    expect(call.deposit).toBe("0");
-    expect(call.args.session_id).toBe("alice:1");
-    expect(call.args.max_cost).toBe("10");
-    expect(call.args.pricing_version).toBe("pressure-v1-fixture");
-    expect(call.args.expires_at_ns).toBe("130000000000");
-    expect(call.args.action_nonce).toBe("1");
-  });
-});
