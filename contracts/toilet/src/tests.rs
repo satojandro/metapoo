@@ -29,8 +29,11 @@ fn tax() -> Tax {
     }
 }
 fn setup() -> Toilet {
+    setup_with_tax(tax())
+}
+fn setup_with_tax(config: Tax) -> Toilet {
     context(0, 0);
-    let mut token = Toilet::new(accounts(1), tax());
+    let mut token = Toilet::new(accounts(1), config);
     let fee = token.storage_balance_bounds().min.as_yoctonear();
     for caller in 0..4 {
         context(caller, fee);
@@ -87,6 +90,95 @@ fn invariant(token: &Toilet) {
     );
 }
 
+fn assert_resolution_event(receiver: usize, delivered: u128, used: u128, fee: u128) {
+    let logs = get_logs();
+    let event: near_sdk::serde_json::Value = near_sdk::serde_json::from_str(
+        logs.last().unwrap().strip_prefix("EVENT_JSON:").unwrap(),
+    )
+    .unwrap();
+    assert_eq!(event["event"], "transfer_resolved");
+    assert_eq!(
+        event["data"][0],
+        near_sdk::serde_json::json!({
+            "receiver_id": accounts(receiver), "delivered": U128(delivered),
+            "used": U128(used), "tax": U128(fee)
+        })
+    );
+}
+
+#[test]
+fn resolver_full_rejection_returns_zero() {
+    let mut token = setup();
+    mint(&mut token, 2, 1000);
+    context(2, 1);
+    drop(token.ft_transfer_call(accounts(3), U128(1000), None, "".into()));
+    assert_eq!(resolve(&mut token, 2, 3, 970, 30, PromiseResult::Failed), 0);
+    assert_resolution_event(3, 970, 0, 30);
+}
+
+#[test]
+fn resolver_full_consumption_returns_net_delivered() {
+    let mut token = setup();
+    mint(&mut token, 2, 1000);
+    context(2, 1);
+    drop(token.ft_transfer_call(accounts(3), U128(1000), None, "".into()));
+    assert_eq!(
+        resolve(
+            &mut token,
+            2,
+            3,
+            970,
+            30,
+            PromiseResult::Successful(b"\"0\"".to_vec())
+        ),
+        970
+    );
+    assert_resolution_event(3, 970, 970, 30);
+}
+
+#[test]
+fn tax_config_stays_exact_through_emitter_controls_and_transfers() {
+    let mut config = tax();
+    config.exempt = vec![accounts(0), accounts(2), accounts(0)];
+    let mut token = setup_with_tax(config.clone());
+    assert_eq!(token.get_tax(), config);
+    mint(&mut token, 2, 1000);
+    context(2, 1);
+    token.ft_transfer(accounts(3), U128(1000), None);
+    context(1, 1);
+    token.set_paused(true);
+    token.set_paused(false);
+    token.set_emitter(accounts(0));
+    assert_eq!(token.get_tax(), config);
+}
+
+#[test]
+fn only_current_emitter_can_pause_or_handoff_with_exactly_one_yocto() {
+    let mut token = setup();
+    // Even the initializer has no authority over the configured emitter.
+    for caller in [0, 2] {
+        context(caller, 1);
+        rejected("EmitterOnly", || token.set_paused(true));
+        rejected("EmitterOnly", || token.set_emitter(accounts(caller)));
+    }
+    for deposit in [0, 2] {
+        context(1, deposit);
+        rejected("OneYoctoRequired", || token.set_paused(true));
+        rejected("OneYoctoRequired", || token.set_emitter(accounts(0)));
+    }
+    context(1, 1);
+    token.set_paused(true);
+    assert!(token.is_paused());
+    token.set_emitter(accounts(0));
+    assert_eq!(token.get_emitter(), accounts(0));
+    context(1, 1);
+    rejected("EmitterOnly", || token.set_paused(false));
+    rejected("EmitterOnly", || token.set_emitter(accounts(1)));
+    context(0, 1);
+    token.set_paused(false);
+    assert!(!token.is_paused());
+}
+
 #[test]
 fn only_emitter_can_mint_and_burning_never_reopens_lifetime_cap() {
     let mut token = setup();
@@ -136,12 +228,9 @@ fn tax_rounding_conserves_every_atomic_unit_including_tiny_transfers() {
 
 #[test]
 fn exempt_sender_or_receiver_skips_venue_tax() {
-    let mut token = setup();
     let mut config = tax();
     config.exempt = vec![accounts(2)];
-    context(0, 1);
-    token.set_tax(config);
-    assert!(get_logs()[0].contains("tax_changed"));
+    let mut token = setup_with_tax(config);
     mint(&mut token, 2, 1000);
     context(2, 1);
     token.ft_transfer(accounts(3), U128(1000), None);
@@ -170,18 +259,22 @@ fn transfer_call_sends_net_and_resolves_failed_receiver_without_taxing_refund() 
                 let payload: near_sdk::serde_json::Value =
                     near_sdk::serde_json::from_slice(&args).unwrap();
                 assert_eq!(payload["amount"], "970");
-                calls.push(String::from_utf8(method_name).unwrap());
+                let name = String::from_utf8(method_name).unwrap();
+                if name == "ft_resolve_transfer" {
+                    assert_eq!(payload["tax"], "30");
+                }
+                calls.push(name);
             }
         }
     }
     assert!(calls.contains(&"ft_on_transfer".to_string()));
     assert!(calls.contains(&"ft_resolve_transfer".to_string()));
     assert_eq!(balance(&token, 3), 970);
-    context(0, 1);
+    context(1, 1);
     token.set_paused(true);
     assert_eq!(
         resolve(&mut token, 2, 3, 970, 30, PromiseResult::Failed),
-        30
+        0
     );
     assert_eq!(balance(&token, 2), 970);
     assert_eq!(balance(&token, 3), 0);
@@ -204,7 +297,7 @@ fn partial_refund_is_clamped_to_net_and_available_balance() {
             30,
             PromiseResult::Successful(b"\"100\"".to_vec())
         ),
-        900
+        870
     );
     assert_eq!(balance(&token, 2), 100);
     invariant(&token);
@@ -230,7 +323,7 @@ fn malformed_or_oversized_refund_requests_cannot_take_more_than_net() {
                 30,
                 PromiseResult::Successful(payload)
             ),
-            30
+            0
         );
         invariant(&token);
         // The next loop uses the same mocked storage; clear it before constructing anew.
@@ -285,7 +378,7 @@ fn registered_storage_cannot_be_withdrawn_while_account_exists() {
 #[test]
 fn pause_stops_both_transfer_paths_but_not_mint_or_burn() {
     let mut token = setup();
-    context(0, 1);
+    context(1, 1);
     token.set_paused(true);
     mint(&mut token, 2, 1000);
     context(2, 1);
@@ -299,12 +392,11 @@ fn pause_stops_both_transfer_paths_but_not_mint_or_burn() {
 }
 
 #[test]
-fn owner_controls_deposits_registration_and_callback_are_enforced() {
+fn emitter_controls_deposits_registration_and_callback_are_enforced() {
     let mut token = setup();
     context(2, 1);
-    rejected("OwnerOnly", || token.set_emitter(accounts(2)));
-    rejected("OwnerOnly", || token.set_tax(tax()));
-    rejected("OwnerOnly", || token.set_paused(true));
+    rejected("EmitterOnly", || token.set_emitter(accounts(2)));
+    rejected("EmitterOnly", || token.set_paused(true));
     rejected("PrivateOnly", || {
         token.ft_resolve_transfer(accounts(2), accounts(3), U128(1), U128(0));
     });
@@ -312,7 +404,7 @@ fn owner_controls_deposits_registration_and_callback_are_enforced() {
     rejected("OneYoctoRequired", || {
         token.ft_transfer(accounts(0), U128(1), None)
     });
-    context(0, 1);
+    context(1, 1);
     token.set_emitter(accounts(0));
     context(1, 0);
     rejected("EmitterOnly", || token.mint(accounts(2), U128(1)));
@@ -323,16 +415,18 @@ fn owner_controls_deposits_registration_and_callback_are_enforced() {
 }
 
 #[test]
-fn invalid_tax_splits_and_rates_rejected_without_changing_config() {
-    let mut token = setup();
-    context(0, 1);
+fn invalid_tax_splits_and_rates_rejected_at_initialization() {
+    context(0, 0);
     let mut invalid = tax();
     invalid.sell_bps = 10_001;
-    rejected("InvalidTaxRate", || token.set_tax(invalid));
+    rejected("InvalidTaxRate", || {
+        Toilet::new(accounts(1), invalid);
+    });
     let mut invalid = tax();
     invalid.burn_bps = 100;
-    rejected("InvalidTaxSplit", || token.set_tax(invalid));
-    assert_eq!(token.get_tax(), tax());
+    rejected("InvalidTaxSplit", || {
+        Toilet::new(accounts(1), invalid);
+    });
 }
 
 #[test]
@@ -362,7 +456,7 @@ fn accepted_transfer_and_spent_receiver_balance_resolve_correctly() {
             30,
             PromiseResult::Successful(b"\"0\"".to_vec())
         ),
-        1000
+        970
     );
     context(2, 1);
     drop(token.ft_transfer_call(accounts(0), U128(1000), None, "".into()));
@@ -378,11 +472,9 @@ fn accepted_transfer_and_spent_receiver_balance_resolve_correctly() {
 
 #[test]
 fn full_tax_and_treasury_as_sender_preserve_supply() {
-    let mut token = setup();
     let mut config = tax();
     config.sell_bps = 10_000;
-    context(0, 1);
-    token.set_tax(config);
+    let mut token = setup_with_tax(config);
     mint(&mut token, 2, 1000);
     context(2, 1);
     drop(token.ft_transfer_call(accounts(3), U128(1000), None, "".into()));
@@ -390,7 +482,7 @@ fn full_tax_and_treasury_as_sender_preserve_supply() {
     assert_eq!(balance(&token, 4), 670);
     assert_eq!(
         resolve(&mut token, 2, 3, 0, 1000, PromiseResult::Failed),
-        1000
+        0
     );
     context(4, 1);
     token.ft_transfer(accounts(3), U128(100), None);

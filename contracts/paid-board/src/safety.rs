@@ -2,7 +2,7 @@
 //! changes Borsh state: an older deployed board needs an explicit migration.
 use crate::{Board, BoardExt};
 use near_sdk::json_types::U128;
-use near_sdk::{env, near, AccountId, NearToken, Promise};
+use near_sdk::{env, near, AccountId, Gas, NearToken, Promise};
 
 pub(crate) const MIN_RESERVE: u128 = 5_000_000_000_000_000_000_000_000;
 pub(crate) const MIN_COOLDOWN_NS: u64 = 86_400_000_000_000;
@@ -13,6 +13,19 @@ pub(crate) const STORAGE_PER_PIXEL: u128 = 664_000_000_000_000_000_000;
 
 #[near]
 impl Board {
+    /// Reach the token's emitter-only circuit breaker from this board account.
+    #[payable]
+    pub fn set_toilet_paused(&mut self, toilet: AccountId, paused: bool) -> Promise {
+        self.assert_safety_owner();
+        Promise::new(toilet).function_call(
+            "set_paused",
+            near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({"paused": paused}))
+                .expect("SerializationFailed"),
+            NearToken::from_yoctonear(1),
+            Gas::from_tgas(10),
+        )
+    }
+
     #[payable]
     pub fn set_paused(&mut self, paused: bool) {
         self.assert_safety_owner();
@@ -227,6 +240,56 @@ mod tests {
         let mut config = board.get_tunables();
         config.reserve_floor = U128(0);
         rejected("ReserveFloorTooLow", || board.set_tunables(config));
+    }
+
+    #[test]
+    fn toilet_pause_requires_owner_and_exactly_one_yocto() {
+        let mut board = setup();
+        context(1, 0);
+        rejected("OwnerOnly", || {
+            drop(board.set_toilet_paused(accounts(5), true));
+        });
+        for deposit in [0, 2] {
+            testing_env!(VMContextBuilder::new()
+                .predecessor_account_id(accounts(0))
+                .attached_deposit(NearToken::from_yoctonear(deposit))
+                .build());
+            rejected("OneYoctoRequired", || {
+                drop(board.set_toilet_paused(accounts(5), true));
+            });
+            assert!(get_created_receipts().is_empty());
+        }
+    }
+
+    #[test]
+    fn toilet_pause_forwards_target_payload_deposit_and_gas_even_when_board_paused() {
+        let mut board = setup();
+        board.set_paused(true);
+        for paused in [true, false] {
+            context(0, 0);
+            drop(board.set_toilet_paused(accounts(5), paused));
+            let receipts = get_created_receipts();
+            assert_eq!(receipts.len(), 1);
+            assert_eq!(receipts[0].receiver_id, accounts(5));
+            assert_eq!(receipts[0].actions.len(), 1);
+            match &receipts[0].actions[0] {
+                near_sdk::mock::MockAction::FunctionCallWeight {
+                    method_name,
+                    args,
+                    attached_deposit,
+                    prepaid_gas,
+                    ..
+                } => {
+                    assert_eq!(method_name, b"set_paused");
+                    let payload: near_sdk::serde_json::Value =
+                        near_sdk::serde_json::from_slice(args).unwrap();
+                    assert_eq!(payload, near_sdk::serde_json::json!({"paused": paused}));
+                    assert_eq!(*attached_deposit, NearToken::from_yoctonear(1));
+                    assert_eq!(*prepaid_gas, Gas::from_tgas(10));
+                }
+                action => panic!("unexpected action: {action:?}"),
+            }
+        }
     }
 
     #[test]

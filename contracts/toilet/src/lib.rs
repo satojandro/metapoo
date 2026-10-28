@@ -73,7 +73,6 @@ pub struct SupplyInfo {
 #[derive(PanicOnDefault)]
 pub struct Toilet {
     token: FungibleToken,
-    owner: AccountId,
     emitter: AccountId,
     tax: Tax,
     transfers_paused: bool,
@@ -94,7 +93,6 @@ impl Toilet {
         token.internal_register_account(&tax.treasury);
         Self {
             token,
-            owner: env::predecessor_account_id(),
             emitter,
             tax,
             transfers_paused: false,
@@ -147,7 +145,8 @@ impl Toilet {
 
     #[payable]
     pub fn set_emitter(&mut self, emitter: AccountId) {
-        self.assert_owner();
+        one_yocto();
+        assert_eq!(env::predecessor_account_id(), self.emitter, "EmitterOnly");
         event(
             "emitter_changed",
             near_sdk::serde_json::json!({"old": self.emitter, "new": emitter}),
@@ -156,20 +155,9 @@ impl Toilet {
     }
 
     #[payable]
-    pub fn set_tax(&mut self, tax: Tax) {
-        self.assert_owner();
-        tax.validate();
-        self.registered_balance(&tax.treasury);
-        event(
-            "tax_changed",
-            near_sdk::serde_json::json!({"old": self.tax, "new": tax}),
-        );
-        self.tax = tax;
-    }
-
-    #[payable]
     pub fn set_paused(&mut self, paused: bool) {
-        self.assert_owner();
+        one_yocto();
+        assert_eq!(env::predecessor_account_id(), self.emitter, "EmitterOnly");
         self.transfers_paused = paused;
         event(
             "pause_changed",
@@ -273,9 +261,15 @@ impl Toilet {
         );
         let (used, burned) =
             self.token
-                .internal_ft_resolve_transfer(&sender_id, receiver_id, amount);
+                .internal_ft_resolve_transfer(&sender_id, receiver_id.clone(), amount);
         self.record_burn(burned);
-        U128(used.checked_add(tax.0).expect("AmountOverflow"))
+        event(
+            "transfer_resolved",
+            near_sdk::serde_json::json!({
+                "receiver_id": receiver_id, "delivered": amount, "used": U128(used), "tax": tax
+            }),
+        );
+        U128(used)
     }
 
     #[payable]
@@ -316,10 +310,6 @@ impl Toilet {
 }
 
 impl Toilet {
-    fn assert_owner(&self) {
-        one_yocto();
-        assert_eq!(env::predecessor_account_id(), self.owner, "OwnerOnly");
-    }
     fn registered_balance(&self, account: &AccountId) -> u128 {
         self.token
             .accounts
