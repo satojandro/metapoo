@@ -89,10 +89,12 @@ Baseline for this revision: `origin/main = 5b40b63`, 263 tests / 39 files, build
 
 Evidence: branch source `contracts/paid-board/src/lib.rs` and `payments.rs` on
 `codex/paint-credit-payments`; `new`, `buy_credits_near`, `ft_on_transfer`,
-`get_credits`, `get_payment_config` and `set_credit_prices` exist. Locate its implementation commit with `git log -- contracts/paid-board web/src/paint-wallet.ts`. Verification: 36 local tests and release WASM build passed;
+`get_credits`, `get_payment_config` and `set_credit_prices` exist. Baseline contract commits:
+`0e4eae5` and `34b1a84`. The `codex/paid-board-safety-toilet-token` safety implementation has 63 local
+tests and a passing release WASM build; see [contract verification](learning/2026-10-28-contract-safety-and-token.md).
 not a live settlement or cost result. `contracts/board` (schema 2) is **retired as a product**
-and kept only as the testnet fixture; `web/src/payment-provider.ts` is deleted together with the
-schema-3 mock path ([decision record](payments/2026-10-28-paid-model-decisions.md)). Existing
+and kept only as the testnet fixture; deletion of `web/src/payment-provider.ts` and the
+schema-3 mock path is assigned in [the work queue](implementation/2026-10-28-work-queue.md). Existing
 pressure quotes do not implement this new payment UI. Mainnet deployment: none,
 confirmed by owner. A testnet token is needed for the first paid rehearsal.
 
@@ -102,8 +104,10 @@ confirmed by owner. A testnet token is needed for the first paid rehearsal.
 | PAY-INTEGRATION | Paid schema-4 frontend and real testnet purchase → paint → refreshed balances | Local methods exist; no full-loop receipt evidence |
 | **PAY-RECENCY-UI** | Show the repaint price before the user commits: per-cell cost, stroke total, one-line legend | **Contract shipped 2026-10-28** (`get_cell_cost`, `get_tunables`); the page still shows a flat price |
 | **PAY-COST** | **Reopen immediately after first mainnet paid-board deployment** | [Required cost matrix](payments/mainnet-cost-validation.md); all mainnet cases pending, keep open through owner acceptance |
-| PAY-UPGRADE | Select deployment authority and rehearse state-preserving upgrades before public paid launch | **Owner-only `upgrade()` shipped 2026-10-28**; still missing: pause, migration path, rehearsed testnet upgrade |
-| ECONOMY-LATER | TOILET, staking, longevity rewards, swaps, inventory shop | Deferred; older economy briefs require reconciliation before implementation |
+| PAY-SAFETY | Local implementation ready for review; chain rehearsal pending | Branch implementation in `contracts/paid-board/src/safety.rs`, price bounds and checked credit counters; 63 contract tests and release build pass. Pause, native withdrawals and price events implemented. Storage estimate still needs paid-board measurement. |
+| PAY-UPGRADE | Select deployment authority and rehearse state-preserving upgrades before public paid launch | Owner-only `upgrade()` in `34b1a84`; pause now local. New safety fields change the stored layout: migration and testnet rehearsal remain open. |
+| TOILET-TOKEN | Local implementation ready for review; deployment and venue compatibility unverified | Branch implementation in `contracts/toilet`: 18 tests and release build pass. Capped issuer, token/storage APIs, venue tax and supply views; no live cross-contract receipts. |
+| ECONOMY-LATER | Staking, longevity rewards, board-to-token issuance, swaps, inventory shop | Still deferred. Standalone TOILET token code does not implement an emission schedule, vault or revenue distribution. |
 
 ## Open gates and scoped work
 

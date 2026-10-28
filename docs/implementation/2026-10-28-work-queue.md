@@ -78,3 +78,20 @@ token (0.00125 NEAR), seed a small mural, and record account ids + receipts in
 - **Staking asset**: TOILET holds the revenue claim (recommended) or a split with mPOO.
 - **Emission model**: revenue-keyed with the 1B cap (recommended) or a calendar schedule.
 - **TOILET tradeability**: internal ledger or NEP-141. Task 5 assumes NEP-141.
+
+## Local implementation handoff — 2026-10-28
+
+Tasks 4 and 5 are implemented on `codex/paid-board-safety-toilet-token`, based on
+`e745942`, pending independent review. Paid board: 63 tests; TOILET: 18 tests; both release
+WASM builds pass. Frontend baseline: 284 tests and build pass, with existing `util`
+externalization and mixed-import warnings. No deployment, signing or live token
+transfer was performed. [Evidence and lessons](../learning/2026-10-28-contract-safety-and-token.md).
+
+Correction to task 4's premise: its four safety fields were absent from `Tunables`
+at the baseline. They have been added only there, but that **still changes persisted
+Borsh state**. This is fresh-initialization code, not a migration-free upgrade.
+An existing initialized board needs an explicit migration and rehearsal.
+
+Task 5's tax is settled at transfer time; a receiver failure refunds only the net
+delivery, without a second tax. This policy and fee-on-transfer venue risks are
+documented in [the TOILET README](../../contracts/toilet/README.md).

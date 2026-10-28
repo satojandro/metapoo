@@ -24,12 +24,14 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | mainnet cost measurement | [`payments/mainnet-cost-validation.md`](payments/mainnet-cost-validation.md) | **all pending** — reopens on first deploy |
 | upgrade authority and migration | [`payments/upgrade-policy.md`](payments/upgrade-policy.md) | `upgrade()` exists; migration + pause missing |
 | the contract itself | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | schema 4, not deployed |
+| pause, treasury withdrawal, bounded price change | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) + [`implementation/paid-board-safety.task.json`](implementation/paid-board-safety.task.json) | **on the review branch**, not on main yet |
 
 ## Economy
 
 | topic | document | status |
 |---|---|---|
 | TOILET: issuance, staking, burns, burn page | [`economy/2026-10-28-toilet-economy-v1.md`](economy/2026-10-28-toilet-economy-v1.md) | **proposed** — four decisions open |
+| TOILET token: supply, tax, refund semantics | [`../contracts/toilet/README.md`](../contracts/toilet/README.md) + [`implementation/toilet-token.task.json`](implementation/toilet-token.task.json) | **on the review branch**, not deployed |
 
 ## Work in flight
 
