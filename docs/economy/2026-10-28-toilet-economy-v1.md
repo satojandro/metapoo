@@ -42,6 +42,10 @@ It means emitting 100 % of supply per year.
 Cell-day yield depends on how many cells share the emission, so early adoption pays enormously and a
 full board pays little. At 10 % target yield, TOILET price = `R/10` per 1B supply:
 
+> **These figures assume a static holder who keeps the cell all day.** They are the upper bound only.
+> Once a cell is repainted several times a day the emission splits between the successive owners and
+> the per-paint return collapses — see §10, which supersedes the payback column below.
+
 | paint revenue/yr | TOILET price | market cap | cell-day @2,301 painted | payback on a $0.0116 pixel | cell-day @full board | payback |
 |---|---|---|---|---|---|---|
 | $5,000 | $0.00005 | $50k | $0.0298 | **0.4 days** | $0.0042 | 2.8 days |
@@ -190,3 +194,111 @@ This pulls TOILET from "deferred, unspecified" to "specified, blocked on three p
 sandbagged — but there is no on-chain record that the price moved, and no limit on the move. Before a
 mainnet paid board: emit a `price_changed` event and bound the change (e.g. ≤ 2× per call, or a 24 h
 cooldown), so a compromised owner key cannot reprice to 1 NEAR mid-session.
+
+---
+
+## 10. Correction: repaints dominate the model (owner's objection, accepted)
+
+The §2 payback column assumed one owner keeps a cell for a full day. In the actual game a cell changes
+hands many times a day, so the emission for that cell-day is split between every successive owner.
+
+With `n` = repaints of a cell per day, `N` = painted cells, `PX` = pixel price, `p` = TOILET price,
+`E_day` = daily emission:
+
+```
+per-paint emission value = (E_day / (N × n)) × p
+per-paint cost           = PX
+ratio                    = (E_day × p) / (N × n × PX)      ← n cancels
+```
+
+**Repaint frequency cancels out.** The per-paint return equals *annual emission value ÷ annual
+revenue*, whatever `n` is. Measured at 0.0025 NEAR/pixel, full board, 1B over two years, $0.00025 TOILET:
+
+| repaints/cell/day | paint revenue/day | emission value/day | return per paint |
+|---|---|---|---|
+| 1 | $190 | $342 | **1.81×** |
+| 3 | $569 | $342 | 0.60× |
+| 10 | $1,896 | $342 | 0.18× |
+| 50 | $9,482 | $342 | 0.04× |
+
+What this actually means — and it is better news than a rebate, once stated properly:
+
+- **High activity raises revenue without raising emission.** The token's implied yield falls, which
+  means at a fixed price it becomes cheap; the market repriced against a real cash flow is where the
+  value comes from. The owner's thesis is correct, but the mechanism is *revenue growth*, not a
+  per-paint subsidy.
+- **`e` chooses the whole character of the token.** Fast emission ⇒ high yield ⇒ cheap token ⇒ generous
+  per-paint rebate. Slow emission ⇒ low yield ⇒ expensive token ⇒ small rebate. Total paint economics
+  are unchanged; only the split between "cheap token now" and "valuable token later" moves.
+- **Equilibrium is `y = e`.** Emission rate is effectively the yield promise. Pick it as a promise, not
+  as a calendar convenience.
+
+Implementation consequence (proven pattern, not cleverness): a **MasterChef-style accumulator** —
+global `reward_per_cell_accumulator`, per-account `reward_debt` and `cells_owned` — settles emission
+on every `draw`/`draw_many` without iterating over cells. Per-cell checkpointing would be both more
+expensive and more bug-prone at 16,384 cells with dozens of daily ownership changes each.
+
+## 11. Anti-capture measures: two different caps for two different problems
+
+The owner asked for a daily cell limit, optionally proportional to holdings. There are two distinct
+threats and they need different limits:
+
+| threat | limit | why |
+|---|---|---|
+| **Emission capture** — one wallet buys the board for $190 and farms 100 % of TOILET | **cap earning cells per account** (recommend 128) | a painting cap does not stop a holder; a holding cap does |
+| **Capital dominance** — one funded bot repaints everything every minute, so the wall stops being communal | **daily paint quota** | converts money into time-gated influence; also the revenue dial |
+
+### Which holding should the quota scale with?
+
+| basis | verdict |
+|---|---|
+| **cells currently owned** | ✅ **recommended.** No bootstrap problem, no external token, and it makes defence matter: losing cells loses capacity. Also needs state you already need (below). |
+| TOILET held | ❌ chicken-and-egg — TOILET is the reward, so a new player could not paint until they earned. Also conflicts with staking the same tokens. |
+| mPOO held | ⚠️ workable, gives mPOO an access utility, but double-charges the player (mPOO for access *and* mPOO for credits) and ties access to an external price. |
+
+Recommended shape: `quota = min(512, 32 + 4 × cells_owned)` per day.
+
+| cells owned | paints/day | max spend/day |
+|---|---|---|
+| 0 | 32 | $0.37 |
+| 10 | 72 | $0.83 |
+| 64 | 288 | $3.33 |
+| 256+ | 512 | $5.93 |
+
+One map, `cells_owned[account]`, serves **both** the earning cap (§2) and the quota — increment the new
+artist, decrement the displaced one, on every draw. No separate index is needed.
+
+### The quota is also the revenue dial
+
+| cap/day | 25 users | 100 users |
+|---|---|---|
+| 32 | $3.4 k/yr | $13.5 k/yr |
+| 64 | $6.8 k/yr | $27 k/yr |
+| 128 | $13.5 k/yr | $54 k/yr |
+| 256 | $27 k/yr | **$108 k/yr** |
+
+So choose the cap from the revenue target, then size the emission schedule against it — not from
+anti-bot anxiety alone.
+
+## 12. Which asset stakes for revenue: recommendation
+
+**TOILET holds the revenue claim. mPOO is the money.** One cash flow, one claim stack.
+
+Reasons:
+
+1. **TOILET has no other source of value.** Without the claim it is a fixed-supply points token with a
+   burn page — decoration. With it, earning TOILET is a claim on the game's future, which is exactly the
+   "opportunity cost of not earning" the owner described.
+2. **mPOO keeps a stronger, simpler job**: pay for credits, and burn. Burning a share of mPOO credit
+   receipts is a direct, enforceable sink (the token exposes `burn`, and the board owns the mPOO it
+   receives), and it serves the recorded primary objective — genuine mPOO acquisition and supply burn.
+3. **It avoids mPOO becoming a revenue-share staking asset** with its own vault, accounting and
+   regulatory shape, on top of everything else.
+
+Honest counter-argument, which the owner should weigh: mPOO staking would support mPOO's price more
+directly (stakers buy and hold), whereas paying TOILET stakers *in mPOO* is buy-and-distribute, so the
+stakers may immediately sell — volume without durable price support. If mPOO price is the primary
+objective, that point deserves a deliberate answer, not a hand-wave.
+
+**Still blocking either choice:** revenue cannot leave the contract. No withdraw/treasury method exists,
+so there is nothing to distribute until M2 adds one with an outstanding-credit liability rule.
