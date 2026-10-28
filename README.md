@@ -10,14 +10,15 @@ Start with the [core pixel-board handoff](docs/implementation/core-board.md): es
 
 1. [Shared decisions](docs/00-shared-decisions.md) — implemented Open wall rules and confirmed next-phase economy decisions.
 2. [Frontend guide](web/README.md) and [board contract guide](contracts/board/README.md) — running code, interfaces and verification limits.
-3. [Economy plan](docs/2026-10-12-paint-economy-and-swap-plan.md) — the single current plan for MPOO-only paint purchases, TOILET longevity/burn, MPOO staking/payouts and the optional inventory shop.
-4. [MPOO mainnet evidence](docs/research/2026-10-12-mpoo-live-contract-readout.json) — exact observed settings and block references; no transfer trial.
+3. [Paid payment stage](contracts/paid-board/README.md) — local schema-4 contract; NEAR/mPOO credits at an initial 0.0069 NEAR per pixel. [Frontend requirements](docs/payments/frontend-handoff.md), [pending mainnet cost tests](docs/payments/mainnet-cost-validation.md), and [upgrade policy proposal](docs/payments/upgrade-policy.md).
+4. [Economy plan](docs/2026-10-12-paint-economy-and-swap-plan.md) — later token-economy planning for TOILET, staking/payouts and the optional inventory shop; its older purchase rules are superseded for the current payment stage.
+5. [MPOO mainnet evidence](docs/research/2026-10-12-mpoo-live-contract-readout.json) — exact observed settings and block references; no transfer trial.
 
-The implemented board is free. The economy above is planned, not enabled. Its latest decisions replace the original pack's optional NEAR payment and earlier NEAR payout proposals. Update the economy plan in place rather than creating another overlapping proposal.
+The existing board/frontend remain free. A separate paid contract is locally implemented on `codex/paint-credit-payments`; it is not deployed. The frontend has a read-only price/balance panel and NEARLY link; paid checkout and painting integration remain pending. The owner confirmed no Meta Poo mainnet deployment on 2026-10-28. Reopen **PAY-COST** immediately after the first paid mainnet deployment; do not treat local tests as cost or settlement evidence. Later token-economy work remains deferred.
 
 October 2026 board work (viewport, shared updates, drawing session, 3D stall):
 
-- Assessment / plan: `docs/2026-10-12-board-review-and-next-steps.md`
+- Assessment / plan: `docs/2026-10-12-board-review-and-next-steps.md` (archived — see `docs/archive/`)
 - Interaction brief: `docs/2026-10-12-viewport-and-interaction-brief.md`
 - Stall visual references: `docs/2026-10-12-stall-visual-references.md`
 - Saturated palette proposal (not shipped): `docs/2026-10-12-palette-proposal.md`
@@ -36,6 +37,9 @@ These files preserve the original free-MVP scope, assignments and longer-term id
 7. [Chain abstraction research brief](07-agent-brief-chain-abstraction-research.md)
 8. [Acceptance security and QA](08-acceptance-security-and-qa.md)
 9. [Learning journal](09-learning-journal.md)
+10. [Documentation map — which doc is authoritative](docs/README.md)
+11. [Roadmap — open product decisions](docs/roadmap.md)
+12. [Learning records](docs/learning/README.md) · [traps](docs/learning/traps.md)
 
 ## Evidence labels
 

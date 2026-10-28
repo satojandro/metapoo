@@ -21,6 +21,7 @@ export interface PlacementOutcome {
 
 export interface PlacementOutcomeController {
   submit: (placement: Pick<PlacementOutcome, "x" | "y" | "colorIndex">) => string;
+  discard: (id: string) => void;
   settle: (id: string, result: SubmitDrawResult) => void;
   list: () => readonly PlacementOutcome[];
   subscribe: (listener: () => void) => () => void;
@@ -39,6 +40,9 @@ export function createPlacementOutcomeController(options: { now?: () => number }
       outcomes.set(id, { ...placement, id, state: "submitted", submittedAtMs: now(), settledAtMs: null, detail: null });
       notify();
       return id;
+    },
+    discard(id) {
+      if (outcomes.delete(id)) notify();
     },
     settle(id, result) {
       const outcome = outcomes.get(id);
@@ -65,7 +69,7 @@ const labels: Record<PlacementOutcomeState, string> = {
   submitted: "Submitted — awaiting wallet/chain confirmation",
   confirmed: "Confirmed on current cell",
   failed: "Failed — no confirmed placement",
-  overwritten: "Overwritten/uncertain — transaction succeeded, current cell differs",
+  overwritten: "Overwritten — transaction executed; current cell owner differs",
   "confirmation-delayed": "Confirmation delayed — pending/uncertain; not retried",
 };
 

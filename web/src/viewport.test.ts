@@ -12,6 +12,8 @@ import {
   PAINT_MIN_CELL_PX,
   isPaintZoom,
   zoomAt,
+  fitCellSize,
+  wheelZoomFactor,
 } from "./viewport";
 
 const BOARD_LANDMARKS = [
@@ -257,5 +259,50 @@ describe("viewport camera", () => {
       height: 20,
     });
     expect(transform.cellAt(10, 10)).toEqual({ x: 5, y: 10 });
+  });
+});
+
+
+describe("zoom limits and wheel sensitivity", () => {
+  const viewport = { width: 900, height: 600 };
+
+  it("never lets the board shrink below the size that fills the viewport", () => {
+    // A board smaller than the viewport is empty space with a picture in it.
+    const floor = fitCellSize(viewport);
+    const fitted = fitCamera(viewport);
+    expect(fitted.cellSize).toBeCloseTo(floor, 6);
+
+    const zoomedOut = zoomAt({ ...fitted, cellSize: floor }, viewport, 1 / 4, 450, 300);
+    expect(zoomedOut.cellSize).toBeCloseTo(floor, 6);
+
+    const clamped = clampPan({ cellSize: 0.25, panX: 0, panY: 0 }, viewport);
+    expect(clamped.cellSize).toBeCloseTo(floor, 6);
+  });
+
+  it("scales wheel zoom by the actual delta instead of a fixed step per event", () => {
+    // One mouse notch and one trackpad tick must not move the camera the same.
+    const mouseNotch = wheelZoomFactor(-100);
+    const trackpadTick = wheelZoomFactor(-4);
+    expect(mouseNotch).toBeGreaterThan(1);
+    expect(trackpadTick).toBeGreaterThan(1);
+    expect(trackpadTick - 1).toBeLessThan((mouseNotch - 1) / 10);
+
+    // A trackpad gesture is many small ticks; they must compose smoothly rather
+    // than multiplying into a jump that crosses the whole range.
+    let accumulated = 1;
+    for (let i = 0; i < 25; i += 1) accumulated *= wheelZoomFactor(-4);
+    expect(accumulated).toBeGreaterThan(1.1);
+    expect(accumulated).toBeLessThan(1.6);
+  });
+
+  it("clamps one wheel event so a huge delta cannot teleport the camera", () => {
+    expect(wheelZoomFactor(-100000)).toBeCloseTo(1.2, 6);
+    expect(wheelZoomFactor(100000)).toBeCloseTo(1 / 1.2, 6);
+    expect(wheelZoomFactor(0)).toBe(1);
+  });
+
+  it("normalises line and page delta modes", () => {
+    expect(wheelZoomFactor(-3, 1)).toBeCloseTo(wheelZoomFactor(-48, 0), 6);
+    expect(wheelZoomFactor(-1, 2)).toBeCloseTo(wheelZoomFactor(-100, 0), 6);
   });
 });

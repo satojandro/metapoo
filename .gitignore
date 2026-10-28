@@ -19,3 +19,4 @@
 # Orchestrator runtime files (local only)
 .orchestrator-worktree.json
 orchestrator-init.log
+/contracts/paid-board/target

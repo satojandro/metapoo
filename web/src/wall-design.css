@@ -58,7 +58,7 @@ summary { cursor:pointer; }
 .is-focused .board-bezel { box-shadow:0 15px 65px #000a; border-color:#818086; }
 .board-toolbar { margin:12px 0; gap:6px; }
 .board-toolbar .action { min-height:38px; padding:8px 12px; font-size:11px; }
-.wall-zoom-controls { display:flex; flex:0 0 auto; gap:6px; }
+.wall-zoom-controls { display:flex; flex:0 0 auto; gap:6px; align-items:center; }
 .wall-layout .board-toolbar .wall-zoom-control { min-width:44px; min-height:44px; touch-action:manipulation; user-select:none; }
 #zoom-in,#zoom-out { font-size:20px; line-height:1; }
 .board-load-status { text-align:right; font:10px monospace; }
@@ -77,6 +77,17 @@ summary { cursor:pointer; }
 .swatch[aria-pressed=true] { outline:2px solid #25252b; outline-offset:0; background:#fff; }
 .swatch:hover { border-color:#696773; }
 .direct-paint-toggle { flex:0 0 auto; font-size:11px; color:#3d3943; }
+.paint-unlock { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; padding:10px 12px; border-radius:6px; background:#fff; border:1px solid #b9b2a6; }
+/* `display:flex` beats the UA `[hidden]` rule, so restate it explicitly. */
+.paint-unlock[hidden] { display:none; }
+.paint-unlock-title { flex:1 1 100%; margin:0; font-size:13px; font-weight:600; color:#25252b; }
+.paint-unlock-body { flex:1 1 300px; margin:0; font-size:12px; line-height:1.4; color:#4a4650; }
+.paint-unlock .action.unlock { flex:0 0 auto; min-height:44px; padding:12px 18px; border:0; border-radius:4px; background:#27252d; color:#f5d8e4; font-size:12px; }
+.paint-unlock .action.unlock:hover:not(:disabled) { background:#413748; }
+.tap-to-paint-status { flex:1 1 100%; margin:0; font-size:12px; line-height:1.35; color:#3d3943; }
+.paint-unlocked { flex:1 1 100%; margin:0; font-size:12px; line-height:1.35; color:#17623f; }
+.board-legend { margin:4px 0 0; font-size:10px; line-height:1.4; color:#8d8791; text-align:center; }
+.wall-contract-line { margin:6px 0 0; font-size:11px; line-height:1.45; color:#8d8791; text-align:center; }
 .action.place { flex:0 0 auto; background:#27252d; color:#f5d8e4; border:0; padding:14px 24px; }
 .action.place:hover:not(:disabled) { background:#413748; }
 .draw-state { flex:1 1 180px; margin:0; color:#46414a; font:10px/1.35 monospace; }
@@ -116,3 +127,13 @@ summary { cursor:pointer; }
 .wall-advanced .side { grid-template-columns:1fr; } .summary { font-size:11px; }
 }
 @media (prefers-reduced-motion:reduce) { .action,.stall-scene::before { transition:none; } }
+
+/* Balances stay inside the wallet disclosure instead of crowding the paint dock. */
+.paint-wallet-values { display:grid; gap:12px; margin:14px 0; }
+.paint-wallet-values > div { display:grid; gap:3px; }
+.paint-wallet-values dt { color:#bfc1c7; font-size:12px; }
+.paint-wallet-values dd { margin:0; font-size:14px; overflow-wrap:anywhere; }
+#paint-wallet-panel .paint-wallet-buy { display:inline-flex; margin-top:10px; text-decoration:none; min-height:44px; align-items:center; }
+#paint-wallet-panel .paint-wallet-refresh { min-height:44px; }
+#paint-wallet-panel p { overflow-wrap:anywhere; }
+.wallet-details[open] { max-height:calc(100dvh - 100px); overflow-y:auto; }

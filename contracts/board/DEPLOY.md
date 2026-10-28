@@ -118,3 +118,11 @@ Record whether each step was local or testnet in your learning journal.
 - Event log is a simple `EVENT_JSON` string, not a finalized NEP standard review.
 - Storage and gas numbers below are planning estimates, not measurements from your deploy.
 - No mainnet instructions on purpose.
+
+## Paid-board mainnet follow-up (28 October 2026)
+
+This testnet/free-board guide does not deploy the new paid board. On the first
+paid mainnet deployment, reopen **PAY-COST** in [the backlog](../../docs/backlog.md)
+and run [the mainnet cost checklist](../../docs/payments/mainnet-cost-validation.md).
+Choose and rehearse [upgrade/migration control](../../docs/payments/upgrade-policy.md)
+before public paid use. No mainnet deployment or measurements exist yet.

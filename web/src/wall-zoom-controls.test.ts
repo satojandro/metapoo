@@ -128,4 +128,5 @@ describe("mountWallZoomControls", () => {
     detachedZoomIn.click();
     expect(fixture.host.zoomBy).not.toHaveBeenCalled();
   });
+
 });

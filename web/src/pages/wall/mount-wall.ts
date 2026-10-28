@@ -1,3 +1,5 @@
+import { strokeBegin, strokeExtend, MAX_BATCH, type StrokeState } from "./stroke-paint";
+import { planStrokeCommit, strokeBlockedReason, strokeResultCopy, TRUNCATED_STROKE_COPY, WALLET_STROKE_COPY } from "./stroke-commit";
 import { PALETTE } from "@shared/palette.ts";
 import { BOARD_HEIGHT, BOARD_WIDTH, type NetworkId } from "@shared/types.ts";
 import {
@@ -29,7 +31,7 @@ import {
   getPixelWithBlock,
   isContractConfigured,
 } from "../../contract";
-import { validateContractMetadata } from "../../contract-meta";
+import { contractMetaBlockCopy, validateContractMetadata, type ContractMetaIssue } from "../../contract-meta";
 import { prepareDraw } from "../../draw-policy";
 import {
   describeDrawingSession,
@@ -40,6 +42,7 @@ import {
 import {
   canUseLocalDrawingSession,
   fetchDrawingSessionAllowance,
+  signAndSendStrokeLocally,
 } from "../../local-draw";
 import {
   clearPaintQueue,
@@ -74,12 +77,14 @@ import { submitDraw } from "../../submit-draw";
 import {
   createCameraTransform,
   fitCamera,
+  fitCellSize,
   FIT_MIN_CELL_PX,
   isPaintZoom,
   MAX_CELL_PX,
   paintZoomCamera,
   PAINT_CELL_PX,
   panBy,
+  wheelZoomFactor,
   zoomAt,
   type Camera,
   type CameraTransform,
@@ -134,6 +139,9 @@ export interface WallMountTestApi {
   queueLength: () => number;
   kickDrain: () => Promise<void>;
   pendingPaintCount: () => number;
+  /** Test-only read seam for verifying board-load ordering. */
+  refreshPixel: (cell: Cell) => Promise<void>;
+  cachedPixelColor: (cell: Cell) => number | null | undefined;
 }
 
 function mustFindIn<T extends Element>(root: ParentNode, selector: string): T {
@@ -201,6 +209,7 @@ export function mountWall(
     "#revoke-session-button",
   );
   const hoverSummary = mustFindIn<HTMLElement>(pageRoot, "#hover-summary");
+  const contractLine = mustFindIn<HTMLElement>(pageRoot, "#wall-contract-line");
   const directPaintToggle = mustFindIn<HTMLInputElement>(pageRoot, "#direct-paint-toggle");
   const pressurePanel = mustFindIn<HTMLElement>(pageRoot, "#pressure-panel");
   const pressureToggle = mustFindIn<HTMLInputElement>(pageRoot, "#pressure-toggle");
@@ -212,6 +221,29 @@ export function mountWall(
   const pressureDemoBanner = mustFindIn<HTMLElement>(pageRoot, "#pressure-demo-banner");
   const placementQuote = mustFindIn<HTMLElement>(pageRoot, "#placement-quote");
   const placementQuoteBody = mustFindIn<HTMLElement>(pageRoot, "#placement-quote-body");
+  const tapToPaintAffordanceCandidate = directPaintToggle.closest<HTMLLabelElement>("label");
+  if (!tapToPaintAffordanceCandidate) {
+    throw new Error("The wall page is missing the tap-to-paint affordance.");
+  }
+  const tapToPaintAffordance = tapToPaintAffordanceCandidate;
+  // The status line is presentation, so it lives in the template with a real
+  // class. It used to be created here with no styling at all, which is how a
+  // developer-facing sentence ended up as raw body text in the paint dock.
+  const tapToPaintAnnouncement = mustFindIn<HTMLElement>(
+    pageRoot,
+    "#tap-to-paint-status",
+  );
+  directPaintToggle.setAttribute("aria-describedby", tapToPaintAnnouncement.id);
+
+  // One-approval unlock. This is the visible entry point to the drawing
+  // session; the authorise/revoke panel stays in About / details for people
+  // who want the details, but nobody should have to find it to start painting.
+  const paintUnlock = mustFindIn<HTMLElement>(pageRoot, "#paint-unlock");
+  const paintUnlocked = mustFindIn<HTMLElement>(pageRoot, "#paint-unlocked");
+  const unlockPaintButton = mustFindIn<HTMLButtonElement>(
+    pageRoot,
+    "#unlock-paint-button",
+  );
 
   // Keep the current cell coordinates available when keyboard users reach Place.
   drawButton.setAttribute("aria-describedby", "selection-summary");
@@ -240,6 +272,7 @@ export function mountWall(
   const pixelCache = createPixelCache();
   const pendingPaints = createPendingPaintMap();
   const placementOutcomes = createPlacementOutcomeController();
+  const queuedPlacementOutcomes = new WeakMap<DrawRequest, string>();
   const unmountPlacementOutcomes = mountPlacementOutcomeLayer(
     boardViewport,
     placementOutcomes,
@@ -289,12 +322,25 @@ export function mountWall(
 
   let selected: Cell | null = null;
   let selectedColor: number | null = null;
+  let tapToPaintEnabled = directPaintToggle.checked;
+  // Direct paint is a pre-approval, not a second permission: once a drawing
+  // session exists, clicking a square should just paint (Berry Club flow).
+  // `null` = follow the session; a boolean = the user has decided.
+  let tapToPaintUserChoice: boolean | null = null;
   let walletAccount: string | null = null;
   let walletNetwork: string | null = null;
   let drawInFlight = false;
+  type AnchoredStroke = { state: StrokeState; accountId: string; networkId: string; color: number };
+  let activeStroke: AnchoredStroke | null = null;
+
   let boardLoadInFlight = false;
   /** False until get_board metadata matches shared constants (or mock mode). */
   let contractMetaOk = !isContractConfigured();
+  // A failed *read* and a real metadata *mismatch* both leave contractMetaOk
+  // false, and the draw path used to report both as "did not match the shared
+  // schema". They need different advice: one is "try again", the other is
+  // "this contract is not this board".
+  let contractMetaIssue: ContractMetaIssue | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let camera: Camera = { cellSize: 4, panX: 0, panY: 0 };
   let viewTransform: CameraTransform = createCameraTransform(camera);
@@ -381,6 +427,8 @@ export function mountWall(
     queueLength: () => paintQueueLength(paintQueue),
     kickDrain: () => drainPaintQueue(),
     pendingPaintCount: () => listPendingPaints(pendingPaints).length,
+    refreshPixel: (cell) => refreshSelectedPixel(cell),
+    cachedPixelColor: (cell) => getCachedPixel(pixelCache, cell.x, cell.y)?.colorIndex,
   });
 
   listen(document, "visibilitychange", () => {
@@ -425,10 +473,20 @@ export function mountWall(
   });
 
   listen(directPaintToggle, "change", () => {
+    tapToPaintUserChoice = directPaintToggle.checked;
     updateDirectPaintAvailability();
   });
 
+  listen(unlockPaintButton, "click", () => {
+    void onAuthorizeSessionClick();
+  });
+
   listen(refreshButton, "click", () => {
+    // A transient read failure at load used to block drawing until a full page
+    // reload, because nothing re-ran the metadata check. Refresh now does.
+    if (!contractMetaOk) {
+      void revalidateContractMeta();
+    }
     void refreshBoardFromContract();
   });
 
@@ -453,7 +511,10 @@ export function mountWall(
       const wheelEvent = event as WheelEvent;
       wheelEvent.preventDefault();
       const rect = boardViewport.getBoundingClientRect();
-      const factor = wheelEvent.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const factor = wheelZoomFactor(wheelEvent.deltaY, wheelEvent.deltaMode);
+      if (factor === 1) {
+        return;
+      }
       applyCamera(
         zoomAt(
           camera,
@@ -527,6 +588,7 @@ export function mountWall(
       previousAccount !== walletAccount ||
       previousNetwork !== walletNetwork
     ) {
+      activeStroke = null;
       cancelUnsentPaintQueue("Wallet account or network changed.");
       // Account/network change invalidates quote authorization — fresh intent required.
       selectedQuote = null;
@@ -716,12 +778,53 @@ function syncPaidModeFromBoard(board: unknown): void {
   }
 }
 
+/**
+ * Re-run the `get_board` comparison after a failed load.
+ *
+ * The boot path validates metadata once. When that read threw — RPC hiccup, rate
+ * limit, offline — drawing stayed disabled until the page was reloaded, and the
+ * only explanation offered was a metadata mismatch that never happened. This
+ * lets "Refresh board" recover without a reload.
+ */
+async function revalidateContractMeta(): Promise<boolean> {
+  if (!isContractConfigured()) {
+    contractMetaOk = true;
+    contractMetaIssue = null;
+    updateDirectPaintAvailability();
+    return true;
+  }
+  try {
+    const board = await getBoard();
+    const meta = validateContractMetadata(board);
+    contractMetaOk = meta.ok;
+    contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
+    if (meta.ok) {
+      contractLine.textContent =
+        `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
+        `Painting a square replaces the colour that was there, and the contract ` +
+        `records which account painted it and when.`;
+    } else {
+      fillBlock(result, meta.title, meta.message);
+    }
+    return meta.ok;
+  } catch (error) {
+    contractMetaOk = false;
+    const detail = error instanceof Error ? error.message : "Unknown read error";
+    contractMetaIssue = { kind: "read", detail };
+    return false;
+  } finally {
+    updateDirectPaintAvailability();
+  }
+}
+
 async function bootstrapBoard(): Promise<void> {
   if (!isContractConfigured()) {
     contractMetaOk = true;
     syncPaidModeFromBoard(null);
     evidence.textContent =
       "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
+    contractLine.textContent =
+      "This is a local demo board. Nothing here is on a blockchain."
     if (!options.route?.query.x) {
       boardLoadStatus.textContent =
         "Board load: mock only (no contract id). Refresh stays disabled.";
@@ -739,6 +842,7 @@ async function bootstrapBoard(): Promise<void> {
     syncPaidModeFromBoard(board);
     const meta = validateContractMetadata(board);
     contractMetaOk = meta.ok;
+    contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
     if (!meta.ok) {
       evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK} failed metadata checks — ${meta.message}`;
       fillBlock(result, meta.title, meta.message);
@@ -751,13 +855,22 @@ async function bootstrapBoard(): Promise<void> {
       sponsorNote.textContent = `${sponsorship.message} (Contract reported sponsorship_enabled=true; this page still does not offer a sponsored submit path.)`;
     }
     evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK}. ${meta.summary} sponsorship_enabled=${board.sponsorship_enabled}.`;
+    // One sentence a non-crypto visitor can repeat. Everything here is enforced
+    // by the contract (`overwrite_rule: open_wall`), not by this page.
+    contractLine.textContent =
+      `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
+      `Painting a square replaces the colour that was there, and the contract ` +
+      `records which account painted it and when.`;
     await refreshBoardFromContract();
     applyRoutePaintingContext();
     void refreshPlacementQuote();
   } catch (error) {
     contractMetaOk = false;
     const detail = error instanceof Error ? error.message : "Unknown read error";
+    contractMetaIssue = { kind: "read", detail };
     evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but the initial board read failed: ${detail}. You can still look at the local empty picture and try Refresh. Drawing stays blocked until metadata validates.`;
+    contractLine.textContent =
+      "The board contract could not be read, so nothing here is confirmed chain state.";
     boardLoadStatus.textContent = `Board load failed: ${detail}`;
     updateCompactStatus();
   } finally {
@@ -809,15 +922,27 @@ async function refreshBoardFromContract(options?: {
   }
 }
 
-async function refreshSelectedPixel(): Promise<void> {
-  if (!selected || !isContractConfigured()) {
+async function refreshSelectedPixel(cell = selected): Promise<void> {
+  if (!cell || !isContractConfigured()) {
     showSelection();
     return;
   }
+  const loadId = beginBoardLoad(boardSync);
   try {
-    const { pixel, blockHeight } = await getPixelWithBlock(selected.x, selected.y);
+    const { pixel, blockHeight } = await getPixelWithBlock(cell.x, cell.y);
+    // A cell response is board evidence too.  Do not let it replace a newer
+    // full snapshot (or another cell read), including after unmount.
+    if (
+      disposed ||
+      loadAbort.signal.aborted ||
+      !shouldApplyBoardLoad(boardSync, loadId, blockHeight)
+    ) {
+      return;
+    }
     rememberPixelAtBlock(pixelCache, pixel, blockHeight);
     reconcilePendingWithConfirmed(pendingPaints, [pixel]);
+    markBoardLoadApplied(boardSync, loadId, blockHeight, Date.now());
+    showBoardFreshness();
     render();
     showSelection();
   } catch {
@@ -865,7 +990,10 @@ async function runBoardPoll(): Promise<void> {
   await refreshBoardFromContract({ reason: "poll" });
 }
 
-async function attemptDraw(request?: DrawRequest): Promise<void> {
+async function attemptDraw(
+  request?: DrawRequest,
+  queuedPlacementOutcomeId?: string,
+): Promise<void> {
   if (disposed || drawInFlight) {
     return;
   }
@@ -962,11 +1090,8 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
 
   if (!contractMetaOk) {
     setFlow("failed");
-    fillBlock(
-      result,
-      "Drawing blocked by contract metadata",
-      "This page refused to enable drawing because get_board did not match the shared schema, size, rule, or palette. Fix the contract id or deploy a matching board.",
-    );
+    const copy = contractMetaBlockCopy(contractMetaIssue);
+    fillBlock(result, copy.title, copy.message);
     return;
   }
 
@@ -1036,7 +1161,7 @@ async function attemptDraw(request?: DrawRequest): Promise<void> {
     y: frozen.y,
     colorIndex: frozen.colorIndex,
   });
-  const placementOutcomeId = placementOutcomes.submit({
+  const placementOutcomeId = queuedPlacementOutcomeId ?? placementOutcomes.submit({
     x: frozen.x,
     y: frozen.y,
     colorIndex: frozen.colorIndex,
@@ -1336,6 +1461,7 @@ async function onAuthorizeSessionClick(): Promise<void> {
     return;
   }
   authorizeSessionButton.disabled = true;
+  unlockPaintButton.disabled = true;
   try {
     await services.wallet.connect({ authorizeDrawingSession: true });
     setFlow(selected ? "editing" : "connected");
@@ -1350,12 +1476,19 @@ async function onAuthorizeSessionClick(): Promise<void> {
       );
     }
   } finally {
+    unlockPaintButton.disabled = false;
     showDrawingSession();
   }
 }
 
 function render(): void {
-  renderBoard(canvas, paintedPixels(pixelCache), listPendingPaints(pendingPaints));
+  renderBoard(canvas, paintedPixels(pixelCache), [
+    ...listPendingPaints(pendingPaints),
+    ...(activeStroke?.state.cells.map(cell => ({ ...cell,
+      colorIndex: activeStroke!.color, accountId: activeStroke!.accountId,
+      transactionId: null, phase: "submitted" as const,
+    })) ?? []),
+  ]);
   positionSelection();
   updatePositionReadout();
   updateCompactStatus();
@@ -1402,14 +1535,17 @@ function applyCamera(next: Camera): void {
 }
 
 function readZoomState() {
-  const fittedCamera = fitCamera(readViewportSize());
+  const viewport = readViewportSize();
+  const fittedCamera = fitCamera(viewport);
   const fitted =
     Math.abs(camera.cellSize - fittedCamera.cellSize) < 1e-6 &&
     Math.abs(camera.panX - fittedCamera.panX) < 1e-6 &&
     Math.abs(camera.panY - fittedCamera.panY) < 1e-6;
   return {
     current: camera.cellSize,
-    minimum: FIT_MIN_CELL_PX,
+    // The floor is the fitted size, not the smallest representable cell: a
+    // board smaller than the viewport is only empty space with a picture in it.
+    minimum: fitCellSize(viewport),
     maximum: MAX_CELL_PX,
     fitted,
   };
@@ -1447,16 +1583,49 @@ function fitWallToView(): void {
 
 /**
  * Pointer rules:
- * - one finger / mouse drag past threshold → pan (never paint)
+ * - direct paint armed (session + colour + consent): one pointer paints a stroke
+ * - panning while armed is a deliberate gesture: middle/right button, held
+ *   space, two fingers, or a drag that starts outside the board
+ * - otherwise one finger / mouse drag past threshold → pan (never paint)
  * - release without much movement → select cell
  * - two pointers → pinch zoom (never paint)
+ *
+ * Paint zoom is deliberately NOT part of arming. Requiring a zoom level to be
+ * allowed to drag-paint was an invented precondition: it made drag silently
+ * pan for every user who had not discovered the zoom button, and the button
+ * carried no state to discover.
  */
 function wirePointerGestures(): void {
   let gesture = createGestureState();
+  let strokeCancelled = false;
+  let spaceHeld = false;
+  const cancelStroke = () => { activeStroke = null; strokeCancelled = true; render(); };
+  listen(boardViewport, "wheel", () => { if (gesture.points.length) cancelStroke(); });
+  listen(boardViewport, "lostpointercapture", cancelStroke);
+
+  // Space is the conventional "temporarily pan" modifier. Ignore it while a
+  // control is focused so the keyboard path for the palette keeps working.
+  listen(window, "keydown", (event) => {
+    const key = (event as KeyboardEvent).key;
+    if (key !== " " || (event as KeyboardEvent).repeat) return;
+    const target = event.target as HTMLElement | null;
+    if (target && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName)) return;
+    spaceHeld = true;
+  });
+  listen(window, "keyup", (event) => {
+    if ((event as KeyboardEvent).key === " ") spaceHeld = false;
+  });
+  // Right-drag is a pan gesture here, so the browser menu must not interrupt it.
+  listen(boardViewport, "contextmenu", (event) => event.preventDefault());
+
   let lastX = 0;
   let lastY = 0;
   let pinchStartDistance = 0;
   let pinchStartCamera: Camera | null = null;
+  // The reducer decides whether a sequence is a tap. Keep its originating
+  // cell alongside that state so a sub-threshold move across tiny fitted
+  // cells cannot turn a touch scroll/pan into a placement on another cell.
+  let tapStartCell: Cell | null = null;
 
   const gestureEvent = (
     event: PointerEvent,
@@ -1478,11 +1647,14 @@ function wirePointerGestures(): void {
     const pointerEvent = event as PointerEvent;
     boardViewport.setPointerCapture(pointerEvent.pointerId);
     const rect = boardViewport.getBoundingClientRect();
-    const beganOnPanSurface =
-      viewTransform.cellAt(
-        pointerEvent.clientX - rect.left,
-        pointerEvent.clientY - rect.top,
-      ) === null;
+    const beganCell = viewTransform.cellAt(
+      pointerEvent.clientX - rect.left,
+      pointerEvent.clientY - rect.top,
+    );
+    const beganOnPanSurface = beganCell === null;
+    if (gesture.points.length === 0) {
+      tapStartCell = beganCell;
+    }
     const update = updateGesture(
       gesture,
       gestureEvent(pointerEvent, beganOnPanSurface),
@@ -1490,9 +1662,45 @@ function wirePointerGestures(): void {
     gesture = update.state;
 
     if (gesture.points.length === 1) {
+      strokeCancelled = false;
+      const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
+      // A non-primary button or a held space means "I want to move the board",
+      // not "I want to paint here". That is the only way drag-painting can be
+      // unconditional at every zoom level.
+      const wantsPan =
+        pointerEvent.button === 1 ||
+        pointerEvent.button === 2 ||
+        spaceHeld ||
+        beganOnPanSurface;
+      if (cell && !wantsPan && directPaintToggle.checked &&
+          walletAccount && selectedColor !== null && contractMetaOk &&
+          !drawInFlight && !paintQueue.inFlight && !paintQueueLength(paintQueue) &&
+          canUseLocalDrawingSession(walletAccount, walletNetwork)) {
+        activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
+          networkId: walletNetworkId(), color: selectedColor };
+        render();
+      } else {
+        // Say which precondition is missing. A drag that silently pans reads as
+        // "painting is broken", which is how this was first reported.
+        const blocked = strokeBlockedReason({
+          directPaint: directPaintToggle.checked,
+          accountId: walletAccount,
+          colorIndex: selectedColor,
+          contractOk: contractMetaOk,
+          sessionActive: walletAccount
+            ? canUseLocalDrawingSession(walletAccount, walletNetwork)
+            : false,
+          drawInFlight,
+          queueBusy: paintQueue.inFlight || paintQueueLength(paintQueue) > 0,
+        });
+        if (cell && !wantsPan && blocked) {
+          drawState.textContent = blocked;
+        }
+      }
       lastX = pointerEvent.clientX;
       lastY = pointerEvent.clientY;
     } else if (gesture.points.length === 2) {
+      cancelStroke();
       const pts = gesture.points;
       pinchStartDistance = Math.hypot(
         pts[0].clientX - pts[1].clientX,
@@ -1508,7 +1716,7 @@ function wirePointerGestures(): void {
   listen(boardViewport, "pointermove", (event) => {
     const pointerEvent = event as PointerEvent;
     if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
-      updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
+      updatePointerPreview(pointerEvent);
       return;
     }
     const update = updateGesture(gesture, gestureEvent(pointerEvent));
@@ -1537,7 +1745,7 @@ function wirePointerGestures(): void {
         positionSelection();
         updateCompactStatus();
       }
-      updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
+      updatePointerPreview(pointerEvent);
       return;
     }
 
@@ -1545,6 +1753,14 @@ function wirePointerGestures(): void {
       return;
     }
 
+    if (activeStroke) {
+      const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
+      if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
+      render();
+      if (activeStroke.state.truncated) fillBlock(result, "Stroke limit", TRUNCATED_STROKE_COPY);
+      updatePointerPreview(pointerEvent);
+      return;
+    }
     if (update.activeKind === "drag" || update.activeKind === "pan") {
       boardViewport.classList.add("is-panning");
       applyCamera(
@@ -1559,12 +1775,13 @@ function wirePointerGestures(): void {
       lastX = pointerEvent.clientX;
       lastY = pointerEvent.clientY;
     }
-    updatePointerPreview(pointerEvent.clientX, pointerEvent.clientY);
+    updatePointerPreview(pointerEvent);
   });
 
   const endPointer = (event: Event): void => {
     const pointerEvent = event as PointerEvent;
     if (pointerEvent.type === "pointercancel") {
+      cancelStroke();
       clearPointerPreview();
     }
     if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
@@ -1581,9 +1798,38 @@ function wirePointerGestures(): void {
     if (update.completedKind !== null) {
       boardViewport.classList.remove("is-panning");
 
+      if (activeStroke) {
+        const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
+        if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
+        const stroke = activeStroke;
+        activeStroke = null;
+        // Long presses and cancelled gestures retain the classifier's guards.
+        if (update.completedKind === "tap" || update.completedKind === "drag") {
+          if (stroke.state.cells.length > 1) void commitStroke(stroke);
+          else if (update.completedKind === "tap") selectAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
+        }
+        render();
+        return;
+      }
+      if (strokeCancelled) { updateCompactStatus(); return; }
       // Only the pure classifier's deliberate-tap result may reach selection
-      // or direct paint. Drag, pan, pinch, long press, and cancel are discarded.
-      if (update.completedKind === "tap") {
+      // or direct paint. It must also end in the cell where it started:
+      // fitted cells can be smaller than the movement threshold. Drag, pan,
+      // pinch, long press, cancel, and cross-cell releases are discarded.
+      const beganCell = tapStartCell;
+      tapStartCell = null;
+      const rect = boardViewport.getBoundingClientRect();
+      const endedCell = viewTransform.cellAt(
+        pointerEvent.clientX - rect.left,
+        pointerEvent.clientY - rect.top,
+      );
+      if (
+        update.completedKind === "tap" &&
+        beganCell !== null &&
+        endedCell !== null &&
+        beganCell.x === endedCell.x &&
+        beganCell.y === endedCell.y
+      ) {
         selectAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
       } else {
         updateCompactStatus();
@@ -1604,9 +1850,94 @@ function wirePointerGestures(): void {
   listen(boardViewport, "pointerleave", clearPointerPreview);
 }
 
-function selectAtClientPoint(clientX: number, clientY: number): void {
+function cellAtClientPoint(clientX: number, clientY: number): Cell | null {
   const rect = boardViewport.getBoundingClientRect();
-  const next = viewTransform.cellAt(clientX - rect.left, clientY - rect.top);
+  return viewTransform.cellAt(clientX - rect.left, clientY - rect.top);
+}
+
+async function commitStroke(stroke: AnchoredStroke): Promise<void> {
+  if (disposed || drawInFlight || stroke.accountId !== walletAccount ||
+      stroke.networkId !== walletNetworkId() || !directPaintToggle.checked) return;
+  const plan = planStrokeCommit(stroke.state, canUseLocalDrawingSession(walletAccount, walletNetwork));
+  if (plan.kind === "wallet_approval") {
+    fillBlock(result, "Drawing session needed", WALLET_STROKE_COPY);
+    return;
+  }
+  drawInFlight = true;
+  for (const cell of stroke.state.cells) setPendingPaint(pendingPaints, {
+    ...cell, colorIndex: stroke.color, accountId: stroke.accountId,
+    transactionId: null, phase: "submitted",
+  });
+  render();
+  setFlow("submitted");
+  try {
+    const outcome = await signAndSendStrokeLocally({
+      accountId: stroke.accountId, networkId: stroke.networkId,
+      cells: stroke.state.cells, color: stroke.color,
+    });
+    if (disposed) return;
+    // Resolve known outcomes through a fresh chain read; uncertain cells keep
+    // a pending marker. Never infer execution from matching pre-existing paint.
+    const uncertain = outcome.failingChunk?.mayHaveBroadcast;
+    const uncertainStart = outcome.confirmedChunks * MAX_BATCH;
+
+    // A confirmed chunk's receipt proves the write at a specific block. Stamp
+    // those cells now instead of leaving the board stale until the next full
+    // read: the read pages the whole wall (6 requests today, 64 on a full
+    // 16,384-cell board), and waiting for it is what made a finished stroke
+    // look unresolved. board-cache keeps the newer stamp if a snapshot from an
+    // older block arrives, so this cannot be rolled back by a slow read.
+    for (const { chunkIndex, blockHeight } of outcome.executedBlocks ?? []) {
+      const start = chunkIndex * MAX_BATCH;
+      for (const cell of stroke.state.cells.slice(start, start + MAX_BATCH)) {
+        rememberPixelAtBlock(
+          pixelCache,
+          {
+            x: cell.x,
+            y: cell.y,
+            colorIndex: stroke.color,
+            artistAccountId: stroke.accountId,
+            lastWriteTimestampNs: null,
+          },
+          blockHeight,
+        );
+      }
+    }
+
+    for (const [i, cell] of stroke.state.cells.entries()) {
+      if (uncertain && i >= uncertainStart && i < uncertainStart + MAX_BATCH) {
+        setPendingPaint(pendingPaints, { ...cell, colorIndex: stroke.color,
+          accountId: stroke.accountId, transactionId: null, phase: "confirmation_delayed" });
+      } else clearPendingPaint(pendingPaints, cell.x, cell.y);
+    }
+    fillBlock(result, outcome.status === "confirmed" ? "Stroke confirmed" : "Stroke stopped", strokeResultCopy(stroke.state, outcome));
+    setFlow(outcome.status === "confirmed" ? "confirmed" : "confirmation_delayed");
+    // Stroke execution and latest ownership are distinct; do not reuse the
+    // single-cell label that promises a matching confirming read.
+    const statusText = outcome.status === "confirmed"
+      ? "Stroke transactions executed. Refreshing the latest board state."
+      : "Stroke stopped. Review the batch results before painting again.";
+    // Keep the reason where it cannot scroll away: the dock line persists, the
+    // result block is one action away from being replaced.
+    const failureReason =
+      outcome.status === "confirmed" ? null : outcome.failingChunk?.message;
+    if (failureReason) {
+      // Also to the console, so a tester can hand back the exact error.
+      console.error("[wall] stroke submission failed:", failureReason);
+    }
+    flowState.textContent = statusText;
+    drawState.textContent = failureReason
+      ? `${statusText} Reason: ${failureReason}`
+      : statusText;
+    await refreshBoardFromContract({ reason: "after_draw" });
+  } finally {
+    drawInFlight = false;
+    if (!disposed) render();
+  }
+}
+
+function selectAtClientPoint(clientX: number, clientY: number): void {
+  const next = cellAtClientPoint(clientX, clientY);
   if (!next) {
     return;
   }
@@ -1636,8 +1967,13 @@ function maybeEnqueueDirectPaint(
   cell: Cell,
   options: { paintZoom: boolean } = { paintZoom: false },
 ): void {
+  // A deliberate tap is a user decision, so it is queued even while another
+  // paint is still confirming: `drainPaintQueue` is the serialiser and runs the
+  // next entry when this one settles. Dropping it here instead made the second
+  // click on a cell silently do nothing until the first transaction landed,
+  // which read as "painting stopped working".
   if (
-    !directPaintToggle.checked ||
+    !tapToPaintEnabled ||
     !canUseLocalDrawingSession(walletAccount, walletNetwork) ||
     selectedColor === null ||
     !walletAccount ||
@@ -1688,6 +2024,17 @@ function maybeEnqueueDirectPaint(
     networkId: walletNetworkId(),
     ...(paidFields ?? {}),
   });
+  // A direct tap gets a mount-local pending marker immediately, before the
+  // serialized draw reaches the existing submit path. It is never a second
+  // submission path: drainPaintQueue hands this id to attemptDraw below.
+  queuedPlacementOutcomes.set(
+    queued,
+    placementOutcomes.submit({
+      x: queued.x,
+      y: queued.y,
+      colorIndex: queued.colorIndex,
+    }),
+  );
   enqueuePaint(paintQueue, queued);
   setPendingPaint(pendingPaints, {
     x: queued.x,
@@ -1701,9 +2048,19 @@ function maybeEnqueueDirectPaint(
   void drainPaintQueue();
 }
 
-function updatePointerPreview(clientX: number, clientY: number): void {
+function updatePointerPreview(event: PointerEvent): void {
+  // Hover is a fine-pointer affordance only. On a touch pointer, or on a
+  // surface that owns touch gestures, it must neither show a prospective cell
+  // nor participate in the tap-to-paint route.
+  if (
+    event.pointerType === "touch" ||
+    getComputedStyle(boardViewport).touchAction !== "auto"
+  ) {
+    clearPointerPreview();
+    return;
+  }
   const rect = boardViewport.getBoundingClientRect();
-  const cell = viewTransform.cellAt(clientX - rect.left, clientY - rect.top);
+  const cell = viewTransform.cellAt(event.clientX - rect.left, event.clientY - rect.top);
   if (!cell) {
     clearPointerPreview();
     return;
@@ -1725,13 +2082,47 @@ function clearPointerPreview(): void {
 function updateDirectPaintAvailability(): void {
   const allowed =
     canUseLocalDrawingSession(walletAccount, walletNetwork) && contractMetaOk;
-  directPaintToggle.disabled = !allowed;
-  if (!allowed) {
-    directPaintToggle.checked = false;
-  }
-  directPaintToggle.title = allowed
-    ? "Tap cells to queue paints through your drawing session (serialized, no auto-resubmit on uncertainty)"
-    : "Authorize a drawing session first to enable direct paint";
+  const connected = walletAccount !== null;
+
+  // A disabled checkbox is not an explanation. With no session there is
+  // nothing to toggle, so the toggle is hidden and the dock offers the single
+  // approval that turns painting on. With a session, Direct paint is on by
+  // default unless the user has explicitly turned it off.
+  tapToPaintEnabled = allowed && (tapToPaintUserChoice ?? true);
+  directPaintToggle.checked = tapToPaintEnabled;
+  directPaintToggle.disabled = false;
+  directPaintToggle.title = tapToPaintEnabled
+    ? "Direct paint is on: click a square to paint it, with no wallet popup."
+    : "Direct paint is off: select a square, then press Place paint.";
+
+  paintUnlock.hidden = !(
+    connected &&
+    !allowed &&
+    contractMetaOk &&
+    isContractConfigured()
+  );
+  tapToPaintAffordance.hidden = !allowed;
+  tapToPaintAnnouncement.hidden = !allowed;
+
+  // "Place paint" and "Direct paint is on" are two instructions for the same
+  // act. While painting is armed the button is redundant — clicking a cell
+  // already places the paint — so it steps aside instead of contradicting the
+  // status line. It returns the moment painting is not armed, which is when it
+  // is the only pointer path. Enter still places either way (board keydown).
+  drawButton.hidden = allowed && tapToPaintEnabled;
+
+  // A one-approval unlock that vanishes after use reads as "did it work?".
+  // Keep a quiet, permanent line while the session is live.
+  paintUnlocked.hidden = !allowed;
+  paintUnlocked.textContent = allowed
+    ? "Painting unlocked this browser. No wallet popup per pixel. Revoke it any time under About / details."
+    : "";
+
+  tapToPaintAnnouncement.textContent = !allowed
+    ? ""
+    : tapToPaintEnabled
+      ? "Direct paint is on. Drag or click to paint. To move the board, hold space, use two fingers, or the middle mouse button."
+      : "Direct paint is off. Select a square, then press Place paint.";
 }
 
 /**
@@ -1745,6 +2136,8 @@ function cancelUnsentPaintQueue(reason: string, options?: { quiet?: boolean }): 
   }
   for (const item of paintQueue.items) {
     clearPendingPaint(pendingPaints, item.x, item.y);
+    const outcomeId = queuedPlacementOutcomes.get(item);
+    if (outcomeId) placementOutcomes.discard(outcomeId);
   }
   clearPaintQueue(paintQueue);
   if (options?.quiet || disposed) {
@@ -1765,6 +2158,8 @@ async function drainPaintQueue(): Promise<void> {
     !drawRequestMatchesSession(next, walletAccount, walletNetworkId())
   ) {
     clearPendingPaint(pendingPaints, next.x, next.y);
+    const outcomeId = queuedPlacementOutcomes.get(next);
+    if (outcomeId) placementOutcomes.discard(outcomeId);
     next = shiftPaint(paintQueue);
   }
   if (!next) {
@@ -1775,6 +2170,8 @@ async function drainPaintQueue(): Promise<void> {
   }
   if (disposed) {
     clearPendingPaint(pendingPaints, next.x, next.y);
+    const outcomeId = queuedPlacementOutcomes.get(next);
+    if (outcomeId) placementOutcomes.discard(outcomeId);
     cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
       quiet: true,
     });
@@ -1782,7 +2179,7 @@ async function drainPaintQueue(): Promise<void> {
   }
   paintQueue.inFlight = true;
   try {
-    await attemptDraw(next);
+    await attemptDraw(next, queuedPlacementOutcomes.get(next));
   } finally {
     paintQueue.inFlight = false;
     if (disposed) {
@@ -1960,7 +2357,7 @@ function fillRules(): void {
     "An unpainted square is not a color. It has no stored artist. Palette index 0 is Ink, a real paint color.",
     "Overwrite rule: Open wall. Any connected account may paint any pixel, including one someone else painted. Vandalism is possible.",
     "The current artist is credit for the latest successful write. That is not a legal claim on the artwork.",
-    "Explore with pan and zoom. Only Place paint (or Enter) submits a draw — drag and pinch never paint.",
+    "Explore with pan and zoom. Place paint (or Enter) submits a draw. With Direct paint enabled at paint zoom, drag to paint a stroke. Pan and pinch never paint.",
     isContractConfigured()
       ? `Game contract: ${CONTRACT_ID} on ${PAGE_NETWORK}. On open (and Refresh), the page loads every painted cell via paginated get_pixels. Transaction execution is reported separately from the latest cell owner; a successful paint may already be overwritten under Open wall.`
       : "No game contract id is configured yet (VITE_CONTRACT_ID empty), so this page will not open a draw signature or claim a chain success.",

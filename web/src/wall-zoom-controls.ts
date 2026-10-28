@@ -12,7 +12,9 @@ export interface WallZoomControlsHost {
   subscribe: (listener: () => void) => () => void;
 }
 
-const ZOOM_STEP = 1.25;
+// One click of the arrow buttons. 1.25 was too coarse: two clicks overshot the
+// zoom level the user wanted, which is why they asked for manual stepping.
+const ZOOM_STEP = 1.15;
 const LIMIT_EPSILON = 1e-6;
 
 /**

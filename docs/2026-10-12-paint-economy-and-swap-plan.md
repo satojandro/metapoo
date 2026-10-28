@@ -2,7 +2,18 @@
 
 Updated: 12 October 2026
 
-Status: current economy planning document. Product decisions are distinguished from proposed mechanics and unset parameters. No payment, staking, reward token, inventory shop or trading bot has been implemented or deployed by this work. The running board implementation remains a free Open wall; frontend changes are proceeding separately.
+Status: current economy planning document. Product decisions are distinguished from proposed mechanics and unset parameters. This original planning work did not implement payments. The 28 October override below records subsequent local payment work; staking, rewards, inventory shop and trading remain unimplemented by that work. The running board implementation remains a free Open wall; frontend changes are proceeding separately.
+
+## Payment-stage override — 28 October 2026
+
+The current stage accepts **NEAR and mPOO**, with one non-expiring internal paint
+credit per pixel placement and an initial price of **0.0069 NEAR**. The first mPOO
+acquisition UI is an external NEARLY link. Older MPOO-only, TOILET-pack and embedded
+swap requirements below are historical proposals, not current implementation instructions.
+Staking, longevity/rewards, TOILET and the inventory shop are deferred.
+The [paid contract](../contracts/paid-board/README.md) exists locally; no mainnet
+deployment has happened. Follow the [frontend handoff](payments/frontend-handoff.md),
+[mainnet cost gate](payments/mainnet-cost-validation.md) and [upgrade proposal](payments/upgrade-policy.md).
 
 ## Decisions and reading path
 
@@ -11,9 +22,9 @@ The [product PRD](2026-10-12-product-prd.md) adds pressure-priced placement, his
 Confirmed by the user:
 
 - The primary economic objective is genuine MPOO acquisition/trading activity and its associated supply burn.
-- Paid paint purchases accept **MPOO only**. NEAR is not an alternative paint-payment asset.
-- **MPOO is the staking asset**, confirmed after the latest question.
-- Pixels earn **TOILET** through longevity. TOILET is spent/burned as paint, allowing players to reuse earnings in the game.
+- ~~Paid paint purchases accept **MPOO only**. NEAR is not an alternative paint-payment asset.~~ **Superseded 2026-10-28**: native NEAR and direct mPOO are both accepted — see [paid model v1](payments/2026-10-28-paid-model-decisions.md).
+- **MPOO is the staking asset**, confirmed after the latest question. *(Contested 2026-10-28 — a TOILET-staking proposal now claims the same revenue: [TOILET economy v1](economy/2026-10-28-toilet-economy-v1.md) §4.)*
+- Pixels earn **TOILET** through longevity. TOILET is spent/burned as paint, allowing players to reuse earnings in the game. *(Revised 2026-10-28: paint is paid with prepaid credits; TOILET is earned, then staked or burned rather than spent as paint — see [TOILET economy v1](economy/2026-10-28-toilet-economy-v1.md).)*
 - Net game revenue is to be distributed **in MPOO**, after a disclosed operating reserve and liabilities. This replaces the earlier NEAR-only distribution plan.
 - Competition should produce repeated painting expenditure greater than pixel reward issuance. This is a design target to test, not observed player behavior.
 - Investigate a separate shop selling existing treasury MPOO for NEAR at a premium and replenishing inventory through the DIARHEA route. Premium, inventory, risk budget and execution permissions remain unset.

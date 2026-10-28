@@ -8,7 +8,7 @@ Build a shared NEAR pixel wall where communities create and defend art, collecto
 
 The user approved focusing on these three pillars and excluding mystery cards. Audience order: existing mPOO/NEAR communities, other crypto communities, then broader pixel-art audiences. Creation develops attachment; defence supplies a longer-term reason to return. Lore: cheeky longtime NEAR contributors positioned as Meta Pool's nemesis, with freedom to develop the story. This describes the user's creative direction, not affiliation or endorsement.
 
-This PRD owns product scope, journeys, and priorities. [Delivery plan](implementation/delivery-plan.md) owns allocation and integration gates. Domain specs own their named interfaces. [Economy plan](2026-10-12-paint-economy-and-swap-plan.md) remains authoritative for MPOO purchases, TOILET issuance/rewards, staking and reserves. [Shared decisions](00-shared-decisions.md) separates current code from proposed behavior. Old numbered briefs describe the original free MVP, not this release's complete scope.
+This PRD owns product scope, journeys, and priorities. [Delivery plan](implementation/delivery-plan.md) owns allocation and integration gates. Domain specs own their named interfaces. [Economy plan](2026-10-12-paint-economy-and-swap-plan.md) remains authoritative for staking and reserves; **paint purchases moved on 2026-10-28** to fixed-price prepaid credits ([decision record](payments/2026-10-28-paid-model-decisions.md)) and TOILET issuance is deferred. [Shared decisions](00-shared-decisions.md) separates current code from proposed behavior. Old numbered briefs describe the original free MVP, not this release's complete scope.
 
 Mechanics labelled **proposed default** are sufficiently specific for simulation and testnet implementation. They are not approved mainnet parameters. Agents must record departures through the coordinator instead of silently choosing incompatible rules.
 
@@ -53,13 +53,13 @@ Sources: `contracts/board/src/lib.rs`, `shared/types.ts`, `web/src/main.ts`, `we
 
 ### R0: integration foundation and simulation
 
-Freeze shared interfaces, simulate regional pressure, build route shells with conspicuously labelled fixtures, and define the snapshot trust model. Preserve the existing free board until the paid schema is ready. Capture a baseline and begin history indexing during testnet rehearsal.
+Freeze shared interfaces, simulate regional pressure, build route shells with conspicuously labelled fixtures, and define the snapshot trust model. Preserve the existing free board until the paid schema is ready. *(Resolved 2026-10-28: the paid board is the product and the free board is retired — [decision record](payments/2026-10-28-paid-model-decisions.md).)* Capture a baseline and begin history indexing during testnet rehearsal.
 
 ### R1: one complete funded art journey on testnet
 
 One wall with metadata-driven dimensions; 128×128 remains the current fixture, with proposed 1,024×1,024 capacity subject to scale validation (see core handoff); public Open wall; fixed eight-color versioned palette; fixed-price MPOO paint packs; variable TOILET placement costs; single-sponsor MPOO bounties; a named sponsor judging bounded submissions; explicit participant payout splits; finalized static snapshots; numbered print editions; independent award claims and print mint; account recovery screens. A mock fungible token is used for testnet money flows and must be visibly distinguished from actual mainnet MPOO.
 
-Proposed default: TOILET is an internal paint ledger in R1, not a separately transferable fungible token. Purchased and later earned units have the same spending rights. Product language says "paint spent"; do not claim an externally verifiable token burn unless that token implementation exists. No longevity issuance or staking payouts are enabled in this slice. Existing plans remain later phases, not abandoned commitments.
+Proposed default: TOILET is an internal paint ledger in R1, not a separately transferable fungible token. **(Tradeability reopened 2026-10-28:** the owner wants buy/sell burn tax, which is only enforceable on a tradeable NEP-141 or via a pool/wrapper — [TOILET economy v1](economy/2026-10-28-toilet-economy-v1.md) §5.**)** Purchased and later earned units have the same spending rights. Product language says "paint spent"; do not claim an externally verifiable token burn unless that token implementation exists. No longevity issuance or staking payouts are enabled in this slice. Existing plans remain later phases, not abandoned commitments.
 
 Mainnet activation is a separate gate after mechanism review, exact token/transfer validation, authority and budget selection, and independent multi-user rehearsal. No deployment, treasury transfers or trading automation is authorized by this document.
 

@@ -2,6 +2,7 @@
  * App shell: brand, top nav, global wallet chrome, page outlet.
  */
 
+import { mountPaintWalletPanel } from "./paint-wallet-panel";
 import type { ParsedRoute } from "./routes";
 import { mountWalletChrome, type WalletChromeDispose } from "./wallet-chrome";
 import type { AppServices } from "./services";
@@ -90,7 +91,8 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   walletPanel.setAttribute("aria-label", "Wallet");
   walletPanel.innerHTML = `
     <button id="connect-button" class="action" type="button">Connect NEAR wallet</button>
-    <details class="wallet-details"><summary>Wallet &amp; activity</summary>
+    <details class="wallet-details"><summary>Paint &amp; wallet</summary>
+    <section id="paint-wallet-panel" aria-label="Paint and wallet balances"></section>
     <h2>Connection details</h2>
     <p id="wallet-summary"></p>
     <p id="network-summary"></p>
@@ -122,6 +124,10 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     services,
   );
 
+  const paintWalletDispose = mountPaintWalletPanel(
+    walletPanel.querySelector<HTMLElement>("#paint-wallet-panel")!, services,
+  );
+
   function setActiveNav(route: ParsedRoute): void {
     const matchKey =
       route.pageId === "bounties/new" || route.pageId === "bounties/:id"
@@ -146,6 +152,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     outlet,
     setActiveNav,
     dispose() {
+      paintWalletDispose();
       walletDispose();
       host.replaceChildren();
     },
