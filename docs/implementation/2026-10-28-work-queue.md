@@ -21,7 +21,7 @@ paints, and the paint is visible to someone else — on **testnet** first, then 
 | 6 | `payments.rs` security review | this doc, §Hermes | **Hermes** | Independent of whoever wrote it | nothing |
 | 7 | Testnet paid deployment rehearsal | this doc, §Hermes | **Hermes** | Scripts, keys, RPC, receipts — ops lane | #2, #3 |
 | 8 | `toilet-d4-immutable` — immutable tax, no owner, emitter-only authority, resolver fix | `toilet-d4-immutable.task.json` | **Codex** | **delivered → PR #16, merged `38cc262`**; one review revert (the board's `upgrade()` was deleted, restored) | nothing |
-| 9 | `toilet-accrual-claim` — accrual reserved against the 1B cap, claim mints, token auto-registers the first claimer | `toilet-accrual-claim.task.json` | **Codex** | D5; requires the board's `holders` layout, so it must land **before** any deploy | nothing |
+| 9 | `toilet-accrual-claim` — accrual reserved against the 1B cap, claim mints, token auto-registers the first claimer | `toilet-accrual-claim.task.json` | **Codex** | **delivered → PR #17**; one review fix: the claim had no failure callback and destroyed `pending` on a refused mint | nothing |
 | 10 | Claim UI — "you have earned X, claim" + registration + receipt states | not written yet | **Cursor** | needs 9's views (`get_pending_toilet`, `get_toilet_emission`) | 9 |
 
 Two Codex tasks are deliberately independent of each other and of the frontend, so they can run in
