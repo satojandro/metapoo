@@ -78,7 +78,7 @@ pub struct PaletteColor {
 #[near(serializers = [json, borsh])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tunables {
-    /// Emergency stop for painting and purchases. Views and upgrades stay open.
+    /// Emergency stop for painting and purchases. Views and treasury withdrawals stay open.
     pub paused: bool,
     /// Additional liquid NEAR retained after existing storage and credit obligations.
     pub reserve_floor: near_sdk::json_types::U128,
@@ -396,10 +396,17 @@ impl Board {
 
     /// Replace this contract's code. Owner-only, one yocto attached.
     ///
-    /// A logic-only change (the repaint tiers, pricing rules, a quota check) needs
-    /// no migration because the state layout is unchanged. Changing the layout —
-    /// adding a field to `Board` or `Payments` — needs an `#[init(ignore_state)]`
-    /// migration written and rehearsed first. Never call `new` over live state.
+    /// The board keeps an upgrade path; the TOILET token deliberately does not (D4). The
+    /// difference is what each one holds. The board custodies credits and pixels, so a bug
+    /// here strands user balances and has to be repairable. The token's only authority is
+    /// its emitter and its configuration is frozen at `new`, so a code-swap power would buy
+    /// nothing that is worth the trust.
+    ///
+    /// A logic-only change needs no migration because the layout is unchanged. Changing the
+    /// layout — adding a field to `Board` or `Payments` — needs an `#[init(ignore_state)]`
+    /// migration written and rehearsed first. Never call `new` over live state. Before
+    /// mainnet money this belongs behind a delay; that is tracked as an M2 item, not a
+    /// reason to delete the method.
     #[payable]
     pub fn upgrade(&mut self, code: near_sdk::json_types::Base64VecU8) {
         near_sdk::assert_one_yocto();

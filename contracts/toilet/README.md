@@ -3,15 +3,25 @@
 Implements [toilet-token](../../docs/implementation/toilet-token.task.json) as a new,
 independent Rust contract. **Not deployed, independently audited, or AMM-tested.**
 No staking vault, emission schedule, board reward accumulator or holder payouts are
-included. The board does not call this token yet.
+included. The board only exposes the pause passthrough; it does not mint rewards yet.
 
 ## Supply and authority
 
-`new(emitter, tax)` starts at zero supply; the initializer is the owner. TOILET has
+`new(emitter, tax)` starts at zero supply. TOILET has no owner or admin account. It has
 18 decimals and a lifetime issuance cap of 1,000,000,000 tokens (10^27 atomic units).
 Only `emitter` can call `mint(account, amount)`; the recipient must already be
-registered. The owner can replace the emitter, including with its own account:
-this is a trusted administrative power, not immutable decentralized issuance.
+registered. Only the current emitter can call `set_emitter(emitter)` or
+`set_paused(paused)`, each with exactly 1 yoctoNEAR. Handoff immediately removes
+the previous emitter's authority. The intended emitter is the game contract;
+the paid board exposes an owner-gated pause passthrough so that circuit breaker
+is reachable. Emitter handoff remains a token method; a board handoff path is
+not implemented in this task.
+
+D4 freezes the entire validated `Tax` exactly as supplied to `new()`: rates,
+exchange, treasury, split and exempt list have no mutating path. There is no
+`set_tax`, no token owner and no upgrade entrypoint in either contract. Removing
+the old owner field changes Borsh state. This token is **fresh-init only**;
+there is no migration for an initialized older token.
 
 `burn(amount)` removes the caller's tokens. `issued_total` never falls when tokens
 burn. For example, issuing all 1 billion and burning half leaves 500 million in
@@ -32,7 +42,7 @@ Taxed transfers are a **fee-on-transfer extension**: they do not promise the
 standard gross delivery amount. Do not assume compatibility merely because a
 wallet or exchange recognizes these method names.
 
-`get_tax()` / owner-only `set_tax(tax)` use this shape:
+`new(emitter, tax)` configures this immutable shape; `get_tax()` returns it:
 
 | Field | Meaning |
 |---|---|
@@ -49,10 +59,13 @@ a 1,000-unit sale at 300 bps takes 30 units. With a 3300/6700 split, 9 burn,
 even if treasury is an endpoint, so its net balance change can differ from gross.
 
 `ft_transfer_call(receiver_id, amount, memo, msg)` reports **net delivered** tokens
-to `ft_on_transfer`. The private resolver returns gross amount consumed, including
-tax. Tax is settled immediately and **is not refunded** if the receiver rejects.
+to `ft_on_transfer`. The private resolver returns only net tokens consumed by the
+receiver (`used`): full rejection returns 0 and full consumption returns the net
+delivered amount. Its `transfer_resolved` event records `{receiver_id, delivered,
+used, tax}` with decimal-string token amounts; the callback retains `tax` for
+this event. Tax is settled immediately and **is not refunded** if the receiver rejects.
 Only unused net tokens can return, bounded by the receiver's remaining balance;
-refunds are not taxed again. Pausing or changing tax while a call is in flight does
+refunds are not taxed again. Pausing while a call is in flight does
 not change its refund terms. A 100% rate delivers zero and retains the entire tax.
 
 **AMM risk:** a pool that records `amount` instead of actual received tokens can
@@ -61,7 +74,7 @@ tax can reduce output below a pool's quoted minimum. Validate the exact venue in
 sandbox/testnet before enabling tax or liquidity. This implementation mirrors the
 requested mPOO configuration shape, not a claim of byte-for-byte mPOO behavior.
 There is no default live exchange or tax rate: initialization requires an explicit
-configuration. Rates may change immediately through the trusted owner.
+configuration. It cannot change after initialization.
 
 ## Storage, pause and methods
 
@@ -72,15 +85,15 @@ configuration. Rates may change immediately through the trusted owner.
   registration deposit, use `storage_unregister(force?)`; forcing removal burns
   any remaining tokens. Standard-library storage errors retain its standard text.
 - The initial treasury record is funded by the deployer. Other accounts pay their
-  own registration. Replacement treasuries must register first; unregistering the
-  current treasury blocks transfers with a treasury tax until it registers again.
-- `ft_transfer`, `ft_transfer_call`, `burn`, storage withdrawal/removal, `set_tax`,
+  own registration. Unregistering the fixed treasury blocks transfers with a
+  treasury tax until it registers again.
+- `ft_transfer`, `ft_transfer_call`, `burn`, storage withdrawal/removal,
   `set_emitter` and `set_paused` require exactly **1 yoctoNEAR**. `mint` is nonpayable.
 - `set_paused(paused)` stops both transfer entrypoints; mint, burn, storage, views
   and already-pending refunds continue. `is_paused()` exposes that state.
 - `ft_balance_of(account_id)`, `ft_total_supply()`, `ft_metadata()`, `get_emitter()`
   and the supply/tax views are read-only. Token amounts are JSON decimal strings.
-- Standard mint/transfer/burn events and custom tax/emitter/pause events are emitted.
+- Standard mint/transfer/burn events and custom tax/emitter/pause/resolver events are emitted.
 
 ## Verification
 
@@ -88,7 +101,7 @@ Run `cargo test --locked --manifest-path contracts/toilet/Cargo.toml`.
 Build with `cargo build --locked --release --target wasm32-unknown-unknown
 --manifest-path contracts/toilet/Cargo.toml`.
 
-18 local tests cover cap permanence, authority, supply conservation, tax rounding,
+22 local tests cover cap permanence, authority, supply conservation, tax rounding,
 exemptions, storage refunds, pause, full/partial/failed receiver handling, spent
 receiver balances, and deleted-sender refund burns. Promise payloads are inspected
 in the mocked NEAR runtime. These are not executed cross-contract receipts on a

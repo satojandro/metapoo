@@ -15,8 +15,10 @@ integration remain pending.
   before general paid launch. Every measurement is still pending.
 - [Accepted frontend requirements](../../docs/payments/frontend-handoff.md): NEARLY
   link, pixel prices, credits, NEAR and mPOO balances implemented locally as read-only UI; checkout and live paid-state verification pending.
-- [Upgrade policy proposal](../../docs/payments/upgrade-policy.md): owner-only upgrade
-  exists; migration design and a state-preserving rehearsal remain pending.
+- [Upgrade policy proposal](../../docs/payments/upgrade-policy.md): the board keeps an
+  owner-only `upgrade()` so a bug in credit or pixel custody stays repairable; TOILET
+  deliberately exposes no upgrade entrypoint (D4). Migration design and a state-preserving
+  rehearsal remain pending.
 
 ## Product rules
 
@@ -44,6 +46,14 @@ exactly 1 yoctoNEAR attached. Existing credits are unaffected. Buyers submit
   native purchases with `Paused`. Authenticated FT purchases return the full unused
   amount for refund. Views, upgrades and treasury withdrawals remain available.
   `get_tunables().paused` exposes the state.
+- Owner-only `set_toilet_paused(toilet, paused)` requires exactly 1 yoctoNEAR
+  and returns a promise calling the supplied token's `set_paused` with 1 yoctoNEAR
+  and 10 Tgas. The board must be that token's current emitter. This makes TOILET's
+  emitter-only circuit breaker reachable without adding a token owner; it works
+  even while painting is paused. Follow the returned receipt to confirm success:
+  scheduling does not prove the token paused. The token address is an argument,
+  so this passthrough adds no state or migration. Token emission and emitter
+  handoff passthroughs remain outside this task.
 - `set_credit_prices` permits each price to move only between half and double its
   prior value (odd-number halving rounds up). The first change is allowed immediately;
   subsequent changes require at least 24 hours. `price_changed` includes both old
@@ -111,9 +121,10 @@ transaction rather than a redeploy plus a migration:
   re-implementing the tier rule in JavaScript.
 - `get_cells_owned(account_id)` — cells an account holds; the input to the quota and the earning cap.
 - `get_outstanding_credits()` — credits sold and not yet spent. Prepaid service, never profit.
-- `upgrade(code)` — owner-only, one yocto. A logic-only change needs no migration; adding a field to
-  `Board` or `Payments` does, so it needs an `#[init(ignore_state)]` migration rehearsed against testnet
-  state first. Never call `new` over live state.
+- `upgrade(code)` — owner-only, one yocto. The board keeps this; TOILET does not (D4), because the board
+  custodies credits and pixels. A logic-only change needs no migration; adding a field to `Board` or
+  `Payments` does, so it needs an `#[init(ignore_state)]` migration rehearsed against testnet state first.
+  Never call `new` over live state.
 
 The board account must also be registered on the mPOO token before receiving it.
 The board credit-registration fee does not perform that token registration.
