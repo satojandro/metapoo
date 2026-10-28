@@ -11,8 +11,10 @@
 //! Do not deploy until an explicit review. Local `cargo test` is not a
 //! testnet or mainnet result.
 
+mod emission;
 mod payments;
 mod safety;
+use emission::Holder;
 use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{env, near, AccountId, PanicOnDefault};
 use payments::Payments;
@@ -102,6 +104,8 @@ pub struct Tunables {
     pub quota_max: u32,
     /// Cells that accrue TOILET emission per account. 0 = uncapped.
     pub max_earning_cells: u32,
+    /// Atomic TOILET units per held cell per second; zero disables emission.
+    pub toilet_per_cell_second: u128,
 }
 
 impl Tunables {
@@ -141,6 +145,10 @@ impl Tunables {
             self.repaint_young_ns <= self.repaint_mid_ns,
             "RepaintTiersOutOfOrder"
         );
+        assert!(
+            self.toilet_per_cell_second <= emission::MAX_RATE,
+            "ToiletRateTooHigh"
+        );
         if self.quota_max > 0 {
             assert!(self.quota_base <= self.quota_max, "QuotaBaseAboveMax");
         }
@@ -164,6 +172,7 @@ impl Default for Tunables {
             quota_per_cell: 4,
             quota_max: 512,
             max_earning_cells: 128,
+            toilet_per_cell_second: 0,
         }
     }
 }
@@ -242,10 +251,12 @@ pub struct Board {
     tunables: Tunables,
     /// Key is `y * WIDTH + x`. Only painted cells appear here.
     pixels: IterableMap<u32, PixelRecord>,
-    /// Cells each account currently holds. Maintained on every write so the
-    /// paint quota, the earning cap and any future emission accumulator never
-    /// need a separate index — and never need a migration to bootstrap one.
-    cells_owned: LookupMap<AccountId, u32>,
+    /// Ownership and settled emission survive even after the last cell is lost.
+    holders: LookupMap<AccountId, Holder>,
+    acc_per_cell: u128,
+    last_accrual_ns: u64,
+    accrued_total: u128,
+    total_cells: u32,
 }
 
 #[near]
@@ -259,7 +270,11 @@ impl Board {
             payments: Payments::new(mpoo_token, payments::INITIAL_NEAR_PRICE, mpoo_per_credit.0),
             tunables: Tunables::default(),
             pixels: IterableMap::new(b"p"),
-            cells_owned: LookupMap::new(b"o"),
+            holders: LookupMap::new(b"h"),
+            acc_per_cell: 0,
+            last_accrual_ns: env::block_timestamp(),
+            accrued_total: 0,
+            total_cells: 0,
         }
     }
 
@@ -375,6 +390,8 @@ impl Board {
             tunables.last_price_change_ns, self.tunables.last_price_change_ns,
             "PriceHistoryImmutable"
         );
+        // Rate changes apply from now, never retroactively to the idle interval.
+        self.accrue(env::block_timestamp());
         self.tunables = tunables;
     }
 
@@ -391,7 +408,7 @@ impl Board {
     /// Cells an account currently holds: the input to the paint quota and to the
     /// emission earning cap.
     pub fn get_cells_owned(&self, account_id: AccountId) -> u32 {
-        self.cells_owned.get(&account_id).copied().unwrap_or(0)
+        self.holders.get(&account_id).map_or(0, |holder| holder.cells)
     }
 
     /// Replace this contract's code. Owner-only, one yocto attached.
@@ -424,6 +441,7 @@ impl Board {
     /// On NEAR, a panic cancels the whole transaction. A successful return
     /// means the cell was stored for this call.
     pub fn draw(&mut self, x: u32, y: u32, color: u32) {
+        self.accrue(env::block_timestamp());
         self.assert_unpaused();
         if let Err(code) = validate_draw_args(x, y, color) {
             reject(code);
@@ -466,6 +484,7 @@ impl Board {
     /// The stroke is capped at `MAX_DRAW_BATCH` cells. Longer drags are
     /// split by the client into several calls, each of which is still atomic.
     pub fn draw_many(&mut self, cells: Vec<DrawCell>) {
+        self.accrue(env::block_timestamp());
         self.assert_unpaused();
         if cells.is_empty() {
             reject("EmptyStroke");
@@ -555,20 +574,24 @@ fn read_cell(board: &Board, key: u32) -> (Option<AccountId>, Option<u64>) {
     }
 }
 
-/// Keep `cells_owned` exact. It is the input to the paint quota and the emission
-/// earning cap, so an off-by-one here would be a payout bug, not a cosmetic one.
+/// Settle before changing the holder's weight, then checkpoint the new weight.
 fn bump_cells_owned(board: &mut Board, account: &AccountId, delta: i32) {
-    let current = board.cells_owned.get(account).copied().unwrap_or(0);
-    let next = if delta >= 0 {
-        current.saturating_add(delta as u32)
+    let mut holder = board.settled_holder(account, board.acc_per_cell);
+    if delta >= 0 {
+        holder.cells = holder.cells.checked_add(delta as u32).expect("CellCountOverflow");
+        board.total_cells = board.total_cells
+            .checked_add(delta as u32)
+            .expect("CellCountOverflow");
     } else {
-        current.saturating_sub(delta.unsigned_abs())
-    };
-    if next == 0 {
-        board.cells_owned.remove(account);
-    } else {
-        board.cells_owned.insert(account.clone(), next);
+        holder.cells = holder.cells
+            .checked_sub(delta.unsigned_abs())
+            .expect("CellCountInvariant");
+        board.total_cells = board.total_cells
+            .checked_sub(delta.unsigned_abs())
+            .expect("CellCountInvariant");
     }
+    holder.debt = emission::entitlement(holder.cells, board.acc_per_cell);
+    board.holders.insert(account.clone(), holder);
 }
 
 fn validate_draw_args(x: u32, y: u32, color: u32) -> Result<(), &'static str> {

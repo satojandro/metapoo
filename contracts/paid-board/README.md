@@ -52,8 +52,7 @@ exactly 1 yoctoNEAR attached. Existing credits are unaffected. Buyers submit
   emitter-only circuit breaker reachable without adding a token owner; it works
   even while painting is paused. Follow the returned receipt to confirm success:
   scheduling does not prove the token paused. The token address is an argument,
-  so this passthrough adds no state or migration. Token emission and emitter
-  handoff passthroughs remain outside this task.
+  so this passthrough adds no state or migration. Emitter handoff passthroughs remain outside this task.
 - `set_credit_prices` permits each price to move only between half and double its
   prior value (odd-number halving rounds up). The first change is allowed immediately;
   subsequent changes require at least 24 hours. `price_changed` includes both old
@@ -163,7 +162,7 @@ a sandbox/testnet; then calculate margin with gas sponsorship (if added), storag
 conversion costs, tax and a reserve. A 0.0069 NEAR price alone cannot guarantee profit.
 
 `ECONOMY NEXT` comments mark the extension points. This board has no staking,
-TOILET issuance, longevity rewards, buybacks, burns or swaps. Native treasury
+longevity rewards, buybacks, burns or swaps. TOILET emission uses the claim path below. Native treasury
 withdrawals use the safeguards above; mPOO proceeds remain in the contract.
 Future distribution must account for tax and pending liabilities, and must never
 distribute staked principal or outstanding refund liabilities.
@@ -215,3 +214,54 @@ An inventory shop is a separate later-stage business: quote a disclosed premium
 above net replacement cost, reserve inventory per order, handle failed delivery
 and refunds, and cap exposure. Restocking later at a lower price is not guaranteed
 arbitrage. Use separate inventory capital, never credit-service or storage reserves.
+
+## TOILET accrual and claims
+
+This state layout is **fresh init only, no migration**. Do not deserialize an older
+board into this layout or run `new` over live state. The existing board `upgrade`
+entrypoint remains unchanged; it does not migrate this state.
+
+`toilet_per_cell_second` in `Tunables` defaults to 0, so no emission begins until
+the owner sets a rate. It counts atomic units (18 decimals) per held cell per
+second. The maximum is `u128::MAX / (86_400e9 * 16_384)`; higher values fail
+`ToiletRateTooHigh`. Changing tunables settles the elapsed interval at the old
+rate before applying the new one. Stored quota and `max_earning_cells` limits
+remain unenforced; accrual uses all held cells.
+
+At the start of `draw`, `draw_many`, and `claim_toilet`, the board reserves elapsed
+emission against the lifetime 1 billion TOILET cap. The invariant is
+`accrued_total <= CAP`; claims do not consume this allowance again. No holders
+are iterated. A shared per-cell accumulator uses `SCALE = 1e9`, with a compile-time
+assertion that `CAP * SCALE` fits `u128`. Accumulator division loses less than
+`total_cells / SCALE` atomic units per call (at most 0.000016384). Subsecond
+per-cell emission is truncated before multiplying by the number of cells.
+Empty-board intervals earn nothing. Long idle intervals clamp safely at the cap.
+
+Ownership changes settle both holders before changing their cell counts and
+checkpoint their new debts. Same-artist repaints leave ownership unchanged;
+losing every cell preserves pending emission. Once the cap is reserved, accrual
+stops and previously earned claims remain available.
+
+- `get_pending_toilet(account)` returns a decimal-string amount including accrual
+  projected through the current block. This view does not reserve or mutate state.
+- `get_toilet_emission()` returns `{per_cell_second, accrued_total, cap, remaining}`
+  as decimal strings. Totals describe persisted reservations, not a view projection.
+- `claim_toilet(toilet)` requires exactly 1 yoctoNEAR. It settles the caller, takes
+  and zeroes their pending amount, and returns a promise to `mint(account, amount)`
+  on the supplied token with zero deposit and 10 Tgas, **chained to a private
+  `resolve_claim(account_id, amount)` callback**. An empty claim fails
+  `NothingToClaim`. The `toilet_claimed` event includes `account_id`, `amount`,
+  and `accrued_total`; it proves the claim was scheduled, not that the mint succeeded.
+- `resolve_claim` restores the claim when the mint fails — wrong token address, wrong
+  emitter, registration reserve low, or gas. The amount goes back into `pending` and
+  `claim_failed` is emitted. `PromiseError::TooLong` counts as success: the call
+  succeeded and only the payload could not be read, so treating it as failure would
+  double-credit. Without this callback a refused mint silently destroys the claim.
+
+Configure this board as the supplied TOILET token's emitter and fund the token's
+registration reserve. Emission mints only through a player claim. Follow the
+returned receipt: the event records a scheduled claim, not successful minting.
+As specified, there is no mint-failure callback or retry restoration: pending is
+already zero if that separate receipt fails (including an incorrect token address,
+wrong emitter, or low registration reserve). No deployment or live receipt test
+was performed.

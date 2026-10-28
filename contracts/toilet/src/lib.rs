@@ -15,6 +15,7 @@ use near_sdk::{env, near, AccountId, Gas, NearToken, PanicOnDefault, Promise, Pr
 
 /// 1 billion tokens, each divisible into 10^18 atomic units.
 pub const CAP: u128 = 1_000_000_000_000_000_000_000_000_000;
+const MIN_REGISTRATION_RESERVE: u128 = 1_000_000_000_000_000_000_000_000;
 const BPS: u128 = 10_000;
 const MAX_EXEMPT: usize = 64;
 
@@ -89,7 +90,7 @@ impl Toilet {
         tax.validate();
         let mut token = FungibleToken::new(b"t");
         // Bootstrap only the treasury; its one account record is funded by the
-        // deployer. All other recipients must pay standard storage registration.
+        // deployer. Mint recipients can also be registered from this token's balance.
         token.internal_register_account(&tax.treasury);
         Self {
             token,
@@ -108,12 +109,24 @@ impl Toilet {
     pub fn mint(&mut self, account: AccountId, amount: U128) {
         assert_eq!(env::predecessor_account_id(), self.emitter, "EmitterOnly");
         assert!(amount.0 > 0, "ZeroAmount");
-        self.registered_balance(&account);
         let issued = self
             .issued_total
             .checked_add(amount.0)
             .expect("SupplyCapExceeded");
         assert!(issued <= CAP, "SupplyCapExceeded");
+        if self.token.accounts.get(&account).is_none() {
+            // Protect current storage, the new record and a liquid 1 NEAR floor.
+            let storage = u128::from(env::storage_usage())
+                .checked_mul(env::storage_byte_cost().as_yoctonear())
+                .expect("RegistrationReserveLow");
+            let required = storage
+                .checked_add(self.token.storage_balance_bounds().min.as_yoctonear())
+                .and_then(|cost| cost.checked_add(MIN_REGISTRATION_RESERVE))
+                .expect("RegistrationReserveLow");
+            assert!(env::account_balance().as_yoctonear() >= required, "RegistrationReserveLow");
+            self.token.internal_register_account(&account);
+            event("account_auto_registered", near_sdk::serde_json::json!({"account_id": account}));
+        }
         self.token.internal_deposit(&account, amount.0);
         self.issued_total = issued;
         FtMint {
