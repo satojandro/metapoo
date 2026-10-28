@@ -382,6 +382,29 @@ worth more than a promise of good judgement — and it costs nothing to implemen
 | holder payouts | automatic ~every 15 min once ≥ $0.10 is owed |
 | wallet-to-wallet | **never taxed** |
 
+**Verified directly from the token contract** (`get_tax` on `mpoo.nearlytrade.near`, mainnet):
+
+```json
+{"tax": {"buy_bps": 200, "sell_bps": 300,
+         "pairs": ["dclv2.ref-labs.near"],
+         "admin": "nearlytrade.near",
+         "exempt": ["lock_6.nearlytrade.near", "feeswap.near"]},
+ "pending": "0"}
+```
+
+Three things this settles, and one it opens:
+
+- **2 % / 3 % confirmed on chain**, not just on the page.
+- **The tax is venue-scoped, not a transfer tax.** It fires when the counterparty is the Rhea DCL
+  exchange contract (`dclv2.ref-labs.near`). Every DCL pool trade is taxed — including the second
+  mPOO/stNEAR pool — but wallet-to-wallet and trades on other venues are not.
+- **The split is not in the token.** 34/33/33 lives in `nearlytrade.near` (the `admin`), so a burn page
+  reading only the token cannot compute the burn share. It needs the factory, or the page's own figures
+  must be labelled as sourced from NEARLY.
+- **Open: `admin: nearlytrade.near` exists**, plus a `pending` balance. The docs say rates are fixed at
+  launch, but the contract exposes an admin field. Treat "immutable tax" as a documentation claim until
+  the token code is read — it matters if anyone models future burn rates from it.
+
 Three consequences for the plan:
 
 1. **The 4 % ceiling is a NEARLY-launch constraint, not a TOILET constraint.** TOILET is a separate
