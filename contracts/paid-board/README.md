@@ -1,8 +1,12 @@
 # Paid board: payment integration stage
 
-Experimental **schema 4**, separate from `contracts/board` (currently free schema 2).
-Fresh account initialization only: this is not a migration of an existing board.
-The web app still targets the free board. Its read-only panel supports paid price/credit views, but paid checkout and painting integration remain pending.
+Schema **4** — this is the product board, ratified 2026-10-28
+([decision record](../../docs/payments/2026-10-28-paid-model-decisions.md)).
+`contracts/board` (free schema 2) is retired as a product and kept as the testnet fixture.
+Fresh account initialization only: this is not a migration of an existing board, and the
+testnet mural does not carry over. Pricing stays per pixel; the launch price is being set.
+The app's read-only panel supports paid price/credit views, but paid checkout and painting
+integration remain pending.
 
 ## Release follow-ups
 

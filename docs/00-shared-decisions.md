@@ -20,6 +20,20 @@ is an open post-deployment gate. [Upgrade policy](payments/upgrade-policy.md) re
 a proposal: migration/control mechanisms are not implemented. Staking, longevity,
 TOILET, revenue sharing and inventory trading remain a subsequent stage.
 
+### Ratified by the owner — 2026-10-28
+
+- **D1 — one paid model: prepaid credits, schema 4.** Schema 3, its mock pressure quotes and
+  `payment-provider.ts` are deleted. The page accepts schema 2 (legacy free board) and schema 4
+  (paid board) only.
+- **D2 — one paid board, on mainnet.** `contracts/paid-board` is the wall; `contracts/board`
+  (schema 2) is retired as a product and kept as the testnet fixture. The 2,301-pixel testnet
+  mural does **not** migrate; the mainnet wall starts empty and is seeded deliberately.
+- **D3 — pricing stays per pixel.** Storage is charged per pixel, so a flat per-stroke price
+  cannot cover a full-length drag. Launch price comes from the table in the decision record.
+  The free-paint-window idea is recorded there in its safe form (empty cells only, per-account cap).
+
+Evidence and the full contradiction list: [paid model v1 decisions](payments/2026-10-28-paid-model-decisions.md).
+
 ## Product expansion: approved direction, proposed mechanics
 
 The user selected three product pillars: demand-sensitive placement pricing, chosen historical NFT prints, and funded **Art Bounties** that communities rally around. Mystery cards are explicitly excluded. Audience order is mPOO/NEAR communities, other crypto communities, then broader pixel-art audiences. Creation builds attachment; defence supports return visits. Creative freedom remains compatible with mPOO's cheeky rivalry with Meta Pool.

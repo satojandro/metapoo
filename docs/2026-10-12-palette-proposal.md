@@ -2,7 +2,10 @@
 
 Inspired by the Sydney stall references (dark grounds, vivid cyan/blue/yellow/green/red/pink). **Not implemented yet.** Changing hex values for existing indices would recolor stored art; a coordinated schema bump is required.
 
-## Proposed schema 3 swatches (same 8 indices)
+## Proposed palette swatches (same 8 indices)
+
+> Schema note, 2026-10-28: schema 3 no longer exists — the paid board is **schema 4** and its
+> palette is identical to today's. Applying these swatches is therefore a **schema 5** bump.
 
 | Index | Name | Current hex | Proposed hex | Notes |
 |---|---|---|---|---|

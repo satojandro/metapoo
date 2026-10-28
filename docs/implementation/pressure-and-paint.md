@@ -1,6 +1,6 @@
 # Pressure pricing and paint implementation specification
 
-Status: proposed R1 protocol; prototype parameters below are test fixtures, not selected production economics. Owner: Board/Economy agent. Scope complements the [economy plan](../2026-10-12-paint-economy-and-swap-plan.md); it does not redefine staking, rewards or swap/shop flows.
+Status: **superseded for the current payment stage (2026-10-28)** — the paid board sells fixed-price prepaid credits, not TOILET, and has no regional heat. Kept as the later-stage pressure design ([decision record](../payments/2026-10-28-paid-model-decisions.md)). Original status: proposed R1 protocol; prototype parameters below are test fixtures, not selected production economics. Owner: Board/Economy agent. Scope complements the [economy plan](../2026-10-12-paint-economy-and-swap-plan.md); it does not redefine staking, rewards or swap/shop flows.
 
 ## Current code and target
 

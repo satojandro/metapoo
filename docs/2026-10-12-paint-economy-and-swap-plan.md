@@ -22,7 +22,7 @@ The [product PRD](2026-10-12-product-prd.md) adds pressure-priced placement, his
 Confirmed by the user:
 
 - The primary economic objective is genuine MPOO acquisition/trading activity and its associated supply burn.
-- Paid paint purchases accept **MPOO only**. NEAR is not an alternative paint-payment asset.
+- ~~Paid paint purchases accept **MPOO only**. NEAR is not an alternative paint-payment asset.~~ **Superseded 2026-10-28**: native NEAR and direct mPOO are both accepted — see [paid model v1](payments/2026-10-28-paid-model-decisions.md).
 - **MPOO is the staking asset**, confirmed after the latest question.
 - Pixels earn **TOILET** through longevity. TOILET is spent/burned as paint, allowing players to reuse earnings in the game.
 - Net game revenue is to be distributed **in MPOO**, after a disclosed operating reserve and liabilities. This replaces the earlier NEAR-only distribution plan.

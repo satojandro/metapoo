@@ -8,7 +8,7 @@ Build a shared NEAR pixel wall where communities create and defend art, collecto
 
 The user approved focusing on these three pillars and excluding mystery cards. Audience order: existing mPOO/NEAR communities, other crypto communities, then broader pixel-art audiences. Creation develops attachment; defence supplies a longer-term reason to return. Lore: cheeky longtime NEAR contributors positioned as Meta Pool's nemesis, with freedom to develop the story. This describes the user's creative direction, not affiliation or endorsement.
 
-This PRD owns product scope, journeys, and priorities. [Delivery plan](implementation/delivery-plan.md) owns allocation and integration gates. Domain specs own their named interfaces. [Economy plan](2026-10-12-paint-economy-and-swap-plan.md) remains authoritative for MPOO purchases, TOILET issuance/rewards, staking and reserves. [Shared decisions](00-shared-decisions.md) separates current code from proposed behavior. Old numbered briefs describe the original free MVP, not this release's complete scope.
+This PRD owns product scope, journeys, and priorities. [Delivery plan](implementation/delivery-plan.md) owns allocation and integration gates. Domain specs own their named interfaces. [Economy plan](2026-10-12-paint-economy-and-swap-plan.md) remains authoritative for staking and reserves; **paint purchases moved on 2026-10-28** to fixed-price prepaid credits ([decision record](payments/2026-10-28-paid-model-decisions.md)) and TOILET issuance is deferred. [Shared decisions](00-shared-decisions.md) separates current code from proposed behavior. Old numbered briefs describe the original free MVP, not this release's complete scope.
 
 Mechanics labelled **proposed default** are sufficiently specific for simulation and testnet implementation. They are not approved mainnet parameters. Agents must record departures through the coordinator instead of silently choosing incompatible rules.
 
@@ -53,7 +53,7 @@ Sources: `contracts/board/src/lib.rs`, `shared/types.ts`, `web/src/main.ts`, `we
 
 ### R0: integration foundation and simulation
 
-Freeze shared interfaces, simulate regional pressure, build route shells with conspicuously labelled fixtures, and define the snapshot trust model. Preserve the existing free board until the paid schema is ready. Capture a baseline and begin history indexing during testnet rehearsal.
+Freeze shared interfaces, simulate regional pressure, build route shells with conspicuously labelled fixtures, and define the snapshot trust model. Preserve the existing free board until the paid schema is ready. *(Resolved 2026-10-28: the paid board is the product and the free board is retired — [decision record](payments/2026-10-28-paid-model-decisions.md).)* Capture a baseline and begin history indexing during testnet rehearsal.
 
 ### R1: one complete funded art journey on testnet
 

@@ -90,8 +90,9 @@ Baseline for this revision: `origin/main = 5b40b63`, 263 tests / 39 files, build
 Evidence: branch source `contracts/paid-board/src/lib.rs` and `payments.rs` on
 `codex/paint-credit-payments`; `new`, `buy_credits_near`, `ft_on_transfer`,
 `get_credits`, `get_payment_config` and `set_credit_prices` exist. Locate its implementation commit with `git log -- contracts/paid-board web/src/paint-wallet.ts`. Verification: 36 local tests and release WASM build passed;
-not a live settlement or cost result. `contracts/board` remains the free schema-2
-contract; `web/src/payment-provider.ts` remains an unused placeholder. Existing
+not a live settlement or cost result. `contracts/board` (schema 2) is **retired as a product**
+and kept only as the testnet fixture; `web/src/payment-provider.ts` is deleted together with the
+schema-3 mock path ([decision record](payments/2026-10-28-paid-model-decisions.md)). Existing
 pressure quotes do not implement this new payment UI. Mainnet deployment: none,
 confirmed by owner. A testnet token is needed for the first paid rehearsal.
 
