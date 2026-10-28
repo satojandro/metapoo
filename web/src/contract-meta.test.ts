@@ -24,18 +24,10 @@ function validFreeBoard(): ChainBoardView {
 }
 
 function validPaidBoard(): ChainBoardView {
-  return {
-    ...validFreeBoard(),
-    schema_version: 3,
-    pricing_version: "pressure-v1-fixture",
-    ledger_unit: "TOILET",
-    pressure: {
-      version: "pressure-v1-fixture",
-      region_size: 8,
-      base_cost: "10",
-      max_cost: "50",
-    },
-  };
+  // Schema 4 deliberately reports the same shape as the free board: the paid marker
+  // is the schema number plus `get_payment_config`, not extra `get_board` fields.
+  // No pricing_version / pressure / ledger_unit here, on purpose.
+  return { ...validFreeBoard(), schema_version: 4 };
 }
 
 describe("validateContractMetadata", () => {
@@ -48,22 +40,23 @@ describe("validateContractMetadata", () => {
     }
   });
 
-  it("accepts schema 3 when size/origin/overwrite/palette match and paid markers exist", () => {
+  it("accepts the paid schema 4 board without any extra get_board markers", () => {
     const result = validateContractMetadata(validPaidBoard());
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.summary).toMatch(/paid/);
-      expect(result.summary).toMatch(/schema 3/);
+      expect(result.summary).toMatch(/schema 4/);
     }
   });
 
-  it("rejects schema 3 without paid markers", () => {
+  it("rejects the retired schema 3 and says so", () => {
     const board = validFreeBoard();
     board.schema_version = 3;
     const result = validateContractMetadata(board);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.title).toMatch(/paid/i);
+      expect(result.title).toMatch(/schema/i);
+      expect(result.message).toMatch(/retired/i);
     }
   });
 
@@ -75,7 +68,7 @@ describe("validateContractMetadata", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("rejects schema drift outside 2 and 3", () => {
+  it("rejects schema drift outside 2 and 4", () => {
     const board = validFreeBoard();
     board.schema_version = 99;
     const result = validateContractMetadata(board);

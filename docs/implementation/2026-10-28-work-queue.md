@@ -13,7 +13,7 @@ paints, and the paint is visible to someone else — on **testnet** first, then 
 
 | # | Task | File | Owner | Why this owner | Blocked by |
 |---|---|---|---|---|---|
-| 1 | Schema-4 cleanup: accept schema 4, delete schema-3 mock path + `payment-provider.ts` | this doc, §Hermes | **Hermes** | Small, deletion-shaped, needs a reviewer who remembers why schema 3 is dead | nothing |
+| 1 | Schema-4 cleanup: accept schema 4, delete schema-3 mock path + `payment-provider.ts` | this doc, §Hermes | **Hermes** | **gate delivered → PR #18**: page accepts schema 2/4, schema 3 is rejected by name, fixture quotes can never render. The Journey C module deletion moved into the Cursor prompt because it overlaps `mount-wall` | nothing |
 | 2 | `pay-recency-ui` — per-cell price, stroke total, legend, paint wired to schema 4 | `pay-recency-ui.task.json` | **Cursor** | Multi-file frontend state work; Cursor's lane | #1 |
 | 3 | `pay-checkout` — quantity, NEAR/mPOO purchase, receipt-driven confirmation | `pay-checkout.task.json` | **Cursor** | Same lane; the largest single UI surface | #1 |
 | 4 | `paid-board-safety` — pause, treasury withdrawal with reserve floor, bounded price change | `paid-board-safety.task.json` | **Codex** | Contract-internal invariants and arithmetic; good fit for a long, test-first run | nothing |

@@ -42,6 +42,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | Cursor: checkout flow | [`implementation/pay-checkout.task.json`](implementation/pay-checkout.task.json) |
 | Codex: pause, treasury, bounded price change | [`implementation/paid-board-safety.task.json`](implementation/paid-board-safety.task.json) |
 | Codex: TOILET token | [`implementation/toilet-token.task.json`](implementation/toilet-token.task.json) |
+| Cursor: ready-to-paste prompts | [`implementation/cursor-prompts.md`](implementation/cursor-prompts.md) |
 
 ## Code and security
 
