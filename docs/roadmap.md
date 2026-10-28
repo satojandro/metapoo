@@ -100,3 +100,14 @@ Accepted payment UI requirements are in [the frontend handoff](payments/frontend
 and complete [the mainnet cost matrix](payments/mainnet-cost-validation.md).
 Upgrade authority and migration design remain a pre-launch decision in
 [the upgrade proposal](payments/upgrade-policy.md); this roadmap does not approve a deployment.
+
+## TOILET economy — specified, blocked on prerequisites (2026-10-28)
+
+Fixed-supply 1,000,000,000 TOILET with longevity issuance, TOILET staking for platform profit, burn mechanics and a
+burn page are specified in [TOILET economy v1](economy/2026-10-28-toilet-economy-v1.md). It stays out of
+the MVP path, but it adds one hard M2 prerequisite: **treasury withdrawal and revenue accounting.** With
+no way for revenue to leave the paid contract, there is no profit to stake against.
+
+Open decisions there: staking asset (TOILET vs MPOO, and only one can claim revenue), emission model
+(revenue-keyed with a 1B cap is recommended), TOILET tradeability, and a per-account earning cap
+(the entire board costs $190 at 0.0025 NEAR/pixel, so uncapped emission is capturable by one wallet).

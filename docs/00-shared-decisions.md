@@ -106,7 +106,7 @@ Those identifiers are not the game contract. Do not point the pixel contract at 
 
 - Paid paint purchases use **MPOO only**, replacing the earlier NEAR/MPOO choice and its 20% price comparison.
 - Pixels earn bounded **TOILET**, which is spent/burned as paint. No third independent paint-credit currency is planned.
-- Users stake **MPOO**, explicitly confirmed by the user, and receive net game revenue **in MPOO** after a disclosed operating reserve and liabilities. This replaces earlier TOILET staking and NEAR-only payout proposals.
+- Users stake **MPOO**, explicitly confirmed by the user, and receive net game revenue **in MPOO** after a disclosed operating reserve and liabilities. This replaces earlier TOILET staking and NEAR-only payout proposals. *(Contested 2026-10-28: the owner now proposes staking **TOILET** for the same revenue. Both cannot claim it — see [TOILET economy v1](economy/2026-10-28-toilet-economy-v1.md) §4. Decision pending.)*
 - Competitive repeated painting should consume more paint units than pixels issue. The economy must also have explicit reward caps for quiet/cooperative/bot-dominated play.
 - A separate NEAR-to-MPOO premium inventory shop and bounded replenishment executor are under investigation. NEAR buys MPOO there; it does not directly buy game paint. No premium, budget or live execution configuration is chosen.
 
