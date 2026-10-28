@@ -24,6 +24,26 @@ paints, and the paint is visible to someone else — on **testnet** first, then 
 Two Codex tasks are deliberately independent of each other and of the frontend, so they can run in
 parallel with Cursor rather than queueing behind it.
 
+## Review status — 2026-10-28
+
+Codex delivered both contract tasks on `codex/paid-board-safety-toilet-token` → **PR #15**. Verified
+locally: 63 paid-board tests (was 54), 18 TOILET tests, both release wasms build, `web/` untouched.
+
+**Merge gate — three should-fix items, all Codex:**
+
+1. `ft_resolve_transfer` returns `used + tax`, which can exceed the `amount` argument it was given.
+   Return `used`; report gross in the event.
+2. The TOILET tax has no bound and no cooldown, while the board's price has both — an owner key can
+   reach 100 % in one transaction on a contract with no upgrade path. Owner must choose the posture.
+3. `mint` panics unless the recipient is already registered, so a payout batch fails on the first
+   unregistered player. Decide who pays registration.
+
+**Owner decision (blocks item 2):** TOILET tax immutable at launch (like mPOO) or owner-controlled with a
+bound, cooldown and upgrade path. The current combination is trusted *and* irreparable.
+
+The branch was cut before the documentation cut, so `main` was merged into it (`3d214b8`) with the
+`docs/README.md` conflict resolved — its two rows folded into the one-page map. No code conflicts.
+
 ## What Hermes takes now
 
 **6 — `payments.rs` review.** Written up as `docs/payments/2026-10-28-payments-review.md` with each
