@@ -97,6 +97,9 @@ export function wallPageHtml(): string {
         </section>
 
         <div class="paint-dock">
+          <p id="repaint-legend" class="repaint-legend" hidden></p>
+          <p id="cell-price" class="cell-price" role="status" aria-live="polite"></p>
+          <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
           <div id="paint-unlock" class="paint-unlock" hidden>
             <p class="paint-unlock-title">Painting is read-only until you approve one drawing key.</p>
             <p class="paint-unlock-body">

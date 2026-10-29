@@ -70,6 +70,10 @@ summary { cursor:pointer; }
 .hover-summary { display:inline-flex; width:max-content; margin:2px 0 4px; padding:3px 7px; border:1px solid #4a4b50; border-radius:3px; background:#1b1c20; color:#e9e5df; font:9px/1.2 monospace; letter-spacing:.04em; }
 .selection-preview .preview-label { font-size:11px; }
 .paint-dock { position:sticky; bottom:14px; z-index:8; border-radius:8px; padding:12px 16px; background:#e9e5df; border:1px solid #fff9; box-shadow:0 12px 35px #0006; gap:12px; margin:16px auto; max-width:950px; }
+.repaint-legend,.cell-price,.stroke-total { flex:1 1 100%; margin:0; font-size:13px; line-height:1.4; color:#25252b; }
+.repaint-legend[hidden] { display:none; }
+.cell-price:empty,.stroke-total:empty { display:none; }
+.cell-price[data-state=unavailable],.stroke-total[data-state=unavailable] { color:#9f3029; }
 .palette { flex:1; gap:6px; }
 .swatch { position:relative; flex:0 0 40px; width:40px; height:44px; padding:5px; border:1px solid transparent; border-radius:4px; background:transparent; }
 .swatch .chip { width:100%; height:100%; border:1px solid #0002; border-radius:2px; }
