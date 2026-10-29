@@ -4,6 +4,8 @@
 **Companion tasks:** [`pay-checkout.task.json`](../implementation/pay-checkout.task.json), [`pay-recency-ui.task.json`](../implementation/pay-recency-ui.task.json), [`frontend-handoff.md`](frontend-handoff.md)  
 **Authority:** does not override [paid model decisions](2026-10-28-paid-model-decisions.md). It *stages how* schema-4 buy/spend becomes a consumer product.
 
+**Near-term sequencing:** see the [UX review vs shipped UI](buy-credits-ux-review.md). Keep this doc as the north star; Phase 0 should match current dock/harness fidelity (credits language, no packs/theater yet). Raise the whole paint journey one band before consumer garnish.
+
 ---
 
 ## 0. One-line bet
