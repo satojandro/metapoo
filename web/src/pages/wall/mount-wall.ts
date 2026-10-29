@@ -95,7 +95,7 @@ import type { ParsedRoute } from "../../app/routes";
 import type { AppServices } from "../../app/services";
 import { paintOperationId } from "../../app/operations";
 import { mountBuyCreditsSheet } from "../../app/buy-credits-sheet";
-import { parseHelpPaintSearch } from "../bounties/deep-link";
+import { parseWallLinkSearch } from "./wall-link";
 import { wallPageHtml } from "./wall-template";
 import { mountWallHint } from "../../wall-hint";
 import {
@@ -142,7 +142,7 @@ function shellEl<T extends Element>(selector: string): T | null {
 }
 
 /**
- * Page-registry adapter: passes route context so bounty Help-paint links focus the wall.
+ * Page-registry adapter: passes route context so `/wall?x=…&y=…` links focus the wall.
  */
 export const mountWallPage: PageMount = (root, ctx) =>
   mountWall(root, ctx.services, { route: ctx.route });
@@ -609,7 +609,7 @@ export function mountWall(
   });
 
 /**
- * Apply Help-paint / bounty deep-link query after the wall mounts.
+ * Apply a `/wall?x=…&y=…&zoom=…` location link after the wall mounts.
  * Coordinates and zoom are clamped; a URL never supplies a trusted price.
  */
 function applyRoutePaintingContext(): void {
@@ -622,7 +622,7 @@ function applyRoutePaintingContext(): void {
       params.set(key, value);
     }
   }
-  const parsed = parseHelpPaintSearch(`?${params.toString()}`);
+  const parsed = parseWallLinkSearch(`?${params.toString()}`);
   if (parsed.x === null || parsed.y === null) {
     return;
   }
@@ -635,12 +635,6 @@ function applyRoutePaintingContext(): void {
   const contextBits: string[] = [
     `Focused square x=${parsed.x}, y=${parsed.y} from the link.`,
   ];
-  if (parsed.bounty) {
-    contextBits.push(`Bounty context ${parsed.bounty} (coordination only — not territory).`);
-  }
-  if (parsed.template) {
-    contextBits.push(`Template id ${parsed.template} (overlay not applied in this shell yet).`);
-  }
   if (parsed.board && CONTRACT_ID && parsed.board !== CONTRACT_ID) {
     contextBits.push(
       `Link board "${parsed.board}" differs from configured contract ${CONTRACT_ID}; coordinates were still applied.`,

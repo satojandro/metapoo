@@ -26,7 +26,7 @@ Live configuration (`get_tunables`, `get_payment_config`):
   (`paid-model-decisions.md:69`); the earlier deployment carried the legacy 0.0069 default from the
   2026-10-12 plan and was replaced.
 - 1 mPOO per credit (`1000000000000000000`) — **a plumbing fixture, not an economic rate.**
-  **Launch sells credits for NEAR only** (owner decision, 2026-10-29): the mPOO exchange rate adds a
+  ~~**Launch sells credits for NEAR only**~~ (owner decision, 2026-10-29; **superseded the same day: mPOO is offered at mainnet launch**): the mPOO exchange rate adds a
   layer the launch does not need. The contract path stays, the UI must not offer it.
 - Registration fee 0.01 NEAR; repaint tiers 1 / 2 / 4 credits at >60 min / 10–60 min / <10 min.
 - `toilet_per_cell_second = 1000000000000000` (0.001 TOILET per cell per second). **Fixture.** Roughly 86.4 TOILET per cell per day; the real emission model is still an open owner decision.

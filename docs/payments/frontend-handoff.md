@@ -8,7 +8,7 @@ pressure/TOILET fixtures or enable payments on the free schema-2 board.
 
 | Display | Source / behavior |
 |---|---|
-| Price per paint pixel | Board `get_payment_config().near_per_credit`: **0.0025 NEAR** at launch. **Launch sells credits for NEAR only.** The contract keeps its mPOO purchase path, but the UI must not offer it until the real token and its exchange rate are settled (phase 3). |
+| Price per paint pixel | Board `get_payment_config().near_per_credit`: **0.0025 NEAR** at launch. **Superseded 2026-10-29 by the owner: mPOO is a payment option at mainnet launch.** The UI keeps it hidden (`TOKEN_PAYMENTS_ENABLED=false`) until the mPOO rate rule is settled and an mPOO purchase is recorded on testnet. See [code audit](../2026-10-29-code-audit.md) C8. |
 | Paint pixels available | `get_credits(account_id)`: one credit = one pixel placement, no expiry. Null means not registered, not an RPC failure. |
 | NEAR available in wallet | Network-matched account balance with storage backing / locked balance accounted for. Label spendable estimate accurately; reserve gas before enabling checkout or Max. Do not mistake function-call-key allowance for wallet funds. |
 | mPOO in wallet | `ft_balance_of(account_id)` on the board-configured token; decimals from verified `ft_metadata`, not a floating-point approximation. |
@@ -26,7 +26,7 @@ credits; hide the CTA there or label it as a separate mainnet external market.
 ## Checkout and refresh behavior
 
 - Quantity plus total: 10 credits = 0.025 NEAR; 100 = 0.25 NEAR.
-- Launch: NEAR only. Disclose registration and estimated network fees separately.
+- Launch: NEAR and mPOO (owner decision, 2026-10-29). Disclose registration and estimated network fees separately.
 - Read prices from the deployed board; send expected price and minimum credits.
 - Insufficient mPOO offers the NEARLY link. Return/focus triggers a fresh balance read;
   a click, tab return or wallet success message is not proof that a purchase settled.

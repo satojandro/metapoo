@@ -16,9 +16,6 @@ export interface ShellHandles {
 
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: string }> = [
   { href: "/wall", label: "Wall", match: "wall" },
-  { href: "/bounties", label: "Art Bounties", match: "bounties" },
-  { href: "/history", label: "History", match: "history" },
-  { href: "/account", label: "My activity", match: "account" },
 ];
 
 /**
@@ -53,15 +50,6 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   navList.className = "app-nav-list";
   for (const item of NAV_ITEMS) {
     const li = document.createElement("li");
-    if (item.match !== "wall") {
-      const disabled = document.createElement("span");
-      disabled.className = "nav-coming-soon";
-      disabled.setAttribute("aria-disabled", "true");
-      disabled.textContent = `${item.label} · soon`;
-      li.append(disabled);
-      navList.append(li);
-      continue;
-    }
     const a = document.createElement("a");
     a.href = item.href;
     a.dataset.navMatch = item.match;
@@ -134,14 +122,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   );
 
   function setActiveNav(route: ParsedRoute): void {
-    const matchKey =
-      route.pageId === "bounties/new" || route.pageId === "bounties/:id"
-        ? "bounties"
-        : route.pageId === "prints/:id"
-          ? "history"
-          : route.pageId === "home"
-            ? ""
-            : route.pageId;
+    const matchKey = route.pageId === "home" ? "" : route.pageId;
     for (const link of nav.querySelectorAll<HTMLAnchorElement>("a[data-nav-match]")) {
       const active = matchKey !== "" && link.dataset.navMatch === matchKey;
       link.classList.toggle("is-active", active);

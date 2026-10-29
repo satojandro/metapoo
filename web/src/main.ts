@@ -32,7 +32,7 @@ const router = createRouter({
 
 router.start();
 
-// Expose a stable hook for Worker G (and tests) without editing wallet wiring.
+// Expose a stable hook for new pages (and tests) without editing wallet wiring.
 export {
   registerPageMount,
   getPageMount,

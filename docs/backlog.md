@@ -42,7 +42,7 @@ git log --oneline origin/main -- web/src/pages/wall web/src/style.css web/src/wa
 grep -rn "devicePixelRatio" web/src     # the T1 check, as an example
 ```
 
-Baseline for this revision: `origin/main = 5b40b63`, 263 tests / 39 files, build clean.
+Baseline for the T-rows: `origin/main = 5b40b63`, 263 tests / 39 files, build clean. Payment rows re-checked at `09965fe` (2026-10-29).
 
 ---
 
@@ -85,14 +85,12 @@ Baseline for this revision: `origin/main = 5b40b63`, 263 tests / 39 files, build
 | **T10** | Berry Club parity remainder | default-on shipped; single-tap-always is a consent decision |
 | **R1** | Sign once, paint forever | four decisions listed in `roadmap.md` R1 |
 
-## Payment stage — local work, deployment and UI pending (2026-10-28)
+## Payment stage — on testnet, mainnet pending (updated 2026-10-29)
 
-Evidence: branch source `contracts/paid-board/src/lib.rs` and `payments.rs` on
-`codex/paint-credit-payments`; `new`, `buy_credits_near`, `ft_on_transfer`,
-`get_credits`, `get_payment_config` and `set_credit_prices` exist. Baseline contract commits:
-`0e4eae5` and `34b1a84`. The `codex/paid-board-safety-toilet-token` safety implementation has 63 local
-tests and a passing release WASM build; see [contract verification](learning/2026-10-28-contract-safety-and-token.md).
-not a live settlement or cost result. `contracts/board` (schema 2) is **retired as a product**
+Evidence (re-checked 2026-10-29 at `09965fe`): the paid board, safety controls and TOILET are on `main`
+(PRs #15–#17) and deployed to testnet ([deployment record](payments/testnet-deployment-2026-10.md)).
+`cargo test`: paid board 86, TOILET 24. That is local and scripted-testnet evidence, not a settlement
+through the page and not a cost result. Mainnet blockers: [code audit](2026-10-29-code-audit.md) §1. `contracts/board` (schema 2) is **retired as a product**
 and kept only as the testnet fixture. `web/src/payment-provider.ts` is already absent. The schema-3
 Journey C pressure modules are removed, so fixture quotes cannot render on the wall. Schema 4 credit
 display stays in `paint-wallet.ts`. Mainnet deployment: none,
@@ -100,14 +98,14 @@ confirmed by owner. A testnet token is needed for the first paid rehearsal.
 
 | ID | Pending work | Evidence / completion gate |
 |---|---|---|
-| PAY-UI | Read-only display + buy-credits sheet + NEAR-only CTA gating; live Brave/Meteor verification still pending | Issues #25–#29 fixes on this branch: `restoreWalletSession`, wallet-details Close/Escape/outside-click, Buy NEAR instead of NEARLY while `TOKEN_PAYMENTS_ENABLED=false`, credits dock refresh after paint, Retry on price fetch failure. Proof: `wallet-restore.test.ts`, `wallet-details-close.test.ts`, `credits-dock-refresh.test.ts`, `buy-credits-sheet.test.ts`. |
+| PAY-UI | Read-only display + buy-credits sheet + NEAR CTA (mPOO hidden; **mPOO is offered at mainnet launch**, owner 2026-10-29, gated on audit C8); live Brave/Meteor verification still pending | Issues #25–#29 fixes on this branch: `restoreWalletSession`, wallet-details Close/Escape/outside-click, Buy NEAR instead of NEARLY while `TOKEN_PAYMENTS_ENABLED=false`, credits dock refresh after paint, Retry on price fetch failure. Proof: `wallet-restore.test.ts`, `wallet-details-close.test.ts`, `credits-dock-refresh.test.ts`, `buy-credits-sheet.test.ts`. |
 | PAY-INTEGRATION | Paid schema-4 frontend and real testnet purchase → paint → refreshed balances | Checkout UI exists locally; full-loop receipt evidence on Brave+Meteor still open. **Contracts are live on testnet** ([deployment record](payments/testnet-deployment-2026-10.md)) |
-| **PAY-REHEARSAL** | **Delivered 2026-10-29** — board + TOILET deployed and exercised on testnet | `docs/payments/testnet-deployment-2026-10.md`: 49 checks, board `board1.metapoo-player3.testnet`; harness `~/Hermes-crypto-builder/mpoo/harness`. Proves schema-4 views and `resolve_claim` on a refused mint |
+| **PAY-REHEARSAL** | **Delivered 2026-10-29** — board + TOILET deployed and exercised on testnet | `docs/payments/testnet-deployment-2026-10.md`: 50 checks, board `board3.metapoo-player1.testnet` (canonical; `board1.metapoo-player3.testnet` was an earlier, replaced deployment); harness `~/Hermes-crypto-builder/mpoo/harness`. Proves schema-4 views and `resolve_claim` on a refused mint |
 | **PAY-RECENCY-UI** | Show the repaint price before the user commits: per-cell cost, stroke total, one-line legend | Page reads `get_cell_cost` and `get_tunables`. A cell painted 2 minutes ago renders chain cost × cells, not cells × 1. The legend sits outside `<details>`. A failed `get_cell_cost` disables submit and shows "price unavailable". Proof: `d1475d9`, `web/src/pages/wall/repaint-price.test.ts`. |
 | **PAY-COST** | **Reopen immediately after first mainnet paid-board deployment** | [Required cost matrix](payments/mainnet-cost-validation.md); all mainnet cases pending, keep open through owner acceptance |
-| PAY-SAFETY | Local implementation ready for review; chain rehearsal pending | Branch implementation in `contracts/paid-board/src/safety.rs`, price bounds and checked credit counters; 63 contract tests and release build pass. Pause, native withdrawals and price events implemented. Storage estimate still needs paid-board measurement. |
+| PAY-SAFETY | On main and testnet; **two gaps found by the audit** | `contracts/paid-board/src/safety.rs`: pause, withdrawals, price bounds. Open: `set_tunables` can raise repaint credits without bound (audit C1), and `STORAGE_PER_PIXEL` is still the free-board estimate (C5) |
 | PAY-UPGRADE | Select deployment authority and rehearse state-preserving upgrades before public paid launch | Owner-only `upgrade()` in `34b1a84`; pause now local. New safety fields change the stored layout: migration and testnet rehearsal remain open. |
-| TOILET-TOKEN | Local implementation ready for review; deployment and venue compatibility unverified | Branch implementation in `contracts/toilet`: 18 tests and release build pass. Capped issuer, token/storage APIs, venue tax and supply views; no live cross-contract receipts. |
+| TOILET-TOKEN | On main and testnet (`metapoo-toilet.testnet`); venue compatibility unverified | `contracts/toilet`: 24 tests. Capped issuer, emitter-only mint, venue tax. A `resolve_claim` on a refused mint has been seen on testnet; a successful mint through the page has not |
 | ECONOMY-LATER | Staking, longevity rewards, board-to-token issuance, swaps, inventory shop | Still deferred. Standalone TOILET token code does not implement an emission schedule, vault or revenue distribution. |
 
 ## Open gates and scoped work
@@ -143,6 +141,5 @@ Preconditions before the next dispatch:
 
 | file | status |
 |---|---|
-| `remaining.json`, `remaining.harness.json` (repo root) | 46 raw items, heavy duplication, all `pass:false`. **Do not dispatch from these.** Rebuild from this document. |
-| `fix_plan.md` | three unresolved P5 findings; they are **T1 acceptance criteria**, not separate tasks |
+| `remaining.json`, `remaining.harness.json`, `fix_plan.md`, `.ao/`, `signs/` | **Deleted 2026-10-29** (cleanup PR); recoverable from tag `archive/pre-cleanup-2026-10-29`. `fix_plan.md`'s three findings live on as the T1 acceptance criteria above |
 | `~/Hermes-crypto-builder/metapoo-backlog-refresh-2026-10-26.md` | **RETRACTED** for T2/T3/T4/T8 status — see the table above |

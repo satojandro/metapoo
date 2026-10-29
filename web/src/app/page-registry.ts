@@ -1,14 +1,11 @@
 /**
  * Stable page-mount registry.
  *
- * Worker G registers bounty pages here without touching wallet wiring:
+ * A new page registers here without touching wallet wiring:
  *
- *   import { registerPageMount } from "../../app/page-registry";
- *   registerPageMount("bounties", mountBountiesList);
- *   registerPageMount("bounties/new", mountBountyCreate);
- *   registerPageMount("bounties/:id", mountBountyDetail);
+ *   registerPageMount("wall", mountWallPage);
  *
- * Later registrations override earlier ones (defaults → Worker G).
+ * Later registrations override earlier ones.
  */
 
 import type { AppServices } from "./services";
@@ -26,18 +23,11 @@ export interface PageContext {
 export type PageMount = (root: HTMLElement, ctx: PageContext) => PageDispose;
 
 /**
- * Logical page ids. Route matching maps URLs onto these ids;
- * Worker G only needs the bounty* ids.
+ * Logical page ids. Route matching maps URLs onto these ids.
  */
 export type PageId =
   | "home"
   | "wall"
-  | "bounties"
-  | "bounties/new"
-  | "bounties/:id"
-  | "history"
-  | "prints/:id"
-  | "account"
   | "not-found";
 
 const mounts = new Map<PageId, PageMount>();

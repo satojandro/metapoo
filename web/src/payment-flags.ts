@@ -1,8 +1,8 @@
 /**
- * Launch sells credits for NEAR only.
+ * Mainnet launch sells credits for NEAR and mPOO (owner decision, 2026-10-29).
  *
- * The contract keeps its mPOO purchase path (`ft_on_transfer`, `mpoo_per_credit`),
- * but the NEAR/mPOO exchange rate is an extra product decision the launch does not
- * need. Flip this to true when that rate is settled; nothing else changes.
+ * Hidden until the mPOO rate rule is settled (docs/2026-10-29-code-audit.md C8)
+ * and an mPOO purchase is recorded on testnet. The contract path
+ * (`ft_on_transfer`, `mpoo_per_credit`) already exists.
  */
 export const TOKEN_PAYMENTS_ENABLED = false;

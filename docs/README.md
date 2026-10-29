@@ -13,6 +13,8 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | what is left to build? | [`backlog.md`](backlog.md) — every row carries its proof |
 | what has already gone wrong here? | [`learning/traps.md`](learning/traps.md) |
 | what is decided vs still open? | [`00-shared-decisions.md`](00-shared-decisions.md), [`roadmap.md`](roadmap.md) |
+| what blocks mainnet, in what order? | [`2026-10-29-code-audit.md`](2026-10-29-code-audit.md) |
+| how should the site look and feel? | [`2026-10-29-whole-site-design-review.md`](2026-10-29-whole-site-design-review.md) |
 | how should a judgement call be made? | [`2026-10-14-product-judgment.md`](2026-10-14-product-judgment.md) |
 
 ## Payments (the money path)
@@ -20,30 +22,30 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | topic | document | status |
 |---|---|---|
 | the paid model: credits, schema 4, the 15 contradictions it resolved | [`payments/2026-10-28-paid-model-decisions.md`](payments/2026-10-28-paid-model-decisions.md) | **authoritative** |
-| what the purchase UI must do and show | [`payments/frontend-handoff.md`](payments/frontend-handoff.md) | current; checkout unbuilt |
+| what the purchase UI must do and show | [`payments/frontend-handoff.md`](payments/frontend-handoff.md) | current; NEAR checkout built (`55526b9`), mPOO hidden |
 | mainnet cost measurement | [`payments/mainnet-cost-validation.md`](payments/mainnet-cost-validation.md) | **all pending** — reopens on first deploy |
-| first live testnet deployment of board + TOILET, with evidence | [`payments/testnet-deployment-2026-10.md`](payments/testnet-deployment-2026-10.md) | **deployed 2026-10-29**, 49 checks green; frontend still unbuilt |
+| first live testnet deployment of board + TOILET, with evidence | [`payments/testnet-deployment-2026-10.md`](payments/testnet-deployment-2026-10.md) | **deployed 2026-10-29** at `board3.metapoo-player1.testnet` (canonical), 50 checks green |
 | upgrade authority and migration | [`payments/upgrade-policy.md`](payments/upgrade-policy.md) | `upgrade()` exists; migration + pause missing |
-| the contract itself | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | schema 4, not deployed |
-| pause, treasury withdrawal, bounded price change | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) + [`implementation/paid-board-safety.task.json`](implementation/paid-board-safety.task.json) | **on the review branch**, not on main yet |
+| the contract itself | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | schema 4, testnet only |
+| pause, treasury withdrawal, bounded price change | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | on main (PR #15) and on testnet |
 
 ## Economy
 
 | topic | document | status |
 |---|---|---|
 | TOILET: issuance, staking, burns, burn page | [`economy/2026-10-28-toilet-economy-v1.md`](economy/2026-10-28-toilet-economy-v1.md) | **proposed** — four decisions open |
-| TOILET token: supply, tax, refund semantics | [`../contracts/toilet/README.md`](../contracts/toilet/README.md) + [`implementation/toilet-token.task.json`](implementation/toilet-token.task.json) | **on the review branch**, not deployed |
+| TOILET token: supply, tax, refund semantics | [`../contracts/toilet/README.md`](../contracts/toilet/README.md) | on main (PRs #15–#17), testnet at `metapoo-toilet.testnet` |
 
 ## Work in flight
 
 | topic | document |
 |---|---|
-| who is doing what, and in what order | [`implementation/2026-10-28-work-queue.md`](implementation/2026-10-28-work-queue.md) |
-| Cursor: repaint price display | [`implementation/pay-recency-ui.task.json`](implementation/pay-recency-ui.task.json) |
-| Cursor: checkout flow | [`implementation/pay-checkout.task.json`](implementation/pay-checkout.task.json) |
-| Codex: pause, treasury, bounded price change | [`implementation/paid-board-safety.task.json`](implementation/paid-board-safety.task.json) |
-| Codex: TOILET token | [`implementation/toilet-token.task.json`](implementation/toilet-token.task.json) |
-| Cursor: ready-to-paste prompts | [`implementation/cursor-prompts.md`](implementation/cursor-prompts.md) |
+| what is next, in what order | [`2026-10-29-code-audit.md`](2026-10-29-code-audit.md) §5 |
+| what is left, with proof | [`backlog.md`](backlog.md) |
+
+The task orders in [`implementation/`](implementation/) (repaint price, checkout, safety, TOILET token,
+D4, accrual claim) are **all delivered** (PRs #15–#23). The 2026-10-28 work queue is superseded by the
+audit's order of work. Keep them for the reasoning; do not dispatch from them.
 
 ## Code and security
 

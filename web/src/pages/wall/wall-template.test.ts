@@ -30,9 +30,7 @@ describe("wallPageHtml", () => {
       expect(about?.querySelector(selector), selector).not.toBeNull();
     }
 
-    expect(root.querySelector(".wall-runtime-status")?.textContent).toMatch(
-      /Testnet[\s\S]*No app fee/,
-    );
+    expect(root.querySelector(".wall-runtime-status")?.textContent).toMatch(/Testnet/);
     expect(root.querySelectorAll(".wall-layout details")).toHaveLength(1);
     expect(root.querySelector(".scene-label")?.textContent).toMatch(
       /DEMO STALL ART[\s\S]*LIVE BOARD/,
@@ -68,5 +66,23 @@ describe("wallPageHtml", () => {
       board!.compareDocumentPosition(root.querySelector("#draw-button")!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("labels the network it is configured for, and claims no fee", () => {
+    const root = document.createElement("div");
+    root.innerHTML = wallPageHtml("mainnet");
+    const status = root.querySelector(".wall-runtime-status")?.textContent ?? "";
+    expect(status).toMatch(/Mainnet/);
+    expect(status).not.toMatch(/Testnet/);
+    expect(status).not.toMatch(/No app fee/);
+  });
+
+  it("says the drawing key can spend paint credits but not wallet funds", () => {
+    const root = document.createElement("div");
+    root.innerHTML = wallPageHtml();
+    const body = root.querySelector(".paint-unlock-body")?.textContent ?? "";
+    expect(body).toMatch(/spend your paint credits/);
+    expect(body).toMatch(/cannot send NEAR or tokens/);
+    expect(body).not.toMatch(/cannot move your funds/);
   });
 });
