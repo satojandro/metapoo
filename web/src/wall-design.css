@@ -9,7 +9,6 @@ a { color:#73d7ee; } button,a,summary { -webkit-tap-highlight-color:transparent;
 .app-nav-list { justify-content:center; gap:24px; font-size:12px; }
 .app-nav-list a { color:#efebe5; padding:8px 0; }
 .app-nav-list a.is-active { color:#f1dc5e; border-color:#f1dc5e; }
-.nav-coming-soon { color:#92949a; cursor:not-allowed; }
 .shell-chrome { grid-column:3; grid-row:1; display:block; margin:0; padding:0; background:none; border:0; }
 .wallet-chrome { display:flex; align-items:center; gap:16px; }
 .action { border:1px solid #515156; border-radius:4px; background:#f0ddd9; color:#251d22; font-size:12px; font-weight:700; padding:12px 18px; transition:background .18s,transform .18s; }
@@ -127,7 +126,7 @@ summary { cursor:pointer; }
 .about { grid-column:1 / -1; }
 .result { border-radius:6px; font-size:13px; }
 @media (max-width:1000px) {
-.app-shell { padding:0 22px 24px; } .app-shell-top { gap:12px; } .app-nav-list { gap:14px; } .nav-coming-soon { display:none; }
+.app-shell { padding:0 22px 24px; } .app-shell-top { gap:12px; } .app-nav-list { gap:14px; }
 .wallet-details[open] { right:22px; } .stall-scene { aspect-ratio:1.2; } .stall-scene::before { background-size:auto 100%; }
 .stall-back { left:27%; right:27%; } .is-focused .stall-back { left:50%; right:auto; }
 }

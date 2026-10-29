@@ -124,23 +124,23 @@ describe("router dispose", () => {
     router.stop();
   });
 
-  it("allows Worker G to override bounty mounts via registerPageMount", () => {
-    registerPageMount("bounties", (root) => {
+  it("lets a later registerPageMount override an earlier one", () => {
+    registerPageMount("wall", (root) => {
       root.textContent = "stub";
       return () => root.replaceChildren();
     });
 
-    // Worker G registration (later wins).
-    registerPageMount("bounties", (root) => {
-      root.textContent = "Worker G bounty list";
+    // Later registration wins.
+    registerPageMount("wall", (root) => {
+      root.textContent = "override";
       return () => root.replaceChildren();
     });
 
     const outlet = document.querySelector<HTMLElement>("#outlet")!;
     const router = createRouter({ outlet, services: fakeServices() });
     router.start();
-    router.navigate("/bounties");
-    expect(outlet.textContent).toBe("Worker G bounty list");
+    router.navigate("/wall");
+    expect(outlet.textContent).toBe("override");
     router.stop();
   });
 

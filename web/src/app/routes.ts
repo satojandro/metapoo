@@ -1,7 +1,7 @@
 /**
  * Path → page id matching for History API routing.
  *
- * Query params (board, x, y, zoom, bounty, template, snapshot) are parsed
+ * Query params (board, x, y, zoom) are parsed
  * as strings; callers clamp/validate before trusting coordinates.
  */
 
@@ -12,17 +12,13 @@ export interface RouteQuery {
   x?: string;
   y?: string;
   zoom?: string;
-  bounty?: string;
-  template?: string;
-  snapshot?: string;
-  token?: string;
   [key: string]: string | undefined;
 }
 
 export interface ParsedRoute {
   path: string;
   pageId: PageId;
-  /** Captured path params, e.g. { id: "abc" } for /bounties/:id */
+  /** Captured path params. No current route has any. */
   params: Record<string, string>;
   query: RouteQuery;
 }
@@ -32,10 +28,6 @@ const KNOWN_QUERY_KEYS = [
   "x",
   "y",
   "zoom",
-  "bounty",
-  "template",
-  "snapshot",
-  "token",
 ] as const;
 
 /**
@@ -84,37 +76,6 @@ export function matchRoute(pathname: string, search = ""): ParsedRoute {
   if (path === "/wall") {
     return { path, pageId: "wall", params: {}, query };
   }
-  if (path === "/bounties") {
-    return { path, pageId: "bounties", params: {}, query };
-  }
-  if (path === "/bounties/new") {
-    return { path, pageId: "bounties/new", params: {}, query };
-  }
-  const bountyDetail = path.match(/^\/bounties\/([^/]+)$/);
-  if (bountyDetail) {
-    return {
-      path,
-      pageId: "bounties/:id",
-      params: { id: decodeURIComponent(bountyDetail[1]) },
-      query,
-    };
-  }
-  if (path === "/history") {
-    return { path, pageId: "history", params: {}, query };
-  }
-  const printDetail = path.match(/^\/prints\/([^/]+)$/);
-  if (printDetail) {
-    return {
-      path,
-      pageId: "prints/:id",
-      params: { id: decodeURIComponent(printDetail[1]) },
-      query,
-    };
-  }
-  if (path === "/account") {
-    return { path, pageId: "account", params: {}, query };
-  }
-
   return { path, pageId: "not-found", params: {}, query };
 }
 

@@ -48,23 +48,6 @@ export const WALLET_NETWORK: "mainnet" | "testnet" =
  */
 export const CONTRACT_ID = envString("VITE_CONTRACT_ID");
 
-/**
- * Art bounty escrow contract account (separate from the game board).
- * Empty → bounty pages stay on the fixture adapter (demo data).
- * Set `VITE_BOUNTY_CONTRACT_ID` for live view calls. Do not put the MPOO
- * token account here.
- */
-export const BOUNTY_CONTRACT_ID = envString("VITE_BOUNTY_CONTRACT_ID");
-
-/**
- * Live bounty funding CTA. Off by default until the payout path is ready.
- * When false, create/fund UI stays disabled or gated with explicit copy.
- * When true, the CTA may unlock after confirmation — still MPOO escrow
- * liability, never paint revenue. Does not claim live-verified funding.
- */
-export const BOUNTY_FUNDING_ENABLED =
-  envString("VITE_BOUNTY_FUNDING_ENABLED") === "true";
-
 /** Public JSON-RPC endpoint for free view calls (reads). */
 export const RPC_URL =
   envString("VITE_NEAR_RPC_URL") || defaultRpcUrl(PAGE_NETWORK);

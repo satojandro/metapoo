@@ -1,26 +1,18 @@
 /**
- * Empty / fixture stub pages for routes Worker G/H will fill.
- * Every stub is labelled so it cannot be mistaken for live product data.
+ * A plain text page (today: not-found) with a link back to the wall.
  */
 
 import type { PageDispose, PageMount } from "../app/page-registry";
 
-const DEMO_BANNER =
-  "Demo shell — no funds, NFTs, or live bounty/history data on this page yet.";
-
 export function createStubPage(options: {
   title: string;
   body: string;
-  /** Extra note under the demo banner. */
+  /** Extra note under the body. */
   note?: string;
 }): PageMount {
   return (root, ctx): PageDispose => {
     const section = document.createElement("section");
     section.className = "page-stub";
-
-    const banner = document.createElement("p");
-    banner.className = "demo-banner";
-    banner.textContent = DEMO_BANNER;
 
     const heading = document.createElement("h2");
     heading.dataset.routeHeading = "true";
@@ -29,7 +21,7 @@ export function createStubPage(options: {
     const body = document.createElement("p");
     body.textContent = options.body;
 
-    section.append(banner, heading, body);
+    section.append(heading, body);
 
     if (options.note) {
       const note = document.createElement("p");

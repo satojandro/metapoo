@@ -7,7 +7,7 @@ import { createDrawRequest } from "../../draw-request";
 import { createRouter } from "../../app/router";
 import { clearPageMounts, registerPageMount } from "../../app/page-registry";
 import { matchRoute } from "../../app/routes";
-import { buildHelpPaintDeepLink } from "../bounties/deep-link";
+import { buildWallLink } from "./wall-link";
 import {
   mountWall,
   mountWallPage,
@@ -1183,7 +1183,7 @@ describe("mountWall Help-paint deep link via router", () => {
     document.body.innerHTML = "";
   });
 
-  it("applies bounty Help-paint coordinates through the actual router", () => {
+  it("applies wall link coordinates through the actual router", () => {
     registerPageMount("home", (root) => {
       root.textContent = "home";
       return () => root.replaceChildren();
@@ -1195,13 +1195,11 @@ describe("mountWall Help-paint deep link via router", () => {
     const router = createRouter({ outlet, services });
     router.start();
 
-    const href = buildHelpPaintDeepLink({
+    const href = buildWallLink({
       board: "board.mpoo.testnet",
       x: 40,
       y: 20,
       zoom: 16,
-      bounty: "7",
-      template: "tmpl-demo",
     });
     router.navigate(href);
 
@@ -1211,8 +1209,7 @@ describe("mountWall Help-paint deep link via router", () => {
     const summary = outlet.querySelector("#selection-summary");
     expect(summary?.textContent).toMatch(/Selected square x=40, y=20/);
     const status = outlet.querySelector("#board-load-status");
-    expect(status?.textContent).toMatch(/Bounty context 7/);
-    expect(status?.textContent).toMatch(/Template id tmpl-demo/);
+    expect(status?.textContent).toMatch(/Focused square x=40, y=20 from the link/);
 
     router.stop();
   });

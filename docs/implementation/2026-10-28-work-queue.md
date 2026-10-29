@@ -1,3 +1,6 @@
+> **Superseded 2026-10-29.** Every task below has been delivered or replaced. The current order of work is
+> [`../2026-10-29-code-audit.md`](../2026-10-29-code-audit.md) §5. Kept for its reasoning.
+
 # Work queue — 2026-10-28 (post-merge)
 
 **Baseline:** `main` = `0a3e284`, tree `eac81d53` — the same tree that passed 54 contract tests,

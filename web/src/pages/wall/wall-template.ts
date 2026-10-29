@@ -3,7 +3,18 @@
  * Wallet chrome lives on the app shell so it survives navigation.
  */
 
-export function wallPageHtml(): string {
+import { PAGE_NETWORK } from "../../config";
+import type { NetworkId } from "@shared/types.ts";
+
+/** Short badge text; `NETWORK_LABEL` in shared/types is the long explanatory form. */
+const NETWORK_BADGE: Record<NetworkId, string> = {
+  mock: "Local preview",
+  localnet: "Localnet",
+  testnet: "Testnet",
+  mainnet: "Mainnet",
+};
+
+export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
   const scenery = {
     demoLabelHtml:
       '<div class="scene-label" data-stall-scenery="scene-label" aria-hidden="true">DEMO STALL ART <span>LIVE BOARD</span></div>',
@@ -41,8 +52,8 @@ export function wallPageHtml(): string {
           <h2 data-route-heading>Leave your <em>mark.</em></h2></div>
           <div class="wall-intro-meta">
             <p class="wall-invitation">A shared canvas. An unlikely gallery.</p>
-            <p class="wall-runtime-status" aria-label="Testnet and connection status">
-              <span>Testnet</span><span>Connection status above</span><span>No app fee</span>
+            <p class="wall-runtime-status" aria-label="Network">
+              <span>${NETWORK_BADGE[network]}</span>
             </p>
             <p id="board-freshness" class="board-freshness wall-runtime-status" role="status" aria-live="polite">Board not read yet.</p>
           </div>
@@ -109,9 +120,10 @@ export function wallPageHtml(): string {
             <p class="paint-unlock-title">Painting is read-only until you approve one drawing key.</p>
             <p class="paint-unlock-body">
               Approve once and this browser can place pixels without a wallet
-              popup for every square. The key can paint and nothing else — it
-              cannot move your funds. You can revoke it any time under
-              About / details.
+              popup for every square. The key can only paint on this wall, and
+              on a paid wall painting will spend your paint credits.
+              It cannot send NEAR or tokens from your wallet. You can revoke it
+              any time under About / details.
             </p>
             <button id="unlock-paint-button" class="action unlock" type="button">
               Unlock painting — one approval

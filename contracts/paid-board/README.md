@@ -4,17 +4,21 @@ Schema **4** — this is the product board, ratified 2026-10-28
 ([decision record](../../docs/payments/2026-10-28-paid-model-decisions.md)).
 `contracts/board` (free schema 2) is retired as a product and kept as the testnet fixture.
 Fresh account initialization only: this is not a migration of an existing board, and the
-testnet mural does not carry over. Pricing stays per pixel; the launch price is being set.
-The app's read-only panel supports paid price/credit views, but paid checkout and painting
-integration remain pending.
+testnet mural does not carry over. Launch price: 0.0025 NEAR per credit.
+
+**Deployed on testnet** at `board3.metapoo-player1.testnet` (2026-10-29,
+[deployment record](../../docs/payments/testnet-deployment-2026-10.md)). The page buys credits
+with NEAR, shows the repaint price, and paints. A recorded end-to-end journey, with receipts, is
+still open (`PAY-INTEGRATION` in the backlog).
 
 ## Release follow-ups
 
 - **No mainnet deployment yet.** Immediately after deploying, reopen backlog
   **PAY-COST** and complete [mainnet cost validation](../../docs/payments/mainnet-cost-validation.md)
   before general paid launch. Every measurement is still pending.
-- [Accepted frontend requirements](../../docs/payments/frontend-handoff.md): NEARLY
-  link, pixel prices, credits, NEAR and mPOO balances implemented locally as read-only UI; checkout and live paid-state verification pending.
+- [Accepted frontend requirements](../../docs/payments/frontend-handoff.md): credits,
+  repaint prices and NEAR checkout are built; the mPOO purchase path is in the contract but
+  hidden in the UI (`TOKEN_PAYMENTS_ENABLED=false`).
 - [Upgrade policy proposal](../../docs/payments/upgrade-policy.md): the board keeps an
   owner-only `upgrade()` so a bug in credit or pixel custody stays repairable; TOILET
   deliberately exposes no upgrade entrypoint (D4). Migration design and a state-preserving
