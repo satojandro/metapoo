@@ -5,9 +5,14 @@
  * and `get_tunables` and prints what they say. It does not keep a copy of the
  * 1 / 2 / 4 tier table. If a read fails, the page says "price unavailable"
  * and refuses to submit — it never guesses "1 credit".
+ *
+ * Quote traffic must stay small: a 64-cell stroke used to fire ~129 RPCs
+ * (tunables + get_cell_cost + get_pixel per cell). Prefer session-cached
+ * tunables, wall pixel-cache timestamps, and de-duplicated cells so the
+ * buy-credits sheet is not starved of the same RPC endpoint (issue #26).
  */
 
-import { getPixel, viewFunction } from "../../contract";
+import { viewFunction } from "../../contract";
 
 /** Exact words shown when a price read fails. Do not paraphrase in the UI. */
 export const PRICE_UNAVAILABLE = "price unavailable";
@@ -123,9 +128,24 @@ function wholeCredit(value: number): boolean {
   return Number.isInteger(value) && value >= 0;
 }
 
+/** Keep first occurrence of each (x, y). A stroke that revisits a cell still paints once. */
+export function uniqueCells(cells: readonly CellRef[]): CellRef[] {
+  const seen = new Set<string>();
+  const out: CellRef[] = [];
+  for (const cell of cells) {
+    const key = `${cell.x},${cell.y}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push(cell);
+  }
+  return out;
+}
+
 /**
- * Read every cell's price. One failed read fails the whole quote so a stroke
- * cannot show a mix of real prices and a guessed 1.
+ * Read every unique cell's price. One failed read fails the whole quote so a
+ * stroke cannot show a mix of real prices and a guessed 1.
  */
 export async function quoteRepaint(input: {
   readers: RepaintReaders;
@@ -144,9 +164,10 @@ export async function quoteRepaint(input: {
     return { ok: false, message: PRICE_UNAVAILABLE };
   }
 
+  const cells = uniqueCells(input.cells);
   let rows: QuotedCell[];
   try {
-    rows = await mapInBatches(input.cells, 8, async (cell) => {
+    rows = await mapInBatches(cells, 8, async (cell) => {
       const [credits, pixel] = await Promise.all([
         input.readers.cellCost(cell),
         input.readers.pixel(cell),
@@ -225,8 +246,24 @@ export function showRepaintQuote(chrome: RepaintChrome, quote: Extract<RepaintQu
   chrome.submit.disabled = false;
 }
 
+export interface ChainRepaintReaders extends RepaintReaders {
+  /** Drop the session tunables cache (e.g. after a manual Refresh). */
+  clearTunablesCache(): void;
+}
+
+export interface ChainRepaintReaderOptions {
+  /**
+   * Prefer the wall's pixel cache for `written_at_ns`. Missing cells are
+   * treated as unpainted (`null`) — do not fall back to a per-cell `get_pixel`.
+   */
+  writtenAtNsFromCache?: (cell: CellRef) => string | null;
+}
+
 /** Live readers. Schema 2 never calls these — only a paid board has the methods. */
-export function chainRepaintReaders(): RepaintReaders {
+export function chainRepaintReaders(
+  options: ChainRepaintReaderOptions = {},
+): ChainRepaintReaders {
+  let cachedTunables: RepaintTunables | null = null;
   return {
     async cellCost(cell) {
       const cost = await viewFunction<number | string>("get_cell_cost", {
@@ -240,11 +277,20 @@ export function chainRepaintReaders(): RepaintReaders {
       return credits;
     },
     async tunables() {
-      return viewFunction<RepaintTunables>("get_tunables");
+      if (cachedTunables) {
+        return cachedTunables;
+      }
+      const next = await viewFunction<RepaintTunables>("get_tunables");
+      cachedTunables = next;
+      return next;
     },
     async pixel(cell) {
-      const view = await getPixel(cell.x, cell.y);
-      return { writtenAtNs: view.lastWriteTimestampNs };
+      // Prefer the wall pixel cache. Never re-fetch get_pixel per cell during a
+      // quote — that doubled stroke RPCs and starved buy-credits (issue #26).
+      if (options.writtenAtNsFromCache) {
+        return { writtenAtNs: options.writtenAtNsFromCache(cell) };
+      }
+      return { writtenAtNs: null };
     },
     async credits(accountId) {
       const balance = await viewFunction<string | number | null>("get_credits", {
@@ -254,6 +300,9 @@ export function chainRepaintReaders(): RepaintReaders {
         return null;
       }
       return BigInt(balance);
+    },
+    clearTunablesCache() {
+      cachedTunables = null;
     },
   };
 }

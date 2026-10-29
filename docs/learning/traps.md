@@ -19,6 +19,13 @@ Boot must call `restoreWalletSession()` → `getConnectedWallet()` and emit. Do 
 UI balance are different paths. After a confirmed (or delayed) paint/stroke, call
 `refreshCreditsDock()`; wallet subscribe alone is not enough. See issue #29.
 
+**Buy-credits "price unavailable" is often a self-inflicted RPC storm, not a bad
+contract.** `quoteRepaint` used to call `get_tunables` + per-cell `get_cell_cost`
++ per-cell `get_pixel` (≈129 RPCs for a 64-cell stroke) on the same endpoint as
+`get_payment_config`. A Retry button re-enters the storm. Cache tunables for the
+session, read `written_at_ns` from the wall pixel cache, and de-duplicate cells.
+A `quote_stroke` contract view is a separate ask-first follow-up. See issue #26.
+
 ## Environment
 
 **`cargo` is not on `PATH`.** It lives at

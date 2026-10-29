@@ -39,3 +39,8 @@ Restore-only wallet hydration (`getConnectedWallet` on boot) is enough for
 session continuity and does not need a new key scope or allowance change. Dock
 credits and panel CTAs must share the same launch flag and the same post-spend
 refresh path — gating one surface and not the other is how #28 and #29 shipped.
+
+A Retry button does not fix #26. Owner follow-up (2026-10-29 16:13 Australia/Sydney):
+the sheet fails because `quoteRepaint` floods the same RPC with ~129 reads on a
+64-cell stroke. Session-cached tunables + pixel-cache `written_at_ns` + unique
+cells cut that to 65 (`get_tunables` once + `get_cell_cost` per cell).

@@ -317,7 +317,12 @@ export function mountWall(
   let pricedCellKey: string | null = null;
   let priceRequest = 0;
   let submitQuoteInFlight = false;
-  const repaintReaders = chainRepaintReaders();
+  const repaintReaders = chainRepaintReaders({
+    writtenAtNsFromCache: (cell) => {
+      const cached = getCachedPixel(pixelCache, cell.x, cell.y);
+      return cached ? cached.lastWriteTimestampNs : null;
+    },
+  });
   // A failed *read* and a real metadata *mismatch* both leave contractMetaOk
   // false, and the draw path used to report both as "did not match the shared
   // schema". They need different advice: one is "try again", the other is
@@ -470,6 +475,8 @@ export function mountWall(
       void revalidateContractMeta();
     } else if (paidBoard()) {
       pricedCellKey = null;
+      // Tunables only change on set_tunables; Refresh is the one deliberate re-read.
+      repaintReaders.clearTunablesCache();
       void refreshPaidLegend();
     }
     void refreshBoardFromContract();

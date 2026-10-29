@@ -6,18 +6,30 @@
  * painted 2 minutes ago is more expensive on the paid board, and the rendered
  * total has to be chain cost × cells.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { wallPageHtml } from "./wall-template";
 import {
   PRICE_UNAVAILABLE,
+  chainRepaintReaders,
   creditShortfall,
   quoteRepaint,
   showPriceUnavailable,
   showRepaintQuote,
+  uniqueCells,
   type RepaintChrome,
   type RepaintReaders,
   type RepaintTunables,
 } from "./repaint-price";
+
+vi.mock("../../contract", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../contract")>();
+  return {
+    ...actual,
+    viewFunction: vi.fn(),
+  };
+});
+
+import { viewFunction } from "../../contract";
 
 /** What `get_tunables` returns on a fresh paid board. Fixture input, not a pricing formula. */
 const DEFAULT_TUNABLES: RepaintTunables = {
@@ -186,5 +198,94 @@ describe("repaint price", () => {
     expect(creditShortfall(0n, quote.totalCredits)).toMatch(/Nothing was submitted/);
     expect(creditShortfall(1n, quote.totalCredits)).toBeNull();
     expect(creditShortfall(null, 4)).toMatch(/has 0 credits/);
+  });
+
+  it("de-duplicates cells so a revisited square is priced once", async () => {
+    const cellCost = vi.fn(async () => 1);
+    const pixel = vi.fn(async () => ({ writtenAtNs: null }));
+    const quote = await quoteRepaint({
+      readers: readers({ cellCost, pixel }),
+      cells: [
+        { x: 1, y: 1 },
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+        { x: 1, y: 1 },
+      ],
+      nowNs: 1n,
+    });
+    expect(quote.ok).toBe(true);
+    if (!quote.ok) return;
+    expect(uniqueCells([{ x: 1, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 2 }])).toEqual([
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+    ]);
+    expect(cellCost).toHaveBeenCalledTimes(2);
+    expect(pixel).toHaveBeenCalledTimes(2);
+    expect(quote.totalCredits).toBe(2);
+    expect(quote.strokeText).toBe("this stroke: 2 cells · 2 credits");
+  });
+});
+
+describe("chainRepaintReaders RPC budget", () => {
+  afterEach(() => {
+    vi.mocked(viewFunction).mockReset();
+  });
+
+  it("caches get_tunables for the session and reads written_at from the wall cache", async () => {
+    vi.mocked(viewFunction).mockImplementation(async (method: string) => {
+      if (method === "get_tunables") {
+        return DEFAULT_TUNABLES;
+      }
+      if (method === "get_cell_cost") {
+        return 1;
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+    const written = new Map<string, string | null>([["3,4", "99"]]);
+    const readersLive = chainRepaintReaders({
+      writtenAtNsFromCache: (cell) => written.get(`${cell.x},${cell.y}`) ?? null,
+    });
+
+    await readersLive.tunables();
+    await readersLive.tunables();
+    expect(
+      vi.mocked(viewFunction).mock.calls.filter((call) => call[0] === "get_tunables"),
+    ).toHaveLength(1);
+
+    expect(await readersLive.pixel({ x: 3, y: 4 })).toEqual({ writtenAtNs: "99" });
+    expect(await readersLive.pixel({ x: 0, y: 0 })).toEqual({ writtenAtNs: null });
+    expect(
+      vi.mocked(viewFunction).mock.calls.some((call) => call[0] === "get_pixel"),
+    ).toBe(false);
+
+    readersLive.clearTunablesCache();
+    await readersLive.tunables();
+    expect(
+      vi.mocked(viewFunction).mock.calls.filter((call) => call[0] === "get_tunables"),
+    ).toHaveLength(2);
+  });
+
+  it("quotes 64 unique cells with one tunables read and no get_pixel", async () => {
+    vi.mocked(viewFunction).mockImplementation(async (method: string) => {
+      if (method === "get_tunables") return DEFAULT_TUNABLES;
+      if (method === "get_cell_cost") return 1;
+      throw new Error(`unexpected ${method}`);
+    });
+    const readersLive = chainRepaintReaders({
+      writtenAtNsFromCache: () => null,
+    });
+    const cells = Array.from({ length: 64 }, (_, i) => ({ x: i, y: 0 }));
+    const quote = await quoteRepaint({
+      readers: readersLive,
+      cells,
+      nowNs: 1n,
+    });
+    expect(quote.ok).toBe(true);
+    const methods = vi.mocked(viewFunction).mock.calls.map((call) => call[0]);
+    expect(methods.filter((m) => m === "get_tunables")).toHaveLength(1);
+    expect(methods.filter((m) => m === "get_cell_cost")).toHaveLength(64);
+    expect(methods.filter((m) => m === "get_pixel")).toHaveLength(0);
+    // Before: 1 + 64 + 64 = 129. After: 1 + 64 = 65 (8 parallel waves of cell_cost).
+    expect(methods).toHaveLength(65);
   });
 });
