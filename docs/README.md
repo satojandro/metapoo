@@ -22,6 +22,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | the paid model: credits, schema 4, the 15 contradictions it resolved | [`payments/2026-10-28-paid-model-decisions.md`](payments/2026-10-28-paid-model-decisions.md) | **authoritative** |
 | what the purchase UI must do and show | [`payments/frontend-handoff.md`](payments/frontend-handoff.md) | current; checkout unbuilt |
 | mainnet cost measurement | [`payments/mainnet-cost-validation.md`](payments/mainnet-cost-validation.md) | **all pending** — reopens on first deploy |
+| first live testnet deployment of board + TOILET, with evidence | [`payments/testnet-deployment-2026-10.md`](payments/testnet-deployment-2026-10.md) | **deployed 2026-10-29**, 49 checks green; frontend still unbuilt |
 | upgrade authority and migration | [`payments/upgrade-policy.md`](payments/upgrade-policy.md) | `upgrade()` exists; migration + pause missing |
 | the contract itself | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | schema 4, not deployed |
 | pause, treasury withdrawal, bounded price change | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) + [`implementation/paid-board-safety.task.json`](implementation/paid-board-safety.task.json) | **on the review branch**, not on main yet |
