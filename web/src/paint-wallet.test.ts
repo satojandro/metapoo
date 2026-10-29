@@ -18,10 +18,11 @@ it("subtracts storage without double subtracting locked funds", () => {
  expect(availableNear("1000000000000000000000000","0",100,"10000000000000000000")).toBe("0.999");
  expect(availableNear("1000000000000000000000000","1000000000000000000000000",100,"10000000000000000000")).toBe("1");
 });
-it("reads independent prices, credits and wallet balances",async () => {
+it("reads NEAR prices and credits while mPOO payments stay gated",async () => {
  const data=await loadPaintWallet(fixture(),"board.near","mainnet","alice.near");
- expect(data.price).toBe("0.0025 NEAR / pixel · 1 mPOO / pixel"); expect(data.credits).toBe("12 pixels"); expect(data.near).toBe("0.999 NEAR");
- expect(data.mpoo).toContain("12345678901.234567890123456789");
+ // Launch is NEAR-only: do not append the mPOO unit price until TOKEN_PAYMENTS_ENABLED.
+ expect(data.price).toBe("0.0025 NEAR / pixel"); expect(data.credits).toBe("12 pixels"); expect(data.near).toBe("0.999 NEAR");
+ expect(data.mpoo).toBe("mPOO payments not enabled yet");
 });
 it("distinguishes unregistered from failed reads",async () => {
  expect((await loadPaintWallet(fixture({get_credits:null}),"board.near","mainnet","a.near")).credits).toContain("Not registered");
@@ -31,9 +32,8 @@ it("distinguishes unregistered from failed reads",async () => {
 it("never invents live credits for free or unconfigured boards",async () => {
  const free=await loadPaintWallet(fixture({get_board:{schema_version:2}}),"board.near","mainnet","a.near");
  expect(free.price).toContain("Planned"); expect(free.credits).toContain("not available");
- const empty=await loadPaintWallet(fixture(),"","testnet",null); expect(empty.near).toContain("Connect"); expect(empty.mpoo).toContain("No mPOO token");
+ const empty=await loadPaintWallet(fixture(),"","testnet",null); expect(empty.near).toContain("Connect"); expect(empty.mpoo).toContain("mPOO payments not enabled");
 });
-it("rejects wrong mainnet tokens and invalid metadata",async () => {
+it("rejects invalid payment config without inventing a NEAR price",async () => {
  expect((await loadPaintWallet(fixture({get_payment_config:{mpoo_token:"fake.near"}}),"board.near","mainnet","a.near")).price).toBe("Unavailable — retry");
- expect((await loadPaintWallet(fixture({ft_metadata:{decimals:-1}}),"board.near","mainnet","a.near")).mpoo).toBe("Unavailable — retry");
 });

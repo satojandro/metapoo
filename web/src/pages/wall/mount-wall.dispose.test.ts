@@ -114,6 +114,10 @@ describe("mountWall dispose", () => {
         listener({ accountId: "alice.testnet", networkId: "testnet" });
         return () => undefined;
       },
+      whenReady: Promise.resolve({
+        accountId: "alice.testnet",
+        networkId: "testnet",
+      }),
     };
     return { services, connect };
   }
@@ -538,6 +542,7 @@ describe("mountWall dispose", () => {
         listener({ accountId, networkId });
         return () => listeners.delete(listener);
       },
+      whenReady: Promise.resolve({ accountId, networkId }),
     };
 
     const dispose = mountWall(root, stubServices, {
@@ -646,6 +651,10 @@ describe("mountWall dispose", () => {
         listener({ accountId: "alice.testnet", networkId: "testnet" });
         return () => undefined;
       },
+      whenReady: Promise.resolve({
+        accountId: "alice.testnet",
+        networkId: "testnet",
+      }),
     };
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);

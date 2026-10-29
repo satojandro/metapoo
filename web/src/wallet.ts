@@ -49,6 +49,11 @@ export function onWalletSession(listener: Listener): () => void {
   };
 }
 
+/** Current in-memory session (null account when disconnected). */
+export function getWalletSession(): WalletSession {
+  return session;
+}
+
 function ensureConnector(): NearConnector {
   if (connector) {
     return connector;
@@ -75,6 +80,30 @@ function ensureConnector(): NearConnector {
   });
 
   return connector;
+}
+
+/**
+ * Re-read a previously selected wallet after a full page load.
+ *
+ * near-connect persists `selected-wallet` in storage; Meteor and other redirect
+ * wallets often reload the page after sign-in or a transaction. Without this
+ * boot-time restore the in-memory session stays null and the UI looks logged out.
+ *
+ * Restore-only: does not change key scope, allowance, or connect prompts.
+ */
+export async function restoreWalletSession(): Promise<WalletSession> {
+  try {
+    const current = ensureConnector();
+    const { accounts } = await current.getConnectedWallet();
+    const accountId = nestedAccount(accounts);
+    if (typeof accountId === "string" && accountId.length > 0) {
+      session = { accountId, networkId: WALLET_NETWORK };
+      emit();
+    }
+  } catch {
+    // No previously selected wallet, or the wallet has no accounts — stay disconnected.
+  }
+  return session;
 }
 
 /**

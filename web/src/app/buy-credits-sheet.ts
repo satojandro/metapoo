@@ -13,7 +13,12 @@ import {
 } from "../buy-credits";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
 import { viewFunction } from "../contract";
-import { createReadRpc, formatUnits, NEARLY_MPOO_URL } from "../paint-wallet";
+import {
+  BUY_NEAR_URL,
+  createReadRpc,
+  formatUnits,
+  NEARLY_MPOO_URL,
+} from "../paint-wallet";
 import { submitBuyCredits, type SubmitBuyResult } from "../submit-buy-credits";
 import type { AppServices } from "./services";
 
@@ -81,6 +86,8 @@ export function mountBuyCreditsSheet(
         <p class="buy-credits-status" data-buy="status" role="status"></p>
         <div class="buy-credits-actions">
           <button type="button" class="action place" data-buy="pay">Pay</button>
+          <button type="button" class="action secondary" data-buy="retry-price" hidden>Retry price</button>
+          <a class="action secondary buy-credits-buy-near" data-buy="buy-near" target="_blank" rel="noopener noreferrer">Buy NEAR ↗</a>
           <a class="action secondary buy-credits-nearly" data-buy="nearly" target="_blank" rel="noopener noreferrer" hidden>Buy on NEARLY ↗</a>
         </div>
       </div>
@@ -96,12 +103,18 @@ export function mountBuyCreditsSheet(
   const balanceEl = host.querySelector<HTMLElement>("[data-buy=balance]")!;
   const noteEl = host.querySelector<HTMLElement>("[data-buy=note]")!;
   const payButton = host.querySelector<HTMLButtonElement>("[data-buy=pay]")!;
+  const retryPrice = host.querySelector<HTMLButtonElement>("[data-buy=retry-price]")!;
+  const buyNear = host.querySelector<HTMLAnchorElement>("[data-buy=buy-near]")!;
   const nearly = host.querySelector<HTMLAnchorElement>("[data-buy=nearly]")!;
   const tokenOption = host.querySelector<HTMLElement>("[data-buy=token-option]")!;
   const tokenLabel = host.querySelector<HTMLElement>("[data-buy=token-label]")!;
   const closeButton = host.querySelector<HTMLButtonElement>(".buy-credits-close")!;
 
+  buyNear.href = BUY_NEAR_URL;
   nearly.href = NEARLY_MPOO_URL;
+  // NEAR-only launch: offer Buy NEAR, keep NEARLY gated behind token payments.
+  buyNear.hidden = TOKEN_PAYMENTS_ENABLED;
+  nearly.hidden = true;
 
   let disposed = false;
   let paidBoardVisible = false;
@@ -130,8 +143,10 @@ export function mountBuyCreditsSheet(
       lines.replaceChildren();
       totalEl.textContent = "";
       payButton.disabled = true;
+      retryPrice.hidden = load.status !== "error";
       return;
     }
+    retryPrice.hidden = true;
     let quote: BuyQuote;
     try {
       quote = quoteBuyCredits({
@@ -157,12 +172,14 @@ export function mountBuyCreditsSheet(
       totalEl.textContent = `Total attached · ${formatUnits(quote.totalNearAttached, 24)} NEAR (plus network gas)`;
       payButton.textContent = `Pay ${formatUnits(quote.purchaseAmount, 24)} NEAR`;
       nearly.hidden = true;
+      buyNear.hidden = false;
     } else {
       totalEl.textContent =
         quote.registrationDeposit
           ? `Token amount · ${formatUnits(quote.purchaseAmount, load.tokenDecimals)} ${quote.tokenLabel} + ${formatUnits(quote.registrationDeposit, 24)} NEAR setup (plus gas)`
           : `Token amount · ${formatUnits(quote.purchaseAmount, load.tokenDecimals)} ${quote.tokenLabel} (plus gas)`;
       payButton.textContent = `Pay with ${quote.tokenLabel}`;
+      buyNear.hidden = true;
       nearly.hidden = PAGE_NETWORK !== "mainnet";
     }
     payButton.disabled = buying;
@@ -217,13 +234,19 @@ export function mountBuyCreditsSheet(
       if (disposed || current !== generation) {
         return;
       }
+      const detail = error instanceof Error ? error.message : "Price unavailable";
       load = {
         status: "error",
-        message: error instanceof Error ? error.message : "Price unavailable",
+        message: detail,
       };
       priceEl.textContent = "Price unavailable — retry";
-      setStatus("Could not read payment config. Close and try again.");
+      setStatus(
+        CONTRACT_ID
+          ? `Could not read payment config from ${CONTRACT_ID}. ${detail}`
+          : "No board contract is configured on this page.",
+      );
       payButton.disabled = true;
+      retryPrice.hidden = false;
     }
   }
 
@@ -385,6 +408,9 @@ export function mountBuyCreditsSheet(
   };
 
   closeButton.addEventListener("click", close);
+  retryPrice.addEventListener("click", () => {
+    void refreshConfig();
+  });
   host.querySelector("[data-buy=dec]")!.addEventListener("click", () => {
     qtyInput.value = String(Math.max(1, quantity() - 1));
     renderQuote();

@@ -1205,6 +1205,13 @@ async function attemptDraw(
     if (!disposed) {
       syncSubmitEnabled();
       showDrawingSession();
+      // Dock credits previously refreshed only on wallet change / shortfall —
+      // after a confirmed (or delayed) spend the balance must re-read the chain.
+      void refreshCreditsDock();
+      if (selected && paidBoard()) {
+        pricedCellKey = null;
+        requestCellPrice(selected);
+      }
     }
   }
 }
@@ -1716,6 +1723,11 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     if (!disposed) {
       syncSubmitEnabled();
       render();
+      void refreshCreditsDock();
+      if (selected && paidBoard()) {
+        pricedCellKey = null;
+        requestCellPrice(selected);
+      }
     }
   }
 }

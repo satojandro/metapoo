@@ -5,6 +5,20 @@ Add to it when something bites you.
 
 ---
 
+## Wallet session
+
+**In-memory wallet identity dies on every full page load.** near-connect persists
+`selected-wallet`, but the page only used to update `session` on `wallet:signIn` /
+explicit `connect()`. Meteor (and other redirect wallets) reload after sign-in or a
+tx, so the UI looked logged out even though the connector still knew the wallet.
+Boot must call `restoreWalletSession()` → `getConnectedWallet()` and emit. Do not
+"fix" this by changing key scope or allowance — restore-only is enough. See
+`web/src/wallet.ts` and issue #25.
+
+**Credits dock does not move unless you refresh it after spend.** Chain debit and
+UI balance are different paths. After a confirmed (or delayed) paint/stroke, call
+`refreshCreditsDock()`; wallet subscribe alone is not enough. See issue #29.
+
 ## Environment
 
 **`cargo` is not on `PATH`.** It lives at

@@ -27,6 +27,7 @@ function fakeServices(): AppServices {
         listener(session);
         return () => undefined;
       },
+      whenReady: Promise.resolve(session),
     },
     operations: createOperationsStore(),
   };
