@@ -16,6 +16,8 @@ which of its findings still hold.
 | bounties, prints, history service, pressure simulation | **remove from `main`**, recoverable from a tag |
 | agents | Hermes (co-founder) stays. Claude has priority over Codex |
 | mPOO payments | **offered at mainnet launch** (`mpoo.nearlytrade.near`), alongside NEAR |
+| mPOO credit price | **20% holder discount** against the NEAR price (C8 below) |
+| where revenue goes | NEAR revenue is used to buy mPOO; all mPOO (bought or received) goes **70% to TOILET stakers, 30% burned** (§1b below) |
 | TOILET economy | **required for mainnet launch**. This overrides §4.1 below: sequence it, don't freeze it |
 
 Consequence: C1, C2 and C7 become **mainnet blockers**.
@@ -116,12 +118,23 @@ rises, credits bought with mPOO cost less than credits bought with NEAR, and any
 difference. If it falls, nobody pays in mPOO. The guard that protects buyers from the owner also stops the
 owner from keeping up.
 
-Options, each needing an owner decision:
-1. **Accept the drift.** Make mPOO a deliberate "holder discount", with a bounded daily update.
-2. **Separate rate authority.** Give mPOO a separate cooldown and step bound, or a separate price role from
-   the owner key.
-3. **Price in mPOO only, from a TWAP.** The contract comments already rule out a pool spot-price oracle,
-   because it can be manipulated.
+Why drift matters less than it looks: credits can't be resold, refunded or transferred, so cheap mPOO
+credits can only be used to paint, and that drives buying of mPOO. Only three things are actually at risk:
+NEAR for storage, cheap TOILET farming (C3), and NEAR revenue.
+
+**Decided design (owner, 29 Oct): a holder discount, set by hand, with a cap. No oracle.**
+
+- **Rule:** `mpoo_per_credit = near_per_credit × (mPOO per NEAR, 7-day average) × 0.8`, so mPOO pays 20% less.
+- **Rate:** recomputed **weekly** off-chain from the NEARLY/Rhea pool and set with `set_credit_prices`. The
+  method is public and every change is a logged `price_changed` event. The ×2-per-day bound then only guards
+  against a compromised key.
+- **Cap (new contract work):** a tunable board-wide limit on credits sold for mPOO per UTC day, with a
+  counter. If mPOO pumps between updates, the cheap credits run out for the day and the UI offers NEAR
+  instead. This bounds exposure without an oracle.
+- **Separate cooldowns:** today one call sets both prices under one 24 h cooldown, so a weekly mPOO update
+  would block an emergency NEAR change for a day. Give each price its own cooldown when fixing C1.
+- **Storage:** fund the board with NEAR for the whole wall's first paints, measured per C5. Then the payment
+  currency doesn't affect solvency.
 
 Also: registration and gas are still NEAR, so an mPOO-only holder needs some NEAR. `ft_on_transfer` rejects
 routed deposits (see below), so "swap and buy" in one step won't work.
@@ -133,6 +146,34 @@ routed deposits (see below), so "swap and buy" in one step won't work.
 - The session key is a function-call key in `localStorage` with no CSP on the page. On the paid board
   it can spend all of a user's credits. Acceptable on testnet; add a CSP and a credits warning before
   mainnet.
+
+### 1b — revenue flow: NEAR → mPOO → 70% stakers / 30% burn · **new work, owner-decided**
+
+Decided 29 Oct. It matches option A in the [economy spec](economy/2026-10-28-toilet-economy-v1.md) §4/§12:
+TOILET holds the revenue claim, and mPOO is the money. `mpoo.nearlytrade.near` exposes `burn` (verified in
+economy §5).
+
+| step | proposed mechanism | trust |
+|---|---|---|
+| mPOO paid for credits | stays on the board, tracked in a new `mpoo_undistributed` counter | contract |
+| split mPOO | new `distribute_mpoo()`: 30% `burn` on the mPOO contract, 70% `ft_transfer` to the staking contract. The **only** way mPOO leaves the board, so the split can't be skipped | contract |
+| NEAR revenue | `get_withdrawable_near()` already excludes storage, outstanding credits and the 5 NEAR floor; weekly `withdraw_near` | owner |
+| NEAR → mPOO | **weekly buyback by the operator** on NEARLY/Rhea, with transaction hashes published, then the mPOO goes back to the board and through `distribute_mpoo()` | operator, auditable |
+| pay stakers | **new TOILET staking contract**: stake TOILET, accrue mPOO pro rata (same accumulator pattern as `emission.rs`), claim | contract |
+
+Why the buyback is off-contract at first: an on-chain swap means a cross-contract call to Rhea, slippage
+limits, NEARLY's tax on Rhea-bound transfers, and refund handling. That is the "swap adapter" the
+`ft_on_transfer` comments already warn about. A weekly published buyback is honest and much smaller. It can
+be automated later.
+
+**Open questions:**
+- **No team or ops share?** As decided, 100% of net revenue goes to stakers and the burn, and NEAR for
+  storage is protected by the reserve. Any running cost (RPC, hosting, the weekly buyback's gas) comes out of
+  your pocket. Confirm that this is intended.
+- **Exit tax on unstaking?** The economy spec suggests a capped 10% "paperhand" burn. Decide before the
+  staking contract is written.
+- **Sell pressure:** stakers paid in mPOO may sell straight away (economy §12). The 30% burn is the offset.
+  Worth watching, not blocking.
 
 ---
 
@@ -252,9 +293,11 @@ end-to-end on testnet. Everything that is not on that path is currently cost.
 3. **Recorded testnet journey** with transaction hashes: connect → buy (NEAR **and** mPOO, the latter
    once C8 is decided) → paint →
    seen in a second browser (`PAY-INTEGRATION`).
-4. **One contract revision**: C1, C2, C3, C4, C6, C8, plus a migration (C7), rehearsed as a state-preserving
+4. **One contract revision**: C1, C2, C3, C4, C6, the C8 daily mPOO cap and split cooldowns, `distribute_mpoo()` (§1b),
+   plus a migration (C7), rehearsed as a state-preserving
    upgrade of `board3.metapoo-player1.testnet`.
 5. **`mount-wall.ts` refactor** (F1/F2), behaviour-neutral, before claim and staking UI are added to it.
-6. **TOILET on**: claim UI, emission rate, then staking.
+6. **TOILET on**: claim UI, emission rate, then the **staking contract** paying mPOO (§1b), and the first
+   weekly buyback/burn/distribution, recorded on testnet.
 7. **Mainnet**: an external review of the paid board and TOILET, the cost matrix (`PAY-COST`), and an
    owner-held deploy key.

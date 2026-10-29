@@ -179,7 +179,7 @@ This pulls TOILET from "deferred, unspecified" to "specified, blocked on three p
 
 ## 8. Decisions needed before any of this is built
 
-1. **Staking asset:** TOILET replaces MPOO as the revenue claim (option A), or both split it (B)?
+1. ~~**Staking asset:** TOILET replaces MPOO as the revenue claim (option A), or both split it (B)?~~ **Decided 2026-10-29: option A.** TOILET stakers receive 70% of revenue in mPOO, and 30% is burned. See the [code audit](../2026-10-29-code-audit.md) §1b.
 2. **Emission model:** revenue-keyed with a 1B cap and a floor (recommended), or a calendar schedule —
    and if calendar, accept `e > y` dilution and say so in the docs.
 3. **TOILET tradeability:** internal ledger (no buy/sell tax possible), or NEP-141 (tax possible, plus
