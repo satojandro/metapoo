@@ -8,7 +8,7 @@ pressure/TOILET fixtures or enable payments on the free schema-2 board.
 
 | Display | Source / behavior |
 |---|---|
-| Price per paint pixel | Board `get_payment_config().near_per_credit`: initially **0.0069 NEAR**. Also show the configured mPOO price when available; it is not yet a chosen launch rate. |
+| Price per paint pixel | Board `get_payment_config().near_per_credit`: **0.0025 NEAR** at launch. **Launch sells credits for NEAR only.** The contract keeps its mPOO purchase path, but the UI must not offer it until the real token and its exchange rate are settled (phase 3). |
 | Paint pixels available | `get_credits(account_id)`: one credit = one pixel placement, no expiry. Null means not registered, not an RPC failure. |
 | NEAR available in wallet | Network-matched account balance with storage backing / locked balance accounted for. Label spendable estimate accurately; reserve gas before enabling checkout or Max. Do not mistake function-call-key allowance for wallet funds. |
 | mPOO in wallet | `ft_balance_of(account_id)` on the board-configured token; decimals from verified `ft_metadata`, not a floating-point approximation. |
@@ -25,8 +25,8 @@ credits; hide the CTA there or label it as a separate mainnet external market.
 
 ## Checkout and refresh behavior
 
-- Quantity plus total: 10 credits = 0.069 NEAR; 100 = 0.69 NEAR.
-- Choose NEAR or mPOO; disclose registration and estimated network fees separately.
+- Quantity plus total: 10 credits = 0.025 NEAR; 100 = 0.25 NEAR.
+- Launch: NEAR only. Disclose registration and estimated network fees separately.
 - Read prices from the deployed board; send expected price and minimum credits.
 - Insufficient mPOO offers the NEARLY link. Return/focus triggers a fresh balance read;
   a click, tab return or wallet success message is not proof that a purchase settled.
@@ -62,7 +62,7 @@ account/storage configuration. `web/src/app/paint-wallet-panel.ts` mounts inside
 **Paint & wallet**, with refresh, account/network isolation, explicit failures and
 a mainnet-labelled external NEARLY link. No transaction or wallet-permission changes.
 Mainnet market URL checked against its Meta Poo page title. On free/unconfigured
-boards the 0.0069 NEAR price is labelled Planned and credits are unavailable.
+boards the 0.0025 NEAR price is labelled Planned and credits are unavailable.
 
 Verification: 9 new focused tests; full suite 284 tests / 41 files passed; production
 build passed. Browser inspection confirmed the disconnected panel and live schema-2

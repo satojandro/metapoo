@@ -28,8 +28,8 @@ recency tiers described below; one credit is the default empty/old-cell cost.
 Invalid coordinates/colors and insufficient balances reject the entire stroke.
 Native NEAR and direct mPOO purchases are supported without a swap.
 
-The fixed launch price is **0.0069 NEAR per pixel** (6,900,000,000,000,000,000,000
- yoctoNEAR). Ten credits cost 0.069 NEAR; 100 cost 0.69 NEAR, excluding separate
+The fixed launch price is **0.0025 NEAR per pixel** (2,500,000,000,000,000,000,000
+ yoctoNEAR). Ten credits cost 0.025 NEAR; 100 cost 0.25 NEAR, excluding separate
 registration and gas. This is a NEAR-denominated price, not a USD peg. At an example
 NEAR price of $4.35, it is about $0.03 (three cents), not 0.03 cents.
 
@@ -159,7 +159,7 @@ or refund. Confirm measured storage costs before launch. Pre-fund enough NEAR fo
 the full 128x128 board, since mPOO receipts cannot pay NEAR storage staking.
 Benchmark single draws, 64-cell strokes, registrations, purchases and refunds in
 a sandbox/testnet; then calculate margin with gas sponsorship (if added), storage,
-conversion costs, tax and a reserve. A 0.0069 NEAR price alone cannot guarantee profit.
+conversion costs, tax and a reserve. A 0.0025 NEAR price alone cannot guarantee profit.
 
 `ECONOMY NEXT` comments mark the extension points. This board has no staking,
 longevity rewards, buybacks, burns or swaps. TOILET emission uses the claim path below. Native treasury

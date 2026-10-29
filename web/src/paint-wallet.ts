@@ -57,7 +57,7 @@ async function view(rpc: Rpc, account: string, method: string, args: Record<stri
 
 export async function loadPaintWallet(rpc: Rpc, board: string, network: string, account: string | null): Promise<PaintWalletSnapshot> {
   const result: PaintWalletSnapshot = {
-    price: "Planned: 0.0069 NEAR / pixel", credits: "Paid painting not available yet",
+    price: "Planned: 0.0025 NEAR / pixel", credits: "Paid painting not available yet",
     near: account ? "Unavailable — retry" : "Connect wallet to view",
     mpoo: account ? "Unavailable — retry" : "Connect wallet to view",
     note: "Paid checkout is not enabled. Wallet balances do not include paint credits.",

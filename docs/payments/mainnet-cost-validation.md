@@ -29,10 +29,10 @@ outcomes, balance deltas and costs rather than checking it merely because it ran
 
 | ID | Case | What must be measured / verified | Status |
 |---|---|---|---|
-| C01 | Paid-board deployment and initialization | One-time gas, code/state storage, owner, schema, 0.0069 NEAR price | Pending |
+| C01 | Paid-board deployment and initialization | One-time gas, code/state storage, owner, schema, 0.0025 NEAR price | Pending |
 | C02 | First credit-account registration | Actual storage bytes versus 0.01 NEAR charge; no credits minted | Pending |
 | C03 | Duplicate / incorrect-fee registration | Rejection, attached-deposit recovery, gas still paid, no duplicate ledger | Pending |
-| C04 | NEAR purchase: 1, 10 and 100 credits | 0.0069 / 0.069 / 0.69 NEAR deposits; exact credits; gas separately | Pending |
+| C04 | NEAR purchase: 1, 10 and 100 credits | 0.0025 / 0.025 / 0.25 NEAR deposits; exact credits; gas separately | Pending |
 | C05 | Repeated NEAR purchase | Existing-account storage growth and gas versus first purchase | Pending |
 | C06 | mPOO registration prerequisites | First-time wallet/board FT registration costs, separate from paint credits | Pending |
 | C07 | Direct mPOO purchase, first and repeat | Actual payer debit, board receipt, callback amount, credited amount, all receipt gas; verify tax behavior | Pending |
@@ -90,7 +90,7 @@ is an observation, not a reliable upper bound.
 - [ ] Budget covers deployment/code storage, users and a fully populated board;
   mPOO receipts alone cannot supply NEAR storage backing.
 - [ ] 64-entry strokes fit the configured gas budget with documented headroom.
-- [ ] Report operating margin and storage capital separately at 0.0069 NEAR/credit.
+- [ ] Report operating margin and storage capital separately at 0.0025 NEAR/credit.
   Include infrastructure, optional gas sponsorship, failed-call allowance and
   mPOO realizable conversion costs. No dollar profit promise from a NEAR price.
 - [ ] Owner approves pricing/reserves and any fee-disclosure changes before public launch.

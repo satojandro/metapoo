@@ -8,7 +8,7 @@ This file is the integration record. The overwrite rule below is **accepted and 
 
 This stage supersedes the older MPOO-only / TOILET purchase mechanics below.
 Users buy non-transferable paint credits with **native NEAR or mPOO**. One credit
-pays for one pixel placement, with no expiry. The launch price is **0.0069 NEAR**;
+pays for one pixel placement, with no expiry. The launch price is **0.0025 NEAR**;
 owner configuration remains supported and mPOO launch pricing is still unset.
 Start with **Buy mPOO on NEARLY**, not an embedded swap or inventory shop.
 The app must show pixel prices, available credits and NEAR/mPOO wallet balances;
