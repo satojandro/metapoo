@@ -41,6 +41,21 @@ describe("mountBuyCreditsSheet", () => {
     host.remove();
   });
 
+  it("does not offer the token payment path at launch", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const sheet = mountBuyCreditsSheet(host, services());
+    sheet.setVisible(true);
+    sheet.open({ quantity: 10 });
+    const tokenOption = host.querySelector("[data-buy=token-option]");
+    expect(tokenOption).not.toBeNull();
+    // Buying with mPOO is a later phase: the exchange rate is undecided, so the
+    // radio must be out of reach even before a config read runs.
+    expect(tokenOption?.hasAttribute("hidden")).toBe(true);
+    sheet.dispose();
+    host.remove();
+  });
+
   it("does not open when the board is not marked paid", () => {
     const host = document.createElement("div");
     const sheet = mountBuyCreditsSheet(host, services());

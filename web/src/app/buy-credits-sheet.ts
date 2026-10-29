@@ -8,6 +8,7 @@ import {
   quoteBuyCredits,
   type BuyQuote,
   type PayAsset,
+  TOKEN_PAYMENTS_ENABLED,
   type PaymentConfigView,
 } from "../buy-credits";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
@@ -70,7 +71,9 @@ export function mountBuyCreditsSheet(
         <fieldset class="buy-credits-asset">
           <legend>Pay with</legend>
           <label><input type="radio" name="buy-asset" value="near" checked /> NEAR</label>
-          <label data-buy="token-option"><input type="radio" name="buy-asset" value="token" /> <span data-buy="token-label">test token</span></label>
+          <!-- Hidden by default: launch sells credits for NEAR only. Render reveals it only
+             when TOKEN_PAYMENTS_ENABLED is true, so it can never flash before config load. -->
+          <label data-buy="token-option" hidden><input type="radio" name="buy-asset" value="token" /> <span data-buy="token-label">test token</span></label>
         </fieldset>
         <ul class="buy-credits-lines" data-buy="lines"></ul>
         <p class="buy-credits-total" data-buy="total"></p>
@@ -108,6 +111,7 @@ export function mountBuyCreditsSheet(
   let generation = 0;
 
   function asset(): PayAsset {
+    if (!TOKEN_PAYMENTS_ENABLED) return "near";
     const checked = host.querySelector<HTMLInputElement>('input[name="buy-asset"]:checked');
     return checked?.value === "token" ? "token" : "near";
   }
@@ -199,10 +203,13 @@ export function mountBuyCreditsSheet(
       balanceEl.textContent = session.accountId
         ? creditLabel(credits)
         : "Credits: connect wallet to buy";
-      priceEl.textContent = `${formatUnits(config.nearPerCredit, 24)} NEAR / credit · ${formatUnits(config.mpooPerCredit, tokenDecimals)} ${PAGE_NETWORK === "mainnet" ? "mPOO" : "test token"} / credit`;
+      priceEl.textContent = TOKEN_PAYMENTS_ENABLED
+        ? `${formatUnits(config.nearPerCredit, 24)} NEAR / credit · ${formatUnits(config.mpooPerCredit, tokenDecimals)} ${PAGE_NETWORK === "mainnet" ? "mPOO" : "test token"} / credit`
+        : `${formatUnits(config.nearPerCredit, 24)} NEAR / credit`;
       tokenLabel.textContent = PAGE_NETWORK === "mainnet" ? "mPOO" : "test token";
-      // Hide token pay on networks with no configured token path mismatch: always show when schema 4.
-      tokenOption.hidden = false;
+      // Launch sells credits for NEAR only, so the token radio stays out of reach
+      // rather than offering a path whose exchange rate is still undecided.
+      tokenOption.hidden = !TOKEN_PAYMENTS_ENABLED;
       setStatus("");
       renderQuote();
       options.onCreditsChanged?.(session.accountId ? credits : null);

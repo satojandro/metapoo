@@ -38,6 +38,10 @@ export type BuyFailureCode =
   | "wrong_network"
   | "insufficient_funds"
   | "price_changed"
+  | "not_registered"
+  | "already_registered"
+  | "invalid_amount"
+  | "below_minimum"
   | "float_full"
   | "token_transfer_failed"
   | "paused"
@@ -85,22 +89,38 @@ export interface SubmitBuyInput {
   onProgress?: (progress: BuyProgress) => void;
 }
 
+/**
+ * Map a refusal to the contract's own code.
+ *
+ * The board returns one code per cause: AccountNotRegistered, InvalidPurchaseAmount,
+ * BelowMinimumCredits, FloatCapExceeded, CreditOverflow, PriceChanged,
+ * AlreadyRegistered. They arrive inside Rust's assertion preamble, so match on the
+ * code substring rather than the start of the message.
+ */
 function classifyFailure(message: string): { code: BuyFailureCode; title: string } {
   const lower = message.toLowerCase();
-  if (lower.includes("pricechanged") || lower.includes("price changed")) {
+  if (lower.includes("accountnotregistered")) {
+    return { code: "not_registered", title: "Registration required" };
+  }
+  if (lower.includes("alreadyregistered")) {
+    return { code: "already_registered", title: "Already registered" };
+  }
+  if (lower.includes("pricechanged")) {
     return { code: "price_changed", title: "Price changed" };
   }
-  if (lower.includes("float") || lower.includes("cap") || lower.includes("outstanding")) {
+  if (lower.includes("floatcapexceeded")) {
     return { code: "float_full", title: "Prepaid paint sold out" };
+  }
+  if (lower.includes("invalidpurchaseamount")) {
+    return { code: "invalid_amount", title: "Amount must be an exact multiple of the price" };
+  }
+  if (lower.includes("belowminimumcredits")) {
+    return { code: "below_minimum", title: "Fewer credits than the minimum you asked for" };
   }
   if (lower.includes("paused")) {
     return { code: "paused", title: "Purchases paused" };
   }
-  if (
-    lower.includes("lack of funds") ||
-    lower.includes("insufficient") ||
-    lower.includes("balance")
-  ) {
+  if (lower.includes("insufficient") || lower.includes("lack of funds")) {
     return { code: "insufficient_funds", title: "Not enough funds" };
   }
   if (lower.includes("ft_") || lower.includes("transfer")) {
