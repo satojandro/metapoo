@@ -120,6 +120,29 @@ export function formatStrokeTotal(cellCount: number, credits: number): string {
 }
 
 /**
+ * Can this tap be painted without waiting for a price read?
+ *
+ * The contract enforces affordability itself (`draw` takes no max_cost), so this
+ * is a courtesy check against values already on screen: the cached dock balance
+ * and the last quoted cost for the cell. Unknown values must never block a
+ * paint — blocking on a value we do not have is what made direct paint feel
+ * dead, and it put a network read inside the core gesture.
+ */
+export function tapAffordability(input: {
+  credits: bigint | null;
+  creditsKnown: boolean;
+  knownCost: number | undefined;
+}): { allowed: true } | { allowed: false; needed: number } {
+  if (!input.creditsKnown) {
+    return { allowed: true };
+  }
+  // A null balance means "never registered", which is zero credits, not unknown.
+  const needed = input.knownCost ?? 1;
+  const have = input.credits ?? 0n;
+  return have < BigInt(needed) ? { allowed: false, needed } : { allowed: true };
+}
+
+/**
  * Null from `get_credits` means the account was never registered, so they
  * have zero credits to spend. A balance that covers the total returns null
  * (no shortfall). Otherwise the sentence that must appear before any wallet call.

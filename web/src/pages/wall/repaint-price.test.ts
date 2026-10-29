@@ -19,6 +19,7 @@ import {
   type RepaintChrome,
   type RepaintReaders,
   type RepaintTunables,
+  tapAffordability,
 } from "./repaint-price";
 
 vi.mock("../../contract", async (importOriginal) => {
@@ -394,5 +395,33 @@ describe("chainRepaintReaders RPC budget", () => {
       nowNs: 1n,
     });
     expect(rejected).toEqual({ ok: false, message: PRICE_UNAVAILABLE });
+  });
+});
+
+describe("tapAffordability", () => {
+  it("never blocks a paint on a balance it does not have", () => {
+    expect(
+      tapAffordability({ credits: null, creditsKnown: false, knownCost: 4 }),
+    ).toEqual({ allowed: true });
+  });
+
+  it("blocks when the cached balance cannot cover the last quoted cost", () => {
+    expect(tapAffordability({ credits: 2n, creditsKnown: true, knownCost: 4 })).toEqual({
+      allowed: false,
+      needed: 4,
+    });
+  });
+
+  it("treats an unregistered account as zero credits, not unknown", () => {
+    expect(tapAffordability({ credits: null, creditsKnown: true, knownCost: 1 })).toEqual({
+      allowed: false,
+      needed: 1,
+    });
+  });
+
+  it("assumes the cheapest cell when this cell has never been priced", () => {
+    expect(
+      tapAffordability({ credits: 1n, creditsKnown: true, knownCost: undefined }),
+    ).toEqual({ allowed: true });
   });
 });

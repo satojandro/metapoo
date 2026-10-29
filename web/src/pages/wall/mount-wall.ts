@@ -36,6 +36,7 @@ import {
   chainRepaintReaders,
   creditShortfall,
   quoteRepaint,
+  tapAffordability,
   showPriceUnavailable,
   showRepaintQuote,
   type RepaintChrome,
@@ -314,6 +315,15 @@ export function mountWall(
   let boardSchema: number | null = null;
   /** A failed get_cell_cost / get_tunables read. Submit stays off until a later read works. */
   let priceUnavailable = false;
+  /**
+   * Last credit balance the dock read. Advisory: the tap path checks against
+   * this instead of making a network read, because the contract enforces
+   * affordability itself (`draw` takes no max_cost).
+   */
+  let cachedCredits: bigint | null = null;
+  let creditsKnown = false;
+  /** Cost last quoted for a cell, keyed "x,y". Lets a tap skip the read. */
+  const cellCostCache = new Map<string, number>();
   let pricedCellKey: string | null = null;
   let priceRequest = 0;
   let submitQuoteInFlight = false;
@@ -1802,13 +1812,28 @@ async function enqueuePricedDirectPaint(
   if (!directPaintReady() || !walletAccount || selectedColor === null) {
     return;
   }
-  // Paid boards quote before the pending stripe. A failed read must not
-  // leave chrome for a paint that will not be sent.
+  // A tap is the core gesture and must never wait on the network. The old
+  // pre-flight quote put two sequential reads in front of every direct paint,
+  // which is why this board felt worse than the free one. Affordability is
+  // checked against the cached dock balance and the last quoted cost for this
+  // cell; the contract enforces the rest, because `draw` takes no max_cost.
   if (paidBoard()) {
-    const priced = await ensurePaidQuote([cell], walletAccount);
-    if (!priced || !directPaintReady() || !walletAccount || selectedColor === null) {
+    const decision = tapAffordability({
+      credits: cachedCredits,
+      creditsKnown,
+      knownCost: cellCostCache.get(`${cell.x},${cell.y}`),
+    });
+    if (!decision.allowed) {
+      const shortfall = creditShortfall(cachedCredits, decision.needed);
+      if (shortfall) {
+        fillBlock(result, "Not enough credits", shortfall);
+      }
+      buyCreditsSheet.open({ quantity: Math.max(1, decision.needed - Number(cachedCredits ?? 0n)) });
+      void refreshCreditsDock();
       return;
     }
+    // Price the badge in the background. It must never block the paint.
+    requestCellPrice(cell);
   }
 
   const queued = createDrawRequest({
@@ -1846,10 +1871,10 @@ function updatePointerPreview(event: PointerEvent): void {
   // Hover is a fine-pointer affordance only. On a touch pointer, or on a
   // surface that owns touch gestures, it must neither show a prospective cell
   // nor participate in the tap-to-paint route.
-  if (
-    event.pointerType === "touch" ||
-    getComputedStyle(boardViewport).touchAction !== "auto"
-  ) {
+  // Gate on the pointer, not on `touch-action`. `.board-viewport` sets
+  // `touch-action: none`, so the old check meant this branch always ran and the
+  // per-cell price could never appear on hover on any desktop.
+  if (event.pointerType === "touch") {
     clearPointerPreview();
     return;
   }
@@ -2066,6 +2091,8 @@ async function refreshCreditsDock(): Promise<void> {
   buyCreditsSheet.setVisible(true);
   if (!walletAccount) {
     creditsBalance.textContent = "Credits: connect wallet";
+    cachedCredits = null;
+    creditsKnown = false;
     buyCreditsButton.disabled = true;
     buyCreditsSheet.setCredits(undefined);
     return;
@@ -2078,6 +2105,8 @@ async function refreshCreditsDock(): Promise<void> {
     creditsBalance.textContent =
       balance === null ? "Credits: not registered · 0" : `Credits: ${balance}`;
     buyCreditsSheet.setCredits(balance);
+    cachedCredits = balance;
+    creditsKnown = true;
   } catch {
     if (disposed) return;
     creditsBalance.textContent = "Credits: unavailable — retry";
@@ -2134,6 +2163,9 @@ function requestCellPrice(cell: Cell): void {
       return;
     }
     priceUnavailable = false;
+    for (const row of quote.cells) {
+      cellCostCache.set(`${row.cell.x},${row.cell.y}`, row.credits);
+    }
     showRepaintQuote(repaintChrome, quote);
     syncSubmitEnabled();
   });
@@ -2170,6 +2202,9 @@ async function ensurePaidQuote(cells: Cell[], accountId: string | null): Promise
       return false;
     }
     priceUnavailable = false;
+    for (const row of quote.cells) {
+      cellCostCache.set(`${row.cell.x},${row.cell.y}`, row.credits);
+    }
     showRepaintQuote(repaintChrome, quote);
     syncSubmitEnabled();
     if (!accountId) {
@@ -2178,6 +2213,8 @@ async function ensurePaidQuote(cells: Cell[], accountId: string | null): Promise
     let have: bigint | null;
     try {
       have = await repaintReaders.credits(accountId);
+      cachedCredits = have;
+      creditsKnown = true;
     } catch {
       priceUnavailable = true;
       showPriceUnavailable(repaintChrome);
