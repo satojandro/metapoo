@@ -108,11 +108,22 @@ refused mint on chain rather than in a mock.
 
 ## Findings
 
-**F1 — should-fix, contract.** `ExactRegistrationFeeRequired` (`register_credit_account`)
-and `PriceChanged` (`buy_credits_near`) are produced by Rust `assert_eq!`, so the chain
-reports `assertion failed` with no code. Every other rejection uses `env::panic_str` or
-`expect` and is readable. The README documents codes the client cannot see; switch these
-two to `near_sdk::require!` / `panic_str` before a UI branches on them.
+**F1 — corrected 2026-10-29.** An earlier revision of this document claimed the codes
+`ExactRegistrationFeeRequired` and `PriceChanged` never reach the chain. **That was wrong.**
+They are present, but as the *suffix* of a Rust `assert_eq!` panic rather than a prefix:
+
+```
+Smart contract panicked: panicked at src/payments.rs:201:9:
+assertion `left == right` failed: PriceChanged
+  left: 1
+ right: 2500000000000000000000
+```
+
+A client must substring-match the code, not prefix-match it. The real hazard is
+`buy_credits_near`'s single `InvalidPurchaseOrUnregisteredAccountOrFloatFull` code: it
+covers three unrelated causes (non-multiple deposit, unregistered account, float cap), so
+a UI that maps it to one message — e.g. "sold out" — will mislabel the other two. Split it
+into distinct codes before the checkout UI classifies failures by string.
 
 **F2 — note.** A board with `toilet_per_cell_second = 0` accrues nothing and reports no
 error. Emission is opt-in per deployment; `get_toilet_emission` is the only signal.
