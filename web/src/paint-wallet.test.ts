@@ -7,12 +7,12 @@ function fixture(overrides: Record<string, unknown> = {}): Rpc {
  if (name in overrides) { if (overrides[name] instanceof Error) throw overrides[name]; return encoded(overrides[name]); }
  if (name === "view_account") return {amount:"1000000000000000000000000",locked:"0",storage_usage:100,block_hash:"block"};
  if (method === "EXPERIMENTAL_protocol_config") return {runtime_config:{storage_amount_per_byte:"10000000000000000000"}};
- return encoded(({get_board:{schema_version:4}, get_payment_config:{mpoo_token:"mpoo.nearlytrade.near",near_per_credit:"6900000000000000000000",mpoo_per_credit:"1000000000000000000"}, get_credits:"12",ft_metadata:{decimals:18},ft_balance_of:"12345678901234567890123456789"} as Record<string,unknown>)[name]);
+ return encoded(({get_board:{schema_version:4}, get_payment_config:{mpoo_token:"mpoo.nearlytrade.near",near_per_credit:"2500000000000000000000",mpoo_per_credit:"1000000000000000000"}, get_credits:"12",ft_metadata:{decimals:18},ft_balance_of:"12345678901234567890123456789"} as Record<string,unknown>)[name]);
  };
 }
 it("formats amounts without precision loss", () => {
  expect(formatUnits("12345678901234567890123456789",18)).toBe("12345678901.234567890123456789");
- expect(formatUnits("6900000000000000000000",24)).toBe("0.0069"); expect(() => formatUnits("-1",18)).toThrow();
+ expect(formatUnits("2500000000000000000000",24)).toBe("0.0025"); expect(() => formatUnits("-1",18)).toThrow();
 });
 it("subtracts storage without double subtracting locked funds", () => {
  expect(availableNear("1000000000000000000000000","0",100,"10000000000000000000")).toBe("0.999");
@@ -20,7 +20,7 @@ it("subtracts storage without double subtracting locked funds", () => {
 });
 it("reads independent prices, credits and wallet balances",async () => {
  const data=await loadPaintWallet(fixture(),"board.near","mainnet","alice.near");
- expect(data.price).toBe("0.0069 NEAR / pixel · 1 mPOO / pixel"); expect(data.credits).toBe("12 pixels"); expect(data.near).toBe("0.999 NEAR");
+ expect(data.price).toBe("0.0025 NEAR / pixel · 1 mPOO / pixel"); expect(data.credits).toBe("12 pixels"); expect(data.near).toBe("0.999 NEAR");
  expect(data.mpoo).toContain("12345678901.234567890123456789");
 });
 it("distinguishes unregistered from failed reads",async () => {

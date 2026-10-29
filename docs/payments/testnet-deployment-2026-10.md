@@ -8,22 +8,26 @@ not local test runs. **Nothing here is a mainnet result.**
 
 | Role | Account | Notes |
 |---|---|---|
-| Paid board (schema 4) | `board1.metapoo-player3.testnet` | owner = itself; `upgrade()` present |
+| Paid board (schema 4) | `board2.metapoo-player2.testnet` | owner = itself; `upgrade()` present; **0.0025 NEAR/credit** |
 | TOILET token | `metapoo-toilet.testnet` | NEP-141, 18 decimals, 1B cap, no owner |
-| Test payment token (stands in for mPOO) | `metapoo-mpoo.testnet` | same TOILET wasm, 0 tax, emitter = `berrywall1.testnet` so test balances can be minted |
+| Test payment token (stands in for mPOO) | `metapoo-mpoo.testnet` | same TOILET wasm, 0 tax, emitter = `berrywall1.testnet`. **Dormant at launch** — kept only so the contract's mPOO path can be exercised later |
 | Players | `metapoo-player1.testnet`, `metapoo-player2.testnet`, `metapoo-player3.testnet` | faucet-funded, 10 NEAR each |
 
 WASM (built with `cargo near build non-reproducible-wasm`):
 
 | Contract | Size | SHA-256 |
 |---|---|---|
-| paid board | 287,860 B | `5ef0b862dd748354dad02e9c74136e4d126813ccb2ffa6ea68805b2b65b0a308` |
+| paid board | 287,861 B | `3c9593f25fb8acd4c146fd037e1d15f1fd0136bc5bc98935a6266debbab7d270` |
 | TOILET | 231,550 B | `4ae3739a4286fb4b07c8331fa5e58ef2553ecbe3c78d7e7c86e5975ef1dbe525` |
 
 Live configuration (`get_tunables`, `get_payment_config`):
 
-- 0.0069 NEAR per credit — `6900000000000000000000` yoctoNEAR, unchanged launch price.
+- **0.0025 NEAR per credit** — `2500000000000000000000` yoctoNEAR. This is the agreed launch price
+  (`paid-model-decisions.md:69`); the earlier deployment carried the legacy 0.0069 default from the
+  2026-10-12 plan and was replaced.
 - 1 mPOO per credit (`1000000000000000000`) — **a plumbing fixture, not an economic rate.**
+  **Launch sells credits for NEAR only** (owner decision, 2026-10-29): the mPOO exchange rate adds a
+  layer the launch does not need. The contract path stays, the UI must not offer it.
 - Registration fee 0.01 NEAR; repaint tiers 1 / 2 / 4 credits at >60 min / 10–60 min / <10 min.
 - `toilet_per_cell_second = 1000000000000000` (0.001 TOILET per cell per second). **Fixture.** Roughly 86.4 TOILET per cell per day; the real emission model is still an open owner decision.
 - `reserve_floor` 5 NEAR, price cooldown 24 h, float cap uncapped, quota stored but unenforced.
@@ -63,7 +67,9 @@ Harness: `~/Hermes-crypto-builder/mpoo/harness/paid-board-acceptance.mjs`
 (signs and broadcasts directly over JSON-RPC; every check asserts observable state).
 Raw output: `acceptance-results.json`, `acceptance-results-area2.json`.
 
-Result: **48 of 49 passed in-process.** The one failure was a JSON-RPC
+Result at 0.0025: **49 of 49 passed** (run `acceptance-0025.json`).
+
+An earlier run at the legacy 0.0069 price gave 48 of 49 in-process: The one failure was a JSON-RPC
 `TIMEOUT_ERROR` on the `NothingToClaim` check, not a contract result; replayed
 directly it returned
 `Smart contract panicked: … NothingToClaim` — so all 49 behaviours are confirmed.
@@ -78,7 +84,7 @@ directly it returned
 | A6 | registered account with zero credits rejects `InsufficientCredits` |
 | A7–A8 | stale `expected_price` rejects and the attached NEAR is reverted (credits unchanged) |
 | A9 | non-multiple deposit rejects `InvalidPurchaseOrUnregisteredAccountOrFloatFull` |
-| A10–A12 | 0.069 NEAR buys exactly 10 credits; `get_outstanding_credits` tracks the float |
+| A10–A12 | 0.025 NEAR buys exactly 10 credits; `get_outstanding_credits` tracks the float |
 | A13 | empty cell costs 1 credit |
 | A14–A17 | first paint debits 1; the cell's cost immediately becomes 4 (young tier) |
 | A18 | an instant repaint debits 4 — the recency rule is enforced, not advisory |

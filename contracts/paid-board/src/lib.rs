@@ -261,7 +261,7 @@ pub struct Board {
 
 #[near]
 impl Board {
-    /// Create a fresh paid board at 0.0069 NEAR per credit and an explicit mPOO price.
+    /// Create a fresh paid board at 0.0025 NEAR per credit and an explicit mPOO price.
     /// ECONOMY NEXT: a reviewed migration must preserve outstanding credits.
     #[init]
     pub fn new(mpoo_token: AccountId, mpoo_per_credit: near_sdk::json_types::U128) -> Self {

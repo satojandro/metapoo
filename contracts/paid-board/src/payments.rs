@@ -6,9 +6,11 @@ use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
 use near_sdk::{env, near, AccountId};
 
-// Fixed launch price: 0.0069 NEAR, represented exactly in yoctoNEAR.
+// Fixed launch price: 0.0025 NEAR, represented exactly in yoctoNEAR.
+// The owner can move it later, but only between half and double — a 64% cut
+// (0.0069 -> 0.0025) is rejected as PriceStepTooLarge and needs two steps.
 // No USD oracle: dollar value moves with NEAR. Owner updates remain explicit.
-pub(crate) const INITIAL_NEAR_PRICE: u128 = 6_900_000_000_000_000_000_000;
+pub(crate) const INITIAL_NEAR_PRICE: u128 = 2_500_000_000_000_000_000_000;
 
 // A conservative, fixed registration fee funds one bounded balance record.
 // ECONOMY NEXT: replace this with measured storage billing and explicit refunds.
@@ -302,10 +304,10 @@ mod tests {
     }
 
     #[test]
-    fn launch_price_is_exactly_0069_near_per_pixel() {
+    fn launch_price_is_exactly_0025_near_per_pixel() {
         context(0, 0, 0);
         let mut board = Board::new(accounts(5), U128(100));
-        let price = 6_900_000_000_000_000_000_000u128;
+        let price = 2_500_000_000_000_000_000_000u128;
         assert_eq!(board.get_payment_config().near_per_credit, U128(price));
         context(1, 1, REGISTRATION);
         board.register_credit_account();
