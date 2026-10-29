@@ -1,6 +1,10 @@
 /** Read-only balances. No wallet signatures, transfers or optimistic credits. */
+import { TOKEN_PAYMENTS_ENABLED } from "./payment-flags";
+
 export const MPOO_ACCOUNT = "mpoo.nearlytrade.near";
 export const NEARLY_MPOO_URL = "https://nearly.trade/mpoo.nearlytrade.near";
+/** Where users buy NEAR when the launch path is NEAR-only (mPOO CTAs hidden). */
+export const BUY_NEAR_URL = "https://near.org";
 export interface PaintWalletSnapshot {
   price: string;
   credits: string;
@@ -107,6 +111,11 @@ export async function loadPaintWallet(rpc: Rpc, board: string, network: string, 
       } catch { result.credits = "Unavailable — retry"; }
     })(),
     (async () => {
+      // Launch sells credits for NEAR only — skip token price/balance until enabled.
+      if (!TOKEN_PAYMENTS_ENABLED) {
+        result.mpoo = "mPOO payments not enabled yet";
+        return;
+      }
       if (!token) { result.mpoo = "No mPOO token configured on this network"; return; }
       try {
         const metadata = record(await view(rpc, token, "ft_metadata"));

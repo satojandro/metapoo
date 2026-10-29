@@ -8,6 +8,7 @@ import {
   connectWallet,
   disconnectWallet,
   onWalletSession,
+  restoreWalletSession,
   type ConnectWalletOptions,
   type WalletSession,
 } from "../wallet";
@@ -17,6 +18,8 @@ export interface WalletService {
   connect(options?: ConnectWalletOptions): Promise<void>;
   disconnect(): Promise<void>;
   subscribe(listener: (session: WalletSession) => void): () => void;
+  /** Resolves after the boot-time wallet restore attempt finishes. */
+  whenReady: Promise<WalletSession>;
 }
 
 export interface AppServices {
@@ -32,6 +35,10 @@ export function createAppServices(): AppServices {
     latest = session;
   });
 
+  // Hydrate identity from near-connect storage before the first paint path runs.
+  // Connect / authorize behaviour is unchanged — this only restores an existing session.
+  const whenReady = restoreWalletSession();
+
   const wallet: WalletService = {
     getSession() {
       return latest;
@@ -45,6 +52,7 @@ export function createAppServices(): AppServices {
     subscribe(listener) {
       return onWalletSession(listener);
     },
+    whenReady,
   };
 
   return {

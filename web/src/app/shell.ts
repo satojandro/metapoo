@@ -5,6 +5,7 @@
 import { mountPaintWalletPanel } from "./paint-wallet-panel";
 import type { ParsedRoute } from "./routes";
 import { mountWalletChrome, type WalletChromeDispose } from "./wallet-chrome";
+import { wireWalletDetailsClose } from "./wallet-details-close";
 import type { AppServices } from "./services";
 
 export interface ShellHandles {
@@ -124,6 +125,10 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     services,
   );
 
+  const detailsClose = wireWalletDetailsClose(
+    walletPanel.querySelector<HTMLDetailsElement>("details.wallet-details")!,
+  );
+
   const paintWalletDispose = mountPaintWalletPanel(
     walletPanel.querySelector<HTMLElement>("#paint-wallet-panel")!, services,
   );
@@ -153,6 +158,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     setActiveNav,
     dispose() {
       paintWalletDispose();
+      detailsClose.dispose();
       walletDispose();
       host.replaceChildren();
     },

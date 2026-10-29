@@ -23,6 +23,8 @@ summary { cursor:pointer; }
 .wallet-details[open] { position:absolute; top:84px; right:36px; width:min(400px,calc(100vw - 32px)); padding:20px; background:#242529; border:1px solid #65636b; border-radius:8px; z-index:20; box-shadow:0 18px 50px #0009; }
 .wallet-details p { overflow-wrap:anywhere; }
 .wallet-details .drawing-session-opt-in { color:#d3d3df; font-size:12px; }
+.wallet-details-toolbar { display:flex; justify-content:flex-end; margin:0 0 8px; }
+.wallet-details-close { min-height:36px; padding:6px 12px; }
 .shell-status { grid-column:1 / -1; grid-row:2; max-width:none; text-align:left; }
 .flow-state { font:10px monospace; color:#abacb6; }
 .compact-status { font-size:11px; }

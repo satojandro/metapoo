@@ -1,9 +1,27 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, expect, it, vi } from "vitest";
-import { mountBuyCreditsSheet } from "./buy-credits-sheet";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppServices } from "./services";
+
+vi.mock("../contract", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../contract")>();
+  return {
+    ...actual,
+    viewFunction: vi.fn(),
+  };
+});
+
+vi.mock("../config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../config")>();
+  return {
+    ...actual,
+    CONTRACT_ID: "board3.metapoo-player1.testnet",
+  };
+});
+
+import { viewFunction } from "../contract";
+import { mountBuyCreditsSheet } from "./buy-credits-sheet";
 
 function services(): AppServices {
   return {
@@ -12,6 +30,7 @@ function services(): AppServices {
       connect: vi.fn(),
       disconnect: vi.fn(),
       subscribe: () => () => undefined,
+      whenReady: Promise.resolve({ accountId: null, networkId: null }),
     },
     operations: {
       list: () => [],
@@ -22,6 +41,10 @@ function services(): AppServices {
     },
   };
 }
+
+afterEach(() => {
+  vi.mocked(viewFunction).mockReset();
+});
 
 describe("mountBuyCreditsSheet", () => {
   it("keeps quantity, total and pay controls in the dock panel", () => {
@@ -35,7 +58,6 @@ describe("mountBuyCreditsSheet", () => {
     expect(host.querySelector("#buy-credits-qty")).not.toBeNull();
     expect(host.querySelector("[data-buy=pay]")).not.toBeNull();
     expect(host.querySelector("[data-buy=lines]")).not.toBeNull();
-    // Registration copy appears only after a null credits quote renders.
     expect(host.textContent).toMatch(/Buy credits/);
     sheet.dispose();
     host.remove();
@@ -49,9 +71,12 @@ describe("mountBuyCreditsSheet", () => {
     sheet.open({ quantity: 10 });
     const tokenOption = host.querySelector("[data-buy=token-option]");
     expect(tokenOption).not.toBeNull();
-    // Buying with mPOO is a later phase: the exchange rate is undecided, so the
-    // radio must be out of reach even before a config read runs.
     expect(tokenOption?.hasAttribute("hidden")).toBe(true);
+    expect(host.querySelector("[data-buy=nearly]")?.hasAttribute("hidden")).toBe(true);
+    expect(host.querySelector("[data-buy=buy-near]")?.hasAttribute("hidden")).toBe(false);
+    expect(host.querySelector<HTMLAnchorElement>("[data-buy=buy-near]")?.href).toContain(
+      "near.org",
+    );
     sheet.dispose();
     host.remove();
   });
@@ -63,5 +88,21 @@ describe("mountBuyCreditsSheet", () => {
     sheet.open({ quantity: 5 });
     expect(host.querySelector(".buy-credits-sheet")?.hasAttribute("hidden")).toBe(true);
     sheet.dispose();
+  });
+
+  it("shows Retry price when get_payment_config fails", async () => {
+    vi.mocked(viewFunction).mockRejectedValue(new Error("rpc down"));
+    const host = document.createElement("div");
+    document.body.append(host);
+    const sheet = mountBuyCreditsSheet(host, services());
+    sheet.setVisible(true);
+    sheet.open({ quantity: 10 });
+    await vi.waitFor(() => {
+      expect(host.querySelector("[data-buy=price]")?.textContent).toMatch(/unavailable/i);
+    });
+    expect(host.querySelector("[data-buy=retry-price]")?.hasAttribute("hidden")).toBe(false);
+    expect(host.querySelector("[data-buy=status]")?.textContent).toMatch(/payment config/i);
+    sheet.dispose();
+    host.remove();
   });
 });

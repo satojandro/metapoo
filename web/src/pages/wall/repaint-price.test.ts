@@ -6,18 +6,30 @@
  * painted 2 minutes ago is more expensive on the paid board, and the rendered
  * total has to be chain cost × cells.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { wallPageHtml } from "./wall-template";
 import {
   PRICE_UNAVAILABLE,
+  chainRepaintReaders,
   creditShortfall,
   quoteRepaint,
   showPriceUnavailable,
   showRepaintQuote,
+  uniqueCells,
   type RepaintChrome,
   type RepaintReaders,
   type RepaintTunables,
 } from "./repaint-price";
+
+vi.mock("../../contract", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../contract")>();
+  return {
+    ...actual,
+    viewFunction: vi.fn(),
+  };
+});
+
+import { viewFunction } from "../../contract";
 
 /** What `get_tunables` returns on a fresh paid board. Fixture input, not a pricing formula. */
 const DEFAULT_TUNABLES: RepaintTunables = {
@@ -40,8 +52,14 @@ function mount(): { root: HTMLElement; chrome: RepaintChrome } {
 }
 
 function readers(overrides: Partial<RepaintReaders> = {}): RepaintReaders {
+  const cellCost = overrides.cellCost ?? (async () => 4);
+  const cellCosts =
+    overrides.cellCosts ??
+    (async (cells: Array<{ x: number; y: number }>) =>
+      Promise.all(cells.map((cell) => cellCost(cell))));
   return {
-    cellCost: async () => 4,
+    cellCost,
+    cellCosts,
     tunables: async () => DEFAULT_TUNABLES,
     pixel: async () => ({ writtenAtNs: null }),
     credits: async () => 100n,
@@ -186,5 +204,195 @@ describe("repaint price", () => {
     expect(creditShortfall(0n, quote.totalCredits)).toMatch(/Nothing was submitted/);
     expect(creditShortfall(1n, quote.totalCredits)).toBeNull();
     expect(creditShortfall(null, 4)).toMatch(/has 0 credits/);
+  });
+
+  it("de-duplicates cells so a revisited square is priced once", async () => {
+    const cellCost = vi.fn(async () => 1);
+    const cellCosts = vi.fn(async (cells: Array<{ x: number; y: number }>) => cells.map(() => 1));
+    const pixel = vi.fn(async () => ({ writtenAtNs: null }));
+    const quote = await quoteRepaint({
+      readers: readers({ cellCost, cellCosts, pixel }),
+      cells: [
+        { x: 1, y: 1 },
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+        { x: 1, y: 1 },
+      ],
+      nowNs: 1n,
+    });
+    expect(quote.ok).toBe(true);
+    if (!quote.ok) return;
+    expect(uniqueCells([{ x: 1, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 2 }])).toEqual([
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+    ]);
+    // A multi-cell stroke is one batch read, not one get_cell_cost per cell.
+    expect(cellCosts).toHaveBeenCalledTimes(1);
+    expect(cellCosts).toHaveBeenCalledWith([
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+    ]);
+    expect(cellCost).not.toHaveBeenCalled();
+    expect(pixel).toHaveBeenCalledTimes(2);
+    expect(quote.totalCredits).toBe(2);
+    expect(quote.strokeText).toBe("this stroke: 2 cells · 2 credits");
+  });
+});
+
+describe("chainRepaintReaders RPC budget", () => {
+  afterEach(() => {
+    vi.mocked(viewFunction).mockReset();
+  });
+
+  it("caches get_tunables for the session and reads written_at from the wall cache", async () => {
+    vi.mocked(viewFunction).mockImplementation(async (method: string) => {
+      if (method === "get_tunables") {
+        return DEFAULT_TUNABLES;
+      }
+      if (method === "get_cell_cost") {
+        return 1;
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+    const written = new Map<string, string | null>([["3,4", "99"]]);
+    const readersLive = chainRepaintReaders({
+      writtenAtNsFromCache: (cell) => written.get(`${cell.x},${cell.y}`) ?? null,
+    });
+
+    await readersLive.tunables();
+    await readersLive.tunables();
+    expect(
+      vi.mocked(viewFunction).mock.calls.filter((call) => call[0] === "get_tunables"),
+    ).toHaveLength(1);
+
+    expect(await readersLive.pixel({ x: 3, y: 4 })).toEqual({ writtenAtNs: "99" });
+    expect(await readersLive.pixel({ x: 0, y: 0 })).toEqual({ writtenAtNs: null });
+    expect(
+      vi.mocked(viewFunction).mock.calls.some((call) => call[0] === "get_pixel"),
+    ).toBe(false);
+
+    readersLive.clearTunablesCache();
+    await readersLive.tunables();
+    expect(
+      vi.mocked(viewFunction).mock.calls.filter((call) => call[0] === "get_tunables"),
+    ).toHaveLength(2);
+  });
+
+  it("quotes one cell with get_cell_cost and a 64-cell stroke with one get_cell_costs", async () => {
+    vi.mocked(viewFunction).mockImplementation(async (method: string, args?: Record<string, unknown>) => {
+      if (method === "get_tunables") return DEFAULT_TUNABLES;
+      if (method === "get_cell_cost") return 2;
+      if (method === "get_cell_costs") {
+        const requested = args?.cells;
+        if (!Array.isArray(requested) || requested.length > 64) {
+          throw new Error("StrokeTooLarge");
+        }
+        return requested.map(() => 1);
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+    const readersLive = chainRepaintReaders({
+      writtenAtNsFromCache: () => null,
+    });
+
+    const one = await quoteRepaint({
+      readers: readersLive,
+      cells: [{ x: 3, y: 4 }],
+      nowNs: 1n,
+    });
+    expect(one.ok).toBe(true);
+    if (!one.ok) return;
+    expect(one.totalCredits).toBe(2);
+    const hoverMethods = vi.mocked(viewFunction).mock.calls.map((call) => call[0]);
+    expect(hoverMethods.filter((m) => m === "get_cell_cost")).toEqual(["get_cell_cost"]);
+    expect(hoverMethods.filter((m) => m === "get_cell_costs")).toHaveLength(0);
+    expect(vi.mocked(viewFunction).mock.calls.find((call) => call[0] === "get_cell_cost")?.[1]).toEqual({
+      x: 3,
+      y: 4,
+    });
+
+    vi.mocked(viewFunction).mockClear();
+    const cells = Array.from({ length: 64 }, (_, i) => ({ x: i, y: 0 }));
+    const quote = await quoteRepaint({
+      readers: readersLive,
+      cells,
+      nowNs: 1n,
+    });
+    expect(quote.ok).toBe(true);
+    if (!quote.ok) return;
+    expect(quote.totalCredits).toBe(64);
+    const methods = vi.mocked(viewFunction).mock.calls.map((call) => call[0]);
+    // Tunables are already cached from the hover quote. The stroke itself is one RPC.
+    expect(methods).toEqual(["get_cell_costs"]);
+    expect(methods.filter((m) => m === "get_cell_cost")).toHaveLength(0);
+    expect(methods.filter((m) => m === "get_pixel")).toHaveLength(0);
+    const batch = vi.mocked(viewFunction).mock.calls[0]?.[1] as { cells: unknown[] };
+    expect(batch.cells).toHaveLength(64);
+  });
+
+  it("chunks a stroke above 64 and sums the batch prices", async () => {
+    vi.mocked(viewFunction).mockImplementation(async (method: string, args?: Record<string, unknown>) => {
+      if (method === "get_tunables") return DEFAULT_TUNABLES;
+      if (method === "get_cell_costs") {
+        const requested = args?.cells;
+        if (!Array.isArray(requested) || requested.length > 64) {
+          throw new Error("StrokeTooLarge");
+        }
+        return requested.map(() => 1);
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+    const readersLive = chainRepaintReaders({
+      writtenAtNsFromCache: () => "100",
+    });
+    const cells = Array.from({ length: 65 }, (_, i) => ({ x: i, y: 1 }));
+    const quote = await quoteRepaint({
+      readers: readersLive,
+      cells,
+      nowNs: 1_000_000_000n,
+    });
+    expect(quote.ok).toBe(true);
+    if (!quote.ok) return;
+    expect(quote.totalCredits).toBe(65);
+    expect(quote.cells[0]?.writtenAtNs).toBe("100");
+    const costCalls = vi.mocked(viewFunction).mock.calls.filter((call) => call[0] === "get_cell_costs");
+    expect(costCalls).toHaveLength(2);
+    expect((costCalls[0]?.[1] as { cells: unknown[] }).cells).toHaveLength(64);
+    expect((costCalls[1]?.[1] as { cells: unknown[] }).cells).toHaveLength(1);
+    expect(
+      vi.mocked(viewFunction).mock.calls.some((call) => call[0] === "get_cell_cost" || call[0] === "get_pixel"),
+    ).toBe(false);
+  });
+
+  it("treats a rejected or short get_cell_costs reply as price unavailable", async () => {
+    vi.mocked(viewFunction).mockImplementation(async (method: string) => {
+      if (method === "get_tunables") return DEFAULT_TUNABLES;
+      if (method === "get_cell_costs") return [1];
+      throw new Error(`unexpected ${method}`);
+    });
+    const short = await quoteRepaint({
+      readers: chainRepaintReaders({ writtenAtNsFromCache: () => null }),
+      cells: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ],
+      nowNs: 1n,
+    });
+    expect(short).toEqual({ ok: false, message: PRICE_UNAVAILABLE });
+
+    vi.mocked(viewFunction).mockImplementation(async (method: string) => {
+      if (method === "get_tunables") return DEFAULT_TUNABLES;
+      if (method === "get_cell_costs") throw new Error("rpc down");
+      throw new Error(`unexpected ${method}`);
+    });
+    const rejected = await quoteRepaint({
+      readers: chainRepaintReaders({ writtenAtNsFromCache: () => null }),
+      cells: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ],
+      nowNs: 1n,
+    });
+    expect(rejected).toEqual({ ok: false, message: PRICE_UNAVAILABLE });
   });
 });
