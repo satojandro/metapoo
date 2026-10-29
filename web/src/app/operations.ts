@@ -6,7 +6,12 @@
  * metadata, network/account, and hashes when available.
  */
 
-export type OperationKind = "paint" | "bounty_fund" | "print_mint" | "other";
+export type OperationKind =
+  | "paint"
+  | "buy_paint"
+  | "bounty_fund"
+  | "print_mint"
+  | "other";
 
 /** Matches the vocabulary in frontend-journeys.md §7. */
 export type OperationPhase =

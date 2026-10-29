@@ -74,6 +74,25 @@ summary { cursor:pointer; }
 .repaint-legend[hidden] { display:none; }
 .cell-price:empty,.stroke-total:empty { display:none; }
 .cell-price[data-state=unavailable],.stroke-total[data-state=unavailable] { color:#9f3029; }
+.credits-dock { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.credits-dock[hidden] { display:none; }
+.credits-balance { margin:0; font-size:13px; color:#25252b; }
+#buy-credits-button { min-height:44px; }
+.buy-credits-host { flex:1 1 100%; }
+.buy-credits-sheet[hidden] { display:none; }
+.buy-credits-panel { display:grid; gap:10px; margin-top:4px; padding:12px; border-radius:6px; background:#fff; border:1px solid #b9b2a6; color:#25252b; }
+.buy-credits-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.buy-credits-header h2 { margin:0; font-size:14px; font-weight:700; color:#25252b; }
+.buy-credits-price,.buy-credits-balance,.buy-credits-note,.buy-credits-status,.buy-credits-total { margin:0; font-size:12px; line-height:1.4; color:#4a4650; overflow-wrap:anywhere; }
+.buy-credits-qty-label { font-size:12px; color:#3d3943; }
+.buy-credits-qty-row { display:flex; align-items:center; gap:8px; }
+.buy-credits-qty { width:min(100%,120px); min-height:44px; padding:8px 10px; border:1px solid #b9b2a6; border-radius:4px; background:#fff; color:#25252b; font-size:14px; }
+.buy-credits-asset { margin:0; padding:0; border:0; font-size:12px; color:#3d3943; display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; }
+.buy-credits-asset legend { padding:0; margin:0 12px 0 0; font-size:12px; }
+.buy-credits-lines { margin:0; padding-left:18px; font-size:12px; color:#25252b; }
+.buy-credits-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.buy-credits-actions .action { min-height:44px; }
+.buy-credits-nearly { text-decoration:none; display:inline-flex; align-items:center; }
 .palette { flex:1; gap:6px; }
 .swatch { position:relative; flex:0 0 40px; width:40px; height:44px; padding:5px; border:1px solid transparent; border-radius:4px; background:transparent; }
 .swatch .chip { width:100%; height:100%; border:1px solid #0002; border-radius:2px; }

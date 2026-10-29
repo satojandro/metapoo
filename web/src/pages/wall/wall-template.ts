@@ -100,6 +100,11 @@ export function wallPageHtml(): string {
           <p id="repaint-legend" class="repaint-legend" hidden></p>
           <p id="cell-price" class="cell-price" role="status" aria-live="polite"></p>
           <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
+          <div id="credits-dock" class="credits-dock" hidden>
+            <p id="credits-balance" class="credits-balance" role="status" aria-live="polite">Credits: …</p>
+            <button id="buy-credits-button" class="action secondary" type="button">Buy credits</button>
+          </div>
+          <div id="buy-credits-host" class="buy-credits-host"></div>
           <div id="paint-unlock" class="paint-unlock" hidden>
             <p class="paint-unlock-title">Painting is read-only until you approve one drawing key.</p>
             <p class="paint-unlock-body">

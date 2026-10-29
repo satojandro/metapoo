@@ -93,6 +93,7 @@ import type { PageMount } from "../../app/page-registry";
 import type { ParsedRoute } from "../../app/routes";
 import type { AppServices } from "../../app/services";
 import { paintOperationId } from "../../app/operations";
+import { mountBuyCreditsSheet } from "../../app/buy-credits-sheet";
 import { parseHelpPaintSearch } from "../bounties/deep-link";
 import { wallPageHtml } from "./wall-template";
 import { mountWallHint } from "../../wall-hint";
@@ -223,6 +224,24 @@ export function mountWall(
     pageRoot,
     "#unlock-paint-button",
   );
+  const creditsDock = mustFindIn<HTMLElement>(pageRoot, "#credits-dock");
+  const creditsBalance = mustFindIn<HTMLElement>(pageRoot, "#credits-balance");
+  const buyCreditsButton = mustFindIn<HTMLButtonElement>(
+    pageRoot,
+    "#buy-credits-button",
+  );
+  const buyCreditsHost = mustFindIn<HTMLElement>(pageRoot, "#buy-credits-host");
+  const buyCreditsSheet = mountBuyCreditsSheet(buyCreditsHost, services, {
+    onCreditsChanged: (balance) => {
+      if (disposed) return;
+      creditsBalance.textContent =
+        balance === null
+          ? "Credits: not registered · 0"
+          : balance === undefined
+            ? "Credits: …"
+            : `Credits: ${balance}`;
+    },
+  });
 
   // Keep the current cell coordinates available when keyboard users reach Place.
   drawButton.setAttribute("aria-describedby", "selection-summary cell-price stroke-total");
@@ -562,8 +581,15 @@ export function mountWall(
       setFlow(selected ? "editing" : "connected");
     }
     showDrawingSession();
+    void refreshCreditsDock();
   });
   listenerCleanups.push(unsubWallet);
+  buyCreditsButton.addEventListener("click", () => {
+    buyCreditsSheet.open();
+  });
+  listenerCleanups.push(() => {
+    buyCreditsSheet.dispose();
+  });
 
 /**
  * Apply Help-paint / bounty deep-link query after the wall mounts.
@@ -1992,10 +2018,43 @@ function rememberBoardSchema(schema: number | null): void {
     repaintChrome.legend.textContent = "";
     repaintChrome.badge.textContent = "";
     repaintChrome.strokeTotal.textContent = "";
+    creditsDock.hidden = true;
+    buyCreditsSheet.setVisible(false);
     syncSubmitEnabled();
     return;
   }
+  creditsDock.hidden = false;
+  buyCreditsSheet.setVisible(true);
   void refreshPaidLegend();
+  void refreshCreditsDock();
+}
+
+async function refreshCreditsDock(): Promise<void> {
+  if (!paidBoard()) {
+    creditsDock.hidden = true;
+    buyCreditsSheet.setVisible(false);
+    return;
+  }
+  creditsDock.hidden = false;
+  buyCreditsSheet.setVisible(true);
+  if (!walletAccount) {
+    creditsBalance.textContent = "Credits: connect wallet";
+    buyCreditsButton.disabled = true;
+    buyCreditsSheet.setCredits(undefined);
+    return;
+  }
+  buyCreditsButton.disabled = false;
+  creditsBalance.textContent = "Credits: …";
+  try {
+    const balance = await repaintReaders.credits(walletAccount);
+    if (disposed) return;
+    creditsBalance.textContent =
+      balance === null ? "Credits: not registered · 0" : `Credits: ${balance}`;
+    buyCreditsSheet.setCredits(balance);
+  } catch {
+    if (disposed) return;
+    creditsBalance.textContent = "Credits: unavailable — retry";
+  }
 }
 
 /** Legend only. An empty cell list still proves get_tunables answered. */
@@ -2110,6 +2169,22 @@ async function ensurePaidQuote(cells: Cell[], accountId: string | null): Promise
     if (shortfall) {
       repaintChrome.strokeTotal.textContent = `${quote.strokeText}. ${shortfall}`;
       fillBlock(result, "Not enough credits", shortfall);
+      const haveCount = have === null ? 0 : Number(have);
+      const needCount = quote.totalCredits;
+      const buyQuantity =
+        Number.isFinite(haveCount) && needCount > haveCount
+          ? needCount - haveCount
+          : Math.max(1, needCount);
+      const buyMore = document.createElement("button");
+      buyMore.type = "button";
+      buyMore.className = "action place";
+      buyMore.textContent = "Buy credits";
+      buyMore.addEventListener("click", () => {
+        buyCreditsSheet.open({ quantity: Math.max(1, buyQuantity) });
+      });
+      result.append(buyMore);
+      buyCreditsSheet.open({ quantity: Math.max(1, buyQuantity) });
+      void refreshCreditsDock();
       return false;
     }
     return true;

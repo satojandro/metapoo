@@ -39,7 +39,7 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
     controller = new AbortController();
     const session = services.wallet.getSession();
     for (const key of ["price", "credits", "near", "mpoo"] as const) display(key, "Loading…");
-    display("note", "Read-only balances. Paid checkout is not enabled.");
+    display("note", "Refreshing balances…");
     if (session.accountId && session.networkId !== network) {
       for (const key of ["price", "credits", "near", "mpoo"] as const) display(key, "Switch wallet network to view");
       status.textContent = `This app is using ${network}.`;
