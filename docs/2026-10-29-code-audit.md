@@ -15,13 +15,14 @@ which of its findings still hold.
 | canonical testnet paid board | **`board3.metapoo-player1.testnet`**. Every other id in the docs is wrong |
 | bounties, prints, history service, pressure simulation | **remove from `main`**, recoverable from a tag |
 | agents | Hermes (co-founder) stays. Claude has priority over Codex |
+| mPOO payments | **offered at mainnet launch** (`mpoo.nearlytrade.near`), alongside NEAR |
 | TOILET economy | **required for mainnet launch**. This overrides §4.1 below: sequence it, don't freeze it |
 
 Consequence: C1, C2 and C7 become **mainnet blockers**.
 
-**Open: mPOO at launch.** The deployment record has a 29 Oct owner decision: *launch sells credits for NEAR
-only*. Paying with mPOO is the obvious utility for a memecoin's game, so confirm whether that decision
-still holds. The contract path exists either way; the UI hides it behind `TOKEN_PAYMENTS_ENABLED=false`.
+**Decided: mPOO is a payment option at mainnet launch.** This supersedes the "NEAR only" entry in the
+deployment record. The contract path exists; the UI hides it until C8 is settled and an mPOO purchase is
+recorded on testnet.
 
 ## What was checked
 
@@ -106,6 +107,24 @@ before switching it on.
 `upgrade()` is present; there is no `migrate` / `#[init(ignore_state)]` anywhere. Any layout change
 bricks state. This is already `PAY-UPGRADE` in the backlog — listing it so it is not forgotten behind
 the newer work.
+
+### C8 — a fixed mPOO price can't track a memecoin · **mainnet blocker now that mPOO is offered**
+
+`mpoo_per_credit` is an owner-set constant, bounded to ×2 / ÷2 per 24 h (`payments.rs:144-170`). A memecoin
+can move more than 2× in a day. When it does, one currency becomes the cheap way to buy credits. If mPOO
+rises, credits bought with mPOO cost less than credits bought with NEAR, and anyone can take the
+difference. If it falls, nobody pays in mPOO. The guard that protects buyers from the owner also stops the
+owner from keeping up.
+
+Options, each needing an owner decision:
+1. **Accept the drift.** Make mPOO a deliberate "holder discount", with a bounded daily update.
+2. **Separate rate authority.** Give mPOO a separate cooldown and step bound, or a separate price role from
+   the owner key.
+3. **Price in mPOO only, from a TWAP.** The contract comments already rule out a pool spot-price oracle,
+   because it can be manipulated.
+
+Also: registration and gas are still NEAR, so an mPOO-only holder needs some NEAR. `ft_on_transfer` rejects
+routed deposits (see below), so "swap and buy" in one step won't work.
 
 ### Also noted
 
@@ -230,9 +249,10 @@ end-to-end on testnet. Everything that is not on that path is currently cost.
    never from memory, then map each one to Meta Poo as done, partial or missing. Credits ≈ avocados,
    TOILET-from-held-cells ≈ bananas, and TOILET staking for revenue ≈ the Berry Farm are the likely
    mapping. Treat this as a hypothesis until it's checked.
-3. **Recorded testnet journey** with transaction hashes: connect → buy (NEAR **and** mPOO) → paint →
+3. **Recorded testnet journey** with transaction hashes: connect → buy (NEAR **and** mPOO, the latter
+   once C8 is decided) → paint →
    seen in a second browser (`PAY-INTEGRATION`).
-4. **One contract revision**: C1, C2, C3, C4, C6, plus a migration (C7), rehearsed as a state-preserving
+4. **One contract revision**: C1, C2, C3, C4, C6, C8, plus a migration (C7), rehearsed as a state-preserving
    upgrade of `board3.metapoo-player1.testnet`.
 5. **`mount-wall.ts` refactor** (F1/F2), behaviour-neutral, before claim and staking UI are added to it.
 6. **TOILET on**: claim UI, emission rate, then staking.
