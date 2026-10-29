@@ -118,6 +118,9 @@ transaction rather than a redeploy plus a migration:
   enforced** — a zero limit disables that rule.
 - `get_cell_cost(x, y)` — what that cell costs right now. The page must display this rather than
   re-implementing the tier rule in JavaScript.
+- `get_cell_costs(cells)` — the same answer for a whole stroke in one call, bounded by
+  `MAX_DRAW_BATCH`. Use it instead of `get_cell_cost` per cell: a 64-cell drag priced cell by cell
+  is ~129 round-trips (each cell also needs `get_pixel`) before the wallet prompt.
 - `get_cells_owned(account_id)` — cells an account holds; the input to the quota and the earning cap.
 - `get_outstanding_credits()` — credits sold and not yet spent. Prepaid service, never profit.
 - `upgrade(code)` — owner-only, one yocto. The board keeps this; TOILET does not (D4), because the board

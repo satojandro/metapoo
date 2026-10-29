@@ -17,7 +17,7 @@ WASM (built with `cargo near build non-reproducible-wasm`):
 
 | Contract | Size | SHA-256 |
 |---|---|---|
-| paid board | 288,101 B | `0d9cadb6e25ede0cb038afc8038d585804af9bd265716b9c9477104f6a008020` |
+| paid board | 293,937 B | `f9456dc1a249106e00f845da38b47e71143942c466cf9e0611402b9849829278` |
 | TOILET | 231,550 B | `4ae3739a4286fb4b07c8331fa5e58ef2553ecbe3c78d7e7c86e5975ef1dbe525` |
 
 Live configuration (`get_tunables`, `get_payment_config`):
@@ -68,7 +68,8 @@ Harness: `~/Hermes-crypto-builder/mpoo/harness/paid-board-acceptance.mjs`
 Raw output: `acceptance-results.json`, `acceptance-results-area2.json`.
 
 Result at 0.0025: **50 of 50 passed** (run `acceptance-codes.json`), against the board carrying
-the split rejection codes.
+the split rejection codes. `get_cell_costs` was added afterwards as a code-only upgrade (state and
+price unchanged), because pricing a stroke one cell at a time was the paid wall's worst latency.
 
 An earlier run at the legacy 0.0069 price gave 48 of 49 in-process: The one failure was a JSON-RPC
 `TIMEOUT_ERROR` on the `NothingToClaim` check, not a contract result; replayed

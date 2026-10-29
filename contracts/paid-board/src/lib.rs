@@ -50,6 +50,17 @@ pub struct DrawCell {
     pub color: u32,
 }
 
+/// One cell in a batched price request.
+///
+/// The client prices a whole stroke in one call instead of one call per cell:
+/// `get_cell_cost` per painted cell costs two round-trips each and stalls a
+/// 64-cell drag behind ~129 of them before the wallet prompt.
+#[near(serializers = [json])]
+pub struct CellRef {
+    pub x: u32,
+    pub y: u32,
+}
+
 /// Index 0 is Ink, a real paint color. An unpainted square is not index 0.
 /// Names and hex values match `shared/palette.ts`. Change both together.
 const PALETTE: [(&str, &str); 8] = [
@@ -405,6 +416,29 @@ impl Board {
             .cost(env::block_timestamp(), read_cell(self, pixel_key(x, y)).1)
     }
 
+    /// Price every cell of one stroke in a single call.
+    ///
+    /// Same answer as calling `get_cell_cost` per cell, without the round-trips:
+    /// the recency tiers stay defined here and nowhere else. Bounded by
+    /// `MAX_DRAW_BATCH`, the same cap `draw_many` enforces, so a quote can never
+    /// describe a stroke the contract would refuse.
+    pub fn get_cell_costs(&self, cells: Vec<CellRef>) -> Vec<u32> {
+        if cells.len() as u32 > MAX_DRAW_BATCH {
+            reject("StrokeTooLarge");
+        }
+        let now = env::block_timestamp();
+        cells
+            .iter()
+            .map(|cell| {
+                if let Err(code) = check_coordinate(cell.x, cell.y) {
+                    reject(code);
+                }
+                self.tunables
+                    .cost(now, read_cell(self, pixel_key(cell.x, cell.y)).1)
+            })
+            .collect()
+    }
+
     /// Cells an account currently holds: the input to the paint quota and to the
     /// emission earning cap.
     pub fn get_cells_owned(&self, account_id: AccountId) -> u32 {
@@ -641,6 +675,45 @@ mod tests {
         // Fixture credits must also be included in the global liability counter.
         board.payments.outstanding = 6000;
         board
+    }
+
+    #[test]
+    fn batched_costs_match_the_single_cell_view() {
+        let mut board = setup();
+        context(accounts(1), 1_000_000_000_000);
+        board.draw(0, 0, 1);
+        // (0,0) was just painted, so it must quote the young tier while (1,1)
+        // is empty and quotes the base tier.
+        let batch = board.get_cell_costs(vec![
+            CellRef { x: 0, y: 0 },
+            CellRef { x: 1, y: 1 },
+        ]);
+        assert_eq!(
+            batch,
+            vec![board.get_cell_cost(0, 0), board.get_cell_cost(1, 1)]
+        );
+        assert_ne!(batch[0], batch[1]);
+    }
+
+    #[test]
+    fn batched_costs_accept_an_empty_stroke() {
+        let board = setup();
+        assert!(board.get_cell_costs(vec![]).is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "StrokeTooLarge")]
+    fn batched_costs_reject_a_stroke_over_the_draw_cap() {
+        let board = setup();
+        let cells: Vec<CellRef> = (0..65).map(|i| CellRef { x: i, y: 0 }).collect();
+        board.get_cell_costs(cells);
+    }
+
+    #[test]
+    #[should_panic(expected = "CoordinateOutOfRange")]
+    fn batched_costs_reject_an_off_board_cell() {
+        let board = setup();
+        board.get_cell_costs(vec![CellRef { x: 200, y: 0 }]);
     }
 
     #[test]
