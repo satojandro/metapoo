@@ -291,6 +291,122 @@ export async function signAndSendDraw(args: DrawCallArgs): Promise<unknown> {
   });
 }
 
+export interface BuyCreditsNearCallArgs {
+  contractId: string;
+  /** When set, register_credit_account is the first action (exact fee deposit). */
+  registrationDeposit: string | null;
+  registrationGas: string;
+  minCredits: string;
+  expectedPrice: string;
+  purchaseDeposit: string;
+  purchaseGas: string;
+}
+
+/**
+ * Full-access wallet path for prepaid credits (NEAR).
+ * Batches optional `register_credit_account` with `buy_credits_near` so the
+ * first purchase is one approval. Never use a drawing-session FC key here.
+ */
+export async function signAndSendBuyCreditsNear(
+  args: BuyCreditsNearCallArgs,
+): Promise<unknown> {
+  const current = ensureConnector();
+  const wallet = await current.wallet();
+  const actions: Array<{
+    type: "FunctionCall";
+    params: {
+      methodName: string;
+      args: Record<string, unknown>;
+      gas: string;
+      deposit: string;
+    };
+  }> = [];
+  if (args.registrationDeposit) {
+    actions.push({
+      type: "FunctionCall",
+      params: {
+        methodName: "register_credit_account",
+        args: {},
+        gas: args.registrationGas,
+        deposit: args.registrationDeposit,
+      },
+    });
+  }
+  actions.push({
+    type: "FunctionCall",
+    params: {
+      methodName: "buy_credits_near",
+      args: {
+        min_credits: args.minCredits,
+        expected_price: args.expectedPrice,
+      },
+      gas: args.purchaseGas,
+      deposit: args.purchaseDeposit,
+    },
+  });
+  return wallet.signAndSendTransaction({
+    receiverId: args.contractId,
+    actions,
+  });
+}
+
+export interface BuyCreditsTokenCallArgs {
+  tokenContractId: string;
+  boardContractId: string;
+  /** Optional prior board registration (separate tx, board receiver). */
+  registrationDeposit: string | null;
+  registrationGas: string;
+  amount: string;
+  msg: string;
+  gas: string;
+  deposit: string;
+}
+
+/**
+ * Token purchase: optionally register on the board first, then
+ * `ft_transfer_call` on the configured token with 1 yocto attached.
+ */
+export async function signAndSendBuyCreditsToken(
+  args: BuyCreditsTokenCallArgs,
+): Promise<unknown> {
+  const current = ensureConnector();
+  const wallet = await current.wallet();
+  if (args.registrationDeposit) {
+    await wallet.signAndSendTransaction({
+      receiverId: args.boardContractId,
+      actions: [
+        {
+          type: "FunctionCall",
+          params: {
+            methodName: "register_credit_account",
+            args: {},
+            gas: args.registrationGas,
+            deposit: args.registrationDeposit,
+          },
+        },
+      ],
+    });
+  }
+  return wallet.signAndSendTransaction({
+    receiverId: args.tokenContractId,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: {
+          methodName: "ft_transfer_call",
+          args: {
+            receiver_id: args.boardContractId,
+            amount: args.amount,
+            msg: args.msg,
+          },
+          gas: args.gas,
+          deposit: args.deposit,
+        },
+      },
+    ],
+  });
+}
+
 /**
  * Ask the connected wallet (full access) to delete the experimental FC key
  * on chain. Receiver is the user's own account. Still requires a wallet prompt.

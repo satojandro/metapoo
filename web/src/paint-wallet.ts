@@ -60,7 +60,7 @@ export async function loadPaintWallet(rpc: Rpc, board: string, network: string, 
     price: "Planned: 0.0069 NEAR / pixel", credits: "Paid painting not available yet",
     near: account ? "Unavailable — retry" : "Connect wallet to view",
     mpoo: account ? "Unavailable — retry" : "Connect wallet to view",
-    note: "Paid checkout is not enabled. Wallet balances do not include paint credits.",
+    note: "Buy credits from the paint dock when this board is paid. Balances here stay read-only.",
   };
   // NEAR can load even if the board or token read fails.
   const nearRead = (async () => {
@@ -85,14 +85,16 @@ export async function loadPaintWallet(rpc: Rpc, board: string, network: string, 
         token = config.mpoo_token;
         result.price = `${formatUnits(String(config.near_per_credit),24)} NEAR / pixel`;
         result.credits = account ? "Unavailable — retry" : "Connect wallet to view";
+        result.note =
+          "Buy credits from the paint dock on the wall. This panel only shows balances.";
       } else {
-        result.note = "This board does not use paint credits. Paid checkout is not enabled.";
+        result.note = "This board does not use paint credits.";
       }
     } catch {
       config = null;
       result.price = "Unavailable — retry";
       result.credits = "Unavailable — retry";
-      result.note = "Could not verify paid-board prices. Paid checkout is not enabled.";
+      result.note = "Could not verify paid-board prices. Retry to refresh.";
     }
   }
   await Promise.all([
