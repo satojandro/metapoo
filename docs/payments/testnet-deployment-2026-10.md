@@ -8,7 +8,7 @@ not local test runs. **Nothing here is a mainnet result.**
 
 | Role | Account | Notes |
 |---|---|---|
-| Paid board (schema 4) | `board2.metapoo-player2.testnet` | owner = itself; `upgrade()` present; **0.0025 NEAR/credit** |
+| Paid board (schema 4) | `board3.metapoo-player1.testnet` | owner = itself; `upgrade()` present; **0.0025 NEAR/credit**; split rejection codes |
 | TOILET token | `metapoo-toilet.testnet` | NEP-141, 18 decimals, 1B cap, no owner |
 | Test payment token (stands in for mPOO) | `metapoo-mpoo.testnet` | same TOILET wasm, 0 tax, emitter = `berrywall1.testnet`. **Dormant at launch** — kept only so the contract's mPOO path can be exercised later |
 | Players | `metapoo-player1.testnet`, `metapoo-player2.testnet`, `metapoo-player3.testnet` | faucet-funded, 10 NEAR each |
@@ -17,7 +17,7 @@ WASM (built with `cargo near build non-reproducible-wasm`):
 
 | Contract | Size | SHA-256 |
 |---|---|---|
-| paid board | 287,861 B | `3c9593f25fb8acd4c146fd037e1d15f1fd0136bc5bc98935a6266debbab7d270` |
+| paid board | 288,101 B | `0d9cadb6e25ede0cb038afc8038d585804af9bd265716b9c9477104f6a008020` |
 | TOILET | 231,550 B | `4ae3739a4286fb4b07c8331fa5e58ef2553ecbe3c78d7e7c86e5975ef1dbe525` |
 
 Live configuration (`get_tunables`, `get_payment_config`):
@@ -67,7 +67,8 @@ Harness: `~/Hermes-crypto-builder/mpoo/harness/paid-board-acceptance.mjs`
 (signs and broadcasts directly over JSON-RPC; every check asserts observable state).
 Raw output: `acceptance-results.json`, `acceptance-results-area2.json`.
 
-Result at 0.0025: **49 of 49 passed** (run `acceptance-0025.json`).
+Result at 0.0025: **50 of 50 passed** (run `acceptance-codes.json`), against the board carrying
+the split rejection codes.
 
 An earlier run at the legacy 0.0069 price gave 48 of 49 in-process: The one failure was a JSON-RPC
 `TIMEOUT_ERROR` on the `NothingToClaim` check, not a contract result; replayed
@@ -83,7 +84,8 @@ directly it returned
 | A4–A5 | registration succeeds with exactly 0.01 NEAR; second attempt rejects `AlreadyRegistered` |
 | A6 | registered account with zero credits rejects `InsufficientCredits` |
 | A7–A8 | stale `expected_price` rejects and the attached NEAR is reverted (credits unchanged) |
-| A9 | non-multiple deposit rejects `InvalidPurchaseOrUnregisteredAccountOrFloatFull` |
+| A9 | non-multiple deposit rejects `InvalidPurchaseAmount` |
+| A9b | purchase by an unregistered account rejects `AccountNotRegistered` (not "sold out") |
 | A10–A12 | 0.025 NEAR buys exactly 10 credits; `get_outstanding_credits` tracks the float |
 | A13 | empty cell costs 1 credit |
 | A14–A17 | first paint debits 1; the cell's cost immediately becomes 4 (young tier) |
@@ -108,9 +110,23 @@ refused mint on chain rather than in a mock.
 
 ## Findings
 
-**F1 — corrected 2026-10-29.** An earlier revision of this document claimed the codes
-`ExactRegistrationFeeRequired` and `PriceChanged` never reach the chain. **That was wrong.**
-They are present, but as the *suffix* of a Rust `assert_eq!` panic rather than a prefix:
+**F1 — closed 2026-10-29.** Two corrections, in order.
+
+First, an earlier revision of this document claimed the codes `ExactRegistrationFeeRequired`
+and `PriceChanged` never reach the chain. **That was wrong.** They arrive as the *suffix* of
+a Rust `assert_eq!` panic, so a client must substring-match rather than prefix-match:
+
+```
+Smart contract panicked: panicked at src/payments.rs:201:9:
+assertion `left == right` failed: PriceChanged
+```
+
+Second, the real defect: `buy_credits_near` used **one** code,
+`InvalidPurchaseOrUnregisteredAccountOrFloatFull`, for three unrelated causes. Split in this
+revision into `InvalidPurchaseAmount`, `BelowMinimumCredits`, `AccountNotRegistered`,
+`FloatCapExceeded` and `CreditOverflow`, each asserted by a test and by the acceptance
+harness (A9, A9b). The FT path logs `purchase_rejected: <code>` before refunding, so an
+indexer can explain a refunded transfer.
 
 ```
 Smart contract panicked: panicked at src/payments.rs:201:9:

@@ -63,6 +63,12 @@ impl Payments {
 
     /// `max_outstanding` of 0 means uncapped. The cap is a game rule (scarcity),
     /// not a solvency rule: credits are non-refundable prepaid service.
+    /// Returns a *distinct* code per failure so a client can tell the buyer what
+    /// actually went wrong. One code covering "bad amount / unregistered / sold
+    /// out" forces an interface to mislabel two of the three cases.
+    ///
+    /// Exact multiples avoid silently keeping dust or scheduling a second,
+    /// potentially taxed outgoing transfer. Invalid FT purchases refund all.
     fn credit(
         &mut self,
         account: &AccountId,
@@ -70,25 +76,31 @@ impl Payments {
         price: u128,
         minimum: u128,
         max_outstanding: u128,
-    ) -> Option<u128> {
-        // Exact multiples avoid silently keeping dust or scheduling a second,
-        // potentially taxed outgoing transfer. Invalid FT purchases refund all.
-        if amount == 0 || !amount.is_multiple_of(price) || minimum == 0 {
-            return None;
+    ) -> Result<u128, &'static str> {
+        if amount == 0 || !amount.is_multiple_of(price) {
+            return Err("InvalidPurchaseAmount");
         }
         let credits = amount / price;
-        if credits < minimum {
-            return None;
+        if minimum == 0 || credits < minimum {
+            return Err("BelowMinimumCredits");
         }
-        let outstanding = self.outstanding.checked_add(credits)?;
+        // Checked before the cap so an unregistered buyer is told to register,
+        // not that prepaid paint sold out.
+        let Some(previous) = self.balances.get(account).copied() else {
+            return Err("AccountNotRegistered");
+        };
+        let Some(outstanding) = self.outstanding.checked_add(credits) else {
+            return Err("CreditOverflow");
+        };
         if max_outstanding > 0 && outstanding > max_outstanding {
-            return None;
+            return Err("FloatCapExceeded");
         }
-        let previous = *self.balances.get(account)?;
-        let next = previous.checked_add(credits)?;
+        let Some(next) = previous.checked_add(credits) else {
+            return Err("CreditOverflow");
+        };
         self.balances.insert(account.clone(), next);
         self.outstanding = outstanding;
-        Some(credits)
+        Ok(credits)
     }
 
     pub(crate) fn spend(&mut self, account: &AccountId, count: u128) {
@@ -211,7 +223,7 @@ impl Board {
                 min_credits.0,
                 cap,
             )
-            .expect("InvalidPurchaseOrUnregisteredAccountOrFloatFull");
+            .unwrap_or_else(|code| env::panic_str(code));
         Self::purchase_event(&account, "near", amount, credits);
         U128(credits)
     }
@@ -248,11 +260,15 @@ impl Board {
             purchase.min_credits.0,
             cap,
         ) {
-            Some(credits) => {
+            Ok(credits) => {
                 Self::purchase_event(&sender_id, "mpoo", amount.0, credits);
                 U128(0) // All delivered tokens accepted; no manual refund transfer.
             }
-            None => amount, // Token's resolver handles the unused amount.
+            Err(code) => {
+                // The resolver refunds; the log lets an indexer explain why.
+                env::log_str(&format!("purchase_rejected: {code}"));
+                amount
+            }
         }
     }
 }
@@ -382,6 +398,44 @@ mod tests {
         context(2, 1, 0);
         board.ft_on_transfer(accounts(1), U128(200), message());
     }
+    #[test]
+    #[should_panic(expected = "AccountNotRegistered")]
+    fn purchase_by_unregistered_account_names_registration() {
+        let mut board = setup();
+        // accounts(2) never registered; the purchase must say so rather than
+        // reporting a sold-out float.
+        context(2, 2, 10);
+        board.buy_credits_near(U128(1), U128(10));
+    }
+
+    #[test]
+    #[should_panic(expected = "InvalidPurchaseAmount")]
+    fn non_multiple_deposit_names_the_amount() {
+        let mut board = setup();
+        context(1, 1, 11);
+        board.buy_credits_near(U128(1), U128(10));
+    }
+
+    #[test]
+    #[should_panic(expected = "BelowMinimumCredits")]
+    fn paying_under_the_stated_minimum_names_the_minimum() {
+        let mut board = setup();
+        context(1, 1, 10);
+        board.buy_credits_near(U128(5), U128(10));
+    }
+
+    #[test]
+    #[should_panic(expected = "FloatCapExceeded")]
+    fn float_cap_names_the_cap() {
+        let mut board = setup();
+        let mut tunables = board.get_tunables();
+        tunables.max_outstanding_credits = 1;
+        context(0, 0, 1);
+        board.set_tunables(tunables);
+        context(1, 1, 20);
+        board.buy_credits_near(U128(1), U128(10));
+    }
+
     #[test]
     #[should_panic(expected = "InsufficientCredits")]
     fn free_draw_rejected() {
