@@ -1,15 +1,16 @@
 /**
  * Repaint prices for a schema-4 (paid) board.
  *
- * The contract decides the credit cost. This file only reads `get_cell_cost`
- * and `get_tunables` and prints what they say. It does not keep a copy of the
- * 1 / 2 / 4 tier table. If a read fails, the page says "price unavailable"
+ * The contract decides the credit cost. This file reads `get_cell_cost`,
+ * `get_cell_costs`, and `get_tunables` and prints what they say. It does not
+ * keep a copy of the 1 / 2 / 4 tier table. If a read fails, the page says "price unavailable"
  * and refuses to submit — it never guesses "1 credit".
  *
- * Quote traffic must stay small: a 64-cell stroke used to fire ~129 RPCs
- * (tunables + get_cell_cost + get_pixel per cell). Prefer session-cached
- * tunables, wall pixel-cache timestamps, and de-duplicated cells so the
- * buy-credits sheet is not starved of the same RPC endpoint (issue #26).
+ * Quote traffic must stay small. A 64-cell stroke used to fire ~129 RPCs
+ * (tunables + get_cell_cost + get_pixel per cell). Session-cached tunables,
+ * wall-cache timestamps, de-duplicated cells, and one `get_cell_costs` call
+ * per ≤64 cells keep that off the buy-credits endpoint (issue #26).
+ * Hover and a one-cell place still use `get_cell_cost`.
  */
 
 import { viewFunction } from "../../contract";
@@ -48,9 +49,18 @@ export type RepaintQuote =
     }
   | { ok: false; message: typeof PRICE_UNAVAILABLE };
 
+/**
+ * `get_cell_costs` rejects with StrokeTooLarge above this.
+ * Same cap as the contract's MAX_DRAW_BATCH / draw_many.
+ */
+const MAX_COST_BATCH = 64;
+
 /** How the page asks the chain. Tests pass a fake; the wall uses `chainRepaintReaders`. */
 export interface RepaintReaders {
+  /** One cell. Hover and selection. Batching a single cell buys nothing. */
   cellCost(cell: CellRef): Promise<number>;
+  /** One stroke chunk, at most MAX_COST_BATCH cells. Backed by `get_cell_costs`. */
+  cellCosts(cells: CellRef[]): Promise<number[]>;
   tunables(): Promise<RepaintTunables>;
   pixel(cell: CellRef): Promise<{ writtenAtNs: string | null }>;
   credits(accountId: string): Promise<bigint | null>;
@@ -167,28 +177,33 @@ export async function quoteRepaint(input: {
   const cells = uniqueCells(input.cells);
   let rows: QuotedCell[];
   try {
-    rows = await mapInBatches(cells, 8, async (cell) => {
-      const [credits, pixel] = await Promise.all([
-        input.readers.cellCost(cell),
-        input.readers.pixel(cell),
-      ]);
-      if (!wholeCredit(credits)) {
-        throw new Error(PRICE_UNAVAILABLE);
+    if (cells.length <= 1) {
+      // Hover, selection, and a one-cell place. One `get_cell_cost`.
+      rows = await mapInBatches(cells, 8, async (cell) => {
+        const [credits, pixel] = await Promise.all([
+          input.readers.cellCost(cell),
+          input.readers.pixel(cell),
+        ]);
+        return quotedRow(cell, credits, pixel.writtenAtNs, input.nowNs);
+      });
+    } else {
+      // A drag can be up to 256 cells before draw_many splits it. The view
+      // rejects more than 64, so the quote is chunked and the prices summed.
+      rows = [];
+      for (let index = 0; index < cells.length; index += MAX_COST_BATCH) {
+        const chunk = cells.slice(index, index + MAX_COST_BATCH);
+        const costs = await input.readers.cellCosts(chunk);
+        if (!Array.isArray(costs) || costs.length !== chunk.length) {
+          throw new Error(PRICE_UNAVAILABLE);
+        }
+        const pixels = await Promise.all(chunk.map((cell) => input.readers.pixel(cell)));
+        for (let i = 0; i < chunk.length; i++) {
+          const cell = chunk[i]!;
+          const pixel = pixels[i]!;
+          rows.push(quotedRow(cell, costs[i]!, pixel.writtenAtNs, input.nowNs));
+        }
       }
-      if (pixel.writtenAtNs !== null && !/^\d+$/.test(pixel.writtenAtNs)) {
-        throw new Error(PRICE_UNAVAILABLE);
-      }
-      return {
-        cell,
-        credits,
-        writtenAtNs: pixel.writtenAtNs,
-        line: formatCellPrice({
-          credits,
-          writtenAtNs: pixel.writtenAtNs,
-          nowNs: input.nowNs,
-        }),
-      };
-    });
+    }
   } catch {
     return { ok: false, message: PRICE_UNAVAILABLE };
   }
@@ -200,6 +215,26 @@ export async function quoteRepaint(input: {
     cells: rows,
     strokeText: rows.length > 0 ? formatStrokeTotal(rows.length, totalCredits) : "",
     totalCredits,
+  };
+}
+
+function quotedRow(
+  cell: CellRef,
+  credits: number,
+  writtenAtNs: string | null,
+  nowNs: bigint,
+): QuotedCell {
+  if (!wholeCredit(credits)) {
+    throw new Error(PRICE_UNAVAILABLE);
+  }
+  if (writtenAtNs !== null && !/^\d+$/.test(writtenAtNs)) {
+    throw new Error(PRICE_UNAVAILABLE);
+  }
+  return {
+    cell,
+    credits,
+    writtenAtNs,
+    line: formatCellPrice({ credits, writtenAtNs, nowNs }),
   };
 }
 
@@ -275,6 +310,13 @@ export function chainRepaintReaders(
         throw new Error(PRICE_UNAVAILABLE);
       }
       return credits;
+    },
+    async cellCosts(cells) {
+      const costs = await viewFunction<number[]>("get_cell_costs", { cells });
+      if (!Array.isArray(costs) || costs.length !== cells.length) {
+        throw new Error(PRICE_UNAVAILABLE);
+      }
+      return costs.map((c) => (wholeCredit(Number(c)) ? Number(c) : Number.NaN));
     },
     async tunables() {
       if (cachedTunables) {
