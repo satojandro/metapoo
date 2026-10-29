@@ -1454,9 +1454,17 @@ function wirePointerGestures(): void {
         pointerEvent.button === 2 ||
         spaceHeld ||
         beganOnPanSurface;
+      // One failed price read must not dead-end painting. `priceUnavailable`
+      // is a display state, but it also gated gesture start, so a single 4xx or
+      // 429 left the board refusing every tap and drag until a full reload --
+      // reported as "I click and nothing happens, then I am stuck". Clear it
+      // here so each gesture gets its own attempt; a fresh failure re-latches.
+      if (paidBoard() && priceUnavailable) {
+        priceUnavailable = false;
+      }
+
       if (cell && !wantsPan && directPaintToggle.checked &&
           walletAccount && selectedColor !== null && contractMetaOk &&
-          (!paidBoard() || !priceUnavailable) &&
           !drawInFlight && !paintQueue.inFlight && !paintQueueLength(paintQueue) &&
           canUseLocalDrawingSession(walletAccount, walletNetwork)) {
         activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
