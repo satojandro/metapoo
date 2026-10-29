@@ -286,7 +286,7 @@ end-to-end on testnet. Everything that is not on that path is currently cost.
 1. **Cleanup PR**: docs fixed to `board3.metapoo-player1.testnet` and current state (§3), stray orchestrator
    files and merged branches removed, non-product code removed from `main` behind a tag (F4), and the F3
    copy fixes.
-2. **Berry Club parity matrix**: verify the original's features from its open-source contract and frontend,
+2. **Berry Club parity matrix** ([done](2026-10-29-berry-club-parity.md); owner questions at the end): verify the original's features from its open-source contract and frontend,
    never from memory, then map each one to Meta Poo as done, partial or missing. Credits ≈ avocados,
    TOILET-from-held-cells ≈ bananas, and TOILET staking for revenue ≈ the Berry Farm are the likely
    mapping. Treat this as a hypothesis until it's checked.
