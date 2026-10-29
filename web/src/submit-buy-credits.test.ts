@@ -15,7 +15,7 @@ vi.mock("./config", () => ({
 import { quoteBuyCredits, REGISTRATION_YOCTO, type PaymentConfigView } from "./buy-credits";
 import { submitBuyCredits } from "./submit-buy-credits";
 
-const PRICE = "6900000000000000000000";
+const PRICE = "2500000000000000000000"; // 0.0025 NEAR, the launch price
 const config: PaymentConfigView = {
   mpooToken: "token.testnet",
   nearPerCredit: PRICE,

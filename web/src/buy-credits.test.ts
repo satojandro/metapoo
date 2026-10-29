@@ -10,7 +10,7 @@ import {
   type PaymentConfigView,
 } from "./buy-credits";
 
-const PRICE = "6900000000000000000000"; // 0.0069 NEAR
+const PRICE = "2500000000000000000000"; // 0.0025 NEAR, the launch price
 const MPOO_PRICE = "1000000000000000000"; // 1 token (18 decimals)
 
 const config: PaymentConfigView = {
@@ -23,8 +23,8 @@ const config: PaymentConfigView = {
 describe("multiplyUnits", () => {
   it("produces an attached deposit of exactly quantity × price", () => {
     // Acceptance: quantity 10 at price P → deposit 10P (fails on float math).
-    expect(multiplyUnits(PRICE, 10)).toBe("69000000000000000000000");
-    expect(multiplyUnits(PRICE, 100)).toBe("690000000000000000000000");
+    expect(multiplyUnits(PRICE, 10)).toBe("25000000000000000000000");
+    expect(multiplyUnits(PRICE, 100)).toBe("250000000000000000000000");
     expect(multiplyUnits("1", 3)).toBe("3");
   });
 
