@@ -304,7 +304,31 @@ above. It ships after launch, once the board is full. Free first paints already 
 and the holder paint allowance can wait until there is usage data. The contract fields (paid/free bit,
 free counters, schedule tunables) go into the step-4 revision so no second migration is needed.
 
+### Owner answers, 1 Nov (fourth round)
+
+| topic | owner answer |
+|---|---|
+| palette | **16 fixed colours**. The 8 current colours stay at indices 0–7, so existing cells keep their meaning and no data migration is needed; 8 new colours take indices 8–15 |
+| free painting | **weekly happy hours**, with every mitigation above **except the global cap** on free cells per window |
+
+What the free-painting rules are now:
+
+- a short weekly window (happy hour), on a schedule stored as tunables
+- only **after the first board is full**
+- only cells at the **base price tier** are free; recently painted cells still cost 2 or 4 credits
+- a cell painted for free earns **no TOILET and no allowance** until someone repaints it with a paid credit
+- a **per-account cap** on free cells per window
+- only accounts that have **bought credits at least once**
+- an owner **kill switch**, under the same cooldown as price changes (C1)
+
+Without the global cap, the cost of one window is bounded by the per-account cap times the number of
+eligible accounts. That figure can grow with the player base, but it is revenue not earned and not money
+leaving the board: free cells create no TOILET, and after the board is full they add no storage. The kill
+switch and the per-account cap are the levers if a window costs more than expected.
+
 ### Still open
 
-1. Palette: 16 or 32 fixed colours (recommended), or free colour?
-2. Free-paint window: weekly 24 h, or a shorter weekly happy hour? Global and per-account caps to set at launch.
+1. **The 8 new colours.** A visual decision (`AGENT.md` lists the palette as do-not-touch). They must be
+   added to `shared/palette.ts` and the contract's `PALETTE` together. Proposal to follow for the owner to
+   pick.
+2. **Happy-hour settings at launch:** length, weekday and time (UTC), and the per-account cap.
