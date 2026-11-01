@@ -16,6 +16,11 @@ Read these before changing anything, in order:
 
 Do not infer project state from the code alone, and do not infer it from a green test run.
 
+# Branches
+
+Owner, 1 Nov 2026: **recording decisions and other docs-only updates go straight to `main`.** Use a
+branch and a PR only for meaningful code work (web, contracts, shared).
+
 # Keep `docs/backlog.md` current
 
 You own that file. If your change alters a status in it, update it **in the same PR** — moving
