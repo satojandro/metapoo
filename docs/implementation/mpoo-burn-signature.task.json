@@ -1,0 +1,9 @@
+{
+  "task_id": "mpoo-burn-signature",
+  "queue_id": "REV-E0",
+  "assignee_suggested": "hermes",
+  "source_revision": "0c3eb8d",
+  "blocked_by": [],
+  "files": "docs only: append to docs/payments/2026-11-01-paid-board-revision-spec.md §R2",
+  "goal": "Read the exact burn method of mpoo.nearlytrade.near before REV-D builds on it.\n\nSCOPE\n- From the deployed contract (ABI/metadata if exposed, else source or a dry-run view of the wasm), record: method name, arguments and their JSON shape, attached deposit required, who may call it (any holder? only for its own balance?), gas, and what event it logs.\n- Check whether a contract account (the board) can burn its own balance, and whether the board must be storage-registered first.\n- Record the evidence (command and output, or a testnet/mainnet transaction that called it).\n\nACCEPTANCE\n- The spec's R2 section names the signature with evidence. If burn can't be called by the board, stop and tell the owner: R2's 20% needs a different route.\n\nBEFORE YOU START\nRead AGENT.md, docs/learning/traps.md and the spec section named above. Contract changes were approved by the owner on 1 Nov for this revision only, on testnet. Do not deploy to mainnet.\n\nDONE MEANS\nAGENT.md's definition of done: tests named that fail before and pass after, cargo test / npm test / npm run build as relevant, a '## Learned' line in the PR, and docs/backlog.md updated in the same PR."
+}

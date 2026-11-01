@@ -1,0 +1,9 @@
+{
+  "task_id": "issue-29-recheck",
+  "queue_id": "FE-29",
+  "assignee_suggested": "hermes or owner",
+  "source_revision": "0c3eb8d",
+  "blocked_by": [],
+  "files": "none expected; a fix only if it still reproduces, after FE-0",
+  "goal": "Re-check GitHub issue #29 (credits don't update after spend) on board3 with today's main.\n\nSCOPE\n- Buy 10 credits, paint a 3-cell stroke, check the dock shows 7 without a reload; paint over a fresh cell and check the price shows and the paint works (the issue's second bullet).\n- If both work: close #29 with the commits that fixed it (e7c4d83, 09965fe) and the check performed.\n- If not: comment what still fails. The fix belongs in FE-2 (single credits owner), after FE-0.\n\nACCEPTANCE\n- #29 closed or updated; backlog PAY-INTEGRATION row updated.\n\nBEFORE YOU START\nRead AGENT.md, docs/learning/traps.md and the spec section named above. Contract changes were approved by the owner on 1 Nov for this revision only, on testnet. Do not deploy to mainnet.\n\nDONE MEANS\nAGENT.md's definition of done: tests named that fail before and pass after, cargo test / npm test / npm run build as relevant, a '## Learned' line in the PR, and docs/backlog.md updated in the same PR."
+}

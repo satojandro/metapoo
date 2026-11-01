@@ -79,11 +79,16 @@ Baseline for the T-rows: `origin/main = 5b40b63`, 263 tests / 39 files, build cl
 
 ## Next, owner-approved order (1 Nov)
 
+All of this is broken into parallel work orders in
+[`implementation/2026-11-01-work-queue.md`](implementation/2026-11-01-work-queue.md): 14 tasks in three
+waves, each with its own `*.task.json`. Specs: [paid board revision](payments/2026-11-01-paid-board-revision-spec.md),
+[wall split](implementation/2026-11-01-wall-split-spec.md).
+
 | id | item | evidence / gate | size |
 |---|---|---|---|
-| **REV-1** | Paid board revision: C1, C2, C5, C7, C8, revenue split R1/R2, 16 colours, free first paints, happy hour | [spec](payments/2026-11-01-paid-board-revision-spec.md), **draft, four owner decisions open**; not started | **L** |
-| **F1-REFACTOR** | Split `web/src/pages/wall/mount-wall.ts` (2,538 lines, one closure, ~240 `const`/`let`) into board sync, pricing and credits, paint submission, camera and gestures; `mountWall` becomes wiring. Behaviour-neutral, test-first | audit F1/F2. Recommended before REV-1's frontend work (16 swatches, `max_credits`, free paints, happy hour, mPOO checkout) | **M** |
-| **TOILET-REVIEW** | Full TOILET cycle review: emission, claim, earning cap, staking contract, exit tax, buyback distribution to stakers | next review round (owner, 1 Nov); out of REV-1 scope | — |
+| **REV-1** | Paid board revision (REV-A…REV-F in the queue) | spec reviewed by the owner 1 Nov; open: testnet account ids, mPOO cap value; not started | **L** |
+| **F1-REFACTOR** | `mount-wall.ts` split (FE-0 in the queue) | [spec](implementation/2026-11-01-wall-split-spec.md); not started | **M** |
+| **TOILET-REVIEW** | Full TOILET cycle review: emission, claim, earning cap, staking contract, exit tax, distribution to stakers | next review round (owner, 1 Nov); out of this queue | — |
 
 ## Blocked on a human decision
 

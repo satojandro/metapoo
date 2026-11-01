@@ -1,0 +1,13 @@
+{
+  "task_id": "rev-testnet-rehearsal",
+  "queue_id": "REV-E",
+  "assignee_suggested": "hermes",
+  "source_revision": "0c3eb8d",
+  "blocked_by": [
+    "REV-B",
+    "REV-C",
+    "REV-D"
+  ],
+  "files": "docs/payments/mainnet-cost-validation.md, docs/payments/testnet-deployment-2026-10.md, STORAGE_PER_PIXEL in contracts/paid-board/src/safety.rs",
+  "goal": "Measure, upgrade board3 in place, and run the whole loop with evidence. Spec: docs/payments/2026-11-01-paid-board-revision-spec.md §C5 and §C7.\n\nSCOPE\n- C5: measure storage_usage on testnet for 100 first paints (distinct accounts and one account), 100 registrations, 100 free-cell flags. Replace STORAGE_PER_PIXEL with the measured figure +10% in a small PR; check the 0.01 NEAR registration fee covers an account plus AccountExtra.\n- Record board3's code hash and reads (get_credits for 3+ accounts with balances, get_pixels, get_outstanding_credits) before the upgrade.\n- upgrade(code, migrate_args) with the owner's dedicated testnet team and buyback accounts.\n- Same reads after: unchanged.\n- Full loop with transaction hashes: register, buy with NEAR, buy with the test mPOO (cap above 0), paint using a free first paint, paint a stroke with max_credits, distribute_near, revenue mPOO from the buyback account, distribute_mpoo.\n- Measure gas per distribute call for the keeper's budget.\n\nACCEPTANCE\n- Every hash and read recorded in testnet-deployment-2026-10.md (new section). PAY-INTEGRATION and PAY-UPGRADE in the backlog updated with the evidence.\n\nBEFORE YOU START\nRead AGENT.md, docs/learning/traps.md and the spec section named above. Contract changes were approved by the owner on 1 Nov for this revision only, on testnet. Do not deploy to mainnet.\n\nDONE MEANS\nAGENT.md's definition of done: tests named that fail before and pass after, cargo test / npm test / npm run build as relevant, a '## Learned' line in the PR, and docs/backlog.md updated in the same PR."
+}

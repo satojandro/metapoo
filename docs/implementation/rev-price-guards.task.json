@@ -1,0 +1,11 @@
+{
+  "task_id": "rev-price-guards",
+  "queue_id": "REV-B",
+  "assignee_suggested": "codex",
+  "source_revision": "0c3eb8d",
+  "blocked_by": [
+    "REV-A"
+  ],
+  "files": "contracts/paid-board/src/payments.rs, Tunables::validate in src/lib.rs",
+  "goal": "Bound the price knobs and add mPOO safety. Spec: docs/payments/2026-11-01-paid-board-revision-spec.md §C1 and §C8.\n\nSCOPE\n- C1: repaint tiers 1..=8, base<=mid<=young, young_ns<=mid_ns<=24h; repaint credit changes count as a NEAR price change (cooldown); max_outstanding_credits not below current outstanding unless 0.\n- C8: replace set_credit_prices with set_near_price and set_mpoo_price, each with its own >=24h cooldown and x2/÷2 step; mpoo_daily_credit_cap per UTC day, purchase over the cap refunded with MpooDailyCapReached; cap changes immediate, bound 1,000,000.\n- The cap check lives inside the credit path for mPOO. Do NOT change ft_on_transfer's message parsing: REV-D owns that.\n\nACCEPTANCE\n- One test per bound with its own rejection code.\n- Cap reached refunds the whole transfer; counter resets next UTC day.\n- Changing one price doesn't start the other's cooldown.\n\nBEFORE YOU START\nRead AGENT.md, docs/learning/traps.md and the spec section named above. Contract changes were approved by the owner on 1 Nov for this revision only, on testnet. Do not deploy to mainnet.\n\nDONE MEANS\nAGENT.md's definition of done: tests named that fail before and pass after, cargo test / npm test / npm run build as relevant, a '## Learned' line in the PR, and docs/backlog.md updated in the same PR."
+}

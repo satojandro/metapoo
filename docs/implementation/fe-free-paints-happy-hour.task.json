@@ -1,0 +1,12 @@
+{
+  "task_id": "fe-free-paints-happy-hour",
+  "queue_id": "FE-3",
+  "assignee_suggested": "cursor",
+  "source_revision": "0c3eb8d",
+  "blocked_by": [
+    "FE-2",
+    "REV-C"
+  ],
+  "files": "web/src/pages/wall/pricing-controller.ts, wall-view.ts, new happy-hour banner",
+  "goal": "Show free first paints and happy hour. Spec: docs/payments/2026-11-01-paid-board-revision-spec.md §F1, §F2.\n\nSCOPE\n- Read get_free_first_paints and get_happy_hour; show 'N free paints left' and mark free cells as 'free' in the stroke total.\n- Happy-hour banner: countdown to the next window when closed (Sundays 20:00 UTC, shown in the viewer's local time), time left and free cells left when open; hidden while the first board is still filling.\n- Explain the rules in one plain line each: base-price cells only, 100 per person, need to have bought credits once.\n\nACCEPTANCE\n- Tests for the stroke total with free cells, the banner states (filling / closed / open / used up) and local-time display.\n- Screenshots at 390 px and desktop.\n\nBEFORE YOU START\nRead AGENT.md, docs/learning/traps.md and the spec section named above. Contract changes were approved by the owner on 1 Nov for this revision only, on testnet. Do not deploy to mainnet.\n\nDONE MEANS\nAGENT.md's definition of done: tests named that fail before and pass after, cargo test / npm test / npm run build as relevant, a '## Learned' line in the PR, and docs/backlog.md updated in the same PR."
+}

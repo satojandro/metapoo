@@ -1,0 +1,9 @@
+{
+  "task_id": "wall-split",
+  "queue_id": "FE-0",
+  "assignee_suggested": "cursor or claude",
+  "source_revision": "0c3eb8d",
+  "blocked_by": [],
+  "files": "web/src/pages/wall/** (mount-wall.ts frozen for everyone else while open)",
+  "goal": "Split mount-wall.ts into five controllers, behaviour-neutral, test-first. Spec: docs/implementation/2026-11-01-wall-split-spec.md.\n\nSCOPE, ACCEPTANCE and METHOD: all in the spec. Characterization tests pass on 0c3eb8d before any code moves; one controller per commit; mountWall under ~400 lines; manual check on board3 with screenshots.\n\nBEFORE YOU START\nRead AGENT.md, docs/learning/traps.md and the spec section named above. Contract changes were approved by the owner on 1 Nov for this revision only, on testnet. Do not deploy to mainnet.\n\nDONE MEANS\nAGENT.md's definition of done: tests named that fail before and pass after, cargo test / npm test / npm run build as relevant, a '## Learned' line in the PR, and docs/backlog.md updated in the same PR."
+}

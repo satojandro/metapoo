@@ -1,6 +1,7 @@
 # Paid board revision — spec for review
 
-Date: 1 November 2026. Status: **draft for the owner and Hermes to review. Nothing here is implemented.**
+Date: 1 November 2026. Status: **reviewed by the owner on 1 Nov; three decisions made, one open (the mPOO cap value). Nothing here is implemented.**
+Work orders: [`../implementation/2026-11-01-work-queue.md`](../implementation/2026-11-01-work-queue.md).
 Contract changes and redeploys are ask-first (`AGENT.md`). This document asks for one approval: build
 this revision, test it, and rehearse it on `board3.metapoo-player1.testnet`.
 
@@ -112,7 +113,18 @@ daily on-chain cap, no oracle.
 - **Daily cap.** New tunable `mpoo_daily_credit_cap` (credits). The board counts credits sold for mPOO
   in the current UTC day (`floor(now / 86,400 s)`). A purchase that would cross the cap is refunded
   with `MpooDailyCapReached`, and the page offers NEAR instead. `0` means mPOO sales are closed, which
-  is the default at deploy.
+  is the default at deploy. **Changing the cap takes effect immediately**, with no cooldown: it limits
+  what the protocol can lose, not what users pay, so the owner should be able to raise it the moment
+  demand shows up. Bound: at most 1,000,000 credits a day.
+- **What the cap protects against.** The mPOO price is set by hand each week. If mPOO rises between
+  updates, credits bought with mPOO get cheaper than credits bought with NEAR. Credits can't be resold,
+  so nobody can drain the board. The loss is NEAR revenue that would otherwise have come in. If mPOO
+  doubles, a credit bought with mPOO costs 0.8 ÷ 2 = 40% of the NEAR price, so the worst daily loss is
+  about **60% of the cap's NEAR value**. Emission is 0 at launch, so cheap credits can't farm TOILET yet.
+- **Launch value: open.** The 4,000 first suggested was caution, not data: 10 NEAR a day, worst loss
+  about 6 NEAR. Recommended instead: **20,000 credits a day** (50 NEAR worth at 0.0025), more than the
+  16,384 cells of a full first fill, with a worst loss of about 30 NEAR on a day mPOO doubles. Raise it
+  the same day if mPOO demand hits it.
 - **Separate cooldowns.** `near_price_cooldown_ns` and `mpoo_price_cooldown_ns`, each with its own last
   change time, each at least 24 h. `set_credit_prices` becomes `set_near_price` and `set_mpoo_price`.
   A weekly mPOO update then never blocks an urgent NEAR change.
@@ -127,14 +139,14 @@ changing one price doesn't start the other's cooldown.
 Owner decisions: 10% to the team at the source, in the currency paid; the rest buys mPOO. Automate it.
 
 - New `distribute_near()`. **Anyone can call it**, at most once per `distribution_interval_ns`
-  (tunable, default 1 hour). It takes `get_withdrawable_near()` and sends **10% to `team_account`** and
+  (tunable, default 1 hour; owner, 1 Nov). It takes `get_withdrawable_near()` and sends **10% to `team_account`** and
   **90% to `buyback_account`**. Rounding dust goes to the buyback.
 - `buyback_account` is where the operator swaps NEAR for mPOO on Rhea/NEARLY. The swapped mPOO comes back
   to the board through R2. An on-chain swap is a later stage (parity doc, "Automating revenue
   distribution", stage 2).
 - `team_account` and `buyback_account` are set at `new` (or in the migration). Changing either is
   owner-only, needs a 7-day cooldown, and emits an event.
-- **`withdraw_near` is removed**, so the split can't be skipped. *Decision needed, see the end.*
+- **`withdraw_near` is removed**, so the split can't be skipped (owner, 1 Nov).
 - The transfers are promises. If one fails, a callback adds the amount back so the next call retries it.
 
 **Tests:** non-owner can call; second call inside the interval rejects; amounts are exactly 10/90 of
@@ -253,7 +265,7 @@ free first paint, run both distributions. Record transaction hashes this time.
 |---|---|
 | `draw`, `draw_many` | add `max_credits` |
 | `set_credit_prices` | replaced by `set_near_price`, `set_mpoo_price` |
-| `withdraw_near` | removed (decision needed) |
+| `withdraw_near` | removed |
 | `distribute_near`, `distribute_mpoo` | new, anyone can call, rate-limited |
 | `set_team_account`, `set_buyback_account` | new, owner, 7-day cooldown |
 | `set_staking_contract` | new, owner, once |
@@ -275,16 +287,28 @@ Listed so it's sized. It lands on `web/` after the contract, on its own branch:
 
 The `mount-wall.ts` split is recommended **before** this frontend work. See the backlog row F1-REFACTOR.
 
-## Decisions needed before implementation
+## Automation: who calls the distributions
 
-1. **Remove `withdraw_near`?** Recommended: yes. Every NEAR leaving the board then follows the 10/90
-   split, which is the promise to TOILET holders. The cost: no owner route to recover NEAR outside the
-   split. The upgrade path stays as the last resort.
-2. **Which accounts** are `team_account` and `buyback_account` on testnet and on mainnet? The buyback
-   account should be a dedicated account, not the owner's main one, so its swaps are easy to audit.
-3. **mPOO daily cap at launch**, in credits. Suggestion: 4,000 credits a day (10 NEAR worth at 0.0025),
-   raised once real volumes are known.
-4. **Distribution interval.** Default 1 hour. Shorter means smaller, steadier buybacks.
+A NEAR contract can't run on a timer. Something has to send a transaction. `distribute_near` and
+`distribute_mpoo` are open to anyone, so three callers are possible:
+
+| caller | how | verdict |
+|---|---|---|
+| **a keeper** | a small script on a schedule (hourly) with its own account, calling both methods | **recommended**. Gas is roughly 0.001–0.005 NEAR per call (to be measured in the rehearsal), so a few NEAR a month at most for two calls an hour. Its key can only call the two distribute methods, so a leaked key can't move money anywhere else |
+| piggyback on paint | `draw` triggers a distribution when the interval has passed, as Berry Club did | not recommended: the mPOO split needs three outgoing transfers and callbacks, which would push some painters' `draw_many` toward the gas limit and charge their session allowance |
+| anyone | a "distribute now" button on the revenue panel, or any user's own script | always available as a fallback; nothing depends on the keeper being up |
+
+The keeper is work order [`revenue-keeper.task.json`](../implementation/revenue-keeper.task.json). If it
+stops, nothing is lost: revenue waits on the board and the next call sends all of it.
+
+## Decisions
+
+| # | decision | answer |
+|---|---|---|
+| 1 | remove `withdraw_near` | **yes** (owner, 1 Nov) |
+| 2 | `team_account` and `buyback_account` | **dedicated accounts on testnet and mainnet**, owner to create and send the account ids |
+| 3 | mPOO daily cap at launch | **open**: recommended 20,000 credits a day (see C8); changeable at any time |
+| 4 | distribution interval | **1 hour** (owner, 1 Nov), called by a keeper |
 
 ## Definition of done
 

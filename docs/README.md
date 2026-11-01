@@ -13,7 +13,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | what is left to build? | [`backlog.md`](backlog.md) — every row carries its proof |
 | what has already gone wrong here? | [`learning/traps.md`](learning/traps.md) |
 | what is decided vs still open? | [`00-shared-decisions.md`](00-shared-decisions.md), [`roadmap.md`](roadmap.md) |
-| what blocks mainnet, in what order? | [`2026-10-29-code-audit.md`](2026-10-29-code-audit.md) |
+| what blocks mainnet, in what order? | [`2026-10-29-code-audit.md`](2026-10-29-code-audit.md); work orders in [`implementation/2026-11-01-work-queue.md`](implementation/2026-11-01-work-queue.md) |
 | how should the site look and feel? | [`2026-10-29-whole-site-design-review.md`](2026-10-29-whole-site-design-review.md) |
 | how should a judgement call be made? | [`2026-10-14-product-judgment.md`](2026-10-14-product-judgment.md) |
 
@@ -41,7 +41,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 
 | topic | document |
 |---|---|
-| what is next, in what order | [`2026-10-29-code-audit.md`](2026-10-29-code-audit.md) §5 |
+| what is next, in what order | [`implementation/2026-11-01-work-queue.md`](implementation/2026-11-01-work-queue.md): parallel work orders, 1 Nov |
 | what is left, with proof | [`backlog.md`](backlog.md) |
 
 The task orders in [`implementation/`](implementation/) (repaint price, checkout, safety, TOILET token,

@@ -1,0 +1,11 @@
+{
+  "task_id": "revenue-keeper",
+  "queue_id": "REV-F",
+  "assignee_suggested": "hermes",
+  "source_revision": "0c3eb8d",
+  "blocked_by": [
+    "REV-D"
+  ],
+  "files": "new ops/keeper/ (script + README), optional .github/workflows/keeper.yml",
+  "goal": "Call distribute_near and distribute_mpoo every hour. Spec: docs/payments/2026-11-01-paid-board-revision-spec.md 'Automation'.\n\nSCOPE\n- A small script (Node, using near-api-js or the repo's existing NEAR client) that calls both methods, logs the transaction hashes, and treats 'interval not elapsed' as success.\n- A dedicated keeper account whose access key is a function-call key limited to distribute_near and distribute_mpoo on the board, with a small allowance. Document how to create it. Never commit a key.\n- Run it hourly: a scheduled GitHub Actions workflow with the key as a repository secret, or a cron entry on Hermes's server. Pick one and document why.\n- Alert (a failing workflow or a log line Hermes watches) if both calls fail three times in a row.\n\nACCEPTANCE\n- Runs against the upgraded board3 for 24 h with hashes in the log.\n- Can be written against the spec'd method names while REV-D is in progress; testnet proof waits for REV-E.\n\nBEFORE YOU START\nRead AGENT.md, docs/learning/traps.md and the spec section named above. Contract changes were approved by the owner on 1 Nov for this revision only, on testnet. Do not deploy to mainnet.\n\nDONE MEANS\nAGENT.md's definition of done: tests named that fail before and pass after, cargo test / npm test / npm run build as relevant, a '## Learned' line in the PR, and docs/backlog.md updated in the same PR."
+}
