@@ -77,6 +77,14 @@ Baseline for the T-rows: `origin/main = 5b40b63`, 263 tests / 39 files, build cl
 | **R2.2** | Cheap change detection before paging | Full read is 6 requests today, 64 at 16,384 cells, every 4 s. Needs an O(1) view → **contract change = ask-first** | **M** |
 | **T2b** | *(unverified)* roving tabindex over swatches | Not checked this revision. Tab moves through all 8 swatches rather than arrow keys within the group — cosmetic a11y, not a blocker | **S** |
 
+## Next, owner-approved order (1 Nov)
+
+| id | item | evidence / gate | size |
+|---|---|---|---|
+| **REV-1** | Paid board revision: C1, C2, C5, C7, C8, revenue split R1/R2, 16 colours, free first paints, happy hour | [spec](payments/2026-11-01-paid-board-revision-spec.md), **draft, four owner decisions open**; not started | **L** |
+| **F1-REFACTOR** | Split `web/src/pages/wall/mount-wall.ts` (2,538 lines, one closure, ~240 `const`/`let`) into board sync, pricing and credits, paint submission, camera and gestures; `mountWall` becomes wiring. Behaviour-neutral, test-first | audit F1/F2. Recommended before REV-1's frontend work (16 swatches, `max_credits`, free paints, happy hour, mPOO checkout) | **M** |
+| **TOILET-REVIEW** | Full TOILET cycle review: emission, claim, earning cap, staking contract, exit tax, buyback distribution to stakers | next review round (owner, 1 Nov); out of REV-1 scope | — |
+
 ## Blocked on a human decision
 
 | id | item | what is needed |
@@ -99,7 +107,7 @@ confirmed by owner. A testnet token is needed for the first paid rehearsal.
 | ID | Pending work | Evidence / completion gate |
 |---|---|---|
 | PAY-UI | Read-only display + buy-credits sheet + NEAR CTA (mPOO hidden; **mPOO is offered at mainnet launch**, owner 2026-10-29, gated on audit C8); live Brave/Meteor verification still pending | Issues #25–#29 fixes on this branch: `restoreWalletSession`, wallet-details Close/Escape/outside-click, Buy NEAR instead of NEARLY while `TOKEN_PAYMENTS_ENABLED=false`, credits dock refresh after paint, Retry on price fetch failure. Proof: `wallet-restore.test.ts`, `wallet-details-close.test.ts`, `credits-dock-refresh.test.ts`, `buy-credits-sheet.test.ts`. |
-| PAY-INTEGRATION | Paid schema-4 frontend and real testnet purchase → paint → refreshed balances | Checkout UI exists locally; full-loop receipt evidence on Brave+Meteor still open. **Contracts are live on testnet** ([deployment record](payments/testnet-deployment-2026-10.md)) |
+| PAY-INTEGRATION | Paid schema-4 frontend and real testnet purchase → paint → refreshed balances | **Loop completed by the owner on `board3.metapoo-player1.testnet` (Brave + Meteor), reported 1 Nov.** It produced issues #25–#29; fixes in `e7c4d83`, `dade276`, `69578bb`, `0cae45c`, `9ea4a76`, `09965fe`. #25–#28 closed; **#29 (credits not updating after spend) still open** though `e7c4d83` and `09965fe` target it, so re-check and close. Transaction hashes were not recorded; the revision rehearsal ([spec](payments/2026-11-01-paid-board-revision-spec.md) C7) records them |
 | **PAY-REHEARSAL** | **Delivered 2026-10-29** — board + TOILET deployed and exercised on testnet | `docs/payments/testnet-deployment-2026-10.md`: 50 checks, board `board3.metapoo-player1.testnet` (canonical; `board1.metapoo-player3.testnet` was an earlier, replaced deployment); harness `~/Hermes-crypto-builder/mpoo/harness`. Proves schema-4 views and `resolve_claim` on a refused mint |
 | **PAY-RECENCY-UI** | Show the repaint price before the user commits: per-cell cost, stroke total, one-line legend | Page reads `get_cell_cost` and `get_tunables`. A cell painted 2 minutes ago renders chain cost × cells, not cells × 1. The legend sits outside `<details>`. A failed `get_cell_cost` disables submit and shows "price unavailable". Proof: `d1475d9`, `web/src/pages/wall/repaint-price.test.ts`. |
 | **PAY-COST** | **Reopen immediately after first mainnet paid-board deployment** | [Required cost matrix](payments/mainnet-cost-validation.md); all mainnet cases pending, keep open through owner acceptance |
