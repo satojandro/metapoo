@@ -167,7 +167,7 @@ tradable, and deflationary (vault exit tax).
 
 Proposal: take 10% **at the source, in the currency paid**, before anything else. NEAR revenue: 10% NEAR to
 the team, 90% to the buyback. mPOO revenue: 10% mPOO to the team, 90% into the split. The remainder splits
-70/30, so the gross split is **10% team / 63% stakers / 27% burn**.
+70/30, so the gross split is **10% team / 63% stakers / 27% burn**. *(Owner chose 10 / 70 / 20 on 1 Nov; see below.)*
 
 Taking the team's share in NEAR covers running costs (RPC, hosting, gas) without the team selling mPOO,
 which would work against the buyback. To confirm: 10 / 63 / 27, or keep stakers at 70% and take the team
@@ -239,9 +239,72 @@ take away the reason to do it:
 The contract needs one extra bit per cell (paid or free) and a free-paint counter per account. Both fit
 in the step-4 revision with the migration.
 
+### Owner answers, 1 Nov (third round)
+
+| topic | owner answer |
+|---|---|
+| team share | **10 / 70 / 20**: 10% to the team at the source, in the currency paid; stakers keep 70%; the burn is 20% |
+| exit tax | **yes, capped at 10%** on unstaking TOILET |
+| free first paints | **25 per account**, as in Berry Club, and only **until the first board is full** |
+| colour | open to more colours; asked what it complicates (answer below) |
+| credits model | no strong view; happy with a free-paint day if its cost is bounded (answer below) |
+
+### More colours: what it complicates
+
+The contract already stores `color` as a `u32` (`PixelRecord`, `lib.rs:243`), so 24-bit colour costs no
+extra storage. The only contract change is `validate_draw_args` (`lib.rs:631`) and the `palette` view.
+The rest of the cost is outside the contract:
+
+- **Frontend.** `shared/palette.ts`, the renderer, the swatch dock and the state legend all assume 8
+  named indices. A colour picker on a phone is a real design job, not a swap.
+- **Event and view consumers.** Indices 0–7 would mean something different from `0xRRGGBB`. A redeploy
+  with a migration would need to map old indices to hex, or the page must read both.
+- **Look.** The 8-colour palette is part of the stall's art direction, and `AGENT.md` lists the palette as
+  a do-not-touch item without an owner decision. Free colour makes the wall look like Berry Club's.
+- **Opacity** blends on the client before sending, so it adds no contract work once colour is free.
+
+Recommendation: **a bigger fixed palette, 16 or 32 colours, not free colour.** It is an index check and a
+longer `PALETTE` in the contract, it fits the step-4 revision, it keeps an art direction, and it keeps
+swatches tappable on a phone. Free 24-bit colour can come later without another storage change.
+
+### Free-paint day: what it costs and how to bound it
+
+**What actually leaves the protocol.** Painters pay their own gas through their session key's
+allowance, so a free day costs the board no gas. Two things do cost the board:
+
+1. **Revenue not earned that day.** This is an opportunity cost, not money leaving the treasury, and it
+   is capped at one day in seven.
+2. **Storage for cells painted for the first time** (about 0.0066 NEAR each, unverified, C5). This only
+   happens until the board is full; after that, repaints add no storage.
+
+**What can go wrong.**
+
+- **TOILET farming.** Grab cells for free, then earn TOILET on them all week. This is the real money
+  risk, because TOILET has a market price and the protocol pays it out.
+- **Wiping art for free.** One account repaints the whole wall in a day.
+- **Sybils.** Registration costs 0.01 NEAR, so per-account limits alone are cheap to get around.
+- **Lost buying.** People save their painting for the free day.
+
+**Mitigations. Each one is a tunable or a small check in `draw`:**
+
+| risk | mitigation |
+|---|---|
+| TOILET farming | a cell painted for free earns **no TOILET and no allowance** until someone repaints it with a paid credit. This is the same paid/free bit per cell as free first paints, so it costs nothing extra |
+| wiping art | recency pricing still applies on the free day: only cells at the base tier are free, and a recently painted cell still costs 2 or 4 credits |
+| sybils | a **per-account daily free cap** (for example 100 cells), and only accounts that have **bought credits at least once** can paint free |
+| runaway cost | a **global cap** on free cells per free day; when it's used up, painting costs credits again |
+| lost buying | announce the day, keep it short (24 h, or a shorter "happy hour"), and keep a kill switch: a tunable the owner can set to off, under the same cooldown as price changes (C1) |
+| storage | turn free days on only **after the first board is full**, so they never pay for new storage. This also keeps them separate from the free first paints |
+
+With all of these, the worst case for one free day is bounded by the global cap times the price per
+credit, and none of it creates TOILET.
+
+Recommendation: **credits stay buy-only (A), plus a weekly free-paint window (C)** with the mitigations
+above. It ships after launch, once the board is full. Free first paints already cover the launch period,
+and the holder paint allowance can wait until there is usage data. The contract fields (paid/free bit,
+free counters, schedule tunables) go into the step-4 revision so no second migration is needed.
+
 ### Still open
 
-1. Team share: 10 / 63 / 27, or 10 / 70 / 20?
-2. Exit tax rate: the spec's capped 10%?
-3. Free first paints: how many per account (25)?
-4. Colour: any colour, or keep the 8-colour palette?
+1. Palette: 16 or 32 fixed colours (recommended), or free colour?
+2. Free-paint window: weekly 24 h, or a shorter weekly happy hour? Global and per-account caps to set at launch.
