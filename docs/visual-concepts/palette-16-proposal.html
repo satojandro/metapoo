@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Copy of the published palette proposal (https://claude.ai/artifact/7YANkKitnEnutLcswTCfDA).
+     Owner, 1 Nov 2026: this page is the quality bar for the app. Grime & Gum was chosen. -->
+<title>Meta Poo 16-Colour Palette</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Archivo:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one dark stall wall; a sticky option switcher, then the swatches, the sample art, the checks and a scratch board. */
+:root {
+  --wall: #141517;
+  --tile: #1b1c1f;
+  --grout: #2a2b2f;
+  --cell-empty: #242629;
+  --fg: #f1ede6;
+  --muted: #a3a3a8;
+  --tag: #f1dc5e;
+  --warn: #ffb27a;
+  --ok: #7fd6a8;
+  --display: "Permanent Marker", "Marker Felt", "Comic Sans MS", cursive;
+  --body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background-color: var(--wall);
+  background-image:
+    linear-gradient(var(--grout) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grout) 1px, transparent 1px);
+  background-size: 56px 56px;
+  color: var(--fg);
+  font: 15px/1.55 var(--body);
+}
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 40px;
+}
+header { display: grid; gap: 10px; max-width: 68ch; }
+.eyebrow { font: 600 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 400 clamp(34px, 6vw, 56px)/1.05 var(--display); margin: 0; color: var(--tag); text-wrap: balance; transform: rotate(-1.2deg); transform-origin: left; }
+h2 { font: 800 20px/1.2 var(--body); margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: #d8d4cc; }
+.muted { color: var(--muted); }
+
+.switcher {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 10px; margin: 0 -10px;
+  background: color-mix(in srgb, var(--wall) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--grout);
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--wall); }
+.opt {
+  font: 600 13px var(--body); color: var(--fg);
+  background: var(--tile); border: 1px solid #3a3b40; border-radius: 3px;
+  padding: 9px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+}
+.opt[aria-pressed="true"] { background: var(--fg); color: #17171a; border-color: var(--fg); }
+.opt:focus-visible, .sw:focus-visible, .paintcell:focus-visible, button:focus-visible { outline: 2px solid #56c9ec; outline-offset: 2px; }
+.rec { font: 600 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; background: var(--tag); color: #17171a; padding: 2px 5px; border-radius: 2px; }
+
+section { display: grid; gap: 16px; }
+.intro { display: grid; gap: 6px; max-width: 70ch; }
+
+.swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 640px) { .swatches { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.sw { display: grid; gap: 6px; min-width: 0; background: none; border: 0; padding: 0; color: inherit; text-align: left; cursor: pointer; }
+.chip { aspect-ratio: 1; border-radius: 3px; box-shadow: inset 0 0 0 1px #ffffff1a; position: relative; }
+.sw[aria-pressed="true"] .chip { box-shadow: 0 0 0 2px var(--wall), 0 0 0 4px var(--fg); }
+.chip .idx { position: absolute; left: 5px; top: 4px; font: 600 10px var(--mono); }
+.sw .name { font: 600 12px var(--body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw .hex { font: 11px var(--mono); color: var(--muted); }
+.rowlabel { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.new .name::after { content: " new"; font: 600 9px var(--mono); color: var(--tag); text-transform: uppercase; letter-spacing: .08em; }
+
+.pitch { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 760px) { .pitch { grid-template-columns: 1fr; } }
+.pitch ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.verdict { border-left: 3px solid var(--tag); padding: 4px 0 4px 14px; display: grid; gap: 6px; }
+
+.art { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .art { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 460px) { .art { grid-template-columns: 1fr; } }
+figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+canvas.sprite { width: 100%; max-width: 100%; aspect-ratio: 1; image-rendering: pixelated; background: var(--cell-empty); border: 1px solid #ffffff15; display: block; }
+figcaption { font: 12px var(--mono); color: var(--muted); }
+.compare { display: flex; gap: 8px; align-items: center; font: 12px var(--mono); color: var(--muted); }
+.compare canvas { width: 64px; height: 64px; image-rendering: pixelated; border: 1px solid #ffffff15; background: var(--cell-empty); }
+
+.ladder { display: flex; height: 44px; border-radius: 3px; overflow: hidden; box-shadow: inset 0 0 0 1px #ffffff1a; }
+.ladder div { flex: 1; }
+.checks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+@media (max-width: 760px) { .checks { grid-template-columns: 1fr; } }
+.pairs { display: grid; gap: 6px; font: 12px var(--mono); }
+.pair { display: flex; align-items: center; gap: 8px; }
+.pair i { width: 18px; height: 18px; border-radius: 2px; display: inline-block; box-shadow: inset 0 0 0 1px #ffffff22; flex: none; }
+.pair b { font-weight: 600; min-width: 4ch; font-variant-numeric: tabular-nums; }
+.flag { color: var(--warn); }
+.fine { color: var(--ok); }
+
+.scratch { display: grid; grid-template-columns: minmax(0, 432px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 700px) { .scratch { grid-template-columns: 1fr; } }
+.board { display: grid; grid-template-columns: repeat(24, 1fr); width: 100%; max-width: 432px; aspect-ratio: 1; background: var(--cell-empty); border: 1px solid #ffffff15; touch-action: none; user-select: none; }
+.paintcell { border: 0; padding: 0; margin: 0; background: transparent; box-shadow: inset 0 0 0 .5px #ffffff08; }
+.tools { display: grid; gap: 12px; align-content: start; }
+.tools .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { font: 600 12px var(--body); background: var(--tile); color: var(--fg); border: 1px solid #3a3b40; border-radius: 3px; padding: 8px 12px; cursor: pointer; }
+.btn:hover { background: #2a2b30; }
+.current { display: flex; align-items: center; gap: 10px; font: 12px var(--mono); }
+.current i { width: 28px; height: 28px; border-radius: 3px; box-shadow: inset 0 0 0 1px #ffffff22; }
+footer { font: 12px var(--mono); color: var(--muted); border-top: 1px solid var(--grout); padding-top: 16px; }
+@media (prefers-reduced-motion: reduce) { h1 { transform: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Meta Poo · palette proposal · 1 Nov 2026</div>
+    <h1>Eight more colours for the stall</h1>
+    <p class="lede">The wall goes from 8 colours to 16. Today's 8 keep their slots (0–7), so nothing already painted changes. Below are three ways to fill slots 8–15. Each one is shown as swatches, as sample pixel art on the wall's own empty-cell grey, and with a check for colours that are too close to tell apart.</p>
+  </header>
+
+  <nav class="switcher" aria-label="Palette options" id="switcher"></nav>
+
+  <section aria-labelledby="sw-h">
+    <div class="intro">
+      <h2 id="sw-h">The 16 swatches</h2>
+      <p class="muted" id="opt-sub"></p>
+    </div>
+    <div class="rowlabel">Today · slots 0–7</div>
+    <div class="swatches" id="sw-base"></div>
+    <div class="rowlabel">Proposed · slots 8–15</div>
+    <div class="swatches" id="sw-new"></div>
+  </section>
+
+  <section class="pitch" aria-labelledby="pitch-h">
+    <div class="intro">
+      <h2 id="pitch-h">What this set is for</h2>
+      <p id="pitch-body"></p>
+      <ul id="pitch-list"></ul>
+    </div>
+    <div class="verdict" id="verdict"></div>
+  </section>
+
+  <section aria-labelledby="art-h">
+    <div class="intro">
+      <h2 id="art-h">Sample art with this palette</h2>
+      <p class="muted">Each picture is drawn only from the 16 colours above. The small square under each one is the same picture with today's 8 colours.</p>
+    </div>
+    <div class="art" id="art"></div>
+  </section>
+
+  <section aria-labelledby="chk-h">
+    <div class="intro">
+      <h2 id="chk-h">Can people tell them apart?</h2>
+      <p class="muted">Left: all 16 sorted dark to light. Gaps in the ladder are missing shading steps. Right: the closest pairs by perceptual distance (ΔE, CIE76). Below 20, two colours look alike on a small cell, especially on a phone.</p>
+    </div>
+    <div class="checks">
+      <div style="display:grid;gap:8px;min-width:0">
+        <div class="rowlabel">Dark → light</div>
+        <div class="ladder" id="ladder"></div>
+      </div>
+      <div style="display:grid;gap:8px;min-width:0">
+        <div class="rowlabel">Closest pairs</div>
+        <div class="pairs" id="pairs"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="scr-h">
+    <div class="intro">
+      <h2 id="scr-h">Try it</h2>
+      <p class="muted">A 24 × 24 corner of the wall. Pick a swatch above or below, then click or drag to paint. The board stores slot numbers like the contract does, so switching options repaints slots 8–15 in the new set.</p>
+    </div>
+    <div class="scratch">
+      <div class="board" id="board" role="grid" aria-label="Scratch board, 24 by 24 cells"></div>
+      <div class="tools">
+        <div class="current" id="current"></div>
+        <div class="swatches" id="sw-pick" style="grid-template-columns:repeat(8,minmax(0,1fr))"></div>
+        <div class="row">
+          <button class="btn" id="seed" type="button">Load the sample face</button>
+          <button class="btn" id="clear" type="button">Clear</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Slots 0–7 match <code>shared/palette.ts</code> and the paid board's <code>PALETTE</code>. The chosen set goes into both in the next contract revision. Names are working names.</footer>
+</div>
+
+<script>
+const BASE = [
+  ["Ink", "#1c1917"], ["Paper", "#f4efe4"], ["Brick", "#b23a2f"], ["Marigold", "#e0a100"],
+  ["Moss", "#3d7a4a"], ["River", "#2f6f8f"], ["Grape", "#6b4c7a"], ["Clay", "#c47b5a"],
+];
+
+const OPTIONS = [
+  {
+    id: "grime", label: "Grime & Gum", rec: true,
+    sub: "Stall colours that also fill the gaps an artist hits first.",
+    colors: [["Grout", "#8a857c"], ["Rust", "#7a4528"], ["Nicotine", "#ecd9a0"], ["Bubblegum", "#ec8fb0"],
+             ["Bleach", "#9ccbdc"], ["Bruise", "#263552"], ["Bile", "#9fb53a"], ["Cone", "#ef7a2c"]],
+    body: "Every new colour is something you would find in a public toilet: grout, rust, nicotine-stained tiles, gum under the seat, bleach, a bruise, bile and a traffic cone. Each one also plugs a hole in today's palette.",
+    list: ["a mid grey (Grout) for shading, metal and stone", "a pale warm tone (Nicotine) for skin, sand and highlights", "a pale blue (Bleach) for sky and water", "pink, orange and acid green for accents and tags", "a dark brown and a navy for hair, night and outlines"],
+    verdict: ["Recommended", "Fits the grungy stall and keeps it muted like today's 8, while giving artists a full colour wheel and a light, middle and dark step in most hues. The best balance of theme and art."],
+  },
+  {
+    id: "ramps", label: "Shading ramps",
+    sub: "A light or dark partner for today's colours, built for shading.",
+    colors: [["Sky", "#a7cbe0"], ["Mint", "#a8d5a2"], ["Blush", "#f0aab8"], ["Butter", "#f2d87a"],
+             ["Lilac", "#bba6d0"], ["Peach", "#ebbd98"], ["Navy", "#1e2f4d"], ["Oxblood", "#6a1e22"]],
+    body: "Pixel artists shade with steps of the same hue. This set adds a light step to most of today's colours and two deep darks, so every hue gets a highlight and a shadow.",
+    list: ["light partners for River, Moss, Brick, Marigold, Grape and Clay", "two darks (Navy, Oxblood) for shadows that aren't black", "soft, pastel overall"],
+    verdict: ["Best for art, weakest on theme", "Gives the smoothest shading, but there's no mid grey and no loud accent. It reads clean and pastel, not grungy."],
+  },
+  {
+    id: "tagger", label: "Tagger's can",
+    sub: "Loud spray-paint colours, the kind found tagged on a stall door.",
+    colors: [["Toxic", "#77d13c"], ["Hot Pink", "#e8357d"], ["Cyan", "#22b5d8"], ["Safety", "#f26522"],
+             ["Violet", "#8c45e0"], ["Chrome", "#a3a5a8"], ["Highlighter", "#efe83a"], ["Tar", "#4a2f1d"]],
+    body: "Bright, saturated spray-can colours on top of today's muted base. Graffiti energy, and it pops on the dark wall.",
+    list: ["very bright accents that stand out from far away", "a metallic grey (Chrome) and a dark brown (Tar)", "the brights clash with the muted base 8 by design"],
+    verdict: ["Most attention-grabbing", "Great for tags and logos, but there's no pale skin or sky tone, and the brights overpower the base 8 in subtle work."],
+  },
+];
+
+// Role → palette slot, per option. "base" is today's 8 for comparison.
+const ROLES = {
+  base:   { O:0, H:7, S:7, D:2, W:1, A:2, C:2, G:5, skyTop:6, skyMid:5, skyLow:7, sun:3, sea:5, seaDark:0, land:4, glint:1, tile:1, grout:0, tag:2, tag2:3, seat:1, shade:6 },
+  grime:  { O:0, H:9, S:10, D:7, W:1, A:2, C:11, G:14, skyTop:13, skyMid:6, skyLow:15, sun:3, sea:5, seaDark:13, land:4, glint:10, tile:12, grout:8, tag:11, tag2:15, seat:1, shade:8 },
+  ramps:  { O:0, H:15, S:13, D:7, W:1, A:2, C:10, G:9, skyTop:14, skyMid:12, skyLow:13, sun:11, sea:5, seaDark:14, land:4, glint:8, tile:8, grout:5, tag:10, tag2:11, seat:1, shade:12 },
+  tagger: { O:0, H:15, S:7, D:2, W:1, A:9, C:9, G:8, skyTop:12, skyMid:9, skyLow:11, sun:14, sea:10, seaDark:5, land:8, glint:13, tile:13, grout:0, tag:9, tag2:14, seat:1, shade:13 },
+};
+
+const FACE = [
+  "................",
+  ".....OOOOOO.....",
+  "....OHHHHHHO....",
+  "...OHHHHHHHHO...",
+  "...OHSSSSSSHO...",
+  "..OHSSSSSSSSHO..",
+  "..OSSWOSSWOSSO..",
+  "..OSSWOSSWOSSO..",
+  "..OSSSSSSSSSDO..",
+  "..OSCSSSSSSCDO..",
+  "..OSSSAAAASSDO..",
+  "...OSSSAASSDO...",
+  "....OSSSSSDO....",
+  ".....OOOOOO.....",
+  "....OOGGGGOO....",
+  "...OGGGGGGGGO...",
+];
+
+let current = OPTIONS[0];
+let brush = 11;
+const SIZE = 24;
+const cells = new Array(SIZE * SIZE).fill(-1);
+
+const palette = (opt) => BASE.concat(opt.colors);
+
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function toLab(hex) {
+  let [r, g, b] = hexToRgb(hex).map(v => { v /= 255; return v > 0.04045 ? ((v + 0.055) / 1.055) ** 2.4 : v / 12.92; });
+  let x = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047;
+  let y = (r * 0.2126 + g * 0.7152 + b * 0.0722);
+  let z = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883;
+  const f = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+  [x, y, z] = [f(x), f(y), f(z)];
+  return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+}
+const dE = (a, b) => { const p = toLab(a), q = toLab(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+const textOn = hex => toLab(hex)[0] > 60 ? "#17171a" : "#f4efe4";
+
+function swatch(i, [name, hex], isNew, pickable) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "sw" + (isNew ? " new" : "");
+  b.setAttribute("aria-pressed", String(i === brush));
+  b.setAttribute("aria-label", `Slot ${i}, ${name}, ${hex}. Use as brush`);
+  b.innerHTML = `<div class="chip" style="background:${hex}"><span class="idx" style="color:${textOn(hex)}">${i}</span></div>` +
+    (pickable ? "" : `<span class="name">${name}</span><span class="hex">${hex}</span>`);
+  b.addEventListener("click", () => { brush = i; renderSwatches(); renderCurrent(); });
+  return b;
+}
+
+function renderSwitcher() {
+  const nav = document.getElementById("switcher");
+  nav.replaceChildren(...OPTIONS.map(o => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "opt";
+    b.setAttribute("aria-pressed", String(o === current));
+    b.innerHTML = o.label + (o.rec ? ' <span class="rec">Recommended</span>' : "");
+    b.addEventListener("click", () => { current = o; renderAll(); });
+    return b;
+  }));
+}
+
+function renderSwatches() {
+  const pal = palette(current);
+  document.getElementById("sw-base").replaceChildren(...pal.slice(0, 8).map((c, i) => swatch(i, c, false, false)));
+  document.getElementById("sw-new").replaceChildren(...pal.slice(8).map((c, i) => swatch(i + 8, c, true, false)));
+  document.getElementById("sw-pick").replaceChildren(...pal.map((c, i) => swatch(i, c, i >= 8, true)));
+}
+
+function renderPitch() {
+  document.getElementById("opt-sub").textContent = current.sub;
+  document.getElementById("pitch-body").textContent = current.body;
+  document.getElementById("pitch-list").replaceChildren(...current.list.map(t => { const li = document.createElement("li"); li.textContent = t; return li; }));
+  const [h, t] = current.verdict;
+  document.getElementById("verdict").innerHTML = `<div class="rowlabel">${h}</div><p>${t}</p>`;
+}
+
+// Sample pictures, drawn as slot grids so they can be repainted per palette.
+function faceGrid(roles) {
+  return FACE.map(row => [...row].map(ch => ch === "." ? -1 : roles[ch]));
+}
+function sunsetGrid(r) {
+  const n = 16, g = [];
+  for (let y = 0; y < n; y++) {
+    const row = [];
+    for (let x = 0; x < n; x++) {
+      let c;
+      if (y < 4) c = r.skyTop; else if (y < 7) c = r.skyMid; else if (y < 9) c = r.skyLow;
+      else if (y < 13) c = (y + x) % 5 === 0 ? r.glint : r.sea; else c = r.seaDark;
+      const dx = x - 10.5, dy = y - 8.5;
+      if (y < 9 && dx * dx + dy * dy < 7) c = r.sun;
+      if (y >= 9 && y < 12 && Math.abs(x - 10.5) < 2.5 - (y - 9) * 0.6 && x % 2 === y % 2) c = r.sun;
+      if (y >= 10 && y < 13 && x < 5 - (y - 10)) c = r.land;
+      if (y === 9 && x < 5) c = r.land;
+      row.push(c);
+    }
+    g.push(row);
+  }
+  return g;
+}
+function stallGrid(r) {
+  const n = 16, g = [];
+  for (let y = 0; y < n; y++) {
+    const row = [];
+    for (let x = 0; x < n; x++) {
+      let c = (x % 4 === 0 || y % 4 === 0) ? r.grout : r.tile;
+      if (x > 9 && y > 9) c = (x % 4 === 0 || y % 4 === 0) ? r.grout : r.shade;
+      row.push(c);
+    }
+    g.push(row);
+  }
+  // a heart tag
+  const heart = [".XX.XX.", "XXXXXXX", "XXXXXXX", ".XXXXX.", "..XXX..", "...X..."];
+  heart.forEach((line, j) => [...line].forEach((ch, i) => { if (ch === "X") g[2 + j][1 + i] = r.tag; }));
+  // a scrawled arrow
+  [[9, 3], [10, 3], [11, 3], [12, 3], [11, 2], [11, 4], [10, 1], [10, 5]].forEach(([x, y]) => g[y][x] = r.tag2);
+  // initials "MP" below the heart
+  const mp = ["X...X.XXX", "XX.XX.X.X", "X.X.X.XXX", "X...X.X..", "X...X.X.."];
+  mp.forEach((line, j) => [...line].forEach((ch, i) => { if (ch === "X") g[9 + j][1 + i] = r.O; }));
+  return g;
+}
+
+function paintGrid(canvas, grid, pal) {
+  const n = grid.length;
+  canvas.width = n; canvas.height = n;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#242629"; ctx.fillRect(0, 0, n, n);
+  grid.forEach((row, y) => row.forEach((c, x) => { if (c >= 0) { ctx.fillStyle = pal[c][1]; ctx.fillRect(x, y, 1, 1); } }));
+}
+
+function renderArt() {
+  const pal = palette(current), r = ROLES[current.id], b = ROLES.base;
+  const pieces = [
+    ["Portrait", faceGrid], ["Sunset over the sea", sunsetGrid], ["Stall door tag", stallGrid],
+  ];
+  document.getElementById("art").replaceChildren(...pieces.map(([title, make]) => {
+    const fig = document.createElement("figure");
+    const big = document.createElement("canvas"); big.className = "sprite";
+    big.setAttribute("role", "img"); big.setAttribute("aria-label", `${title}, drawn with ${current.label}`);
+    paintGrid(big, make(r), pal);
+    const cap = document.createElement("figcaption"); cap.textContent = title;
+    const cmp = document.createElement("div"); cmp.className = "compare";
+    const small = document.createElement("canvas");
+    small.setAttribute("role", "img"); small.setAttribute("aria-label", `${title}, today's 8 colours`);
+    paintGrid(small, make(b), palette(current));
+    cmp.append(small, document.createTextNode("today's 8"));
+    fig.append(big, cap, cmp);
+    return fig;
+  }));
+}
+
+function renderChecks() {
+  const pal = palette(current);
+  const sorted = [...pal].sort((a, b) => toLab(a[1])[0] - toLab(b[1])[0]);
+  document.getElementById("ladder").replaceChildren(...sorted.map(([n, h]) => {
+    const d = document.createElement("div"); d.style.background = h; d.title = `${n} ${h}`; return d;
+  }));
+  const pairs = [];
+  for (let i = 0; i < pal.length; i++) for (let j = i + 1; j < pal.length; j++) pairs.push([dE(pal[i][1], pal[j][1]), pal[i], pal[j]]);
+  pairs.sort((a, b) => a[0] - b[0]);
+  document.getElementById("pairs").replaceChildren(...pairs.slice(0, 5).map(([d, a, b]) => {
+    const row = document.createElement("div"); row.className = "pair";
+    const cls = d < 20 ? "flag" : "fine";
+    row.innerHTML = `<i style="background:${a[1]}"></i><i style="background:${b[1]}"></i><b class="${cls}">${d.toFixed(1)}</b><span>${a[0]} · ${b[0]}${d < 20 ? " — close" : ""}</span>`;
+    return row;
+  }));
+}
+
+// Scratch board
+const board = document.getElementById("board");
+let painting = false;
+function cellColor(i) { const c = cells[i]; return c < 0 ? "transparent" : palette(current)[c][1]; }
+function buildBoard() {
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "paintcell"; b.dataset.i = i; b.tabIndex = i === 0 ? 0 : -1;
+    b.setAttribute("aria-label", `Cell ${i % SIZE}, ${Math.floor(i / SIZE)}`);
+    frag.append(b);
+  }
+  board.append(frag);
+  const paintAt = el => { if (!el || !el.dataset || el.dataset.i === undefined) return; const i = +el.dataset.i; cells[i] = brush; el.style.background = cellColor(i); };
+  board.addEventListener("pointerdown", e => { painting = true; board.setPointerCapture(e.pointerId); paintAt(document.elementFromPoint(e.clientX, e.clientY)); });
+  board.addEventListener("pointermove", e => { if (painting) paintAt(document.elementFromPoint(e.clientX, e.clientY)); });
+  const stop = () => { painting = false; };
+  board.addEventListener("pointerup", stop); board.addEventListener("pointercancel", stop);
+  board.addEventListener("keydown", e => {
+    const el = document.activeElement; if (!el.dataset || el.dataset.i === undefined) return;
+    let i = +el.dataset.i;
+    const moves = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: SIZE, ArrowUp: -SIZE };
+    if (moves[e.key] !== undefined) { e.preventDefault(); i = Math.min(SIZE * SIZE - 1, Math.max(0, i + moves[e.key])); el.tabIndex = -1; const n = board.children[i]; n.tabIndex = 0; n.focus(); }
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); paintAt(el); }
+  });
+}
+function repaintBoard() { [...board.children].forEach((el, i) => { el.style.background = cellColor(i); }); }
+function seedFace() {
+  cells.fill(-1);
+  const g = faceGrid(ROLES[current.id]);
+  g.forEach((row, y) => row.forEach((c, x) => { if (c >= 0) cells[(y + 4) * SIZE + x + 4] = c; }));
+  repaintBoard();
+}
+function renderCurrent() {
+  const [n, h] = palette(current)[brush];
+  document.getElementById("current").innerHTML = `<i style="background:${h}"></i><span>Brush: slot ${brush}, ${n} ${h}</span>`;
+}
+document.getElementById("seed").addEventListener("click", seedFace);
+document.getElementById("clear").addEventListener("click", () => { cells.fill(-1); repaintBoard(); });
+
+function renderAll() { renderSwitcher(); renderSwatches(); renderPitch(); renderArt(); renderChecks(); repaintBoard(); renderCurrent(); }
+buildBoard();
+renderAll();
+seedFace();
+</script>

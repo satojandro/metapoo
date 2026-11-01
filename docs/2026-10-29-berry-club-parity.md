@@ -350,7 +350,7 @@ cooldown as price changes, audit C1):
 | happy hour on/off | on, once the first board is full |
 | weekday and start time (UTC) | Sunday, 20:00 |
 | length | 1 hour |
-| per-account cap on free cells per happy hour | to set before launch |
+| per-account cap on free cells per happy hour | 100 |
 | which price tier is free | base tier only (recently painted cells still cost 2 or 4 credits) |
 | "must have bought credits once" requirement | on, but kept as a flag so it can be dropped |
 | free first paints per account | 25 |
@@ -365,7 +365,13 @@ owner-only `upgrade()` but is a code change with a review):
 These are fixed on purpose: they are the protections against TOILET farming, and a tunable would let a
 single mistaken transaction switch them off.
 
-### Still open
+### Owner answers, 1 Nov (sixth round)
 
-1. **The 8 new colours:** pick one of the three options in the artifact above, or mix.
-2. **Per-account cap** on free cells per happy hour.
+- **Palette: Grime & Gum.** Slots 8–15 are Grout `#8a857c`, Rust `#7a4528`, Nicotine `#ecd9a0`, Bubblegum
+  `#ec8fb0`, Bleach `#9ccbdc`, Bruise `#263552`, Bile `#9fb53a`, Cone `#ef7a2c`. They go into
+  `shared/palette.ts` and the paid board's `PALETTE` together in the step-4 contract revision, not before:
+  the page and the deployed contract must agree, and a shared test fails if they drift. A copy of the
+  proposal is in [`visual-concepts/palette-16-proposal.html`](visual-concepts/palette-16-proposal.html).
+- **Per-account cap: 100 free cells per happy hour** at launch. It's a tunable.
+
+No product questions from this document remain open.
