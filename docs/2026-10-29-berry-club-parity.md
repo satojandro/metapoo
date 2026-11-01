@@ -326,9 +326,46 @@ eligible accounts. That figure can grow with the player base, but it is revenue 
 leaving the board: free cells create no TOILET, and after the board is full they add no storage. The kill
 switch and the per-account cap are the levers if a window costs more than expected.
 
+### Owner answers, 1 Nov (fifth round)
+
+- **Happy hour: Sundays at 20:00 UTC.** Length not stated; default **1 hour**, adjustable as a tunable.
+- **Palette:** a proposal with three options for slots 8–15 is published as a private artifact,
+  [Meta Poo 16-Colour Palette](https://claude.ai/artifact/7YANkKitnEnutLcswTCfDA). Recommended: *Grime &
+  Gum* (Grout `#8a857c`, Rust `#7a4528`, Nicotine `#ecd9a0`, Bubblegum `#ec8fb0`, Bleach `#9ccbdc`,
+  Bruise `#263552`, Bile `#9fb53a`, Cone `#ef7a2c`). Awaiting the owner's pick.
+
+### What the owner can change after launch
+
+The owner asked whether the on/off switch covers every condition, and what can be tweaked after launch.
+
+**The switch turns the whole happy hour on or off.** When it's off, no cell is free, whatever the other
+settings say. It doesn't turn off individual rules; those are either numbers the owner can change, or
+rules built into the contract.
+
+**Changeable after launch, with one owner transaction** (stored in `Tunables`, under the same bounds and
+cooldown as price changes, audit C1):
+
+| setting | launch value |
+|---|---|
+| happy hour on/off | on, once the first board is full |
+| weekday and start time (UTC) | Sunday, 20:00 |
+| length | 1 hour |
+| per-account cap on free cells per happy hour | to set before launch |
+| which price tier is free | base tier only (recently painted cells still cost 2 or 4 credits) |
+| "must have bought credits once" requirement | on, but kept as a flag so it can be dropped |
+| free first paints per account | 25 |
+
+**Built into the contract** (changing them needs an upgrade, which is still possible through the
+owner-only `upgrade()` but is a code change with a review):
+
+- a cell painted for free earns no TOILET and no paint allowance until someone repaints it with credits
+- free first paints stop for good once the first board is full
+- happy hours never pay for a cell's first storage (they start after the board is full)
+
+These are fixed on purpose: they are the protections against TOILET farming, and a tunable would let a
+single mistaken transaction switch them off.
+
 ### Still open
 
-1. **The 8 new colours.** A visual decision (`AGENT.md` lists the palette as do-not-touch). They must be
-   added to `shared/palette.ts` and the contract's `PALETTE` together. Proposal to follow for the owner to
-   pick.
-2. **Happy-hour settings at launch:** length, weekday and time (UTC), and the per-account cap.
+1. **The 8 new colours:** pick one of the three options in the artifact above, or mix.
+2. **Per-account cap** on free cells per happy hour.
