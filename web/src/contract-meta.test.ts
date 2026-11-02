@@ -70,6 +70,39 @@ describe("validateContractMetadata", () => {
     }
   });
 
+  it("accepts today's 8-colour boards (a prefix of the shared palette)", () => {
+    const board = validFreeBoard();
+    board.palette = PALETTE.slice(0, 8).map((color) => ({ ...color }));
+    for (const view of [board, { ...board, schema_version: 4 }]) {
+      const result = validateContractMetadata(view);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.paletteLength).toBe(8);
+    }
+  });
+
+  it("accepts the 16-colour paid board", () => {
+    const result = validateContractMetadata(validPaidBoard());
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.paletteLength).toBe(16);
+  });
+
+  it("rejects a 12-colour palette with the palette size reason", () => {
+    const board = validFreeBoard();
+    board.palette = PALETTE.slice(0, 12).map((color) => ({ ...color }));
+    const result = validateContractMetadata(board);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.title).toBe("Incompatible palette size");
+  });
+
+  it("rejects an 8-colour palette with a wrong hex", () => {
+    const board = validFreeBoard();
+    board.palette = PALETTE.slice(0, 8).map((color) => ({ ...color }));
+    board.palette[5] = { ...board.palette[5], hex: "#000000" };
+    const result = validateContractMetadata(board);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.title).toBe("Incompatible palette entry");
+  });
+
   it("rejects palette hex drift so stored colors are not reinterpreted", () => {
     const board = validFreeBoard();
     board.palette[2] = { ...board.palette[2], hex: "#ff0000" };
