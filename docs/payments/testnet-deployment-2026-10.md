@@ -193,7 +193,8 @@ Migration event on chain: `EVENT_JSON:{"standard":"mpoo_board","version":"1.0.0"
 
 New v2 fields populated from the migrate args: `get_revenue_state` reports
 `team_account = team.metapoo-player1.testnet`, `buyback_account = buyback.metapoo-player1.testnet`.
-`get_free_first_paints` → `{used: 0, remaining: 25, active: true}`. `get_mpoo_sales_today` →
+`get_free_first_paints(account_id)` → `{used: 0, remaining: 25, active: true, allowance: 25, registered: true}`
+(it requires an `account_id` argument; called with no args it panics `missing field account_id`). `get_mpoo_sales_today` →
 `{sold_today: "0", cap: "0"}` (mPOO sales closed at deploy, as designed).
 
 ### Finding: an upgrade runs the *old* binary's `upgrade()`, which only deploys
