@@ -47,7 +47,8 @@ function setup(deps: Partial<RevenuePageDeps>, session: WalletSession = { accoun
   document.body.append(root);
   const dispose = mountRevenuePage(root, ctx, {
     now: () => NOW, network: "testnet", contractId: "board.metapoo.testnet", example: false,
-    sign: vi.fn(), pollMs: 1e9, ...deps,
+    sign: vi.fn(), pollMs: 1e9, ledgerPollMs: 1e9,
+    loadLedger: async s => ({ buybackAccount: s.state.buybackAccount, history: null, historyError: null, waiting: null }), ...deps,
   });
   cleanup.push(() => { dispose(); root.remove(); });
   const q = (sel: string) => root.querySelector<HTMLElement>(sel)!;
@@ -143,4 +144,57 @@ it("labels example numbers in mock mode and never offers to send", async () => {
   await flush();
   expect(t.text("source")).toMatch(/Example numbers/);
   expect(t.button("near").disabled).toBe(true);
+});
+
+const ledgerHistory = (complete = true) => ({
+  totals: { nearToBuyback: 11_250_000_000_000_000_000_000_000n, nearDistributions: 2, mpooReturned: 900_000_000_000_000_000_000n, mpooReturns: 1 },
+  complete, transactions: 3, indexedThroughMs: NOW - 5_000, label: "test index",
+});
+
+it("shows the buyback ledger: NEAR sent, mPOO returned, NEAR waiting and the account link", async () => {
+  const loadLedger = vi.fn(async (s: Extract<RevenueSnapshot, { kind: "live" }>) => ({
+    buybackAccount: s.state.buybackAccount, history: ledgerHistory(), historyError: null, waiting: 2_500_000_000_000_000_000_000_000n,
+  }));
+  const t = setup({ load: async () => live(), loadLedger });
+  await flush();
+  expect(t.text("ledger-near")).toBe("11.25");
+  expect(t.text("ledger-mpoo")).toBe("900");
+  expect(t.text("ledger-waiting")).toBe("2.5");
+  expect(t.text("ledger-near-note")).toMatch(/^2 NEAR splits/);
+  expect(t.text("ledger-source")).toMatch(/3 board transactions, found through the test index/);
+  const link = t.q('[data-rev="ledger-account"] a') as HTMLAnchorElement;
+  expect(link.href).toBe("https://testnet.nearblocks.io/address/buyback.metapoo.testnet");
+  // The ledger is not re-scanned with every revenue poll.
+  expect(loadLedger).toHaveBeenCalledTimes(1);
+});
+
+it("a ledger read that fails shows Unavailable, never zero, and each figure fails on its own", async () => {
+  const t = setup({
+    load: async () => live(),
+    loadLedger: async s => ({ buybackAccount: s.state.buybackAccount, history: null, historyError: "The public event index stopped at X.", waiting: 0n }),
+  });
+  await flush();
+  expect(t.text("ledger-near")).toBe("Unavailable");
+  expect(t.text("ledger-mpoo")).toBe("Unavailable");
+  expect(t.text("ledger-waiting")).toBe("0");
+  expect(t.text("ledger-source")).toMatch(/index stopped at X\. .*unknown, not zero/);
+  const t2 = setup({
+    load: async () => live(),
+    loadLedger: async () => { throw new Error("boom"); },
+  });
+  await flush();
+  expect(t2.text("ledger-near")).toBe("Unavailable");
+  expect(t2.text("ledger-waiting")).toBe("Unavailable");
+});
+
+it("an incomplete scan is shown as a lower bound", async () => {
+  const t = setup({
+    load: async () => live(),
+    loadLedger: async s => ({ buybackAccount: s.state.buybackAccount, history: ledgerHistory(false), historyError: null, waiting: null }),
+  });
+  await flush();
+  expect(t.text("ledger-near")).toBe("≥ 11.25");
+  expect(t.text("ledger-near-note")).toMatch(/^at least 2/);
+  expect(t.text("ledger-source")).toMatch(/lower bounds/);
+  expect(t.text("ledger-waiting")).toBe("Unavailable");
 });
