@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Meta Poo — sign in and approve</title>
+    <style>
+      :root { color-scheme: light; font: 16px/1.5 system-ui, sans-serif; color: #201e1a; background: #f4f1e8; }
+      body { margin: 0; padding: 24px; }
+      main { max-width: 40rem; margin: auto; overflow-wrap: anywhere; }
+      h1 { font-size: 1.6rem; }
+      label { display: block; margin-block: 16px; }
+      input, button { font: inherit; min-height: 44px; border: 1px solid #655e54; border-radius: 6px; }
+      input { display: block; width: min(100%, 28rem); box-sizing: border-box; padding: 8px; }
+      button { padding: 8px 16px; margin: 8px 8px 8px 0; background: #fff; cursor: pointer; }
+      button:disabled { cursor: wait; opacity: .6; }
+      :focus-visible { outline: 3px solid #2655bb; outline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <main id="privy-root" aria-label="Meta Poo sign-in and transaction approval"></main>
+    <script type="module" src="/src/integrations/privy/entry.ts"></script>
+  </body>
+</html>

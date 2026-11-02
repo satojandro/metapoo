@@ -84,3 +84,9 @@ function defaultRpcUrl(network: NetworkId): string {
   // mock and testnet both use the public testnet RPC when a contract id is set
   return "https://rpc.testnet.near.org";
 }
+
+/** Acquisition is opt-in and independent of whether mPOO credit sales are enabled. */
+export const PRIVY_ENABLED = envString("VITE_PRIVY_ENABLED") === "true";
+export const INTENTS_FUNDING_ENABLED = envString("VITE_INTENTS_FUNDING_ENABLED") === "true";
+export const RHEA_MPOO_SWAP_ENABLED = envString("VITE_RHEA_MPOO_SWAP_ENABLED") === "true";
+export const ACQUISITION_PLAY_RESERVE_YOCTO = envString("VITE_ACQUISITION_PLAY_RESERVE_YOCTO");

@@ -1,12 +1,47 @@
 import { NearConnector } from "@hot-labs/near-connect";
 import { Account as NearAccount } from "@near-js/accounts";
 import { JsonRpcProvider } from "@near-js/providers";
-import { CONTRACT_ID, RPC_URL, WALLET_NETWORK } from "./config";
+import {
+  CONTRACT_ID,
+  RPC_URL,
+  PAGE_NETWORK,
+  WALLET_NETWORK,
+  PRIVY_ENABLED,
+  INTENTS_FUNDING_ENABLED,
+  RHEA_MPOO_SWAP_ENABLED,
+  ACQUISITION_PLAY_RESERVE_YOCTO,
+} from "./config";
+import {
+  createPrivyManifest,
+  readPrivyConfig,
+  PRIVY_WALLET_ID,
+} from "./integrations/privy/config";
+import {
+  setPrivyHostIdentity,
+  setPrivyPendingDrawingAuthorization,
+  isPrivyUnsubmittedRejection,
+} from "./integrations/privy/session";
+import { withCapitalLock } from "./integrations/operation-store";
+import { createAcquisitionRpc } from "./integrations/rpc";
+import { resolveAccountReadiness } from "./integrations/account-readiness";
+import {
+  createApprovedTransactionGateway,
+  ApprovalNotSubmittedError,
+  validateAcquisitionTransaction,
+  type AcquisitionPolicy,
+  reconcilePendingCapitalAttempt,
+} from "./integrations/approved-transactions";
+import {
+  sameIdentity,
+  type ApprovedTransactionRequest,
+  type OperationContext,
+} from "./integrations/types";
 import { stringifyChainJson } from "./chain-json";
 import {
   buildAddFunctionCallKeyParams,
   createDrawingSessionKeypair,
   DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+  DRAWING_SESSION_METHODS,
   makeAuthorizedSessionRecord,
   saveDrawingSessionRecord,
   wipeDrawingSessionStorage,
@@ -33,10 +68,40 @@ export interface ConnectWalletOptions {
 type Listener = (session: WalletSession) => void;
 
 let connector: NearConnector | null = null;
+let connectorReady: Promise<void> = Promise.resolve();
+let sessionEpoch = 0;
+/** Epoch prevents an async quote/approval from spending after a provider or identity change. */
+export function getAcquisitionContext(
+  operationId: string,
+): OperationContext | null {
+  return session.accountId &&
+    (session.networkId === "mainnet" || session.networkId === "testnet")
+    ? {
+        operationId,
+        accountId: session.accountId,
+        networkId: session.networkId,
+        sessionEpoch,
+      }
+    : null;
+}
 let session: WalletSession = { accountId: null, networkId: null };
 const listeners = new Set<Listener>();
 
 function emit(): void {
+  sessionEpoch++;
+  if (PRIVY_ENABLED && typeof window !== "undefined") {
+    setPrivyHostIdentity(
+      session.accountId &&
+        (session.networkId === "mainnet" || session.networkId === "testnet")
+        ? {
+            accountId: session.accountId,
+            networkId: session.networkId,
+            sessionEpoch,
+          }
+        : null,
+      window.localStorage,
+    );
+  }
   for (const listener of listeners) {
     listener(session);
   }
@@ -71,6 +136,21 @@ function ensureConnector(): NearConnector {
     },
   });
 
+  if (PRIVY_ENABLED && typeof window !== "undefined") {
+    const availability = readPrivyConfig(
+      import.meta.env,
+      window.location.origin,
+    );
+    const target = connector;
+    connectorReady = (async () => {
+      if (availability.state !== "ready") return;
+      await target.whenManifestLoaded;
+      await target.registerWallet(createPrivyManifest(availability.config));
+    })();
+    // Registration failure must not remove ordinary wallets from the selector.
+    void connectorReady.catch(() => undefined);
+  }
+
   connector.on("wallet:signIn", (payload: unknown) => {
     session = readSession(payload);
     emit();
@@ -95,6 +175,7 @@ function ensureConnector(): NearConnector {
 export async function restoreWalletSession(): Promise<WalletSession> {
   try {
     const current = ensureConnector();
+    await connectorReady.catch(() => undefined);
     const { accounts } = await current.getConnectedWallet();
     const accountId = nestedAccount(accounts);
     if (typeof accountId === "string" && accountId.length > 0) {
@@ -121,7 +202,8 @@ function readSession(payload: unknown): WalletSession {
     record.account_id,
     nestedAccount(record.accounts),
   );
-  const networkId = firstString(record.network, record.networkId) ?? WALLET_NETWORK;
+  const networkId =
+    firstString(record.network, record.networkId) ?? WALLET_NETWORK;
   return { accountId, networkId };
 }
 
@@ -152,7 +234,9 @@ function firstString(...values: unknown[]): string | null {
  * Resolve the signed-in account id from a near-connect wallet.
  * Prefer `getAccounts()` — many wallets omit top-level `accountId`.
  */
-export async function accountIdFromWallet(wallet: unknown): Promise<string | null> {
+export async function accountIdFromWallet(
+  wallet: unknown,
+): Promise<string | null> {
   if (!wallet || typeof wallet !== "object") {
     return null;
   }
@@ -185,8 +269,23 @@ export async function verifyAccessKeyOnAccount(
     new JsonRpcProvider({ url: RPC_URL }),
   );
   try {
-    await account.getAccessKey(publicKey);
-    return true;
+    const access = await account.getAccessKey(publicKey);
+    if (
+      typeof access.permission !== "object" ||
+      !("FunctionCall" in access.permission)
+    )
+      return false;
+    const permission = access.permission.FunctionCall;
+    return (
+      permission.receiver_id === CONTRACT_ID &&
+      permission.method_names.length === 2 &&
+      ["draw", "draw_many"].every((method) =>
+        permission.method_names.includes(method),
+      ) &&
+      permission.allowance !== null &&
+      BigInt(permission.allowance) <=
+        BigInt(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO)
+    );
   } catch (error) {
     const detail = error instanceof Error ? error.message : "";
     if (/does not exist|doesn't exist|not found/i.test(detail)) {
@@ -205,6 +304,7 @@ export async function connectWallet(
   options: ConnectWalletOptions = {},
 ): Promise<void> {
   const current = ensureConnector();
+  await connectorReady.catch(() => undefined);
   const wantSession =
     options.authorizeDrawingSession === true && CONTRACT_ID.length > 0;
 
@@ -215,11 +315,41 @@ export async function connectWallet(
       keypair.publicKey,
       DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
     );
-    await current.connect({ addFunctionCallKey });
+    // Reauthorize the selected Privy wallet rather than opening a second wallet picker.
+    const selected = session.accountId
+      ? await current.getConnectedWallet().catch(() => null)
+      : null;
+    const walletId =
+      selected?.wallet?.manifest?.id === PRIVY_WALLET_ID
+        ? PRIVY_WALLET_ID
+        : undefined;
+    if (walletId && session.accountId && typeof window !== "undefined") {
+      setPrivyPendingDrawingAuthorization(
+        {
+          accountId: session.accountId,
+          networkId: WALLET_NETWORK,
+          sessionEpoch,
+          publicKey: keypair.publicKey,
+          contractId: CONTRACT_ID,
+          methods: DRAWING_SESSION_METHODS,
+          allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+          createdAtMs: Date.now(),
+        },
+        window.localStorage,
+      );
+    }
+    try {
+      await current.connect({
+        addFunctionCallKey,
+        ...(walletId ? { walletId } : {}),
+      });
+    } finally {
+      if (walletId && typeof window !== "undefined")
+        setPrivyPendingDrawingAuthorization(null, window.localStorage);
+    }
 
     const wallet = await current.wallet();
-    const accountId =
-      (await accountIdFromWallet(wallet)) ?? session.accountId;
+    const accountId = (await accountIdFromWallet(wallet)) ?? session.accountId;
     if (!accountId) {
       wipeDrawingSessionStorage();
       throw new Error(
@@ -273,9 +403,36 @@ export async function disconnectWallet(): Promise<void> {
     emit();
     return;
   }
-  await connector.disconnect();
+  const current = connector;
+  // Invalidate authority synchronously: even a slow provider lookup must not keep a popup authorized.
   session = { accountId: null, networkId: null };
   emit();
+  const selected = await current.getConnectedWallet().catch(() => null);
+  await current.disconnect();
+  if (
+    selected?.wallet?.manifest?.id === PRIVY_WALLET_ID &&
+    typeof window !== "undefined"
+  ) {
+    const availability = readPrivyConfig(
+      import.meta.env,
+      window.location.origin,
+    );
+    if (availability.state === "ready") {
+      const { createPrivyRuntime } = await import(
+        "./integrations/privy/runtime"
+      );
+      const runtime = createPrivyRuntime(availability.config);
+      const { logoutPrivySession } = await import(
+        "./integrations/privy/session"
+      );
+      try {
+        await runtime.initialize();
+        await logoutPrivySession(runtime, WALLET_NETWORK, window.localStorage);
+      } finally {
+        runtime.dispose();
+      }
+    }
+  }
 }
 
 export interface DrawCallArgs {
@@ -342,11 +499,13 @@ export interface BuyCreditsNearCallArgs {
  * Batches optional `register_credit_account` with `buy_credits_near` so the
  * first purchase is one approval. Never use a drawing-session FC key here.
  */
-export async function signAndSendBuyCreditsNear(
+async function sendBuyCreditsNearInternal(
   args: BuyCreditsNearCallArgs,
 ): Promise<unknown> {
   const current = ensureConnector();
+  const captured = getAcquisitionContext("checkout");
   const wallet = await current.wallet();
+  await assertCheckoutWallet(wallet, captured);
   const actions: Array<{
     type: "FunctionCall";
     params: {
@@ -401,11 +560,13 @@ export interface BuyCreditsTokenCallArgs {
  * Token purchase: optionally register on the board first, then
  * `ft_transfer_call` on the configured token with 1 yocto attached.
  */
-export async function signAndSendBuyCreditsToken(
+async function sendBuyCreditsTokenInternal(
   args: BuyCreditsTokenCallArgs,
 ): Promise<unknown> {
   const current = ensureConnector();
+  const captured = getAcquisitionContext("checkout");
   const wallet = await current.wallet();
+  await assertCheckoutWallet(wallet, captured);
   if (args.registrationDeposit) {
     await wallet.signAndSendTransaction({
       receiverId: args.boardContractId,
@@ -422,6 +583,7 @@ export async function signAndSendBuyCreditsToken(
       ],
     });
   }
+  await assertCheckoutWallet(wallet, captured);
   return wallet.signAndSendTransaction({
     receiverId: args.tokenContractId,
     actions: [
@@ -446,13 +608,16 @@ export async function signAndSendBuyCreditsToken(
  * Ask the connected wallet (full access) to delete the experimental FC key
  * on chain. Receiver is the user's own account. Still requires a wallet prompt.
  */
-export async function revokeDrawingSessionKeyOnChain(publicKey: string): Promise<unknown> {
+export async function revokeDrawingSessionKeyOnChain(
+  publicKey: string,
+): Promise<unknown> {
   const current = ensureConnector();
   const wallet = await current.wallet();
-  const accountId =
-    (await accountIdFromWallet(wallet)) ?? session.accountId;
+  const accountId = (await accountIdFromWallet(wallet)) ?? session.accountId;
   if (!accountId) {
-    throw new Error("Connect a wallet before revoking the drawing-session key on chain.");
+    throw new Error(
+      "Connect a wallet before revoking the drawing-session key on chain.",
+    );
   }
   return wallet.signAndSendTransaction({
     receiverId: accountId,
@@ -482,7 +647,12 @@ export async function signAndSendDistribution(args: {
     actions: [
       {
         type: "FunctionCall",
-        params: { methodName: args.methodName, args: {}, gas: args.gas, deposit: "0" },
+        params: {
+          methodName: args.methodName,
+          args: {},
+          gas: args.gas,
+          deposit: "0",
+        },
       },
     ],
   });
@@ -514,23 +684,275 @@ export async function signAndSendClaimToilet(args: {
 export async function signAndSendAdminChange(args: {
   contractId: string;
   owner: string;
-  methodName: "set_tunables" | "set_near_price" | "set_mpoo_price" | "set_paused" | "set_team_account" | "set_buyback_account" | "set_staking_contract";
+  methodName:
+    | "set_tunables"
+    | "set_near_price"
+    | "set_mpoo_price"
+    | "set_paused"
+    | "set_team_account"
+    | "set_buyback_account"
+    | "set_staking_contract";
   args: Record<string, unknown>;
 }): Promise<unknown> {
   const wallet = await ensureConnector().wallet();
   const actual = await accountIdFromWallet(wallet);
-  if (actual !== args.owner || session.networkId !== WALLET_NETWORK) throw new Error("OwnerWalletRequired");
+  if (actual !== args.owner || session.networkId !== WALLET_NETWORK)
+    throw new Error("OwnerWalletRequired");
   const json = stringifyChainJson(args.args);
   // A JSON round-trip through normal JS numbers would corrupt nanosecond history.
   // Meteor's published adapter accepts Uint8Array arguments and serializes them
   // directly (stringifyJsonOrBytes). Other adapters need an explicit byte-path check.
   const hasBigInteger = /"(?:[^"\\]|\\.)*"|-?\d+/g;
-  const needsBytes = [...json.matchAll(hasBigInteger)].some(m => !m[0].startsWith('"') && !Number.isSafeInteger(Number(m[0])));
+  const needsBytes = [...json.matchAll(hasBigInteger)].some(
+    (m) => !m[0].startsWith('"') && !Number.isSafeInteger(Number(m[0])),
+  );
   if (needsBytes && wallet.manifest.id !== "meteor-wallet") {
-    throw new Error("ExactSettingsWalletRequired: use Meteor Wallet to preserve the board’s full-precision settings history.");
+    throw new Error(
+      "ExactSettingsWalletRequired: use Meteor Wallet to preserve the board’s full-precision settings history.",
+    );
   }
-  return wallet.signAndSendTransaction({ receiverId: args.contractId, actions: [{ type: "FunctionCall", params: {
-    methodName: args.methodName, args: needsBytes ? new TextEncoder().encode(json) : args.args,
-    gas: "50000000000000", deposit: "1",
-  } }] });
+  return wallet.signAndSendTransaction({
+    receiverId: args.contractId,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: {
+          methodName: args.methodName,
+          args: needsBytes ? new TextEncoder().encode(json) : args.args,
+          gas: "50000000000000",
+          deposit: "1",
+        },
+      },
+    ],
+  });
+}
+
+/** Reviewed runtime route policy. Empty exchanges keep all trading disabled until evidence exists. */
+let acquisitionPolicy: AcquisitionPolicy = {
+  wrapAccount: WALLET_NETWORK === "mainnet" ? "wrap.near" : "wrap.testnet",
+  tokenAccounts: [],
+  exchangeAccounts: [],
+  poolIds: [],
+  storageMaximums: {},
+};
+export function configureAcquisitionPolicy(policy: AcquisitionPolicy): void {
+  acquisitionPolicy = JSON.parse(JSON.stringify(policy)) as AcquisitionPolicy;
+}
+export async function signAndSendApprovedTransactions(
+  request: ApprovedTransactionRequest,
+) {
+  if (typeof window === "undefined")
+    throw new Error("Wallet approvals require a browser");
+  if (
+    PAGE_NETWORK !== request.context.networkId ||
+    (PAGE_NETWORK !== "mainnet" && PAGE_NETWORK !== "testnet")
+  )
+    throw new Error("Acquisition network mismatch");
+  if (
+    request.purpose === "mpoo-acquisition"
+      ? !RHEA_MPOO_SWAP_ENABLED
+      : !INTENTS_FUNDING_ENABLED && !RHEA_MPOO_SWAP_ENABLED
+  )
+    throw new Error("Acquisition approvals are disabled");
+  const rpc = createAcquisitionRpc(RPC_URL);
+  const selectedWallet = await ensureConnector().wallet();
+  const gateway = createApprovedTransactionGateway({
+    isUnsubmittedRejection: (error) =>
+      selectedWallet.manifest?.id === PRIVY_WALLET_ID &&
+      isPrivyUnsubmittedRejection(error),
+    context: () => getAcquisitionContext(request.context.operationId),
+    storage: window.localStorage,
+    now: Date.now,
+    validateTransaction: (tx, r) =>
+      validateAcquisitionTransaction(tx, r, acquisitionPolicy),
+    async readBudget(context) {
+      if (!/^[1-9]\d*$/.test(ACQUISITION_PLAY_RESERVE_YOCTO))
+        throw new Error("A measured play-gas reserve must be configured");
+      const ready = await readConnectedAccountReadiness(context);
+      if (ready.state !== "ready")
+        throw new Error("Fund and initialize your account before spending");
+      const gas = (await rpc("gas_price", { block_id: ready.blockHash })) as {
+        gas_price: string;
+      };
+      return {
+        spendableBeforeGasYocto: ready.spendableBeforeGasYocto,
+        gasPriceYocto: gas.gas_price,
+        playReserveYocto: ACQUISITION_PLAY_RESERVE_YOCTO,
+      };
+    },
+    ...(selectedWallet.manifest?.features?.signAndSendTransactions
+      ? {
+          async sendBatch(
+            txs: readonly import("./integrations/types").ApprovedNearTransaction[],
+            context: OperationContext,
+          ) {
+            try {
+              if (
+                (await accountIdFromWallet(selectedWallet)) !==
+                  context.accountId ||
+                !sameIdentity(
+                  context,
+                  getAcquisitionContext(context.operationId),
+                )
+              )
+                throw new Error("Wallet account changed");
+            } catch {
+              // No signing method has been called at this point.
+              throw new ApprovalNotSubmittedError(
+                "Wallet preflight failed before signing",
+              );
+            }
+            return selectedWallet.signAndSendTransactions({
+              transactions: txs.map((tx) => ({
+                receiverId: tx.receiverId,
+                actions: tx.actions.map((a) => ({
+                  ...a,
+                  params: { ...a.params },
+                })),
+              })),
+              signerId: context.accountId,
+              network: context.networkId,
+            });
+          },
+        }
+      : {}),
+    async send(tx, context) {
+      const wallet = selectedWallet;
+      try {
+        if (
+          (await accountIdFromWallet(wallet)) !== context.accountId ||
+          !sameIdentity(context, getAcquisitionContext(context.operationId))
+        )
+          throw new Error("Wallet account changed");
+      } catch {
+        // Keep provider errors outside this catch: after invocation they may have broadcast.
+        throw new ApprovalNotSubmittedError(
+          "Wallet preflight failed before signing",
+        );
+      }
+      return wallet.signAndSendTransaction({
+        receiverId: tx.receiverId,
+        actions: tx.actions.map((a) => ({ ...a, params: { ...a.params } })),
+        signerId: context.accountId,
+        network: context.networkId,
+      });
+    },
+  });
+  return gateway(request);
+}
+
+/** Re-read the selected provider's account metadata; never use email as a chain identity. */
+export async function getConnectedAcquisitionPublicKey(
+  context: OperationContext,
+): Promise<string | undefined> {
+  const wallet = await ensureConnector().wallet();
+  const accounts = await wallet.getAccounts({ network: context.networkId });
+  const selected = accounts.find(
+    (account) => account.accountId === context.accountId,
+  );
+  if (
+    !selected ||
+    !getAcquisitionContext(context.operationId) ||
+    getAcquisitionContext(context.operationId)!.sessionEpoch !==
+      context.sessionEpoch
+  )
+    throw new Error("Selected wallet changed");
+  let publicKey = selected.publicKey;
+  if (
+    !publicKey &&
+    wallet.manifest.id === PRIVY_WALLET_ID &&
+    /^[0-9a-f]{64}$/.test(context.accountId)
+  ) {
+    // Privy Ed25519 implicit IDs are exactly the public-key bytes, never a private key.
+    const { encodeBase58 } = await import("./drawing-session");
+    publicKey =
+      "ed25519:" +
+      encodeBase58(
+        Uint8Array.from(context.accountId.match(/../g)!, (part) =>
+          parseInt(part, 16),
+        ),
+      );
+  }
+  return publicKey;
+}
+export async function readConnectedAccountReadiness(context: OperationContext) {
+  const publicKey = await getConnectedAcquisitionPublicKey(context);
+  return resolveAccountReadiness(
+    context.accountId,
+    context.networkId,
+    createAcquisitionRpc(RPC_URL),
+    publicKey,
+  );
+}
+export async function supportsAcquisitionBatchRegistrations(): Promise<boolean> {
+  const wallet = await ensureConnector().wallet();
+  return wallet.manifest?.features?.signAndSendTransactions === true;
+}
+
+/** Status-only recovery remains available after logout; it never requests a signature. */
+export async function reconcilePendingAcquisition(
+  context: OperationContext,
+): Promise<boolean> {
+  const url =
+    context.networkId === "mainnet"
+      ? "https://rpc.mainnet.near.org"
+      : "https://rpc.testnet.near.org";
+  const rpc = createAcquisitionRpc(url);
+  return reconcilePendingCapitalAttempt(
+    context,
+    window.localStorage,
+    (hash, accountId) =>
+      rpc("EXPERIMENTAL_tx_status", {
+        tx_hash: hash,
+        sender_account_id: accountId,
+        wait_until: "FINAL",
+      }),
+  );
+}
+
+async function withAcquisitionCheckoutLock(
+  run: () => Promise<unknown>,
+): Promise<unknown> {
+  if (
+    (!INTENTS_FUNDING_ENABLED && !RHEA_MPOO_SWAP_ENABLED) ||
+    typeof window === "undefined"
+  )
+    return run();
+  return withCapitalLock(window.localStorage, async () => {
+    const captured = getAcquisitionContext("checkout");
+    if (!captured) throw new Error("Connect your wallet before buying credits");
+    if (
+      window.localStorage.getItem(
+        `metapoo:capital:pending:${captured.networkId}:${captured.accountId}`,
+      )
+    )
+      throw new Error(
+        "Resolve the previous acquisition transaction before buying credits",
+      );
+    return run();
+  });
+}
+export async function signAndSendBuyCreditsNear(
+  args: BuyCreditsNearCallArgs,
+): Promise<unknown> {
+  return withAcquisitionCheckoutLock(() => sendBuyCreditsNearInternal(args));
+}
+export async function signAndSendBuyCreditsToken(
+  args: BuyCreditsTokenCallArgs,
+): Promise<unknown> {
+  return withAcquisitionCheckoutLock(() => sendBuyCreditsTokenInternal(args));
+}
+
+async function assertCheckoutWallet(
+  wallet: unknown,
+  context: OperationContext | null,
+): Promise<void> {
+  if (!INTENTS_FUNDING_ENABLED && !RHEA_MPOO_SWAP_ENABLED) return;
+  const account = await accountIdFromWallet(wallet);
+  if (
+    !context ||
+    account !== context.accountId ||
+    !sameIdentity(context, getAcquisitionContext(context.operationId))
+  )
+    throw new Error("Wallet changed before checkout approval");
 }

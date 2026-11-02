@@ -10,19 +10,28 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@defuse-protocol/one-click-sdk-typescript": "0.1.26",
     "@hot-labs/near-connect": "^0.11.4",
     "@near-js/accounts": "^2.5.1",
     "@near-js/crypto": "^2.5.1",
     "@near-js/providers": "^2.5.1",
     "@near-js/transactions": "^2.5.1",
     "@near-js/types": "^2.5.1",
-    "buffer": "^6.0.3"
+    "@peerfolio/privy-near-connect": "0.0.8",
+    "@privy-io/js-sdk-core": "0.72.0",
+    "buffer": "^6.0.3",
+    "qrcode": "1.5.4",
+    "util": "0.12.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@types/qrcode": "1.5.5",
     "happy-dom": "^18.0.1",
     "typescript": "^5.9.3",
     "vite": "^7.1.9",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "viem": "2.55.10"
   }
 }

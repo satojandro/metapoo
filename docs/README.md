@@ -23,7 +23,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 |---|---|---|
 | the paid model: credits, schema 4, the 15 contradictions it resolved | [`payments/2026-10-28-paid-model-decisions.md`](payments/2026-10-28-paid-model-decisions.md) | **authoritative** |
 | what the purchase UI must do and show | [`payments/frontend-handoff.md`](payments/frontend-handoff.md) | current; NEAR checkout built (`55526b9`), mPOO hidden |
-| social login, cross-chain funding and embedded mPOO acquisition | [`implementation/2026-11-03-wallet-funding-integration-spec.md`](implementation/2026-11-03-wallet-funding-integration-spec.md) | specified 3 Nov; shared contracts, three feature specs and agent task manifest; no implementation/live proof |
+| social login, cross-chain funding and embedded mPOO acquisition | [`implementation/2026-11-03-wallet-funding-integration-spec.md`](implementation/2026-11-03-wallet-funding-integration-spec.md) | specs and task manifest; [disabled implementation verification](learning/2026-11-03-wallet-acquisition.md), live gates open |
 | mainnet cost measurement | [`payments/mainnet-cost-validation.md`](payments/mainnet-cost-validation.md) | **all pending** — reopens on first deploy |
 | first live testnet deployment of board + TOILET, with evidence | [`payments/testnet-deployment-2026-10.md`](payments/testnet-deployment-2026-10.md) | **deployed 2026-10-29** at `board3.metapoo-player1.testnet` (canonical), 50 checks green |
 | every owner-changeable board setting: launch value, limits, timing | [`payments/board-settings-reference.html`](payments/board-settings-reference.html) | reference, 2 Nov |

@@ -5,6 +5,7 @@
 
 import { CONTRACT_ID, PAGE_NETWORK } from "../config";
 import { isContractConfigured } from "../contract";
+import { listRecoverableAcquisitions } from "../integrations/operation-store";
 import { describeNetwork } from "../network";
 import type { AppServices } from "./services";
 import type { OperationRecord } from "./operations";
@@ -32,7 +33,9 @@ export function mountWalletChrome(
   );
 
   const cleanups: Array<() => void> = [];
-  const walletDetails = root.querySelector<HTMLDetailsElement>("details.wallet-details");
+  const walletDetails = root.querySelector<HTMLDetailsElement>(
+    "details.wallet-details",
+  );
   const walletSummaryToggle = walletDetails?.querySelector("summary") ?? null;
   let recoverableOps = 0;
 
@@ -45,7 +48,16 @@ export function mountWalletChrome(
    */
   function placeWalletControls(connectedAccount: string | null): void {
     if (!walletDetails) return;
-    const showPanel = connectedAccount !== null || recoverableOps > 0;
+    let savedAcquisitions = 0;
+    try {
+      savedAcquisitions = listRecoverableAcquisitions(
+        window.localStorage,
+      ).length;
+    } catch {
+      /* Read-only wallet still works if storage is blocked. */
+    }
+    const showPanel =
+      connectedAccount !== null || recoverableOps > 0 || savedAcquisitions > 0;
     walletDetails.hidden = !showPanel;
     if (!showPanel) walletDetails.open = false;
     if (walletSummaryToggle) {
@@ -73,7 +85,9 @@ export function mountWalletChrome(
       connectButton.textContent = "Connect wallet";
     }
     placeWalletControls(session.accountId);
-    const notice = describeNetwork(session.accountId ? session.networkId : null);
+    const notice = describeNetwork(
+      session.accountId ? session.networkId : null,
+    );
     networkSummary.textContent = notice.message;
     if (authorizeDrawingSession) {
       authorizeDrawingSession.disabled =
@@ -155,6 +169,18 @@ export function mountWalletChrome(
   cleanups.push(services.wallet.subscribe(() => showWallet()));
   cleanups.push(services.operations.subscribe(showOps));
 
+  const refreshAcquisitions = () => showWallet();
+  window.addEventListener("metapoo:acquisition-change", refreshAcquisitions);
+  window.addEventListener("storage", refreshAcquisitions);
+  cleanups.push(() =>
+    window.removeEventListener(
+      "metapoo:acquisition-change",
+      refreshAcquisitions,
+    ),
+  );
+  cleanups.push(() =>
+    window.removeEventListener("storage", refreshAcquisitions),
+  );
   showWallet();
 
   return () => {

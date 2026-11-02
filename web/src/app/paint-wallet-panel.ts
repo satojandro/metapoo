@@ -1,5 +1,5 @@
 import { TOKEN_PAYMENTS_ENABLED } from "../payment-flags";
-import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
+import { CONTRACT_ID, PAGE_NETWORK, RPC_URL, INTENTS_FUNDING_ENABLED, RHEA_MPOO_SWAP_ENABLED } from "../config";
 import {
   BUY_NEAR_URL,
   createReadRpc,
@@ -99,8 +99,16 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
   });
   // Refresh visible data periodically, including paints submitted outside the operations store.
   const timer = window.setInterval(focus, 30_000);
+  let disposeAcquisition: (() => void) | undefined;
+  const hasRecovery = (() => { try { return Object.keys(window.localStorage).some(key => key.startsWith("metapoo:acquisition:v1:")); } catch { return false; } })();
+  if (INTENTS_FUNDING_ENABLED || RHEA_MPOO_SWAP_ENABLED || hasRecovery) {
+    void import("./acquisition-panel").then(({ mountAcquisitionPanel }) => {
+      if (!disposed) disposeAcquisition = mountAcquisitionPanel(host, services, refreshNow);
+    }).catch(() => { if (!disposed) status.textContent = "Acquisition controls could not load. Your existing wallet and credits remain available."; });
+  }
   refreshNow();
   return () => {
+    disposeAcquisition?.();
     disposed = true; generation++; controller?.abort(); unsubscribe(); unsubscribeOps();
     window.clearInterval(timer); button.removeEventListener("click", refreshNow);
     window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus);
