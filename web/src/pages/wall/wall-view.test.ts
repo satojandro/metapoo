@@ -2,6 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PALETTE } from "@shared/palette.ts";
 import { matchRoute } from "../../app/routes";
 import { createWallScope } from "./wall-scope";
 import {
@@ -93,11 +94,12 @@ describe("wall view", () => {
     const { view, deps } = setup();
     view.buildPalette();
     const swatches = deps.palette.querySelectorAll<HTMLButtonElement>(".swatch");
-    expect(swatches).toHaveLength(8);
+    // The dock still builds the whole shared palette; FE-1 makes it follow the board's palette.
+    expect(swatches).toHaveLength(PALETTE.length);
     swatches[2]!.click();
     expect(view.selectedColor()).toBe(2);
     expect([...swatches].map((s) => s.getAttribute("aria-pressed"))).toEqual([
-      "false", "false", "true", "false", "false", "false", "false", "false",
+      ...PALETTE.map((_, i) => (i === 2 ? "true" : "false")),
     ]);
     expect(deps.preview.textContent).toBe("Paint preview: Brick (palette index 2)");
     expect(deps.render).toHaveBeenCalled();
