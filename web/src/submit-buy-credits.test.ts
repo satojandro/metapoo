@@ -145,4 +145,72 @@ describe("submitBuyCredits", () => {
       expect(result.creditsAfter).toBe(0n);
     }
   });
+
+  it.each([
+    ["MpooDailyCapReached", "mpoo_cap_reached", /sold out/],
+    ["MpooSalesClosed", "mpoo_sales_closed", /closed/],
+    ["PriceChanged", "price_changed", /price changed/],
+  ])("reports a %s token refund as failed with a chain-read balance", async (log, code, words) => {
+    sendToken.mockResolvedValue({
+      transaction: { hash: "refund-tx" },
+      status: { SuccessValue: btoa('"0"') },
+      receipts_outcome: [{ outcome: { logs: [`purchase_rejected: ${log}`] } }],
+    });
+    const quote = quoteBuyCredits({
+      config,
+      quantity: 4,
+      asset: "token",
+      creditsBalance: 7n,
+      network: "testnet",
+      tokenDecimals: 18,
+      tokenSymbol: "tPOO",
+    });
+    const readCredits = vi.fn(async () => 7n);
+    const result = await submitBuyCredits({
+      quote,
+      accountId: "alice.testnet",
+      networkId: "testnet",
+      pageNetwork: "testnet",
+      tokenContractId: config.mpooToken,
+      creditsBefore: 7n,
+      readCredits,
+    });
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect(result.code).toBe(code);
+      expect(result.message).toMatch(words);
+      expect(result.message).toContain("tPOO was sent back");
+      expect(result.creditsAfter).toBe(7n);
+    }
+    expect(readCredits).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a resolver that used 0 tokens as a refund even without a log", async () => {
+    sendToken.mockResolvedValue({
+      transaction: { hash: "refund-tx" },
+      status: { SuccessValue: btoa('"0"') },
+      receipts_outcome: [],
+    });
+    const quote = quoteBuyCredits({
+      config,
+      quantity: 1,
+      asset: "token",
+      creditsBalance: 2n,
+      network: "testnet",
+      tokenDecimals: 18,
+    });
+    const result = await submitBuyCredits({
+      quote,
+      accountId: "alice.testnet",
+      networkId: "testnet",
+      pageNetwork: "testnet",
+      tokenContractId: config.mpooToken,
+      creditsBefore: 2n,
+      readCredits: async () => 2n,
+    });
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect(result.code).toBe("token_refunded");
+    }
+  });
 });

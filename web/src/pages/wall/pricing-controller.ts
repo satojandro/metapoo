@@ -82,6 +82,11 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
             ? "Credits: …"
             : `Credits: ${balance}`;
     },
+    // FE-4: every purchase outcome re-reads credits from chain here, so the
+    // dock and the cached tap balance never trust the sheet's own numbers.
+    onPurchaseSettled: () => {
+      if (!scope.isDisposed()) void refreshCreditsDock();
+    },
   });
 
   /** A failed get_cell_cost / get_tunables read. Submit stays off until a later read works. */
