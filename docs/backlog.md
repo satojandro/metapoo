@@ -88,6 +88,7 @@ waves, each with its own `*.task.json`. Specs: [paid board revision](payments/20
 |---|---|---|---|
 | **REV-1** | Paid board revision (REV-A…REV-F in the queue) | spec reviewed by the owner 1 Nov; open: testnet account ids, mPOO cap value; not started | **L** |
 | **F1-REFACTOR** | `mount-wall.ts` split (FE-0 in the queue) | [spec](implementation/2026-11-01-wall-split-spec.md); **done on branch `claude/gifted-knuth-bm5wrf-fe-0`, pending review** (characterization tests `mount-wall.behaviour.test.ts` first, then one commit per controller; `mount-wall.ts` 2,538 → 344 lines). Not merged; testnet manual check on board3 still owed (replaced by a local Playwright mock-mode check) | **M** |
+| **FE-5** | "Where the money goes" page, `/money` ([task](implementation/fe-revenue-panel.task.json)) | **done on branch `claude/gifted-knuth-bm5wrf-fe-5` (stacked on FE-0), pending review.** `web/src/app/revenue-panel*.ts`; tests `revenue-panel.test.ts`, `revenue-panel-page.test.ts`. Chain evidence: `get_revenue_state` on `board3.metapoo-player1.testnet` returns `MethodNotFound` (block 275848064) → page shows the "starts with the next board version" state. **Live numbers and Distribute now are unverified until REV-D is on testnet**: field names are assumed in `REVENUE_FIELDS`, distribute gas (50 / 150 Tgas) not measured | **M** |
 | **TOILET-REVIEW** | Full TOILET cycle review: emission, claim, earning cap, staking contract, exit tax, distribution to stakers | next review round (owner, 1 Nov); out of this queue | — |
 
 ## Blocked on a human decision

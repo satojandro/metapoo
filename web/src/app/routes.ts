@@ -76,6 +76,9 @@ export function matchRoute(pathname: string, search = ""): ParsedRoute {
   if (path === "/wall") {
     return { path, pageId: "wall", params: {}, query };
   }
+  if (path === "/money") {
+    return { path, pageId: "money", params: {}, query };
+  }
   return { path, pageId: "not-found", params: {}, query };
 }
 

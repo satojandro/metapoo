@@ -458,3 +458,26 @@ export async function revokeDrawingSessionKeyOnChain(publicKey: string): Promise
     ],
   });
 }
+
+/**
+ * Wallet path for the public revenue split (`distribute_near` / `distribute_mpoo`).
+ * No arguments, no deposit: anyone may call it, and the caller pays only gas.
+ * Never sent with a drawing-session key — the wallet signs.
+ */
+export async function signAndSendDistribution(args: {
+  contractId: string;
+  methodName: "distribute_near" | "distribute_mpoo";
+  gas: string;
+}): Promise<unknown> {
+  const current = ensureConnector();
+  const wallet = await current.wallet();
+  return wallet.signAndSendTransaction({
+    receiverId: args.contractId,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: { methodName: args.methodName, args: {}, gas: args.gas, deposit: "0" },
+      },
+    ],
+  });
+}
