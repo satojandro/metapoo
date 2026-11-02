@@ -31,24 +31,28 @@ describe("wallPageHtml", () => {
     }
 
     expect(root.querySelector(".wall-runtime-status")?.textContent).toMatch(/Testnet/);
-    expect(root.querySelectorAll(".wall-layout details")).toHaveLength(1);
+    expect(root.querySelectorAll(".wall-page details")).toHaveLength(1);
     // Phase 0: no "DEMO STALL ART / LIVE BOARD" label over the scene.
     expect(root.querySelector(".scene-label")).toBeNull();
+    // Phase 1 step 1: the wall is framed by a thin stall border, not the mural scene.
+    // The old scenery stays mounted but hidden until step 4 deletes it.
+    const legacy = root.querySelector<HTMLElement>(".wall-legacy")!;
+    expect(legacy.hidden).toBe(true);
     const sceneryLayers = [
       ...root.querySelectorAll<HTMLElement>("[data-stall-scenery]"),
     ];
     expect(sceneryLayers.length).toBeGreaterThanOrEqual(6);
-    expect(sceneryLayers.every((layer) => !layer.contains(board))).toBe(true);
-    expect(
-      root
-        .querySelector('[data-stall-scenery="back-wall-art"]')!
-        .compareDocumentPosition(board!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(
-      board!.compareDocumentPosition(
-        root.querySelector('[data-stall-scenery="toilet"]')!,
-      ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(sceneryLayers.every((layer) => legacy.contains(layer))).toBe(true);
+    expect(legacy.contains(board)).toBe(false);
+    expect(root.querySelector(".wall-frame")?.contains(board)).toBe(true);
+    // Look is the default mode; the dock is the Paint-mode card in the side panel.
+    expect(root.querySelector<HTMLElement>(".wall-page")?.dataset.mode).toBe("look");
+    expect(root.querySelector("#wall-mode-look")?.getAttribute("aria-pressed")).toBe("true");
+    expect(root.querySelector("#wall-mode-paint")?.getAttribute("aria-pressed")).toBe("false");
+    expect(root.querySelector(".wall-dock")?.closest(".wall-panel")).not.toBeNull();
+    for (const view of ["art", "price", "age", "turf"]) {
+      expect(root.querySelector(`[data-wall-view="${view}"]`), view).not.toBeNull();
+    }
     expect(about?.contains(root.querySelector("#palette"))).toBe(false);
     expect(about?.contains(root.querySelector("#draw-button"))).toBe(false);
     expect(root.querySelector("#buy-credits-button")?.closest(".paint-dock")).not.toBeNull();

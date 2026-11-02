@@ -253,7 +253,7 @@ export function describeDrawingSession(input: {
     message: [
       `Authorized for ${record.accountId} on ${record.networkId}, contract ${record.contractId}, method “draw” only.`,
       `Configured lifetime allowance: ${formatAllowanceNear(record.gasAllowanceYocto)}.`,
-      "Place paint will try local signing with this key first (no wallet popup). If that fails, ordinary wallet approval remains the fallback.",
+      "Paint this tile will try local signing with this key first (no wallet popup). If that fails, ordinary wallet approval remains the fallback.",
       "“Forget” only clears this browser. Use “Revoke on chain” to ask the wallet to delete the access key.",
     ].join(" "),
     allowanceLabel: formatAllowanceNear(record.gasAllowanceYocto),

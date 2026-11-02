@@ -7,7 +7,7 @@ export function planStrokeCommit(stroke: StrokeState, sessionActive: boolean) {
   return { kind: "draw_many" as const, chunks: chunkCells(stroke.cells) };
 }
 
-export const WALLET_STROKE_COPY = "Authorize a drawing session for drag painting, or select a cell and use Place paint with wallet approval.";
+export const WALLET_STROKE_COPY = "Authorize a drawing session for drag painting, or select a cell and use Paint this tile with wallet approval.";
 export const TRUNCATED_STROKE_COPY = `Stroke limited to ${MAX_STROKE_CELLS} cells. The rest of the drag was not submitted.`;
 
 /** Everything the pointer gate needs to know, minus the gesture itself. */
@@ -32,9 +32,6 @@ export interface StrokeGate {
  * fixable comes first, instead of a single opaque "not available".
  */
 export function strokeBlockedReason(gate: StrokeGate): string | null {
-  if (!gate.directPaint) {
-    return "Dragging moves the board. Tick \"Drag to paint strokes\" in the dock to paint with a drag.";
-  }
   if (!gate.accountId) {
     return "Connect a wallet to paint.";
   }
@@ -49,6 +46,11 @@ export function strokeBlockedReason(gate: StrokeGate): string | null {
   }
   if (!gate.sessionActive) {
     return "Painting needs one approval first — press Unlock painting in the dock.";
+  }
+  // Asked last: the toggle is only shown once a drawing key exists, so naming it
+  // before the missing wallet, colour or approval pointed at a control nobody could see.
+  if (!gate.directPaint) {
+    return "Dragging moves the board. Tick \"Drag to paint strokes\" in the dock to paint with a drag.";
   }
   if (gate.drawInFlight || gate.queueBusy) {
     return "Paint still confirming — drag painting resumes when it lands.";

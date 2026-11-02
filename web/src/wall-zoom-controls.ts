@@ -32,7 +32,7 @@ export function mountWallZoomControls(
 
   const zoomOut = createButton("zoom-out", "Zoom out", "−");
   const zoomIn = createButton("zoom-in", "Zoom in", "+");
-  const fit = createButton("zoom-fit", "Fit wall to view", "Fit wall");
+  const fit = createButton("zoom-fit", "Fit wall to view", "Fit");
   controls.append(zoomOut, zoomIn, fit);
   container.prepend(controls);
 
