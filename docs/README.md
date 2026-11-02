@@ -36,7 +36,9 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 
 | topic | document | status |
 |---|---|---|
-| TOILET: issuance, staking, burns, burn page | [`economy/2026-10-28-toilet-economy-v1.md`](economy/2026-10-28-toilet-economy-v1.md) | **proposed** — four decisions open |
+| TOILET round: emission rules, staking contract, exit tax | [`economy/2026-11-02-toilet-round-spec.md`](economy/2026-11-02-toilet-round-spec.md) | **owner decisions recorded 2 Nov**; not implemented |
+| TOILET: the reasoning behind the round | [`economy/2026-10-28-toilet-economy-v1.md`](economy/2026-10-28-toilet-economy-v1.md) | background; its open decisions were settled by the round spec |
+| public page designs: How it works, TOILET | [`visual-concepts/README.md`](visual-concepts/README.md) | approved drafts; the frontend follows them |
 | TOILET token: supply, tax, refund semantics | [`../contracts/toilet/README.md`](../contracts/toilet/README.md) | on main (PRs #15–#17), testnet at `metapoo-toilet.testnet` |
 
 ## Work in flight

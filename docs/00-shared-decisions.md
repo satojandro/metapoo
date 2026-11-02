@@ -49,6 +49,23 @@ TOILET, revenue sharing and inventory trading remain a subsequent stage.
   it needs no operator, no hot key and no N-recipient transaction — and because a visible "claim" badge
   brings people back in a way invisible payouts do not.
 
+### TOILET round — owner decisions, 2 November 2026
+
+Full spec, open items and work orders: [TOILET round spec](economy/2026-11-02-toilet-round-spec.md).
+
+- **T1–T2 — emission is a fixed rate per earning tile per second**, not keyed to revenue, behind price-style
+  safeguards: at most ×2 or ÷2 per change, a 24-hour cooldown, a public event, and 0 allowed any time.
+- **T3 — no earning cap.** `max_earning_cells` is deleted. The whale risk is accepted.
+- **T4 — free tiles earn nothing** until repainted with credits. Their share is never reserved or minted,
+  so nothing is burned for them.
+- **T5 — a staking contract releases at most 10% of its mPOO pool per day** to TOILET stakers, pro rata.
+  The board's revenue path is unchanged.
+- **T6 — TOILET is for staking.** It is not spendable on paint. This replaces the historical
+  “spent/burned as paint” line below.
+- **T7 — unstaking burns 10%** of each unstaked amount, and only that amount.
+- **T8 — an exchange tax matching mPOO (2% buy, 3% sell) is a nice-to-have**, configured before deploy and
+  proven on a real pool first.
+
 Evidence and the full contradiction list: [paid model v1 decisions](payments/2026-10-28-paid-model-decisions.md).
 
 ## Product expansion: approved direction, proposed mechanics
@@ -122,7 +139,7 @@ Those identifiers are not the game contract. Do not point the pixel contract at 
 ### Historical economy direction — payment rules superseded above
 
 - Paid paint purchases use **MPOO only**, replacing the earlier NEAR/MPOO choice and its 20% price comparison.
-- Pixels earn bounded **TOILET**, which is spent/burned as paint. No third independent paint-credit currency is planned.
+- Pixels earn bounded **TOILET**, which is spent/burned as paint. No third independent paint-credit currency is planned. *(**Superseded 2026-11-02 by the owner (T6):** TOILET is for staking only and is not spendable on paint.)*
 - Users stake **MPOO**, explicitly confirmed by the user, and receive net game revenue **in MPOO** after a disclosed operating reserve and liabilities. This replaces earlier TOILET staking and NEAR-only payout proposals. *(**Superseded 2026-10-29 by the owner:** users stake **TOILET**, not MPOO. NEAR revenue is used to buy mPOO, and all mPOO revenue goes 70% to TOILET stakers and 30% to burn. mPOO buys credits at a 20% discount. See the [code audit](2026-10-29-code-audit.md) C8 and §1b.)*
 - Competitive repeated painting should consume more paint units than pixels issue. The economy must also have explicit reward caps for quiet/cooperative/bot-dominated play.
 - A separate NEAR-to-MPOO premium inventory shop and bounded replenishment executor are under investigation. NEAR buys MPOO there; it does not directly buy game paint. No premium, budget or live execution configuration is chosen.

@@ -30,6 +30,19 @@ next PR to `main`), or retarget the next PR by hand.
 | **FE-29** | [`issue-29-recheck`](issue-29-recheck.task.json) | owner or Hermes | a browser and wallet; best after FE-2 |
 | REV-E0 | superseded: the burn goes by transfer to the 64-zero address, registered on mainnet 2 Nov | — | — |
 
+**TOILET round (added 2 Nov).** Spec: [`../economy/2026-11-02-toilet-round-spec.md`](../economy/2026-11-02-toilet-round-spec.md).
+
+| id | work order | who could take it | needs |
+|---|---|---|---|
+| **TR-B** | [`toilet-round-board`](toilet-round-board.task.json) | Codex | can start now from `main` |
+| **TR-S** | [`toilet-staking`](toilet-staking.task.json) | Codex | owner decision S8 (staking contract ownership) |
+| **TR-X** | [`toilet-exchange-tax`](toilet-exchange-tax.task.json) | Hermes | owner choice of tax split and treasury; a testnet venue |
+| **FE-HIW** | [`fe-how-it-works`](fe-how-it-works.task.json) | Claude | can start now |
+| **FE-TOILET** | [`fe-toilet-page`](fe-toilet-page.task.json) | Claude | TR-B and TR-S rehearsed on testnet |
+
+Frontend consistency (owner, 2 Nov): Claude takes the public-facing pages so they share one voice and look.
+Designs are in [`../visual-concepts/README.md`](../visual-concepts/README.md).
+
 **Branches to start from:** `main` (the wall split and the revision are merged). Frontend work that
 needs FE-1/2/4/5 starts from `main` once the chain above is merged, or from
 `claude/gifted-knuth-bm5wrf-fe-5`, which holds all four.
