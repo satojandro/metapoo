@@ -1,0 +1,720 @@
+import type { PixelView } from "@shared/types.ts";
+import { paintOperationId, type OperationPhase } from "../../app/operations";
+import type { AppServices } from "../../app/services";
+import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
+import { contractMetaBlockCopy } from "../../contract-meta";
+import { createDrawRequest, drawRequestMatchesSession, type DrawRequest } from "../../draw-request";
+import { prepareDraw } from "../../draw-policy";
+import { canUseLocalDrawingSession, signAndSendStrokeLocally } from "../../local-draw";
+import { clearPaintQueue, createPaintQueue, enqueuePaint, paintQueueLength, shiftPaint } from "../../paint-queue";
+import {
+  clearPendingPaint, createPendingPaintMap, listPendingPaints, reconcilePendingWithConfirmed, setPendingPaint,
+  type PendingPaint, type PendingPaintPhase,
+} from "../../pending-paint";
+import type { Cell } from "../../selection";
+import type { SponsorshipStatus } from "../../sponsorship";
+import { submitDraw } from "../../submit-draw";
+import type { BoardController } from "./board-controller";
+import type { CameraStrokeHooks } from "./camera-controller";
+import { createPaintSessionPanel, type PaintSessionDom } from "./paint-session-panel";
+import { createPlacementOutcomeController, mountPlacementOutcomeLayer } from "./placement-outcome";
+import type { PricingController } from "./pricing-controller";
+import { planStrokeCommit, strokeBlockedReason, strokeResultCopy, TRUNCATED_STROKE_COPY, WALLET_STROKE_COPY } from "./stroke-commit";
+import { strokeBegin, strokeExtend, MAX_BATCH, type StrokeState } from "./stroke-paint";
+import { colorName, fillBlock, fillResultWithLink, type WallView } from "./wall-view";
+import type { WallScope } from "./wall-scope";
+
+export interface PaintControllerDeps extends PaintSessionDom {
+  scope: WallScope;
+  services: AppServices;
+  sponsorship: SponsorshipStatus;
+  /** Hosts the placement-outcome layer. */
+  boardViewport: HTMLElement;
+  drawState: HTMLElement;
+  /** Shell-owned status strip. */
+  flowState: HTMLElement;
+  board: Pick<BoardController, "contractMetaOk" | "contractMetaIssue" | "rememberPixel" | "refreshBoardFromContract">;
+  pricing: Pick<
+    PricingController,
+    "paidBoard" | "priceUnavailable" | "allowGestureRetry" | "ensurePaidQuote" | "admitTap" | "refreshCreditsDock" | "repriceCell"
+  >;
+  view: Pick<WallView, "selected" | "setSelected" | "selectedColor" | "setFlow" | "showSelection">;
+  render(): void;
+}
+
+export interface PaintController {
+  /** What the camera calls for a one-pointer gesture. */
+  strokes: CameraStrokeHooks;
+  /** Pending paints and the live stroke, for the renderer. */
+  overlayPixels(): PendingPaint[];
+  pendingCount(): number;
+  /** Confirmed pixels arrived; clear the pending marks they settle. */
+  reconcilePending(pixels: PixelView[]): void;
+  drawInFlight(): boolean;
+  /** Place paint / Enter: paint the selected square with the chosen colour. */
+  attemptDraw(): Promise<void>;
+  /** A deliberate tap; queues a direct paint when Direct paint is armed. */
+  maybeEnqueueDirectPaint(cell: Cell, options?: { paintZoom: boolean }): void;
+  syncSubmitEnabled(): void;
+  updateDirectPaintAvailability(): void;
+  showDrawingSession(): void;
+  /** The wallet account or network changed: drop the stroke and unsent paints. */
+  onWalletChanged(): void;
+  /** Test seam (WallMountTestApi): queue a paint without a live session. */
+  enqueueUnsent(request: DrawRequest): void;
+  queueLength(): number;
+  drainPaintQueue(): Promise<void>;
+  dispose(): void;
+}
+
+type AnchoredStroke = { state: StrokeState; accountId: string; networkId: string; color: number };
+
+/**
+ * Sending paints and the drawing session: the single-cell draw, the stroke,
+ * the direct-paint queue and the pending marks on the board.
+ */
+export function createPaintController(deps: PaintControllerDeps): PaintController {
+  const { scope, services, sponsorship, board, pricing, view, drawButton, result, drawState, flowState, directPaintToggle } = deps;
+
+  const pendingPaints = createPendingPaintMap();
+  const placementOutcomes = createPlacementOutcomeController();
+  const queuedPlacementOutcomes = new WeakMap<DrawRequest, string>();
+  const unmountPlacementOutcomes = mountPlacementOutcomeLayer(
+    deps.boardViewport,
+    placementOutcomes,
+  );
+  const paintQueue = createPaintQueue();
+  let drawInFlight = false;
+  let activeStroke: AnchoredStroke | null = null;
+
+  /** Mark a cell pending on the board for this request's colour and account. */
+  const markPending = (
+    paint: Pick<DrawRequest, "x" | "y" | "colorIndex" | "accountId">,
+    transactionId: string | null,
+    phase: PendingPaintPhase,
+  ): void => {
+    setPendingPaint(pendingPaints, {
+      x: paint.x,
+      y: paint.y,
+      colorIndex: paint.colorIndex,
+      accountId: paint.accountId,
+      transactionId,
+      phase,
+    });
+  };
+
+  const session = createPaintSessionPanel({
+    ...deps,
+    contractMetaOk: () => board.contractMetaOk(),
+    selected: () => view.selected(),
+    setFlow: (phase) => view.setFlow(phase),
+  });
+
+  scope.listen(drawButton, "click", () => {
+    void attemptDraw();
+  });
+
+  const strokes: CameraStrokeHooks = {
+    active: () => activeStroke !== null,
+    begin(cell, wantsPan) {
+      const selectedColor = view.selectedColor();
+      const walletAccount = scope.walletAccount();
+      const walletNetwork = scope.walletNetwork();
+      pricing.allowGestureRetry();
+
+      if (cell && !wantsPan && directPaintToggle.checked &&
+          walletAccount && selectedColor !== null && board.contractMetaOk() &&
+          !drawInFlight && !paintQueue.inFlight && !paintQueueLength(paintQueue) &&
+          canUseLocalDrawingSession(walletAccount, walletNetwork)) {
+        activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
+          networkId: scope.walletNetworkId(), color: selectedColor };
+        deps.render();
+      } else {
+        // Say which precondition is missing. A drag that silently pans reads as
+        // "painting is broken", which is how this was first reported.
+        const blocked = strokeBlockedReason({
+          directPaint: directPaintToggle.checked,
+          accountId: walletAccount,
+          colorIndex: selectedColor,
+          contractOk: board.contractMetaOk(),
+          sessionActive: walletAccount
+            ? canUseLocalDrawingSession(walletAccount, walletNetwork)
+            : false,
+          priceOk: !pricing.paidBoard() || !pricing.priceUnavailable(),
+          drawInFlight,
+          queueBusy: paintQueue.inFlight || paintQueueLength(paintQueue) > 0,
+        });
+        if (cell && !wantsPan && blocked) {
+          drawState.textContent = blocked;
+        }
+      }
+    },
+    extend(cell) {
+      if (!activeStroke) return;
+      if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
+      deps.render();
+      if (activeStroke.state.truncated) fillBlock(result, "Stroke limit", TRUNCATED_STROKE_COPY);
+    },
+    finish(cell, completedKind, selectHere) {
+      if (!activeStroke) return;
+      if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
+      const stroke = activeStroke;
+      activeStroke = null;
+      // Long presses and cancelled gestures retain the classifier's guards.
+      if (completedKind === "tap" || completedKind === "drag") {
+        if (stroke.state.cells.length > 1) void commitStroke(stroke);
+        else if (completedKind === "tap") selectHere();
+      }
+    },
+    cancel() {
+      activeStroke = null;
+    },
+  };
+
+  function syncSubmitEnabled(): void {
+    drawButton.disabled = drawInFlight || (pricing.paidBoard() && pricing.priceUnavailable());
+  }
+
+  /** After any paint settles: buttons, session note, balance and price. */
+  function afterPaintSettled(): void {
+    // Dock credits previously refreshed only on wallet change / shortfall —
+    // after a confirmed (or delayed) spend the balance must re-read the chain.
+    void pricing.refreshCreditsDock();
+    const selected = view.selected();
+    if (selected) {
+      pricing.repriceCell(selected);
+    }
+  }
+
+  async function attemptDraw(
+    request?: DrawRequest,
+    queuedPlacementOutcomeId?: string,
+  ): Promise<void> {
+    if (scope.isDisposed() || drawInFlight) {
+      return;
+    }
+    const walletAccount = scope.walletAccount();
+
+    const selected = view.selected();
+    const selectedColor = view.selectedColor();
+    const frozen =
+      request ??
+      (selected && selectedColor !== null && walletAccount
+        ? createDrawRequest({
+            x: selected.x,
+            y: selected.y,
+            colorIndex: selectedColor,
+            accountId: walletAccount,
+            networkId: scope.walletNetworkId(),
+          })
+        : null);
+
+    // Live wallet must still match the frozen request. A queued paint must not
+    // keep going after disconnect or account switch just because the request exists.
+    if (
+      frozen &&
+      !drawRequestMatchesSession(frozen, walletAccount, scope.walletNetworkId())
+    ) {
+      clearPendingPaint(pendingPaints, frozen.x, frozen.y);
+      view.setFlow(walletAccount ? "editing" : "disconnected");
+      fillBlock(
+        result,
+        "Paint cancelled",
+        "The wallet account or network no longer matches this paint request, so it was not submitted.",
+      );
+      deps.render();
+      return;
+    }
+
+    const decision = prepareDraw({
+      x: frozen?.x ?? null,
+      y: frozen?.y ?? null,
+      color: frozen?.colorIndex ?? null,
+      connected: walletAccount !== null,
+      accountId: frozen?.accountId ?? walletAccount,
+      sessionNetworkId: frozen?.networkId ?? scope.walletNetworkId(),
+      boardNetworkId: PAGE_NETWORK,
+      contractId: CONTRACT_ID,
+    });
+
+    if (decision.outcome === "blocked") {
+      view.setFlow(walletAccount ? "editing" : "disconnected");
+      fillBlock(result, decision.title, decision.message);
+      return;
+    }
+
+    if (!board.contractMetaOk()) {
+      view.setFlow("failed");
+      const copy = contractMetaBlockCopy(board.contractMetaIssue());
+      fillBlock(result, copy.title, copy.message);
+      return;
+    }
+
+    if (!frozen) {
+      return;
+    }
+
+    // Price before any pending mark or wallet prompt. A failed read must not
+    // leave a stripe on the board or open a signature request.
+    drawInFlight = true;
+    drawButton.disabled = true;
+    const priced = await pricing.ensurePaidQuote(
+      [{ x: frozen.x, y: frozen.y }],
+      frozen.accountId,
+    );
+    if (!priced || scope.isDisposed()) {
+      drawInFlight = false;
+      if (frozen) {
+        clearPendingPaint(pendingPaints, frozen.x, frozen.y);
+        if (queuedPlacementOutcomeId) {
+          placementOutcomes.discard(queuedPlacementOutcomeId);
+        }
+      }
+      if (!scope.isDisposed()) {
+        deps.render();
+        syncSubmitEnabled();
+      }
+      return;
+    }
+
+    // Keep UI selection in sync with the request, but never re-read color/account
+    // from live UI state while this request is in flight.
+    view.setSelected({ x: frozen.x, y: frozen.y });
+    view.setFlow("wallet_prompt");
+    const opId = paintOperationId({
+      accountId: frozen.accountId,
+      x: frozen.x,
+      y: frozen.y,
+      colorIndex: frozen.colorIndex,
+    });
+    // Every record for this paint shares id, account, network and cell.
+    const recordOp = (
+      phase: OperationPhase,
+      transactionId: string | null,
+      title: string,
+      detail: string,
+    ): void => {
+      services.operations.upsert({
+        id: opId,
+        kind: "paint",
+        phase,
+        accountId: frozen.accountId,
+        networkId: frozen.networkId,
+        transactionId,
+        title,
+        detail,
+        meta: { x: frozen.x, y: frozen.y, colorIndex: frozen.colorIndex },
+      });
+    };
+    const placementOutcomeId = queuedPlacementOutcomeId ?? placementOutcomes.submit({
+      x: frozen.x,
+      y: frozen.y,
+      colorIndex: frozen.colorIndex,
+    });
+    recordOp(
+      "awaiting_signature",
+      null,
+      "Paint",
+      `Awaiting wallet for x=${frozen.x}, y=${frozen.y}, color=${frozen.colorIndex}`,
+    );
+    markPending(frozen, null, "submitted");
+    deps.render();
+    fillBlock(
+      result,
+      "Waiting for your wallet",
+      [
+        `Approve draw at x=${frozen.x}, y=${frozen.y}, color=${frozen.colorIndex} (${colorName(frozen.colorIndex)}).`,
+        "Your wallet may ask you to pay a small network gas fee. The game adds no application fee.",
+        sponsorship.message,
+      ].join(" "),
+    );
+
+    try {
+      const submitResult = await submitDraw({
+        x: frozen.x,
+        y: frozen.y,
+        colorIndex: frozen.colorIndex,
+        accountId: frozen.accountId,
+        networkId: frozen.networkId,
+        onProgress: (progress) => {
+          // Always record broadcast progress on the shared operations store.
+          if (progress.phase === "pending" || progress.phase === "confirming") {
+            recordOp(
+              "submitted",
+              progress.transactionId,
+              "Paint",
+              progress.phase === "pending"
+                ? "Transaction pending confirmation"
+                : "Confirming against a fresh board read",
+            );
+          }
+          if (scope.isDisposed()) {
+            return;
+          }
+          if (progress.phase === "wallet_prompt") {
+            view.setFlow("wallet_prompt");
+            fillBlock(result, "Waiting for your wallet", progress.detail);
+          } else if (progress.phase === "pending" || progress.phase === "confirming") {
+            view.setFlow("submitted");
+            markPending(frozen, progress.transactionId, "submitted");
+            deps.render();
+            fillResultWithLink(
+              result,
+              "Transaction pending",
+              progress.phase === "pending"
+                ? "The wallet returned a transaction id. Confirming against a fresh board read…"
+                : "Re-reading the pixel to distinguish confirmed ownership from a later overwrite…",
+              progress.transactionId,
+              progress.explorer,
+            );
+          }
+        },
+      });
+      placementOutcomes.settle(placementOutcomeId, submitResult);
+      const recordResult = (phase: OperationPhase) =>
+        recordOp(phase, submitResult.transactionId, submitResult.title, submitResult.message);
+      const showResult = () =>
+        fillResultWithLink(
+          result,
+          submitResult.title,
+          submitResult.message,
+          submitResult.transactionId,
+          submitResult.explorerUrl,
+        );
+
+      if (scope.isDisposed()) {
+        // Page left while this draw was in flight: keep operations store, skip DOM.
+        if (submitResult.status === "confirmed" || submitResult.status === "overwritten") {
+          recordResult(submitResult.status);
+        } else if (submitResult.status === "confirmation_delayed") {
+          recordResult("confirmation_delayed");
+        } else if (submitResult.status !== "rejected") {
+          recordResult("failed");
+        }
+        return;
+      }
+
+      if (submitResult.status === "confirmed" && submitResult.pixel) {
+        recordResult("confirmed");
+        // Use the confirming get_pixel's block height only — never a later tip.
+        board.rememberPixel(submitResult.pixel, submitResult.observedBlockHeight);
+        clearPendingPaint(pendingPaints, frozen.x, frozen.y);
+        deps.render();
+        view.setFlow("confirmed");
+        showResult();
+        view.showSelection();
+        void board.refreshBoardFromContract({ reason: "after_draw" });
+        return;
+      }
+
+      if (submitResult.status === "confirmation_delayed") {
+        recordResult("confirmation_delayed");
+        markPending(frozen, submitResult.transactionId, "confirmation_delayed");
+        deps.render();
+        view.setFlow("confirmation_delayed");
+        showResult();
+        view.showSelection();
+        // Do not auto-resubmit. Polling / refresh will reconcile.
+        return;
+      }
+
+      if (submitResult.status === "overwritten" && submitResult.pixel) {
+        recordResult("overwritten");
+        board.rememberPixel(submitResult.pixel, submitResult.observedBlockHeight);
+        clearPendingPaint(pendingPaints, frozen.x, frozen.y);
+        deps.render();
+        view.setFlow("overwritten");
+        showResult();
+        view.showSelection();
+        void board.refreshBoardFromContract({ reason: "after_draw" });
+        return;
+      }
+
+      recordResult("failed");
+      clearPendingPaint(pendingPaints, frozen.x, frozen.y);
+      deps.render();
+      view.setFlow("failed");
+      showResult();
+    } finally {
+      drawInFlight = false;
+      if (!scope.isDisposed()) {
+        syncSubmitEnabled();
+        session.showDrawingSession();
+        afterPaintSettled();
+      }
+    }
+  }
+
+  async function commitStroke(stroke: AnchoredStroke): Promise<void> {
+    const stillArmed = () =>
+      stroke.accountId === scope.walletAccount() &&
+      stroke.networkId === scope.walletNetworkId() && directPaintToggle.checked;
+    if (scope.isDisposed() || drawInFlight || !stillArmed()) return;
+    drawInFlight = true;
+    drawButton.disabled = true;
+    const priced = await pricing.ensurePaidQuote(stroke.state.cells, stroke.accountId);
+    if (!priced || scope.isDisposed() || !stillArmed()) {
+      drawInFlight = false;
+      if (!scope.isDisposed()) syncSubmitEnabled();
+      return;
+    }
+    const plan = planStrokeCommit(
+      stroke.state,
+      canUseLocalDrawingSession(scope.walletAccount(), scope.walletNetwork()),
+    );
+    if (plan.kind === "wallet_approval") {
+      drawInFlight = false;
+      if (!scope.isDisposed()) syncSubmitEnabled();
+      fillBlock(result, "Drawing session needed", WALLET_STROKE_COPY);
+      return;
+    }
+    drawInFlight = true;
+    for (const cell of stroke.state.cells) setPendingPaint(pendingPaints, {
+      ...cell, colorIndex: stroke.color, accountId: stroke.accountId,
+      transactionId: null, phase: "submitted",
+    });
+    deps.render();
+    view.setFlow("submitted");
+    try {
+      const outcome = await signAndSendStrokeLocally({
+        accountId: stroke.accountId, networkId: stroke.networkId,
+        cells: stroke.state.cells, color: stroke.color,
+      });
+      if (scope.isDisposed()) return;
+      // Resolve known outcomes through a fresh chain read; uncertain cells keep
+      // a pending marker. Never infer execution from matching pre-existing paint.
+      const uncertain = outcome.failingChunk?.mayHaveBroadcast;
+      const uncertainStart = outcome.confirmedChunks * MAX_BATCH;
+
+      // A confirmed chunk's receipt proves the write at a specific block. Stamp
+      // those cells now instead of leaving the board stale until the next full
+      // read: the read pages the whole wall (6 requests today, 64 on a full
+      // 16,384-cell board), and waiting for it is what made a finished stroke
+      // look unresolved. board-cache keeps the newer stamp if a snapshot from an
+      // older block arrives, so this cannot be rolled back by a slow read.
+      for (const { chunkIndex, blockHeight } of outcome.executedBlocks ?? []) {
+        const start = chunkIndex * MAX_BATCH;
+        for (const cell of stroke.state.cells.slice(start, start + MAX_BATCH)) {
+          board.rememberPixel(
+            {
+              x: cell.x,
+              y: cell.y,
+              colorIndex: stroke.color,
+              artistAccountId: stroke.accountId,
+              lastWriteTimestampNs: null,
+            },
+            blockHeight,
+          );
+        }
+      }
+
+      for (const [i, cell] of stroke.state.cells.entries()) {
+        if (uncertain && i >= uncertainStart && i < uncertainStart + MAX_BATCH) {
+          setPendingPaint(pendingPaints, { ...cell, colorIndex: stroke.color,
+            accountId: stroke.accountId, transactionId: null, phase: "confirmation_delayed" });
+        } else clearPendingPaint(pendingPaints, cell.x, cell.y);
+      }
+      fillBlock(result, outcome.status === "confirmed" ? "Stroke confirmed" : "Stroke stopped", strokeResultCopy(stroke.state, outcome));
+      view.setFlow(outcome.status === "confirmed" ? "confirmed" : "confirmation_delayed");
+      // Stroke execution and latest ownership are distinct; do not reuse the
+      // single-cell label that promises a matching confirming read.
+      const statusText = outcome.status === "confirmed"
+        ? "Stroke transactions executed. Refreshing the latest board state."
+        : "Stroke stopped. Review the batch results before painting again.";
+      // Keep the reason where it cannot scroll away: the dock line persists, the
+      // result block is one action away from being replaced.
+      const failureReason =
+        outcome.status === "confirmed" ? null : outcome.failingChunk?.message;
+      if (failureReason) {
+        // Also to the console, so a tester can hand back the exact error.
+        console.error("[wall] stroke submission failed:", failureReason);
+      }
+      flowState.textContent = statusText;
+      drawState.textContent = failureReason
+        ? `${statusText} Reason: ${failureReason}`
+        : statusText;
+      await board.refreshBoardFromContract({ reason: "after_draw" });
+    } finally {
+      drawInFlight = false;
+      if (!scope.isDisposed()) {
+        syncSubmitEnabled();
+        deps.render();
+        afterPaintSettled();
+      }
+    }
+  }
+
+  function directPaintReady(): boolean {
+    const walletAccount = scope.walletAccount();
+    return (
+      session.tapToPaintEnabled() &&
+      canUseLocalDrawingSession(walletAccount, scope.walletNetwork()) &&
+      view.selectedColor() !== null &&
+      walletAccount !== null &&
+      board.contractMetaOk() &&
+      !scope.isDisposed()
+    );
+  }
+
+  function maybeEnqueueDirectPaint(
+    cell: Cell,
+    options: { paintZoom: boolean } = { paintZoom: false },
+  ): void {
+    // A deliberate tap is a user decision, so it is queued even while another
+    // paint is still confirming: `drainPaintQueue` is the serialiser and runs the
+    // next entry when this one settles. Dropping it here instead made the second
+    // click on a cell silently do nothing until the first transaction landed,
+    // which read as "painting stopped working".
+    if (!directPaintReady()) {
+      return;
+    }
+    void enqueuePricedDirectPaint(cell, options);
+  }
+
+  async function enqueuePricedDirectPaint(
+    cell: Cell,
+    _options: { paintZoom: boolean },
+  ): Promise<void> {
+    const selectedColor = view.selectedColor();
+    const walletAccount = scope.walletAccount();
+    if (!directPaintReady() || !walletAccount || selectedColor === null) {
+      return;
+    }
+    // A tap is the core gesture and must never wait on the network: the
+    // affordability check uses values already on screen (see admitTap).
+    if (!pricing.admitTap(cell)) {
+      return;
+    }
+
+    const queued = createDrawRequest({
+      x: cell.x,
+      y: cell.y,
+      colorIndex: selectedColor,
+      accountId: walletAccount,
+      networkId: scope.walletNetworkId(),
+    });
+    // A direct tap gets a mount-local pending marker immediately, before the
+    // serialized draw reaches the existing submit path. It is never a second
+    // submission path: drainPaintQueue hands this id to attemptDraw below.
+    queuedPlacementOutcomes.set(
+      queued,
+      placementOutcomes.submit({
+        x: queued.x,
+        y: queued.y,
+        colorIndex: queued.colorIndex,
+      }),
+    );
+    enqueuePaint(paintQueue, queued);
+    markPending(queued, null, "submitted");
+    deps.render();
+    void drainPaintQueue();
+  }
+
+  function discardQueued(item: DrawRequest): void {
+    clearPendingPaint(pendingPaints, item.x, item.y);
+    const outcomeId = queuedPlacementOutcomes.get(item);
+    if (outcomeId) placementOutcomes.discard(outcomeId);
+  }
+
+  /**
+   * Drop waiting queue entries and their pending previews.
+   * An in-flight submit (already shifted out of the queue) is left alone so a
+   * broadcast can finish recording on services.operations.
+   */
+  function cancelUnsentPaintQueue(reason: string, options?: { quiet?: boolean }): void {
+    if (paintQueueLength(paintQueue) === 0) {
+      return;
+    }
+    for (const item of paintQueue.items) {
+      discardQueued(item);
+    }
+    clearPaintQueue(paintQueue);
+    if (options?.quiet || scope.isDisposed()) {
+      return;
+    }
+    deps.render();
+    fillBlock(result, "Queued paints cancelled", reason);
+  }
+
+  async function drainPaintQueue(): Promise<void> {
+    if (scope.isDisposed() || paintQueue.inFlight) {
+      return;
+    }
+    // Skip (and drop) any head that no longer matches the live wallet.
+    let next = shiftPaint(paintQueue);
+    while (
+      next &&
+      !drawRequestMatchesSession(next, scope.walletAccount(), scope.walletNetworkId())
+    ) {
+      discardQueued(next);
+      next = shiftPaint(paintQueue);
+    }
+    if (!next) {
+      if (!scope.isDisposed()) {
+        deps.render();
+      }
+      return;
+    }
+    if (scope.isDisposed()) {
+      discardQueued(next);
+      cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
+        quiet: true,
+      });
+      return;
+    }
+    paintQueue.inFlight = true;
+    try {
+      await attemptDraw(next, queuedPlacementOutcomes.get(next));
+    } finally {
+      paintQueue.inFlight = false;
+      if (scope.isDisposed()) {
+        cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
+          quiet: true,
+        });
+        return;
+      }
+      if (paintQueueLength(paintQueue) > 0) {
+        void drainPaintQueue();
+      }
+    }
+  }
+
+  return {
+    strokes,
+    overlayPixels: () => [
+      ...listPendingPaints(pendingPaints),
+      ...(activeStroke?.state.cells.map(cell => ({ ...cell,
+        colorIndex: activeStroke!.color, accountId: activeStroke!.accountId,
+        transactionId: null, phase: "submitted" as const,
+      })) ?? []),
+    ],
+    pendingCount: () => listPendingPaints(pendingPaints).length,
+    reconcilePending: (pixels) => reconcilePendingWithConfirmed(pendingPaints, pixels),
+    drawInFlight: () => drawInFlight,
+    attemptDraw: () => attemptDraw(),
+    maybeEnqueueDirectPaint,
+    syncSubmitEnabled,
+    updateDirectPaintAvailability: session.updateDirectPaintAvailability,
+    showDrawingSession: session.showDrawingSession,
+    onWalletChanged() {
+      activeStroke = null;
+      cancelUnsentPaintQueue("Wallet account or network changed.");
+    },
+    enqueueUnsent(request) {
+      if (scope.isDisposed()) return;
+      enqueuePaint(paintQueue, request);
+      markPending(request, null, "submitted");
+      deps.render();
+    },
+    queueLength: () => paintQueueLength(paintQueue),
+    drainPaintQueue,
+    dispose() {
+      unmountPlacementOutcomes();
+      // Drop unsent queue work; an in-flight attemptDraw may still settle into
+      // services.operations. Do not continue draining after leave.
+      cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
+        quiet: true,
+      });
+    },
+  };
+}
