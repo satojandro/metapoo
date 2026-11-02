@@ -12,6 +12,8 @@ import {
   BUY_CREDITS_GAS,
   buildBuyCreditsNearArgs,
   buildFtTransferCallArgs,
+  describeTokenRefund,
+  findTokenRefund,
   FT_TRANSFER_CALL_DEPOSIT,
   FT_TRANSFER_CALL_GAS,
   type BuyQuote,
@@ -47,6 +49,12 @@ export type BuyFailureCode =
   | "paused"
   | "stale_read"
   | "unknown_broadcast"
+  /** Token refunded: today's mPOO credits are sold out. */
+  | "mpoo_cap_reached"
+  /** Token refunded: mPOO sales are closed (cap 0). */
+  | "mpoo_sales_closed"
+  /** Token refunded for another reason (e.g. the price changed). */
+  | "token_refunded"
   | "failed";
 
 export type SubmitBuyResult =
@@ -207,6 +215,36 @@ export async function submitBuyCredits(input: SubmitBuyInput): Promise<SubmitBuy
       explorerUrl: explorer,
       creditsAfter: creditsBefore,
     };
+  }
+
+  // A refused token purchase is a successful transaction whose tokens came back.
+  if (input.quote.asset === "token" && parsed.status === "success") {
+    const refund = findTokenRefund(outcome);
+    if (refund.refunded) {
+      let creditsAfter = creditsBefore;
+      try {
+        creditsAfter = await input.readCredits(input.accountId);
+      } catch {
+        /* Keep the pre-purchase balance; never bump it. */
+      }
+      const code: BuyFailureCode =
+        refund.code === "MpooDailyCapReached"
+          ? "mpoo_cap_reached"
+          : refund.code === "MpooSalesClosed"
+            ? "mpoo_sales_closed"
+            : refund.code === "PriceChanged"
+              ? "price_changed"
+              : "token_refunded";
+      return {
+        status: "failed",
+        code,
+        title: `${input.quote.tokenLabel} returned`,
+        message: describeTokenRefund(refund.code, input.quote.tokenLabel),
+        transactionId: parsed.transactionHash,
+        explorerUrl: explorer,
+        creditsAfter,
+      };
+    }
   }
 
   if (!hasRecognizedTxSuccess(parsed) || !parsed.transactionHash) {

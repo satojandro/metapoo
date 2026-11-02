@@ -240,6 +240,9 @@ describe("repaint price", () => {
   });
 });
 
+/** What testnet RPC answers for a view the deployed wasm does not export. */
+const OLD_CONTRACT_NO_METHOD = "wasm execution failed with error: MethodResolveError(MethodNotFound)";
+
 describe("chainRepaintReaders RPC budget", () => {
   afterEach(() => {
     vi.mocked(viewFunction).mockReset();
@@ -290,6 +293,8 @@ describe("chainRepaintReaders RPC budget", () => {
         }
         return requested.map(() => 1);
       }
+      // The deployed (old) contract has no get_stroke_cost.
+      if (method === "get_stroke_cost") throw new Error(OLD_CONTRACT_NO_METHOD);
       throw new Error(`unexpected ${method}`);
     });
     const readersLive = chainRepaintReaders({
@@ -323,12 +328,58 @@ describe("chainRepaintReaders RPC budget", () => {
     if (!quote.ok) return;
     expect(quote.totalCredits).toBe(64);
     const methods = vi.mocked(viewFunction).mock.calls.map((call) => call[0]);
-    // Tunables are already cached from the hover quote. The stroke itself is one RPC.
+    // Tunables are cached, and the old contract's missing get_stroke_cost is
+    // remembered from the hover quote. The stroke itself is one RPC.
     expect(methods).toEqual(["get_cell_costs"]);
     expect(methods.filter((m) => m === "get_cell_cost")).toHaveLength(0);
     expect(methods.filter((m) => m === "get_pixel")).toHaveLength(0);
     const batch = vi.mocked(viewFunction).mock.calls[0]?.[1] as { cells: unknown[] };
     expect(batch.cells).toHaveLength(64);
+  });
+
+  it("new contract: get_stroke_cost prices for the account, free cells cost 0, chunk totals are max_credits", async () => {
+    vi.mocked(viewFunction).mockImplementation(async (method: string, args?: Record<string, unknown>) => {
+      if (method === "get_tunables") return DEFAULT_TUNABLES;
+      if (method === "get_stroke_cost") {
+        const requested = args?.cells as unknown[];
+        return {
+          costs: requested.map((_, i) => (i === 0 ? 0 : 2)),
+          free: requested.map((_, i) => i === 0),
+          total: (requested.length - 1) * 2,
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+    const readersLive = chainRepaintReaders({ writtenAtNsFromCache: () => null });
+    const cells = Array.from({ length: 65 }, (_, i) => ({ x: i, y: 0 }));
+    const quote = await quoteRepaint({ readers: readersLive, cells, nowNs: 1n, accountId: "alice.testnet" });
+    expect(quote.ok).toBe(true);
+    if (!quote.ok) return;
+    expect(quote.cells[0]).toMatchObject({ credits: 0, free: true });
+    expect(quote.chunkTotals).toEqual([126, 0]);
+    expect(quote.totalCredits).toBe(126);
+    const calls = vi.mocked(viewFunction).mock.calls.filter((call) => call[0] === "get_stroke_cost");
+    expect(calls).toHaveLength(2);
+    expect(calls[0]![1]).toMatchObject({ account_id: "alice.testnet" });
+  });
+
+  it("old contract: a missing get_stroke_cost is asked once, then get_cell_cost(s) price", async () => {
+    vi.mocked(viewFunction).mockImplementation(async (method: string, args?: Record<string, unknown>) => {
+      if (method === "get_tunables") return DEFAULT_TUNABLES;
+      if (method === "get_stroke_cost") throw new Error(OLD_CONTRACT_NO_METHOD);
+      if (method === "get_cell_costs") return (args?.cells as unknown[]).map(() => 1);
+      if (method === "get_cell_cost") return 1;
+      throw new Error(`unexpected ${method}`);
+    });
+    const readersLive = chainRepaintReaders({ writtenAtNsFromCache: () => null });
+    const cells = [{ x: 1, y: 0 }, { x: 2, y: 0 }];
+    const first = await quoteRepaint({ readers: readersLive, cells, nowNs: 1n, accountId: "alice.testnet" });
+    const second = await quoteRepaint({ readers: readersLive, cells, nowNs: 1n, accountId: "alice.testnet" });
+    expect(first).toMatchObject({ ok: true, totalCredits: 2, chunkTotals: [2] });
+    expect(second).toMatchObject({ ok: true, totalCredits: 2 });
+    const methods = vi.mocked(viewFunction).mock.calls.map((call) => call[0]);
+    expect(methods.filter((m) => m === "get_stroke_cost")).toHaveLength(1);
+    expect(methods.filter((m) => m === "get_cell_costs")).toHaveLength(2);
   });
 
   it("chunks a stroke above 64 and sums the batch prices", async () => {

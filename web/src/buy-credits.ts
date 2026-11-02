@@ -108,8 +108,10 @@ export function quoteBuyCredits(input: {
   quantity: number;
   asset: PayAsset;
   creditsBalance: bigint | null;
-  /** mainnet → "mPOO"; otherwise "test token". */
+  /** mainnet → "mPOO"; otherwise "test token" (unless `tokenSymbol` is given). */
   network: string;
+  /** Token symbol from verified `ft_metadata`; preferred over the network fallback. */
+  tokenSymbol?: string;
   /** FT decimals from `ft_metadata` (required for token quotes). */
   tokenDecimals?: number;
 }): BuyQuote {
@@ -117,7 +119,7 @@ export function quoteBuyCredits(input: {
   if (!Number.isInteger(quantity) || quantity <= 0) {
     throw new Error("Invalid quantity");
   }
-  const tokenLabel = network === "mainnet" ? "mPOO" : "test token";
+  const tokenLabel = input.tokenSymbol || (network === "mainnet" ? "mPOO" : "test token");
   const needsRegistration = creditsBalance === null;
   const registrationDeposit = needsRegistration ? config.registrationFee : null;
   const minCredits = String(quantity);
@@ -227,4 +229,122 @@ export function creditsUnchangedAfterFailure(
   after: bigint | null,
 ): boolean {
   return before === after;
+}
+
+/**
+ * `get_mpoo_sales_today()` (REV-B). Absent on older boards, which means the
+ * token path stays closed.
+ */
+export interface MpooSalesToday {
+  dayIndex: bigint;
+  soldToday: bigint;
+  cap: bigint;
+  remaining: bigint;
+  /** Nanoseconds since the epoch when the UTC-day counter resets. */
+  resetsAtNs: bigint;
+}
+
+function requireNonNegative(value: unknown, label: string): bigint {
+  const text = typeof value === "number" && Number.isSafeInteger(value) ? String(value) : value;
+  if (typeof text !== "string" || !/^\d+$/.test(text)) {
+    throw new Error(`Invalid ${label}`);
+  }
+  return BigInt(text);
+}
+
+export function parseMpooSalesToday(raw: unknown): MpooSalesToday {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("Invalid mPOO sales view");
+  }
+  const r = raw as Record<string, unknown>;
+  return {
+    dayIndex: requireNonNegative(r.day_index, "day_index"),
+    soldToday: requireNonNegative(r.sold_today, "sold_today"),
+    cap: requireNonNegative(r.cap, "cap"),
+    remaining: requireNonNegative(r.remaining, "remaining"),
+    resetsAtNs: requireNonNegative(r.resets_at_ns, "resets_at_ns"),
+  };
+}
+
+/**
+ * The token checkout is open only when the board reports today's sales and
+ * there is room under a non-zero cap. `null` = the view is missing (old board).
+ */
+export function mpooCheckoutOpen(sales: MpooSalesToday | null | undefined): boolean {
+  return !!sales && sales.cap > 0n && sales.remaining > 0n;
+}
+
+/**
+ * Split a requested quantity between the token (up to today's remaining
+ * credits) and NEAR (the rest). Never returns a token quantity above remaining.
+ */
+export function splitTokenQuantity(
+  requested: number,
+  remaining: bigint,
+): { token: number; near: number } {
+  if (!Number.isInteger(requested) || requested <= 0) {
+    throw new Error("Invalid quantity");
+  }
+  if (remaining <= 0n) {
+    return { token: 0, near: requested };
+  }
+  if (BigInt(requested) <= remaining) {
+    return { token: requested, near: 0 };
+  }
+  const token = Number(remaining);
+  return { token, near: requested - token };
+}
+
+/**
+ * A token purchase the board refuses still succeeds as a transaction:
+ * `ft_on_transfer` logs `purchase_rejected: <code>` and the token contract
+ * returns the tokens. Read the code from the receipt logs, and fall back to
+ * the resolver's return value (amount used) when it is "0".
+ */
+export function findTokenRefund(outcome: unknown): { refunded: boolean; code: string | null } {
+  if (!outcome || typeof outcome !== "object") {
+    return { refunded: false, code: null };
+  }
+  const record = outcome as Record<string, unknown>;
+  let code: string | null = null;
+  const receipts = Array.isArray(record.receipts_outcome) ? record.receipts_outcome : [];
+  for (const receipt of receipts) {
+    const logs = (receipt as { outcome?: { logs?: unknown } } | null)?.outcome?.logs;
+    if (!Array.isArray(logs)) continue;
+    for (const log of logs) {
+      if (typeof log !== "string") continue;
+      const match = /purchase_rejected:\s*([A-Za-z]+)/.exec(log);
+      if (match) code = match[1];
+    }
+  }
+  if (code) {
+    return { refunded: true, code };
+  }
+  const status = record.status as Record<string, unknown> | undefined;
+  const value = status && typeof status === "object" ? status.SuccessValue : undefined;
+  if (typeof value === "string" && value.length > 0) {
+    try {
+      const used: unknown = JSON.parse(atob(value));
+      if (used === "0" || used === 0) {
+        return { refunded: true, code: null };
+      }
+    } catch {
+      /* not a resolver amount */
+    }
+  }
+  return { refunded: false, code: null };
+}
+
+/** Plain words for a refunded token purchase. */
+export function describeTokenRefund(code: string | null, symbol: string): string {
+  switch (code) {
+    case "MpooDailyCapReached":
+      return `Today's ${symbol} credits sold out before your purchase landed. Your ${symbol} was sent back. You can pay with NEAR instead.`;
+    case "MpooSalesClosed":
+      return `${symbol} sales are closed right now. Your ${symbol} was sent back. You can pay with NEAR instead.`;
+    case "PriceChanged":
+      return `The ${symbol} price changed before your purchase landed. Your ${symbol} was sent back. Check the new price and try again, or pay with NEAR.`;
+    default:
+      return `The board did not accept this ${symbol} payment, so your ${symbol} was sent back. You can pay with NEAR instead.`;
+  }
 }

@@ -1,8 +1,11 @@
 /**
  * Mainnet launch sells credits for NEAR and mPOO (owner decision, 2026-10-29).
  *
- * Hidden until the mPOO rate rule is settled (docs/2026-10-29-code-audit.md C8)
- * and an mPOO purchase is recorded on testnet. The contract path
- * (`ft_on_transfer`, `mpoo_per_credit`) already exists.
+ * The buy-credits sheet no longer reads this flag: its token checkout is
+ * feature-detected per board (`mpooCheckoutOpen` in buy-credits.ts — REV-B's
+ * `get_mpoo_sales_today` must exist and report cap > 0 with credits remaining).
+ *
+ * This constant still gates only the read-only "Paint & wallet" panel's mPOO
+ * balance row and NEARLY link, which have not moved to feature detection yet.
  */
 export const TOKEN_PAYMENTS_ENABLED = false;

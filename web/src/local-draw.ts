@@ -50,6 +50,20 @@ export interface LocalDrawArgs {
   x: number;
   y: number;
   color: number;
+  /**
+   * Paid board: the quoted price, sent as `max_credits`. The revised contract
+   * rejects with PriceRoseAboveMax above it; the old one ignores the field
+   * (near-sdk only denies unknown JSON args under #[deny_unknown_arguments]).
+   */
+  maxCredits?: number | null;
+}
+
+/** `max_credits` only when there is a quoted price (paid board). */
+export function withMaxCredits<T extends Record<string, unknown>>(
+  args: T,
+  maxCredits: number | null | undefined,
+): T & { max_credits?: number } {
+  return typeof maxCredits === "number" ? { ...args, max_credits: maxCredits } : args;
 }
 
 export interface AccessKeyAllowanceInfo {
@@ -180,7 +194,10 @@ export async function signAndSendDrawLocally(
 
   // Once callFunctionRaw starts, a lost RPC response may still mean the tx
   // landed. Treat any error from this call as possibly-broadcast.
-  const callArgs = { x: args.x, y: args.y, color: args.color } as Record<string, unknown>;
+  const callArgs = withMaxCredits(
+    { x: args.x, y: args.y, color: args.color },
+    args.maxCredits,
+  ) as Record<string, unknown>;
   try {
     return await account.callFunctionRaw({
       contractId: CONTRACT_ID,
@@ -268,6 +285,8 @@ export async function signAndSendStrokeLocally(args: {
   networkId: string;
   cells: readonly StrokeCell[];
   color: number;
+  /** Paid board: `max_credits` for each draw_many chunk, in order. */
+  maxCredits?: readonly number[] | null;
 }): Promise<LocalStrokeResult> {
   const chunks = chunkCells([...args.cells]);
   const result: LocalStrokeResult = {
@@ -299,7 +318,8 @@ export async function signAndSendStrokeLocally(args: {
       mayHaveBroadcast = true;
       const outcome = await account.callFunctionRaw({
         contractId: CONTRACT_ID, methodName: "draw_many",
-        args: chunkArgs(chunk, args.color), gas: DRAW_GAS, deposit: DRAW_DEPOSIT,
+        args: withMaxCredits(chunkArgs(chunk, args.color), args.maxCredits?.[index]),
+        gas: DRAW_GAS, deposit: DRAW_DEPOSIT,
         waitUntil: "EXECUTED_OPTIMISTIC",
       });
       result.outcomes.push(outcome);

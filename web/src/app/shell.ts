@@ -16,6 +16,8 @@ export interface ShellHandles {
 
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: string }> = [
   { href: "/wall", label: "Wall", match: "wall" },
+  { href: "/money", label: "Where the money goes", match: "money" },
+  { href: "/admin", label: "Board settings", match: "admin" },
 ];
 
 /**
@@ -85,6 +87,8 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     <h2>Connection details</h2>
     <p id="wallet-summary"></p>
     <p id="network-summary"></p>
+    <p class="wallet-money-link"><a href="/money">Where the money goes →</a></p>
+    <p class="wallet-admin-link"><a href="/admin">Board settings →</a></p>
     <label class="drawing-session-opt-in" for="authorize-drawing-session">
       <input id="authorize-drawing-session" type="checkbox" disabled />
       Authorize drawing session on connect
@@ -113,9 +117,15 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     services,
   );
 
-  const detailsClose = wireWalletDetailsClose(
-    walletPanel.querySelector<HTMLDetailsElement>("details.wallet-details")!,
-  );
+  const walletDetails = walletPanel.querySelector<HTMLDetailsElement>("details.wallet-details")!;
+  const detailsClose = wireWalletDetailsClose(walletDetails);
+  // The primary nav is hidden on phones; this link is the phone route to /money.
+  walletPanel.querySelector(".wallet-money-link a")?.addEventListener("click", () => {
+    walletDetails.open = false;
+  });
+  walletPanel.querySelector(".wallet-admin-link a")?.addEventListener("click", () => {
+    walletDetails.open = false;
+  });
 
   const paintWalletDispose = mountPaintWalletPanel(
     walletPanel.querySelector<HTMLElement>("#paint-wallet-panel")!, services,

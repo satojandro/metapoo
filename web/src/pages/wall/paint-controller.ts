@@ -18,7 +18,8 @@ import type { BoardController } from "./board-controller";
 import type { CameraStrokeHooks } from "./camera-controller";
 import { createPaintSessionPanel, type PaintSessionDom } from "./paint-session-panel";
 import { createPlacementOutcomeController, mountPlacementOutcomeLayer } from "./placement-outcome";
-import type { PricingController } from "./pricing-controller";
+import type { CreditReservation, PricingController } from "./pricing-controller";
+import { isPriceRoseAboveMax } from "./repaint-price";
 import { planStrokeCommit, strokeBlockedReason, strokeResultCopy, TRUNCATED_STROKE_COPY, WALLET_STROKE_COPY } from "./stroke-commit";
 import { strokeBegin, strokeExtend, MAX_BATCH, type StrokeState } from "./stroke-paint";
 import { colorName, fillBlock, fillResultWithLink, type WallView } from "./wall-view";
@@ -36,7 +37,8 @@ export interface PaintControllerDeps extends PaintSessionDom {
   board: Pick<BoardController, "contractMetaOk" | "contractMetaIssue" | "rememberPixel" | "refreshBoardFromContract">;
   pricing: Pick<
     PricingController,
-    "paidBoard" | "priceUnavailable" | "allowGestureRetry" | "ensurePaidQuote" | "admitTap" | "refreshCreditsDock" | "repriceCell"
+    | "paidBoard" | "priceUnavailable" | "allowGestureRetry" | "ensurePaidQuote" | "admitTap"
+    | "refreshCreditsDock" | "repriceCell" | "settle" | "release" | "confirmRequote"
   >;
   view: Pick<WallView, "selected" | "setSelected" | "selectedColor" | "setFlow" | "showSelection">;
   render(): void;
@@ -79,6 +81,8 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
   const pendingPaints = createPendingPaintMap();
   const placementOutcomes = createPlacementOutcomeController();
   const queuedPlacementOutcomes = new WeakMap<DrawRequest, string>();
+  /** Credits each queued tap holds (pricing-controller owns the balance). */
+  const queuedReservations = new WeakMap<DrawRequest, CreditReservation>();
   const unmountPlacementOutcomes = mountPlacementOutcomeLayer(
     deps.boardViewport,
     placementOutcomes,
@@ -189,8 +193,12 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
   async function attemptDraw(
     request?: DrawRequest,
     queuedPlacementOutcomeId?: string,
+    requote?: { approvedMax: number },
   ): Promise<void> {
+    const queuedReservation = request ? queuedReservations.get(request) : undefined;
+    if (request) queuedReservations.delete(request);
     if (scope.isDisposed() || drawInFlight) {
+      pricing.release(queuedReservation);
       return;
     }
     const walletAccount = scope.walletAccount();
@@ -222,6 +230,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         "Paint cancelled",
         "The wallet account or network no longer matches this paint request, so it was not submitted.",
       );
+      pricing.release(queuedReservation);
       deps.render();
       return;
     }
@@ -238,12 +247,14 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
     });
 
     if (decision.outcome === "blocked") {
+      pricing.release(queuedReservation);
       view.setFlow(walletAccount ? "editing" : "disconnected");
       fillBlock(result, decision.title, decision.message);
       return;
     }
 
     if (!board.contractMetaOk()) {
+      pricing.release(queuedReservation);
       view.setFlow("failed");
       const copy = contractMetaBlockCopy(board.contractMetaIssue());
       fillBlock(result, copy.title, copy.message);
@@ -251,6 +262,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
     }
 
     if (!frozen) {
+      pricing.release(queuedReservation);
       return;
     }
 
@@ -261,8 +273,10 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
     const priced = await pricing.ensurePaidQuote(
       [{ x: frozen.x, y: frozen.y }],
       frozen.accountId,
+      { reservation: queuedReservation, approvedMax: requote?.approvedMax },
     );
     if (!priced || scope.isDisposed()) {
+      pricing.release(priced?.reservation ?? queuedReservation);
       drawInFlight = false;
       if (frozen) {
         clearPendingPaint(pendingPaints, frozen.x, frozen.y);
@@ -329,6 +343,9 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       ].join(" "),
     );
 
+    const reservation = priced.reservation;
+    /** Set when the chain said PriceRoseAboveMax and the painter accepted the new total. */
+    let retryMax: number | null = null;
     try {
       const submitResult = await submitDraw({
         x: frozen.x,
@@ -336,6 +353,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         colorIndex: frozen.colorIndex,
         accountId: frozen.accountId,
         networkId: frozen.networkId,
+        maxCredits: priced.maxCredits,
         onProgress: (progress) => {
           // Always record broadcast progress on the shared operations store.
           if (progress.phase === "pending" || progress.phase === "confirming") {
@@ -371,6 +389,13 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         },
       });
       placementOutcomes.settle(placementOutcomeId, submitResult);
+      // Credits: an executed (or possibly executed) paint settles from the
+      // chain; anything else spent nothing.
+      if (submitResult.status === "failed" || submitResult.status === "rejected") {
+        pricing.release(reservation);
+      } else {
+        pricing.settle(reservation);
+      }
       const recordResult = (phase: OperationPhase) =>
         recordOp(phase, submitResult.transactionId, submitResult.title, submitResult.message);
       const showResult = () =>
@@ -433,6 +458,15 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       recordResult("failed");
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       deps.render();
+      if (submitResult.status === "failed" && isPriceRoseAboveMax(submitResult.message) && !requote) {
+        // Nothing was stored or charged. Re-quote and ask once; never retry silently.
+        view.setFlow("editing");
+        retryMax = await pricing.confirmRequote(
+          [{ x: frozen.x, y: frozen.y }],
+          frozen.accountId,
+        );
+        return;
+      }
       view.setFlow("failed");
       showResult();
     } finally {
@@ -441,19 +475,28 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         syncSubmitEnabled();
         session.showDrawingSession();
         afterPaintSettled();
+        if (retryMax !== null) {
+          await attemptDraw(frozen, undefined, { approvedMax: retryMax });
+        }
       }
     }
   }
 
-  async function commitStroke(stroke: AnchoredStroke): Promise<void> {
+  async function commitStroke(
+    stroke: AnchoredStroke,
+    requote?: { approvedMax: number },
+  ): Promise<void> {
     const stillArmed = () =>
       stroke.accountId === scope.walletAccount() &&
       stroke.networkId === scope.walletNetworkId() && directPaintToggle.checked;
     if (scope.isDisposed() || drawInFlight || !stillArmed()) return;
     drawInFlight = true;
     drawButton.disabled = true;
-    const priced = await pricing.ensurePaidQuote(stroke.state.cells, stroke.accountId);
+    const priced = await pricing.ensurePaidQuote(stroke.state.cells, stroke.accountId, {
+      approvedMax: requote?.approvedMax,
+    });
     if (!priced || scope.isDisposed() || !stillArmed()) {
+      pricing.release(priced?.reservation);
       drawInFlight = false;
       if (!scope.isDisposed()) syncSubmitEnabled();
       return;
@@ -463,6 +506,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       canUseLocalDrawingSession(scope.walletAccount(), scope.walletNetwork()),
     );
     if (plan.kind === "wallet_approval") {
+      pricing.release(priced.reservation);
       drawInFlight = false;
       if (!scope.isDisposed()) syncSubmitEnabled();
       fillBlock(result, "Drawing session needed", WALLET_STROKE_COPY);
@@ -475,15 +519,22 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
     });
     deps.render();
     view.setFlow("submitted");
+    let retry: { stroke: AnchoredStroke; approvedMax: number } | null = null;
+    // Until the outcome says otherwise, assume credits may have been spent.
+    let spent = true;
     try {
       const outcome = await signAndSendStrokeLocally({
         accountId: stroke.accountId, networkId: stroke.networkId,
         cells: stroke.state.cells, color: stroke.color,
+        maxCredits: priced.chunkMaxCredits,
       });
+      // The chain's own PriceRoseAboveMax: that chunk stored and charged nothing.
+      const priceRose = isPriceRoseAboveMax(outcome.failingChunk?.message);
+      spent = outcome.confirmedChunks > 0 || (!!outcome.failingChunk?.mayHaveBroadcast && !priceRose);
       if (scope.isDisposed()) return;
       // Resolve known outcomes through a fresh chain read; uncertain cells keep
       // a pending marker. Never infer execution from matching pre-existing paint.
-      const uncertain = outcome.failingChunk?.mayHaveBroadcast;
+      const uncertain = outcome.failingChunk?.mayHaveBroadcast && !priceRose;
       const uncertainStart = outcome.confirmedChunks * MAX_BATCH;
 
       // A confirmed chunk's receipt proves the write at a specific block. Stamp
@@ -533,13 +584,24 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       drawState.textContent = failureReason
         ? `${statusText} Reason: ${failureReason}`
         : statusText;
+      if (priceRose && !requote) {
+        // Ask once for the cells that were not painted.
+        const rest = stroke.state.cells.slice(outcome.confirmedChunks * MAX_BATCH);
+        const approvedMax = await pricing.confirmRequote(rest, stroke.accountId);
+        if (approvedMax !== null) {
+          retry = { stroke: { ...stroke, state: { cells: rest, truncated: false } }, approvedMax };
+        }
+      }
       await board.refreshBoardFromContract({ reason: "after_draw" });
     } finally {
+      if (spent) pricing.settle(priced.reservation);
+      else pricing.release(priced.reservation);
       drawInFlight = false;
       if (!scope.isDisposed()) {
         syncSubmitEnabled();
         deps.render();
         afterPaintSettled();
+        if (retry) await commitStroke(retry.stroke, { approvedMax: retry.approvedMax });
       }
     }
   }
@@ -582,7 +644,8 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
     }
     // A tap is the core gesture and must never wait on the network: the
     // affordability check uses values already on screen (see admitTap).
-    if (!pricing.admitTap(cell)) {
+    const reservation = pricing.admitTap(cell);
+    if (!reservation) {
       return;
     }
 
@@ -604,6 +667,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         colorIndex: queued.colorIndex,
       }),
     );
+    queuedReservations.set(queued, reservation);
     enqueuePaint(paintQueue, queued);
     markPending(queued, null, "submitted");
     deps.render();
@@ -611,6 +675,8 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
   }
 
   function discardQueued(item: DrawRequest): void {
+    pricing.release(queuedReservations.get(item));
+    queuedReservations.delete(item);
     clearPendingPaint(pendingPaints, item.x, item.y);
     const outcomeId = queuedPlacementOutcomes.get(item);
     if (outcomeId) placementOutcomes.discard(outcomeId);
