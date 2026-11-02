@@ -161,20 +161,29 @@ Owner decision (1 Nov): 10% team, 70% TOILET stakers, 20% burned.
   `{"revenue": {}}`, accepted only from `buyback_account`.
 - New `distribute_mpoo()`. **Anyone can call it**, on the same interval. It sends:
   - **10%** to `team_account` with `ft_transfer`
-  - **20%** to the mPOO contract's `burn`. *The method's exact arguments must be read from
-    `mpoo.nearlytrade.near` before implementation. The economy spec confirms `burn` exists, not its
-    signature.*
+  - **20%** with `ft_transfer` to the **burn address**
+    `0000000000000000000000000000000000000000000000000000000000000000` (64 zeros). Owner decision,
+    2 Nov: the board doesn't call mPOO's `burn` method, which only NEARLY uses for the Rhea pool tax.
+    Nobody holds a key for that account, so tokens sent there can never move again.
   - **70%** to `mpoo_staker_reserve`, a counter on the board. The staking contract doesn't exist yet.
     When it does, the owner sets `staking_contract` **once**, and from then on the 70% is forwarded
     with each distribution, including what built up in the reserve. Until then the reserve can't be
     spent by anyone, the owner included.
 - Each outgoing transfer has a callback that restores its amount on failure.
-- `team_account` and the staking contract must be registered for storage on the mPOO contract before
-  the first distribution. The callback catches it if they aren't.
+- `team_account`, the staking contract **and the burn address** must be registered for storage on the
+  mPOO contract before the first distribution. The callback catches it if they aren't. Checked
+  2 Nov: the burn address is **not registered** on `mpoo.nearlytrade.near` (`storage_balance_of` →
+  `null`). One-off setup step, open to anyone: `storage_deposit({"account_id": "000…000"})` with
+  0.00125 NEAR attached (`storage_balance_bounds`). Do the same on the testnet token
+  `metapoo-mpoo.testnet` (board3's `get_payment_config`) before the rehearsal.
+- **Burned tokens still count in `ft_total_supply`**, because a transfer doesn't reduce it. Anything
+  that reports burns (the revenue panel, a burn page) computes them as the burn address's
+  `ft_balance_of`, and circulating supply as total supply minus that balance minus NEARLY's own burns.
+- The same route applies to TOILET's 10% exit tax in the TOILET round (recorded there, not built here).
 - NEARLY's tax applies to transfers to and from the Rhea pool only (economy spec §5), so these
   transfers aren't taxed. The operator's buyback swap is.
 
-**Tests:** split exact to the yocto with dust to the reserve; burn failure restores the 20%; reserve
+**Tests:** split exact to the yocto with dust to the reserve; a failed transfer to the burn address restores the 20%; reserve
 accumulates until `staking_contract` is set and can be set only once; `revenue` messages from anyone
 except `buyback_account` are refunded.
 
