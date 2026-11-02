@@ -1,3 +1,4 @@
+import { PALETTE } from "@shared/palette.ts";
 import type { PixelView } from "@shared/types.ts";
 import {
   createPixelCache,
@@ -59,6 +60,11 @@ export interface BoardControllerDeps {
   onSchemaChanged(): void;
   /** Refresh was pressed while metadata is valid. */
   onManualRefresh(): void;
+  /**
+   * The board's palette size is known: 8 or 16 from a matching `get_board`, or the
+   * whole shared palette on the local mock board. Not called when metadata fails.
+   */
+  onPaletteChanged(paletteLength: number): void;
 }
 
 export interface BoardController {
@@ -176,6 +182,7 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
       contractMetaOk = true;
       contractMetaIssue = null;
       rememberBoardSchema(null);
+      deps.onPaletteChanged(PALETTE.length);
       deps.updateDirectPaintAvailability();
       return true;
     }
@@ -186,6 +193,7 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
       contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
       rememberBoardSchema(meta.ok ? board.schema_version : null);
       if (meta.ok) {
+        deps.onPaletteChanged(meta.paletteLength);
         contractLine.textContent =
           `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
           `Painting a square replaces the colour that was there, and the contract ` +
@@ -209,6 +217,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     if (!isContractConfigured()) {
       contractMetaOk = true;
       rememberBoardSchema(null);
+      // The local mock board accepts every shared colour.
+      deps.onPaletteChanged(PALETTE.length);
       evidence.textContent =
         "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
       contractLine.textContent =
@@ -238,6 +248,7 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
         deps.updateDirectPaintAvailability();
         return;
       }
+      deps.onPaletteChanged(meta.paletteLength);
       if (board.sponsorship_enabled && !sponsorship.flagEnabled) {
         sponsorNote.textContent = `${sponsorship.message} (Contract reported sponsorship_enabled=true; this page still does not offer a sponsored submit path.)`;
       }

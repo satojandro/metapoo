@@ -160,3 +160,18 @@ summary { cursor:pointer; }
 #paint-wallet-panel .paint-wallet-refresh { min-height:44px; }
 #paint-wallet-panel p { overflow-wrap:anywhere; }
 .wallet-details[open] { max-height:calc(100dvh - 100px); overflow-y:auto; }
+
+/* 16 colours (FE-1). The dock gets `data-count` from the board's palette. One row of 16
+   where it fits; two rows of 8 below that, filling the width on a phone so every swatch
+   stays a 44 px target at 390 px. An 8-colour board keeps the rules above. */
+.palette[data-count="16"] { flex:1 1 100%; display:grid; grid-template-columns:repeat(16,40px); justify-content:start; gap:6px; }
+.palette[data-count="16"] .swatch { width:40px; }
+@media (max-width:820px) {
+.palette[data-count="16"] { grid-template-columns:repeat(8,40px); }
+}
+@media (max-width:600px) {
+.palette[data-count="16"],
+.wall-layout .paint-dock .palette[data-count="16"] { grid-template-columns:repeat(8,minmax(0,1fr)); gap:0; }
+.palette[data-count="16"] .swatch,
+.wall-layout .paint-dock .palette[data-count="16"] .swatch { width:auto; min-width:0; max-width:none; height:44px; min-height:44px; }
+}
