@@ -93,11 +93,12 @@ describe("wall view", () => {
     const { view, deps } = setup();
     view.buildPalette();
     const swatches = deps.palette.querySelectorAll<HTMLButtonElement>(".swatch");
-    expect(swatches).toHaveLength(8);
+    expect(swatches).toHaveLength(16);
     swatches[2]!.click();
     expect(view.selectedColor()).toBe(2);
     expect([...swatches].map((s) => s.getAttribute("aria-pressed"))).toEqual([
       "false", "false", "true", "false", "false", "false", "false", "false",
+      "false", "false", "false", "false", "false", "false", "false", "false",
     ]);
     expect(deps.preview.textContent).toBe("Paint preview: Brick (palette index 2)");
     expect(deps.render).toHaveBeenCalled();
