@@ -13,6 +13,7 @@ describe("matchRoute", () => {
   it("maps the documented app routes", () => {
     expect(matchRoute("/").pageId).toBe("home");
     expect(matchRoute("/wall").pageId).toBe("wall");
+    expect(matchRoute("/toilet").pageId).toBe("toilet");
     expect(matchRoute("/how-it-works").pageId).toBe("how");
     expect(matchRoute("/how-it-works/").pageId).toBe("how");
     expect(matchRoute("/nope").pageId).toBe("not-found");

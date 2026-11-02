@@ -79,6 +79,9 @@ export function matchRoute(pathname: string, search = ""): ParsedRoute {
   if (path === "/how-it-works") {
     return { path, pageId: "how", params: {}, query };
   }
+  if (path === "/toilet") {
+    return { path, pageId: "toilet", params: {}, query };
+  }
   if (path === "/money") {
     return { path, pageId: "money", params: {}, query };
   }

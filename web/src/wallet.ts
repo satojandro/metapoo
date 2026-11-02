@@ -488,6 +488,28 @@ export async function signAndSendDistribution(args: {
   });
 }
 
+/**
+ * Wallet path for `claim_toilet`: the board mints the caller's earned TOILET.
+ * Exactly 1 yoctoNEAR, which the board requires so a function-call key can't claim.
+ * Never sent with a drawing-session key — the wallet signs.
+ */
+export async function signAndSendClaimToilet(args: {
+  contractId: string;
+  toilet: string;
+  gas: string;
+}): Promise<unknown> {
+  const wallet = await ensureConnector().wallet();
+  return wallet.signAndSendTransaction({
+    receiverId: args.contractId,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: { methodName: "claim_toilet", args: { toilet: args.toilet }, gas: args.gas, deposit: "1" },
+      },
+    ],
+  });
+}
+
 /** Normal owner-wallet call; never uses the browser's drawing-session key. */
 export async function signAndSendAdminChange(args: {
   contractId: string;

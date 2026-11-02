@@ -234,6 +234,7 @@ const TEMPLATE = `
     <p class="mp-eyebrow">Coming next</p>
     <h4 id="hiw-next-h">Tiles that earn TOILET</h4>
     <p>Tiles you paint with credits will earn TOILET for as long as they survive on the wall. Stake TOILET and you take a share of everything the stall earns. Earning switches on in a later round.</p>
+    <p><a href="/toilet">How TOILET works →</a></p>
   </section>
 
   <p class="hiw-foot" data-hiw-source role="status"></p>
