@@ -13,6 +13,14 @@
     { "index": 4, "name": "Moss", "hex": "#3d7a4a" },
     { "index": 5, "name": "River", "hex": "#2f6f8f" },
     { "index": 6, "name": "Grape", "hex": "#6b4c7a" },
-    { "index": 7, "name": "Clay", "hex": "#c47b5a" }
+    { "index": 7, "name": "Clay", "hex": "#c47b5a" },
+    { "index": 8, "name": "Grout", "hex": "#8a857c" },
+    { "index": 9, "name": "Rust", "hex": "#7a4528" },
+    { "index": 10, "name": "Nicotine", "hex": "#ecd9a0" },
+    { "index": 11, "name": "Bubblegum", "hex": "#ec8fb0" },
+    { "index": 12, "name": "Bleach", "hex": "#9ccbdc" },
+    { "index": 13, "name": "Bruise", "hex": "#263552" },
+    { "index": 14, "name": "Bile", "hex": "#9fb53a" },
+    { "index": 15, "name": "Cone", "hex": "#ef7a2c" }
   ]
 }
