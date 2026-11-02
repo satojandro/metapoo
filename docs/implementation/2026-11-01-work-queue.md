@@ -13,17 +13,17 @@
 | REV-A | #34 | contract state v2 and migration | after contract review |
 | REV-B+C+D | **#39** | the combined contract revision (167 tests) | after #34, **with or after FE-1** |
 | FE-1 | #41 | swatch dock follows the board's palette (8 now, 16 after the upgrade) | with #39 |
+| FE-2 | #43 | `max_credits` on every paid paint; one reserved credit balance; stale balance and price fixes | with #39 |
 | REV-B, REV-C, REV-D | #35, #38, #36 | per-task reference for #39 | **close, don't merge** |
 
-**In progress:** FE-2 (`max_credits`, one credit balance, the stale-balance and stale-price fixes), on
-branch `claude/gifted-knuth-bm5wrf-fe-2` from `fe-base`.
+**In progress:** nothing. FE-3 is unblocked (start from `claude/gifted-knuth-bm5wrf-fe-2`).
 
 **Ready to pick up.** Each has a work order in this folder:
 
 | id | work order | who could take it | needs |
 |---|---|---|---|
 | **REV-E** | [`rev-testnet-rehearsal`](rev-testnet-rehearsal.task.json) | **Hermes** (keys, RPC, chain evidence) | #39 merged or its branch; the owner's testnet team and buyback accounts; board3's owner key |
-| **FE-3** | [`fe-free-paints-happy-hour`](fe-free-paints-happy-hour.task.json) | Cursor or Claude | FE-2 |
+| **FE-3** | [`fe-free-paints-happy-hour`](fe-free-paints-happy-hour.task.json) | Cursor or Claude | FE-2 (#43); branch from `claude/gifted-knuth-bm5wrf-fe-2` |
 | **ADM-1** | [`admin-dashboard`](admin-dashboard.task.json), [spec](2026-11-02-admin-dashboard-spec.md) | Cursor or Claude | can start now from `fe-base` |
 | **REV-G** | [`rev-followups`](rev-followups.task.json) | Codex or Claude | the revision branch; one owner decision (pause) |
 | **FE-29** | [`issue-29-recheck`](issue-29-recheck.task.json) | owner or Hermes | a browser and wallet; best after FE-2 |
