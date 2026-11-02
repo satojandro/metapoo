@@ -111,6 +111,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             </label>
             <p id="tap-to-paint-status" class="tap-to-paint-status" role="status" aria-live="polite" hidden></p>
             <p id="paint-unlocked" class="paint-unlocked" role="status" aria-live="polite" hidden></p>
+            <div id="wall-optin-slot" class="wall-optin"></div>
             <div class="wall-action">
               <button id="dock-primary" class="mp-btn mp-btn-primary wall-primary" type="button" hidden></button>
               <button id="draw-button" class="mp-btn mp-btn-primary wall-primary action place" type="button">Paint this tile</button>

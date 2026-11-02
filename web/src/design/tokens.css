@@ -39,6 +39,15 @@
   --mp-turf-9: #ff5f5f;
   --mp-turf-10: #c9c4ba;
 
+  /* App chrome: the page glow behind every route, and the soft `.action` button
+     still used by /money and the About details. Named so no page needs a literal. */
+  --mp-glow: #282629;
+  --mp-soft-btn: #f0ddd9;
+  --mp-soft-btn-hover: #fff0ec;
+  --mp-soft-btn-ink: #251d22;
+  --mp-soft-btn-line: #515156;
+  --mp-shadow: #0009;
+
   /* Semantic status, separate from the accents' meaning */
   --mp-good: var(--mp-stake);
   --mp-warn: var(--mp-tag);

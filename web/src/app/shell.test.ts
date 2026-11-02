@@ -1,7 +1,13 @@
 /**
  * @vitest-environment happy-dom
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// No network in these tests: the wall mounts in preview mode.
+vi.mock("../contract", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../contract")>();
+  return { ...actual, isContractConfigured: () => false };
+});
 import { createAppServices } from "./services";
 import { mountShell } from "./shell";
 
@@ -35,6 +41,34 @@ describe("app shell", () => {
     expect(details.contains(connect)).toBe(false);
     // The status line is duplicated in the paint dock; the shell copy is screen-reader only.
     expect(host.querySelector(".shell-status")?.classList.contains("visually-hidden")).toBe(true);
+    shell.dispose();
+  });
+
+  it("keeps the drawing-key opt-in out of the header row (the wall shows it in its dock)", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shell = mountShell(host, createAppServices());
+    const optIn = host.querySelector<HTMLLabelElement>("label.drawing-session-opt-in")!;
+    const details = host.querySelector<HTMLDetailsElement>("details.wallet-details")!;
+    expect(details.contains(optIn)).toBe(true);
+    expect(host.querySelector("#connect-button")!.classList.contains("mp-btn")).toBe(true);
+    shell.dispose();
+  });
+
+  it("the wall borrows the opt-in into its dock and gives it back on dispose", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const services = createAppServices();
+    const shell = mountShell(host, services);
+    const { mountWall } = await import("../pages/wall/mount-wall");
+    const page = document.createElement("div");
+    shell.outlet.append(page);
+    const dispose = mountWall(page, services);
+    const optIn = host.querySelector<HTMLLabelElement>("label.drawing-session-opt-in")!;
+    expect(page.querySelector("#wall-optin-slot")!.contains(optIn)).toBe(true);
+    expect(optIn.querySelector("#authorize-drawing-session")).not.toBeNull();
+    dispose();
+    expect(host.querySelector("details.wallet-details")!.contains(optIn)).toBe(true);
     shell.dispose();
   });
 });

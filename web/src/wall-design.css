@@ -1,240 +1,136 @@
-/* Reference-led street-art scene. The real canvas stays flat and independently interactive. */
-:root { font-family: Arial, Helvetica, sans-serif; background:#111214; color:#f4f1e9; --muted:#a9aaad; --focus:#56c9ec; --ok:#65d5ae; --bad:#ffaaa1; --wall-empty:#242629; }
-body { padding:0; background:radial-gradient(ellipse at 50% 25%,#282629,transparent 65%); }
-a { color:#73d7ee; } button,a,summary { -webkit-tap-highlight-color:transparent; }
-.app-shell { max-width:1600px; margin:auto; padding:0 36px 28px; }
-.app-shell-top { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:12px 30px; padding:23px 0 15px; margin:0; border-bottom:1px solid #343537; }
-.brand h1 { margin:0; font-size:31px; font-weight:900; letter-spacing:-2px; line-height:1; }
-.brand .lede { font:9px monospace; letter-spacing:1.8px; margin:9px 0 0; color:#999da2; }
-.app-nav-list { justify-content:center; gap:24px; font-size:12px; }
-.app-nav-list a { color:#efebe5; padding:8px 0; }
-.app-nav-list a.is-active { color:#f1dc5e; border-color:#f1dc5e; }
-.shell-chrome { grid-column:3; grid-row:1; display:block; margin:0; padding:0; background:none; border:0; }
-.wallet-chrome { display:flex; align-items:center; gap:16px; }
-.action { border:1px solid #515156; border-radius:4px; background:#f0ddd9; color:#251d22; font-size:12px; font-weight:700; padding:12px 18px; transition:background .18s,transform .18s; }
-.action:hover:not(:disabled) { background:#fff0ec; transform:translateY(-1px); }
-.action.secondary { background:#222327; color:#e6e6e9; border-color:#46474c; }
-.action.secondary:hover:not(:disabled) { background:#35373d; }
-.action:disabled { opacity:.45; }
-.wallet-details { position:relative; font-size:11px; }
-summary { cursor:pointer; }
-.wallet-details > summary { list-style:none; color:#b8b8c0; padding:12px 0; }
-.wallet-details[open] { position:absolute; top:84px; right:36px; width:min(400px,calc(100vw - 32px)); padding:20px; background:#242529; border:1px solid #65636b; border-radius:8px; z-index:20; box-shadow:0 18px 50px #0009; }
-.wallet-details p { overflow-wrap:anywhere; }
-.wallet-details .drawing-session-opt-in { color:#d3d3df; font-size:12px; }
-.wallet-details-toolbar { display:flex; justify-content:flex-end; margin:0 0 8px; }
-.wallet-details-close { min-height:36px; padding:6px 12px; }
-.shell-status { grid-column:1 / -1; grid-row:2; max-width:none; text-align:left; }
-.flow-state { font:10px monospace; color:#abacb6; }
-.compact-status { font-size:11px; }
-.result:empty { display:none; }
-.wallet-chrome > .result:not(:empty) { position:absolute; right:32px; top:100px; max-width:360px; z-index:21; }
-.wall-layout { display:block; margin:0 auto; max-width:1320px; }
-.wall-intro { display:flex; align-items:flex-end; justify-content:space-between; padding:24px 0 14px; gap:20px; }
-.eyebrow { font:9px monospace; letter-spacing:2px; color:#aeb2b9; margin:0 0 10px; }
-.wall-intro h2 { font-size:clamp(32px,4vw,54px); font-weight:800; letter-spacing:-2.6px; line-height:1.04; margin:0; outline:none; }
-.wall-intro h2 em { color:#f2b6cc; font-family:Georgia,serif; font-weight:400; }
-.wall-invitation { color:#b5b5ba; font-size:12px; margin:0 0 3px; }
-.wall-lede { font:10px/1.5 monospace; padding:8px 0 12px; color:#a9b2b9; margin:0; }
-.stall-scene { position:relative; height:auto; aspect-ratio:1.5; border:1px solid #555052; border-radius:4px; perspective:none; background:#19191b; overflow:hidden; box-shadow:0 24px 80px #0007; isolation:isolate; }
-.stall-scene::before { content:''; position:absolute; inset:0; background:url('/art/street-stall-v2.jpg') center center / 100% 100% no-repeat; transition:transform .65s cubic-bezier(.2,.7,.2,1),filter .65s; }
-.stall-room { background:none; transform:none; overflow:visible; }
-.stall-ceiling,.stall-wall,.stall-floor,.stall-toilet,.back-wall-marks { display:none; }
-.scene-label { position:absolute; z-index:6; top:16px; left:20px; right:20px; display:flex; justify-content:space-between; pointer-events:none; color:#fff4df; font:9px monospace; letter-spacing:2px; text-shadow:0 1px 5px #000; }
-.scene-label span { opacity:.7; }
-.scene-focus { position:absolute; z-index:7; right:20px; bottom:18px; background:#15171cdd; color:#f1ece7; border-color:#aaa2; backdrop-filter:blur(12px); }
-.scene-focus:hover:not(:disabled) { background:#353439; }
-.stall-back { position:absolute; left:31.5%; right:31.5%; top:17%; bottom:auto; z-index:3; transform:none; }
-.back-wall-skin { border:0; padding:0; background:none; box-shadow:none; min-height:0; gap:0; }
-.board-mount { width:100%; max-height:none; gap:0; flex:0 0 auto; }
-.board-bezel { padding:0; border:1px solid #ffffff15; background:#242629; box-shadow:0 4px 12px #0005; }
-.board-focus { border:0; background:#242629; }
-.board-viewport { aspect-ratio:1; flex:auto; min-height:0; }
-.pointer-preview { position:absolute; z-index:4; box-sizing:border-box; border:1px solid #fff; outline:1px solid #111; background:#ffffff20; pointer-events:none; }
-.position-readout { box-sizing:border-box; flex:0 0 auto; width:100%; min-height:22px; padding:5px 8px; border-top:1px solid #ffffff15; overflow:hidden; background:#18191c; color:#d8d5d0; font:9px/1.25 monospace; letter-spacing:.04em; text-align:right; white-space:nowrap; pointer-events:none; user-select:none; }
-.board-caption { padding:10px 0; font:8px monospace; color:#c0bcb8; letter-spacing:1.4px; text-shadow:0 1px 4px #000; }
-.is-focused .stall-scene { aspect-ratio:1.8; min-height:620px; }
-.is-focused .stall-scene::before { transform:scale(1.3); filter:brightness(.4) blur(3px); }
-.is-focused .stall-back { width:min(520px,75%); left:50%; right:auto; top:6%; transform:translateX(-50%); }
-.is-focused .board-bezel { box-shadow:0 15px 65px #000a; border-color:#818086; }
-.board-toolbar { margin:12px 0; gap:6px; }
-.board-toolbar .action { min-height:38px; padding:8px 12px; font-size:11px; }
-.wall-zoom-controls { display:flex; flex:0 0 auto; gap:6px; align-items:center; }
-.wall-layout .board-toolbar .wall-zoom-control { min-width:44px; min-height:44px; touch-action:manipulation; user-select:none; }
-#zoom-in,#zoom-out { font-size:20px; line-height:1; }
-.board-load-status { text-align:right; font:10px monospace; }
-.wall-instructions { float:right; font-size:11px; color:#c4c4cc; max-width:360px; }
-.wall-instructions[open] { float:none; padding:12px 0; }
-.wall-instructions p { margin:12px 0; }
-.summary { font-size:12px; margin:6px 0; max-width:none; }
-.selection-preview { font-size:11px; margin:8px 0; min-height:18px; }
-.hover-summary { display:inline-flex; width:max-content; margin:2px 0 4px; padding:3px 7px; border:1px solid #4a4b50; border-radius:3px; background:#1b1c20; color:#e9e5df; font:9px/1.2 monospace; letter-spacing:.04em; }
-.selection-preview .preview-label { font-size:11px; }
-.paint-dock { position:sticky; bottom:14px; z-index:8; border-radius:8px; padding:12px 16px; background:#e9e5df; border:1px solid #fff9; box-shadow:0 12px 35px #0006; gap:12px; margin:16px auto; max-width:950px; }
-.repaint-legend,.cell-price,.stroke-total { flex:1 1 100%; margin:0; font-size:13px; line-height:1.4; color:#25252b; }
-.repaint-legend[hidden] { display:none; }
-.cell-price:empty,.stroke-total:empty { display:none; }
-.cell-price[data-state=unavailable],.stroke-total[data-state=unavailable] { color:#9f3029; }
-.credits-dock { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
-.credits-dock[hidden] { display:none; }
-.credits-balance { margin:0; font-size:13px; color:#25252b; }
-#buy-credits-button { min-height:44px; }
-.buy-credits-host { flex:1 1 100%; }
-.buy-credits-sheet[hidden] { display:none; }
-.buy-credits-panel { display:grid; gap:10px; margin-top:4px; padding:12px; border-radius:6px; background:#fff; border:1px solid #b9b2a6; color:#25252b; }
-.buy-credits-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.buy-credits-header h2 { margin:0; font-size:14px; font-weight:700; color:#25252b; }
-.buy-credits-price,.buy-credits-token-info,.buy-credits-split p,.buy-credits-balance,.buy-credits-note,.buy-credits-status,.buy-credits-total { margin:0; font-size:12px; line-height:1.4; color:#4a4650; overflow-wrap:anywhere; }
-.buy-credits-qty-label { font-size:12px; color:#3d3943; }
-.buy-credits-qty-row { display:flex; align-items:center; gap:8px; }
-.buy-credits-qty { width:min(100%,120px); min-height:44px; padding:8px 10px; border:1px solid #b9b2a6; border-radius:4px; background:#fff; color:#25252b; font-size:14px; }
-.buy-credits-asset { margin:0; padding:0; border:0; font-size:12px; color:#3d3943; display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; }
-.buy-credits-asset legend { padding:0; margin:0 12px 0 0; font-size:12px; }
-.buy-credits-lines { margin:0; padding-left:18px; font-size:12px; color:#25252b; }
-.buy-credits-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-.buy-credits-actions .action { min-height:44px; }
-.buy-credits-nearly { text-decoration:none; display:inline-flex; align-items:center; }
-.buy-credits-token-info[hidden],.buy-credits-split[hidden],.buy-credits-actions [hidden] { display:none; }
-.buy-credits-split { display:grid; gap:6px; padding:8px; border-radius:4px; background:#f6f1e7; border:1px dashed #b9b2a6; }
-.buy-credits-split .action { min-height:44px; justify-self:start; }
-.palette { flex:1; gap:6px; }
-.swatch { position:relative; flex:0 0 40px; width:40px; height:44px; padding:5px; border:1px solid transparent; border-radius:4px; background:transparent; }
-.swatch .chip { width:100%; height:100%; border:1px solid #0002; border-radius:2px; }
-.swatch > span:not(.chip) { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
-.swatch[aria-pressed=true] { outline:2px solid #25252b; outline-offset:0; background:#fff; }
-.swatch:hover { border-color:#696773; }
-.direct-paint-toggle { flex:0 0 auto; font-size:11px; color:#3d3943; }
-.paint-unlock { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; padding:10px 12px; border-radius:6px; background:#fff; border:1px solid #b9b2a6; }
-/* `display:flex` beats the UA `[hidden]` rule, so restate it explicitly. */
-.paint-unlock[hidden] { display:none; }
-.paint-unlock-title { flex:1 1 100%; margin:0; font-size:13px; font-weight:600; color:#25252b; }
-.paint-unlock-body { flex:1 1 300px; margin:0; font-size:12px; line-height:1.4; color:#4a4650; }
-.paint-unlock .action.unlock { flex:0 0 auto; min-height:44px; padding:12px 18px; border:0; border-radius:4px; background:#27252d; color:#f5d8e4; font-size:12px; }
-.paint-unlock .action.unlock:hover:not(:disabled) { background:#413748; }
-.tap-to-paint-status { flex:1 1 100%; margin:0; font-size:12px; line-height:1.35; color:#3d3943; }
-.paint-unlocked { flex:1 1 100%; margin:0; font-size:12px; line-height:1.35; color:#17623f; }
-.board-legend { margin:4px 0 0; font-size:10px; line-height:1.4; color:#8d8791; text-align:center; }
-.wall-contract-line { margin:6px 0 0; font-size:11px; line-height:1.45; color:#8d8791; text-align:center; }
-.action.place { flex:0 0 auto; background:#27252d; color:#f5d8e4; border:0; padding:14px 24px; }
-.action.place:hover:not(:disabled) { background:#413748; }
-.draw-state { flex:1 1 180px; margin:0; color:#46414a; font:10px/1.35 monospace; }
-.draw-state[data-phase=submitted],.draw-state[data-phase=wallet_prompt],.draw-state[data-phase=confirmation_delayed] { color:#226f86; }
-.draw-state[data-phase=confirmed] { color:#17623f; }
-.draw-state[data-phase=overwritten] { color:#765a00; }
-.draw-state[data-phase=failed] { color:#9f3029; }
-.wall-advanced { border-top:1px solid #39383f; padding:18px 0; font-size:12px; color:#afaeb8; }
-.wall-advanced > summary { display:flex; justify-content:space-between; list-style:none; }
-.wall-advanced .side { margin-top:20px; grid-template-columns:1fr 1fr; }
-.side section,.about { border-radius:6px; background:#242329; color:#ddd7e2; border-color:#4a454f; }
-.about { grid-column:1 / -1; }
-.result { border-radius:6px; font-size:13px; }
-@media (max-width:1000px) {
-.app-shell { padding:0 22px 24px; } .app-shell-top { gap:12px; } .app-nav-list { gap:14px; }
-.wallet-details[open] { right:22px; } .stall-scene { aspect-ratio:1.2; } .stall-scene::before { background-size:auto 100%; }
-.stall-back { left:27%; right:27%; } .is-focused .stall-back { left:50%; right:auto; }
-}
-@media (max-width:600px) {
-.app-shell { padding:0 12px 20px; } .app-shell-top { grid-template-columns:1fr auto; padding-top:18px; }
-.brand h1 { font-size:27px; } .brand .lede { font-size:8px; letter-spacing:1px; }
-.app-nav { display:none; } .shell-chrome { grid-column:2; } .wallet-chrome { gap:0; flex-direction:column; align-items:end; }
-#connect-button { font-size:11px; padding:10px 12px; } .wallet-details > summary { padding:6px 0; font-size:10px; }
-.wallet-details[open] { top:90px; right:12px; } .flow-state { font-size:9px; }
-.wall-intro { padding:22px 0 10px; } .wall-intro h2 { font-size:38px; letter-spacing:-2px; } .wall-invitation { display:none; }
-.eyebrow { font-size:8px; letter-spacing:1.4px; margin-bottom:9px; } .wall-lede { font-size:9px; }
-.stall-scene { aspect-ratio:.8; min-height:410px; } .stall-back { left:15.3%; right:15.3%; top:17%; }
-.scene-label { font-size:8px; left:12px; right:12px; letter-spacing:1px; } .scene-label span { display:none; }
-.scene-focus { right:12px; bottom:12px; font-size:11px; min-height:44px; }
-.board-caption { font-size:7px; letter-spacing:1px; }
-.is-focused .stall-scene { aspect-ratio:.85; min-height:410px; } .is-focused .stall-back { width:90%; top:8%; left:50%; right:auto; }
-.board-toolbar { gap:4px; } .board-toolbar .action { padding:8px; min-height:44px; font-size:10px; }
-.board-load-status { text-align:left; flex-basis:100%; padding-top:6px; }
-.paint-dock { padding:10px; gap:8px; bottom:8px; } .palette { flex-basis:100%; justify-content:space-between; gap:0; }
-.swatch { flex:1 1 0; width:auto; min-width:0; max-width:44px; } .direct-paint-toggle { flex:1; } .action.place { flex:0 0 auto; min-width:130px; }
-.wall-advanced .side { grid-template-columns:1fr; } .summary { font-size:11px; }
-}
-@media (prefers-reduced-motion:reduce) { .action,.stall-scene::before { transition:none; } }
+/*
+ * App chrome (header, nav, wallet panel) and the shared pieces the wall's markup still
+ * relies on. Tokens only (design/tokens.css). The wall page's own layout and dock
+ * live in pages/wall/wall-page.css. Phase 1 step 4 removed the mural scene, the
+ * Focus canvas / Paint zoom controls and the cream dock styles that used to be here.
+ */
+:root { font-family: var(--mp-font); background: var(--mp-bg); color: var(--mp-fg); --muted: var(--mp-muted); --focus: var(--mp-focus); --ok: var(--mp-good); --bad: var(--mp-bad); --wall-empty: var(--mp-card-2); }
+body { padding: 0; background: radial-gradient(ellipse at 50% 25%, var(--mp-glow), transparent 65%); }
+a { color: var(--mp-near); }
+button, a, summary { -webkit-tap-highlight-color: transparent; }
+summary { cursor: pointer; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
-/* Balances stay inside the wallet disclosure instead of crowding the paint dock. */
-.paint-wallet-values { display:grid; gap:12px; margin:14px 0; }
-.paint-wallet-values > div { display:grid; gap:3px; }
-.paint-wallet-values dt { color:#bfc1c7; font-size:12px; }
-.paint-wallet-values dd { margin:0; font-size:14px; overflow-wrap:anywhere; }
-#paint-wallet-panel .paint-wallet-buy { display:inline-flex; margin-top:10px; text-decoration:none; min-height:44px; align-items:center; }
-#paint-wallet-panel .paint-wallet-refresh { min-height:44px; }
-#paint-wallet-panel p { overflow-wrap:anywhere; }
-.wallet-details[open] { max-height:calc(100dvh - 100px); overflow-y:auto; }
+/* ——— Header ——— */
+.app-shell { max-width: 1600px; margin: auto; padding: 0 36px 28px; }
+.app-shell-top { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px 30px; padding: 23px 0 15px; margin: 0; border-bottom: 1px solid var(--mp-line); }
+.brand h1 { margin: 0; font-size: 31px; font-weight: 900; letter-spacing: -2px; line-height: 1; }
+.brand .lede { font: 9px var(--mp-mono); letter-spacing: 1.8px; margin: 9px 0 0; color: var(--mp-muted); }
+.app-nav-list { justify-content: center; gap: 24px; font-size: var(--mp-text-sm); }
+.app-nav-list a { color: var(--mp-fg); padding: 8px 0; }
+.app-nav-list a.is-active { color: var(--mp-tag); border-color: var(--mp-tag); }
+.shell-chrome { grid-column: 3; grid-row: 1; display: block; margin: 0; padding: 0; background: none; border: 0; }
+.wallet-chrome { display: flex; align-items: center; gap: var(--mp-space-4); }
+.shell-connect { min-height: 40px; padding: var(--mp-space-2) var(--mp-space-4); }
+.shell-status { grid-column: 1 / -1; grid-row: 2; max-width: none; text-align: left; }
+.flow-state { font: 10px var(--mp-mono); color: var(--mp-muted); }
+.compact-status { font-size: var(--mp-text-xs); }
 
-/* 16 colours (FE-1). The dock gets `data-count` from the board's palette. One row of 16
-   where it fits; two rows of 8 below that, filling the width on a phone so every swatch
-   stays a 44 px target at 390 px. An 8-colour board keeps the rules above. */
-.palette[data-count="16"] { flex:1 1 100%; display:grid; grid-template-columns:repeat(16,40px); justify-content:start; gap:6px; }
-.palette[data-count="16"] .swatch { width:40px; }
-@media (max-width:820px) {
-.palette[data-count="16"] { grid-template-columns:repeat(8,40px); }
-}
-@media (max-width:600px) {
-.palette[data-count="16"],
-.wall-layout .paint-dock .palette[data-count="16"] { grid-template-columns:repeat(8,minmax(0,1fr)); gap:0; }
-.palette[data-count="16"] .swatch,
-.wall-layout .paint-dock .palette[data-count="16"] .swatch { width:auto; min-width:0; max-width:none; height:44px; min-height:44px; }
-}
+/* One wallet control: Connect, or the account name that opens the wallet panel. */
+.wallet-details { position: relative; font-size: var(--mp-text-xs); }
+.wallet-details[hidden] { display: none; }
+.wallet-details > summary { list-style: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 10px 14px; border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); color: var(--mp-fg); font-size: var(--mp-text-sm); font-weight: 700; }
+.wallet-details[open] { position: absolute; top: 84px; right: 36px; z-index: 20; width: min(400px, calc(100vw - 32px)); max-height: calc(100dvh - 100px); overflow-y: auto; padding: var(--mp-space-5); background: var(--mp-card); border: 1px solid var(--mp-line); border-radius: var(--mp-radius-lg); box-shadow: 0 18px 50px var(--mp-shadow); }
+.wallet-details[open] > #connect-button { margin-top: var(--mp-space-3); }
+.wallet-details p { overflow-wrap: anywhere; }
+.wallet-details .drawing-session-opt-in { display: flex; align-items: center; gap: 6px; color: var(--mp-soft); font-size: var(--mp-text-sm); }
+.wallet-details-toolbar { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.wallet-details-close { min-height: 36px; padding: 6px 12px; }
+.paint-wallet-values { display: grid; gap: var(--mp-space-3); margin: 14px 0; }
+.paint-wallet-values > div { display: grid; gap: 3px; }
+.paint-wallet-values dt { color: var(--mp-muted); font-size: var(--mp-text-sm); }
+.paint-wallet-values dd { margin: 0; font-size: var(--mp-text-body); overflow-wrap: anywhere; }
+#paint-wallet-panel .paint-wallet-buy { display: inline-flex; margin-top: 10px; text-decoration: none; min-height: var(--mp-hit); align-items: center; }
+#paint-wallet-panel .paint-wallet-refresh { min-height: var(--mp-hit); }
+#paint-wallet-panel p { overflow-wrap: anywhere; }
 
-/* ——— Phase 0 (2 Nov audit): nothing sits on top of the wall ——— */
-.visually-hidden { position:absolute !important; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+.result { border-radius: var(--mp-radius-md); font-size: var(--mp-text-md); }
+.result:empty { display: none; }
+.wallet-chrome > .result:not(:empty) { position: absolute; right: 32px; top: 100px; max-width: 360px; z-index: 21; }
 
-/* The dock is in the page flow below the wall at every width. It used to be
-   sticky to the bottom of the viewport, which put it over the board. */
-.paint-dock,
-.wall-layout .paint-dock { position:static; bottom:auto; }
+/* The soft button still used by /money and the About details. */
+.action { border: 1px solid var(--mp-soft-btn-line); border-radius: 4px; background: var(--mp-soft-btn); color: var(--mp-soft-btn-ink); font-size: var(--mp-text-sm); font-weight: 700; padding: 12px 18px; transition: background .18s, transform .18s; }
+.action:hover:not(:disabled) { background: var(--mp-soft-btn-hover); transform: translateY(-1px); }
+.action.secondary { background: var(--mp-card-2); color: var(--mp-fg); border-color: var(--mp-line); }
+.action.secondary:hover:not(:disabled) { background: var(--mp-line); }
+.action:disabled { opacity: .45; }
+
+/* ——— The board's own pieces (positions come from the camera) ——— */
+.board-focus { border: 0; background: var(--mp-card-2); }
+.board-viewport { aspect-ratio: 1; flex: auto; min-height: 0; }
+.pointer-preview { position: absolute; z-index: 4; box-sizing: border-box; border: 1px solid var(--mp-fg); outline: 1px solid var(--mp-bg); background: color-mix(in srgb, var(--mp-fg) 12%, transparent); pointer-events: none; }
+.position-readout { box-sizing: border-box; overflow: hidden; white-space: nowrap; pointer-events: none; user-select: none; }
+.hover-summary { display: inline-flex; width: max-content; color: var(--mp-soft); font: 9px/1.2 var(--mp-mono); letter-spacing: .04em; }
+
+/* ——— Dock pieces the wall page styles further (wall-page.css) ——— */
+.summary { font-size: var(--mp-text-sm); margin: 6px 0; max-width: none; }
+.selection-preview { margin: 8px 0; }
+.repaint-legend[hidden] { display: none; }
+.cell-price:empty, .stroke-total:empty { display: none; }
+.credits-dock[hidden] { display: none; }
+.paint-unlock[hidden] { display: none; }
+.place-reason:empty { display: none; }
+.swatch { position: relative; padding: 5px; border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; }
+.swatch .chip { display: block; width: 100%; height: 100%; border: 1px solid var(--mp-line); border-radius: 2px; }
+.swatch > span:not(.chip) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
 /* First-use hint: one dismissible line at the top of the dock. */
-.wall-hint-host { flex:1 1 100%; }
-.wall-hint-host:empty { display:none; }
-.wall-hint,
-.wall-layout .wall-hint { position:static; z-index:auto; width:auto; display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0; padding:6px 6px 6px 12px; border:1px solid #c9c1b4; border-radius:6px; background:#fff; box-shadow:none; color:#25252b; font:13px/1.35 Arial, Helvetica, sans-serif; pointer-events:auto; }
-.wall-hint-dismiss,
-.wall-layout .wall-hint-dismiss { position:static; flex:0 0 auto; width:36px; height:36px; color:#25252b; }
-.wall-hint-dismiss:hover,
-.wall-hint-dismiss:focus-visible { background:#0001; }
+.wall-hint-host:empty { display: none; }
+.wall-hint { position: static; z-index: auto; width: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; padding: 6px 6px 6px 12px; border-radius: var(--mp-radius-md); box-shadow: none; font: var(--mp-text-md)/1.35 var(--mp-font); pointer-events: auto; }
+.wall-hint-dismiss { position: static; flex: 0 0 auto; width: 36px; height: 36px; border: 0; border-radius: var(--mp-radius-md); background: transparent; cursor: pointer; }
+.wall-hint-dismiss:hover, .wall-hint-dismiss:focus-visible { background: var(--mp-line); }
 
-/* What you chose, inside the dock, next to the colours. */
-.dock-selection { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:4px 16px; }
-.paint-dock .summary,
-.wall-layout .paint-dock .summary { margin:0; font-size:13px; color:#25252b; white-space:normal; overflow:visible; }
-.paint-dock .selection-preview,
-.wall-layout .paint-dock .selection-preview { display:flex; align-items:center; gap:6px; margin:0; min-height:0; color:#25252b; white-space:normal; overflow:visible; }
-.paint-dock .selection-preview .chip { width:14px; height:14px; border-radius:2px; border:1px solid #0003; }
-.paint-dock .selection-preview .preview-label { font-size:13px; }
+/* Buy credits, inside the dock. */
+.buy-credits-sheet[hidden] { display: none; }
+.buy-credits-panel { display: grid; gap: 10px; margin-top: 4px; padding: var(--mp-space-3); border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); color: var(--mp-soft); }
+.buy-credits-header { display: flex; align-items: center; justify-content: space-between; gap: var(--mp-space-3); }
+.buy-credits-header h2 { margin: 0; font-size: var(--mp-text-body); font-weight: 700; color: var(--mp-fg); }
+.buy-credits-price, .buy-credits-token-info, .buy-credits-split p, .buy-credits-balance, .buy-credits-note, .buy-credits-status, .buy-credits-total { margin: 0; font-size: var(--mp-text-sm); line-height: 1.4; color: var(--mp-soft); overflow-wrap: anywhere; }
+.buy-credits-qty-label { font-size: var(--mp-text-sm); color: var(--mp-soft); }
+.buy-credits-qty-row { display: flex; align-items: center; gap: var(--mp-space-2); }
+.buy-credits-qty { width: min(100%, 120px); min-height: var(--mp-hit); padding: 8px 10px; border: 1px solid var(--mp-line); border-radius: 4px; background: var(--mp-bg); color: var(--mp-fg); font-size: var(--mp-text-body); }
+.buy-credits-asset { margin: 0; padding: 0; border: 0; font-size: var(--mp-text-sm); color: var(--mp-soft); display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.buy-credits-asset legend { padding: 0; margin: 0 12px 0 0; font-size: var(--mp-text-sm); }
+.buy-credits-lines { margin: 0; padding-left: 18px; font-size: var(--mp-text-sm); color: var(--mp-soft); }
+.buy-credits-actions { display: flex; flex-wrap: wrap; gap: var(--mp-space-2); align-items: center; }
+.buy-credits-actions .action { min-height: var(--mp-hit); }
+.buy-credits-nearly { text-decoration: none; display: inline-flex; align-items: center; }
+.buy-credits-token-info[hidden], .buy-credits-split[hidden], .buy-credits-actions [hidden] { display: none; }
+.buy-credits-split { display: grid; gap: 6px; padding: var(--mp-space-2); border: 1px dashed var(--mp-line); border-radius: 4px; background: var(--mp-card); }
+.buy-credits-split .action { min-height: var(--mp-hit); justify-self: start; }
 
-/* Why Place paint is off, beside it; and every dock message in view. */
-.place-reason { flex:1 1 160px; margin:0; font-size:12px; color:#4a4650; }
-.place-reason:empty { display:none; }
-.draw-state { font:12px/1.35 Arial, Helvetica, sans-serif; }
-.paint-dock .result { flex:1 1 100%; margin:0; padding:10px 12px; border:1px solid #c9c1b4; border-left:3px solid #56c9ec; background:#fff; color:#25252b; }
-.paint-dock .result h3 { margin:0 0 4px; font-size:14px; }
-.paint-dock .result p { margin:0; font-size:13px; }
+/* ——— About / details, under the wall ——— */
+.wall-advanced { border-top: 1px solid var(--mp-line); padding: 18px 0; font-size: var(--mp-text-sm); color: var(--mp-muted); }
+.wall-advanced > summary { display: flex; justify-content: space-between; list-style: none; }
+.wall-advanced .side { margin-top: var(--mp-space-5); grid-template-columns: 1fr 1fr; }
+.side section, .about { border-radius: var(--mp-radius-md); background: var(--mp-card-2); color: var(--mp-soft); border-color: var(--mp-line); }
+.about { grid-column: 1 / -1; }
+.wall-lede { font: 10px/1.5 var(--mp-mono); padding: 8px 0 12px; color: var(--mp-muted); margin: 0; }
+.board-load-status { text-align: right; font: 10px var(--mp-mono); }
+.board-legend { margin: 4px 0 0; font-size: 10px; line-height: 1.4; color: var(--mp-muted); text-align: center; }
+.wall-contract-line { margin: 6px 0 0; font-size: var(--mp-text-xs); line-height: 1.45; color: var(--mp-muted); text-align: center; }
 
-/* The zoom readout lives in the toolbar now, unclipped. */
-.board-toolbar { display:flex; flex-wrap:wrap; align-items:center; }
-.board-toolbar .position-readout { width:auto; min-height:0; margin-left:auto; padding:4px 8px; border:0; border-radius:3px; background:transparent; color:#a9aaad; font:11px/1.25 monospace; text-align:right; }
-
-/* Header: one wallet control. Disconnected, the opt-in sits under Connect. */
-.wallet-chrome > .drawing-session-opt-in { display:flex; align-items:center; gap:6px; max-width:220px; color:#a9aaad; font-size:11px; }
-.wallet-details > summary { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:10px 14px; border:1px solid #46474c; border-radius:4px; background:#222327; color:#e6e6e9; font-size:12px; font-weight:700; }
-.wallet-details[open] > #connect-button { margin-top:12px; }
-.wallet-details[hidden] { display:none; }
-
-@media (max-width:600px) {
-  /* Phone: the page scrolls; the wall keeps its full size above the dock. */
-  .page-outlet > .wall-layout,
-  .page-outlet .wall-layout > main { height:auto; min-height:0; }
-  .wall-layout .stall { display:block; }
-  .wall-layout .stall-scene,
-  .wall-layout.is-focused .stall-scene { min-height:calc(min(92vw, 360px) + 48px); }
-  .wall-layout .stall-back,
-  .wall-layout.is-focused .stall-back { top:24px; }
-  .wall-layout .paint-dock { width:auto; margin:8px 0; border:1px solid #c9c1b4; border-radius:8px; padding:10px; }
-  .wallet-chrome > .drawing-session-opt-in { display:none; }
-  .wallet-details > summary { max-width:150px; padding:8px 10px; font-size:11px; }
-  .board-toolbar .position-readout { flex-basis:100%; margin-left:0; text-align:left; }
+@media (max-width: 1000px) {
+  .app-shell { padding: 0 22px 24px; }
+  .app-shell-top { gap: 12px; }
+  .app-nav-list { gap: 14px; }
+  .wallet-details[open] { right: 22px; }
 }
+@media (max-width: 600px) {
+  .app-shell { padding: 0 12px 20px; }
+  .app-shell-top { grid-template-columns: 1fr auto; padding-top: 18px; }
+  .brand h1 { font-size: 27px; }
+  .brand .lede { font-size: 8px; letter-spacing: 1px; }
+  .app-nav { display: none; }
+  .shell-chrome { grid-column: 2; }
+  .wallet-chrome { gap: 0; flex-direction: column; align-items: end; }
+  #connect-button { font-size: var(--mp-text-xs); padding: 10px 12px; }
+  .wallet-details > summary { max-width: 150px; padding: 8px 10px; font-size: var(--mp-text-xs); }
+  .wallet-details[open] { top: 90px; right: 12px; }
+  .flow-state { font-size: 9px; }
+  .wall-lede { font-size: 9px; }
+  .board-load-status { text-align: left; flex-basis: 100%; padding-top: 6px; }
+  .wall-advanced .side { grid-template-columns: 1fr; }
+  .summary { font-size: var(--mp-text-xs); }
+}
+@media (prefers-reduced-motion: reduce) { .action { transition: none; } }

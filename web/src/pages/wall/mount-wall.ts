@@ -366,6 +366,19 @@ export function mountWall(
   });
   invite.render();
 
+  // The drawing-key opt-in ("Also allow painting without a popup each time") is
+  // shell-owned. On the wall it sits in the dock, next to Connect, not in the header.
+  const optIn = document.querySelector<HTMLLabelElement>("label.drawing-session-opt-in");
+  const optInSlot = pageRoot.querySelector<HTMLElement>("#wall-optin-slot");
+  if (optIn && optInSlot && !pageRoot.contains(optIn)) {
+    const home = optIn.parentElement;
+    const next = optIn.nextSibling;
+    optInSlot.append(optIn);
+    scope.onDispose(() => {
+      if (home && home.isConnected) home.insertBefore(optIn, next && next.parentNode === home ? next : null);
+    });
+  }
+
   // The Tile card: painter, age, cost to cover, Paint over this, Copy link.
   inspector = createTileInspector({
     scope,
