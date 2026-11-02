@@ -57,7 +57,6 @@ Shared types, `wallet.ts`, configuration wiring, environment example, wallet-pan
 | `VITE_RHEA_MAX_INPUT_YOCTO` | Positive integer-string spending cap chosen at release; unset disables submit |
 | `VITE_RHEA_GAS_RESERVE_YOCTO` | Positive integer-string reserve; shared gas policy may impose a larger value |
 | `VITE_RHEA_MAX_PRICE_IMPACT_BPS` | Explicit release limit, 1–1000; unset disables submit |
-| `VITE_RHEA_MAX_BUY_TAX_BPS` | Highest mPOO buy tax the swap accepts (see the tax gate); unset disables submit |
 
 No endpoint, token, receiver or route may come from an unvalidated query parameter. Slippage defaults to 100 bps (1%), with user choices 50/100/200 bps and a hard maximum of 300 bps; v1 does not offer an unlimited setting. These are conservative implementation defaults, not claims about market prices. Cap quote lifetime at 30 seconds from the oldest price-dependent view and re-quote every remaining checkpoint before its approval. If the route changes, present a new review. Mainnet token IDs must never appear as enabled choices on testnet, localnet or mock. Testnet acceptance uses deliberately configured fixture tokens and pools, clearly labelled.
 
@@ -115,15 +114,7 @@ v1 uses exact input: the player chooses a maximum native NEAR spend. Do not use 
 
 The implementation must establish whether DCL `quote.amount` and `Swap.min_output_amount` measure gross exchange output or net wallet output for the actual mPOO contract. Refresh tax settings at quote time and immediately before signing the final leg; record tax-code/config changes as quote invalidation. A post-swap balance check detects an underfill but does not protect the player from one.
 
-**Production gate (proposed rule, owner to confirm before RHEA-D):** the mPOO buy tax is set by an external admin (`nearlytrade.near` in the 12 October readout), so its stability over execution cannot be proven and a strict proof would block release permanently. Instead:
-
-1. RHEA-A establishes, from the deployed token code, where the tax is taken (on the pool's transfer to the buyer, or elsewhere) and its exact rounding. If it is not taken on the output transfer, this rule does not apply; stop and report.
-2. Read `get_tax({})` immediately before signing. Set `min_output_amount = ceil(minNetMpooAtomic × 10000 / (10000 − buy_bps))` with the token's exact rounding, so the on-chain minimum protects the net floor at that tax rate.
-3. Block the swap if `buy_bps` exceeds a release limit (`VITE_RHEA_MAX_BUY_TAX_BPS`, unset disables submit), if the tax config, `pairs` or `exempt` lists changed since the quote, or if the token code hash differs from the evidence.
-4. After settlement, verify delivered net mPOO against the floor; a shortfall is an underfill failure with evidence, never success.
-5. The review discloses that the tax admin could raise the tax between signing and execution, and that the floor holds only at the tax rate shown.
-
-If the owner rejects this rule, keep embedded execution disabled and the external link as fallback. Do not weaken the minimum, hide the tax or ship a new adapter contract without a separate owner decision.
+**Production gate:** demonstrate that the transaction's on-chain minimum actually protects the displayed net floor, including the token's exact rounding and configured venue tax. A gross-up conversion is acceptable only when the tax calculation and stability over execution are proven from the deployed contract semantics; checking a mutable tax before signing is not enough to guarantee it will remain unchanged. If net protection cannot be enforced, keep embedded execution disabled and document the narrow external fallback. Do not fix this by weakening the minimum, hiding the tax or shipping a new adapter contract without a separate owner decision.
 
 A route spanning more than one exchange is not atomic. Earlier checkpoints can succeed while the last fails. Every checkpoint needs its own positive executable minimum on its final output, and the review must disclose intermediate assets and possible partial completion. The final aggregate estimate is conditional, not a guaranteed return of the original NEAR if a later leg fails. Never insert a zero minimum merely because an upstream generic router helper does so.
 

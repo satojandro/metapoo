@@ -103,7 +103,7 @@
       ],
       "release_gates": [
         "Verified executable route, no assumed direct NEAR/mPOO pair; one approval per exchange checkpoint, plus first-time registration.",
-        "On-chain minimum protects the disclosed post-tax wallet output under the tax rule in the RHEA spec (owner to confirm).",
+        "On-chain minimum protects the disclosed post-tax wallet output.",
         "Separately approved bounded mainnet swap and partial/unknown recovery evidence."
       ]
     },
