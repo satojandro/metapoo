@@ -174,8 +174,11 @@ Owner decision (1 Nov): 10% team, 70% TOILET stakers, 20% burned.
   mPOO contract before the first distribution. The callback catches it if they aren't. Checked
   2 Nov: the burn address is **not registered** on `mpoo.nearlytrade.near` (`storage_balance_of` →
   `null`). One-off setup step, open to anyone: `storage_deposit({"account_id": "000…000"})` with
-  0.00125 NEAR attached (`storage_balance_bounds`). Do the same on the testnet token
-  `metapoo-mpoo.testnet` (board3's `get_payment_config`) before the rehearsal.
+  0.00125 NEAR attached (`storage_balance_bounds`). Do the same on the testnet token before the rehearsal.
+- **board3's test token is not an mPOO copy** (found 2 Nov): `metapoo-mpoo.testnet` is a TOILET-style
+  contract (mint, emitter, 0% tax, 2,000 supply). The rehearsal deploys the real mPOO wasm on testnet
+  instead (work order `rev-testnet-rehearsal`), so the storage-registration and tax behaviour match
+  mainnet. The board's token id is fixed at `new`, so the rehearsal may need a fresh testnet board.
 - **Burned tokens still count in `ft_total_supply`**, because a transfer doesn't reduce it. Anything
   that reports burns (the revenue panel, a burn page) computes them as the burn address's
   `ft_balance_of`, and circulating supply as total supply minus that balance minus NEARLY's own burns.
