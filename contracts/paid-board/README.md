@@ -41,8 +41,8 @@ NEAR price of $4.35, it is about $0.03 (three cents), not 0.03 cents.
 Initialization automatically uses this NEAR price and requires a nonzero mPOO
 price in atomic units. Owner price updates remain available as previously agreed;
 there is no automatic repricing. Test prices 10 and 100 are arithmetic fixtures,
-not economically valid launch prices. `set_credit_prices` changes prices with
-exactly 1 yoctoNEAR attached. Existing credits are unaffected. Buyers submit
+not economically valid launch prices. `set_near_price` and `set_mpoo_price` change
+one price each, with exactly 1 yoctoNEAR attached. Existing credits are unaffected. Buyers submit
 `expected_price` and `min_credits`; stale prices reject/refund.
 
 ## Safety controls (local, 2026-10-28)
@@ -58,14 +58,28 @@ exactly 1 yoctoNEAR attached. Existing credits are unaffected. Buyers submit
   even while painting is paused. Follow the returned receipt to confirm success:
   scheduling does not prove the token paused. The token address is an argument,
   so this passthrough adds no state or migration. Emitter handoff passthroughs remain outside this task.
-- `set_credit_prices` permits each price to move only between half and double its
-  prior value (odd-number halving rounds up). The first change is allowed immediately;
-  subsequent changes require at least 24 hours. `price_changed` includes both old
-  and new prices. Invalid steps fail `PriceStepTooLarge`; early changes fail
-  `PriceCooldown`. Even a no-op update starts the cooldown. Since state version 2 the
-  tunables hold `near_price_cooldown_ns` / `last_near_price_change_ns` (the v1
-  `price_cooldown_ns` / `last_price_change_ns`, renamed) and `mpoo_price_cooldown_ns` /
-  `last_mpoo_price_change_ns`; this setter checks and restarts both until REV-B splits it.
+- `set_near_price(near_per_credit)` and `set_mpoo_price(mpoo_per_credit)` (REV-B, C8)
+  each move one price between half and double its prior value (odd-number halving
+  rounds up; `PriceStepTooLarge`, `ZeroPrice`). Each has its own cooldown, at least
+  24 hours: `near_price_cooldown_ns` / `last_near_price_change_ns` and
+  `mpoo_price_cooldown_ns` / `last_mpoo_price_change_ns`. Early changes fail
+  `NearPriceCooldown` / `MpooPriceCooldown`; changing one never starts the other's
+  clock. The first change of each is allowed immediately; a no-op update still
+  restarts its cooldown. `price_changed` carries `asset` (`near` | `mpoo`),
+  `old_<asset>_per_credit`, `new_<asset>_per_credit` and `changed_at_ns`.
+- Repaint tunables (C1): each tier 1..=8 credits (`RepaintCreditsOutOfRange`),
+  base <= mid <= young (`RepaintCreditsOutOfOrder`), young window <= mid window
+  (`RepaintTiersOutOfOrder`) <= 24 h (`RepaintWindowTooLong`). Changing any repaint
+  credit value in `set_tunables` is a NEAR price change: it fails
+  `RepaintPriceCooldown` inside the NEAR cooldown and restarts it.
+  `max_outstanding_credits` cannot go below current outstanding unless 0
+  (`FloatCapBelowOutstanding`).
+- mPOO daily cap (C8): `mpoo_daily_credit_cap` credits per UTC day
+  (`floor(block_timestamp / 86,400 s)`), bound 1,000,000 (`MpooDailyCapTooHigh`), set
+  through `set_tunables` with immediate effect. 0 (the deploy default) closes mPOO
+  sales. A purchase that is refused refunds the whole transfer and logs
+  `purchase_rejected: MpooSalesClosed` or `purchase_rejected: MpooDailyCapReached`.
+  NEAR purchases do not count against it.
 - `get_withdrawable_near()` returns the maximum available now, as a decimal string:
   account balance minus current storage stake, minus outstanding credits ×
   664,000,000,000,000,000,000 yoctoNEAR, minus the configured reserve floor.

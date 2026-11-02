@@ -115,7 +115,7 @@ pub struct Tunables {
     /// None permits the first price change, including at timestamp zero.
     /// History, not a knob: `set_tunables` refuses to change it.
     pub last_near_price_change_ns: Option<u64>,
-    /// Minimum time between mPOO price changes (C8). Stored now; REV-B splits the setter.
+    /// Minimum time between mPOO price changes (C8), checked by `set_mpoo_price`.
     pub mpoo_price_cooldown_ns: u64,
     /// History, not a knob: `set_tunables` refuses to change it.
     pub last_mpoo_price_change_ns: Option<u64>,
@@ -179,12 +179,20 @@ impl Tunables {
 
     /// True when no NEAR price change happened within `near_price_cooldown_ns`.
     pub(crate) fn near_price_cooldown_elapsed(&self, now: u64) -> bool {
-        cooldown_elapsed(self.last_near_price_change_ns, self.near_price_cooldown_ns, now)
+        cooldown_elapsed(
+            self.last_near_price_change_ns,
+            self.near_price_cooldown_ns,
+            now,
+        )
     }
 
     /// True when no mPOO price change happened within `mpoo_price_cooldown_ns`.
     pub(crate) fn mpoo_price_cooldown_elapsed(&self, now: u64) -> bool {
-        cooldown_elapsed(self.last_mpoo_price_change_ns, self.mpoo_price_cooldown_ns, now)
+        cooldown_elapsed(
+            self.last_mpoo_price_change_ns,
+            self.mpoo_price_cooldown_ns,
+            now,
+        )
     }
 
     fn validate(&self) {
@@ -792,7 +800,10 @@ impl Board {
 
 /// None (never changed) always permits the change, including at timestamp zero.
 fn cooldown_elapsed(last: Option<u64>, cooldown: u64, now: u64) -> bool {
-    last.is_none_or(|last| now.checked_sub(last).is_some_and(|elapsed| elapsed >= cooldown))
+    last.is_none_or(|last| {
+        now.checked_sub(last)
+            .is_some_and(|elapsed| elapsed >= cooldown)
+    })
 }
 
 fn pixel_key(x: u32, y: u32) -> u32 {
@@ -801,7 +812,6 @@ fn pixel_key(x: u32, y: u32) -> u32 {
 
 impl Board {
     /// Revision-2 facts for one account; absent means all zeros.
-    #[allow(dead_code)] // first reader arrives with F1/F2 (REV-D)
     pub(crate) fn account_extra(&self, account: &AccountId) -> AccountExtra {
         self.account_extra.get(account).copied().unwrap_or_default()
     }

@@ -121,7 +121,12 @@ mod tests {
     }
     fn setup() -> Board {
         context(0, 0);
-        Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback())
+        Board::new(
+            accounts(5),
+            U128(100),
+            crate::test_team(),
+            crate::test_buyback(),
+        )
     }
     fn rejected(code: &str, f: impl FnOnce()) {
         let err =
@@ -211,15 +216,13 @@ mod tests {
     fn prices_emit_old_and_new_values_and_enforce_exact_cooldown_boundary() {
         let mut board = setup();
         let original = board.get_payment_config().near_per_credit.0;
-        board.set_credit_prices(U128(original * 2), U128(50));
+        board.set_near_price(U128(original * 2));
         let log = get_logs().pop().unwrap();
         assert!(log.contains("price_changed") && log.contains("old_near_per_credit"));
         context(0, MIN_COOLDOWN_NS - 1);
-        rejected("PriceCooldown", || {
-            board.set_credit_prices(U128(original), U128(100))
-        });
+        rejected("NearPriceCooldown", || board.set_near_price(U128(original)));
         context(0, MIN_COOLDOWN_NS);
-        board.set_credit_prices(U128(original), U128(100));
+        board.set_near_price(U128(original));
         assert_eq!(
             board.get_tunables().last_near_price_change_ns,
             Some(MIN_COOLDOWN_NS)
@@ -227,10 +230,62 @@ mod tests {
     }
 
     #[test]
+    fn mpoo_price_emits_old_and_new_values_and_enforces_its_own_cooldown() {
+        let mut board = setup();
+        board.set_mpoo_price(U128(50));
+        let log = get_logs().pop().unwrap();
+        assert!(log.contains("price_changed") && log.contains("\"old_mpoo_per_credit\":\"100\""));
+        context(0, MIN_COOLDOWN_NS - 1);
+        rejected("MpooPriceCooldown", || board.set_mpoo_price(U128(100)));
+        context(0, MIN_COOLDOWN_NS);
+        board.set_mpoo_price(U128(100));
+        assert_eq!(board.get_payment_config().mpoo_per_credit, U128(100));
+        assert_eq!(
+            board.get_tunables().last_mpoo_price_change_ns,
+            Some(MIN_COOLDOWN_NS)
+        );
+    }
+
+    #[test]
+    fn changing_one_price_does_not_start_the_other_cooldown() {
+        let mut board = setup();
+        let near = board.get_payment_config().near_per_credit.0;
+        context(0, 10);
+        board.set_mpoo_price(U128(150));
+        assert_eq!(board.get_tunables().last_near_price_change_ns, None);
+        // An urgent NEAR change the same block is still allowed.
+        board.set_near_price(U128(near * 2));
+        assert_eq!(board.get_tunables().last_mpoo_price_change_ns, Some(10));
+        assert_eq!(board.get_tunables().last_near_price_change_ns, Some(10));
+        // And the reverse: a NEAR change does not reset the mPOO clock.
+        context(0, 10 + MIN_COOLDOWN_NS);
+        board.set_near_price(U128(near));
+        context(0, 10 + MIN_COOLDOWN_NS + 1);
+        board.set_mpoo_price(U128(100));
+        assert_eq!(
+            board.get_tunables().last_mpoo_price_change_ns,
+            Some(10 + MIN_COOLDOWN_NS + 1)
+        );
+    }
+
+    #[test]
+    fn price_setters_require_owner_and_one_yocto() {
+        let mut board = setup();
+        context(1, 0);
+        rejected("OwnerOnly", || board.set_near_price(U128(1)));
+        rejected("OwnerOnly", || board.set_mpoo_price(U128(100)));
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(accounts(0))
+            .build());
+        rejected("exactly 1 yoctoNEAR", || board.set_near_price(U128(1)));
+        rejected("exactly 1 yoctoNEAR", || board.set_mpoo_price(U128(100)));
+    }
+
+    #[test]
     fn general_tunables_cannot_bypass_history_cooldown_or_reserve_minimum() {
         let mut board = setup();
         let original = board.get_payment_config().near_per_credit;
-        board.set_credit_prices(original, U128(100));
+        board.set_near_price(original);
         let mut config = board.get_tunables();
         config.last_near_price_change_ns = None;
         rejected("PriceHistoryImmutable", || board.set_tunables(config));
@@ -309,18 +364,21 @@ mod tests {
     #[test]
     fn price_halving_rounds_up_and_checks_each_currency() {
         let mut board = setup();
-        let near = board.get_payment_config().near_per_credit;
-        rejected("PriceStepTooLarge", || {
-            board.set_credit_prices(near, U128(49))
-        });
-        rejected("PriceStepTooLarge", || {
-            board.set_credit_prices(near, U128(201))
-        });
-        board.set_credit_prices(near, U128(51));
+        rejected("PriceStepTooLarge", || board.set_mpoo_price(U128(49)));
+        rejected("PriceStepTooLarge", || board.set_mpoo_price(U128(201)));
+        board.set_mpoo_price(U128(51));
         context(0, MIN_COOLDOWN_NS);
+        rejected("PriceStepTooLarge", || board.set_mpoo_price(U128(25)));
+        board.set_mpoo_price(U128(26));
+        // The NEAR setter applies the same step rule.
+        let near = board.get_payment_config().near_per_credit.0;
         rejected("PriceStepTooLarge", || {
-            board.set_credit_prices(near, U128(25))
+            board.set_near_price(U128(near * 2 + 1))
         });
-        board.set_credit_prices(near, U128(26));
+        rejected("PriceStepTooLarge", || {
+            board.set_near_price(U128(near / 2 - 1))
+        });
+        rejected("ZeroPrice", || board.set_near_price(U128(0)));
+        board.set_near_price(U128(near / 2));
     }
 }
