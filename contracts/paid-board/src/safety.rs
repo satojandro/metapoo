@@ -10,6 +10,8 @@ pub(crate) const MIN_COOLDOWN_NS: u64 = 86_400_000_000_000;
 // 152,724 bytes / 2,301 painted cells ≈ 66.4 bytes, at 10^19 yoctoNEAR/byte.
 // This is a baseline estimate, not a measurement of the new paid-board layout.
 pub(crate) const STORAGE_PER_PIXEL: u128 = 664_000_000_000_000_000_000;
+/// Every cell the board can ever hold (128 × 128).
+const BOARD_CELLS: u32 = crate::WIDTH * crate::HEIGHT;
 
 #[near]
 impl Board {
@@ -36,40 +38,24 @@ impl Board {
         );
     }
 
-    /// Reserve existing storage as well as the future storage purchased by
-    /// outstanding credits. Saturation makes an underfunded board return zero.
+    /// NEAR above the protected reserve: what the next `distribute_near` sends.
+    ///
+    /// `protected = storage used now + empty cells × STORAGE_PER_PIXEL + reserve floor`,
+    /// with `empty cells = 16,384 − painted cells` (spec §C5). Outstanding credits
+    /// no longer reserve storage: each one either paints an empty cell, already
+    /// covered by the empty-cell term, or repaints one, which needs no new storage.
+    /// Saturation makes an underfunded board return zero.
     pub fn get_withdrawable_near(&self) -> U128 {
         let storage =
             u128::from(env::storage_usage()).checked_mul(env::storage_byte_cost().as_yoctonear());
-        let protected = self
-            .payments
-            .outstanding
+        let empty_cells = u128::from(BOARD_CELLS.saturating_sub(self.pixels.len()));
+        let protected = empty_cells
             .checked_mul(STORAGE_PER_PIXEL)
             .and_then(|owed| owed.checked_add(self.tunables.reserve_floor.0))
             .and_then(|reserve| storage.and_then(|used| reserve.checked_add(used)));
         U128(protected.map_or(0, |amount| {
             env::account_balance().as_yoctonear().saturating_sub(amount)
         }))
-    }
-
-    #[payable]
-    pub fn withdraw_near(&mut self, recipient: AccountId, amount: U128) -> Promise {
-        self.assert_safety_owner();
-        assert!(amount.0 > 0, "ZeroAmount");
-        assert_ne!(recipient, env::current_account_id(), "InvalidRecipient");
-        assert!(
-            amount.0 <= self.get_withdrawable_near().0,
-            "ReserveBreached"
-        );
-        // A log proves the request, not delivery. Follow this returned promise
-        // to the transfer receipt; a failed transfer leaves the funds here.
-        Self::safety_event(
-            "treasury_withdrawn",
-            near_sdk::serde_json::json!({
-                "recipient": recipient, "amount": amount, "status": "scheduled"
-            }),
-        );
-        Promise::new(recipient).transfer(NearToken::from_yoctonear(amount.0))
     }
 }
 
@@ -121,7 +107,15 @@ mod tests {
     }
     fn setup() -> Board {
         context(0, 0);
-        Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback())
+        let mut board = Board::new(
+            accounts(5),
+            U128(100),
+            crate::test_team(),
+            crate::test_buyback(),
+        );
+        // Paid-path tests: F1 free first paints are covered in `free_paint.rs`.
+        board.tunables.free_first_paints_per_account = 0;
+        board
     }
     fn rejected(code: &str, f: impl FnOnce()) {
         let err =
@@ -141,13 +135,13 @@ mod tests {
         board.payments.outstanding = 10;
         board.set_paused(true);
         context(1, 0);
-        rejected("Paused", || board.draw(0, 0, 1));
+        rejected("Paused", || board.draw(0, 0, 1, u32::MAX));
         rejected("Paused", || {
             board.draw_many(vec![DrawCell {
                 x: 0,
                 y: 0,
                 color: 1,
-            }])
+            }], u32::MAX)
         });
         rejected("Paused", || {
             board.buy_credits_near(U128(1), U128(1));
@@ -164,62 +158,75 @@ mod tests {
         context(0, 0);
         board.set_paused(false);
         context(1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         assert_eq!(board.get_credits(accounts(1)), Some(U128(9)));
     }
 
     #[test]
-    fn withdrawal_exact_boundary_protects_existing_storage_and_outstanding_credits() {
+    fn withdrawable_reserves_storage_empty_cells_and_floor_but_not_credits() {
         let mut board = setup();
+        let storage = u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear();
         let before = board.get_withdrawable_near().0;
         assert_eq!(
             before,
             env::account_balance().as_yoctonear()
                 - MIN_RESERVE
-                - u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear()
+                - storage
+                - u128::from(BOARD_CELLS) * STORAGE_PER_PIXEL
         );
+        // Outstanding credits no longer reserve storage (spec C5).
         board.payments.outstanding = 10_000;
-        let available = board.get_withdrawable_near().0;
-        assert_eq!(before - available, 10_000 * STORAGE_PER_PIXEL);
-        rejected("ReserveBreached", || {
-            let _ = board.withdraw_near(accounts(2), U128(available + 1));
-        });
-        drop(board.withdraw_near(accounts(2), U128(available)));
-        // Promise creation reserves funds in the runtime immediately. A second
-        // withdrawal cannot count the money already committed to this receipt.
-        assert_eq!(board.get_withdrawable_near(), U128(0));
-        rejected("ReserveBreached", || {
-            let _ = board.withdraw_near(accounts(2), U128(1));
-        });
-        assert!(!get_created_receipts().is_empty());
-        assert!(get_logs()
-            .iter()
-            .any(|log| log.contains("treasury_withdrawn")));
+        assert_eq!(board.get_withdrawable_near().0, before);
+        // A painted cell releases its empty-cell reservation.
+        board.payments.balances.insert(accounts(1), 1);
+        board.payments.outstanding = 1;
+        context(1, 0);
+        board.draw(0, 0, 1, u32::MAX);
+        assert_eq!(
+            board.get_withdrawable_near().0,
+            before + STORAGE_PER_PIXEL
+                - (u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear()
+                    - storage)
+        );
     }
 
     #[test]
-    fn underfunded_or_overflowed_liability_has_no_withdrawable_balance() {
-        let mut board = setup();
-        board.payments.outstanding = u128::MAX;
+    fn underfunded_board_has_no_withdrawable_balance() {
+        let board = setup();
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(accounts(4))
+            .account_balance(NearToken::from_near(10))
+            .storage_usage(1000)
+            .build());
         assert_eq!(board.get_withdrawable_near(), U128(0));
-        rejected("ReserveBreached", || {
-            let _ = board.withdraw_near(accounts(2), U128(1));
-        });
+    }
+
+    #[test]
+    fn withdraw_near_is_not_a_contract_method() {
+        // Owner decision, 1 Nov 2026: revenue leaves only through the split.
+        for source in [
+            include_str!("safety.rs"),
+            include_str!("lib.rs"),
+            include_str!("payments.rs"),
+            include_str!("revenue.rs"),
+            include_str!("emission.rs"),
+            include_str!("migrate.rs"),
+        ] {
+            assert!(!source.contains(concat!("fn withdraw", "_near(")));
+        }
     }
 
     #[test]
     fn prices_emit_old_and_new_values_and_enforce_exact_cooldown_boundary() {
         let mut board = setup();
         let original = board.get_payment_config().near_per_credit.0;
-        board.set_credit_prices(U128(original * 2), U128(50));
+        board.set_near_price(U128(original * 2));
         let log = get_logs().pop().unwrap();
         assert!(log.contains("price_changed") && log.contains("old_near_per_credit"));
         context(0, MIN_COOLDOWN_NS - 1);
-        rejected("PriceCooldown", || {
-            board.set_credit_prices(U128(original), U128(100))
-        });
+        rejected("NearPriceCooldown", || board.set_near_price(U128(original)));
         context(0, MIN_COOLDOWN_NS);
-        board.set_credit_prices(U128(original), U128(100));
+        board.set_near_price(U128(original));
         assert_eq!(
             board.get_tunables().last_near_price_change_ns,
             Some(MIN_COOLDOWN_NS)
@@ -227,10 +234,62 @@ mod tests {
     }
 
     #[test]
+    fn mpoo_price_emits_old_and_new_values_and_enforces_its_own_cooldown() {
+        let mut board = setup();
+        board.set_mpoo_price(U128(50));
+        let log = get_logs().pop().unwrap();
+        assert!(log.contains("price_changed") && log.contains("\"old_mpoo_per_credit\":\"100\""));
+        context(0, MIN_COOLDOWN_NS - 1);
+        rejected("MpooPriceCooldown", || board.set_mpoo_price(U128(100)));
+        context(0, MIN_COOLDOWN_NS);
+        board.set_mpoo_price(U128(100));
+        assert_eq!(board.get_payment_config().mpoo_per_credit, U128(100));
+        assert_eq!(
+            board.get_tunables().last_mpoo_price_change_ns,
+            Some(MIN_COOLDOWN_NS)
+        );
+    }
+
+    #[test]
+    fn changing_one_price_does_not_start_the_other_cooldown() {
+        let mut board = setup();
+        let near = board.get_payment_config().near_per_credit.0;
+        context(0, 10);
+        board.set_mpoo_price(U128(150));
+        assert_eq!(board.get_tunables().last_near_price_change_ns, None);
+        // An urgent NEAR change the same block is still allowed.
+        board.set_near_price(U128(near * 2));
+        assert_eq!(board.get_tunables().last_mpoo_price_change_ns, Some(10));
+        assert_eq!(board.get_tunables().last_near_price_change_ns, Some(10));
+        // And the reverse: a NEAR change does not reset the mPOO clock.
+        context(0, 10 + MIN_COOLDOWN_NS);
+        board.set_near_price(U128(near));
+        context(0, 10 + MIN_COOLDOWN_NS + 1);
+        board.set_mpoo_price(U128(100));
+        assert_eq!(
+            board.get_tunables().last_mpoo_price_change_ns,
+            Some(10 + MIN_COOLDOWN_NS + 1)
+        );
+    }
+
+    #[test]
+    fn price_setters_require_owner_and_one_yocto() {
+        let mut board = setup();
+        context(1, 0);
+        rejected("OwnerOnly", || board.set_near_price(U128(1)));
+        rejected("OwnerOnly", || board.set_mpoo_price(U128(100)));
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(accounts(0))
+            .build());
+        rejected("exactly 1 yoctoNEAR", || board.set_near_price(U128(1)));
+        rejected("exactly 1 yoctoNEAR", || board.set_mpoo_price(U128(100)));
+    }
+
+    #[test]
     fn general_tunables_cannot_bypass_history_cooldown_or_reserve_minimum() {
         let mut board = setup();
         let original = board.get_payment_config().near_per_credit;
-        board.set_credit_prices(original, U128(100));
+        board.set_near_price(original);
         let mut config = board.get_tunables();
         config.last_near_price_change_ns = None;
         rejected("PriceHistoryImmutable", || board.set_tunables(config));
@@ -297,9 +356,6 @@ mod tests {
         let mut board = setup();
         context(1, 0);
         rejected("OwnerOnly", || board.set_paused(true));
-        rejected("OwnerOnly", || {
-            let _ = board.withdraw_near(accounts(2), U128(1));
-        });
         testing_env!(VMContextBuilder::new()
             .predecessor_account_id(accounts(0))
             .build());
@@ -309,18 +365,21 @@ mod tests {
     #[test]
     fn price_halving_rounds_up_and_checks_each_currency() {
         let mut board = setup();
-        let near = board.get_payment_config().near_per_credit;
-        rejected("PriceStepTooLarge", || {
-            board.set_credit_prices(near, U128(49))
-        });
-        rejected("PriceStepTooLarge", || {
-            board.set_credit_prices(near, U128(201))
-        });
-        board.set_credit_prices(near, U128(51));
+        rejected("PriceStepTooLarge", || board.set_mpoo_price(U128(49)));
+        rejected("PriceStepTooLarge", || board.set_mpoo_price(U128(201)));
+        board.set_mpoo_price(U128(51));
         context(0, MIN_COOLDOWN_NS);
+        rejected("PriceStepTooLarge", || board.set_mpoo_price(U128(25)));
+        board.set_mpoo_price(U128(26));
+        // The NEAR setter applies the same step rule.
+        let near = board.get_payment_config().near_per_credit.0;
         rejected("PriceStepTooLarge", || {
-            board.set_credit_prices(near, U128(25))
+            board.set_near_price(U128(near * 2 + 1))
         });
-        board.set_credit_prices(near, U128(26));
+        rejected("PriceStepTooLarge", || {
+            board.set_near_price(U128(near / 2 - 1))
+        });
+        rejected("ZeroPrice", || board.set_near_price(U128(0)));
+        board.set_near_price(U128(near / 2));
     }
 }

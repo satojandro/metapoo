@@ -16,6 +16,9 @@ pub(crate) const INITIAL_NEAR_PRICE: u128 = 2_500_000_000_000_000_000_000;
 // ECONOMY NEXT: replace this with measured storage billing and explicit refunds.
 const REGISTRATION: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
 
+/// C8: one UTC day in nanoseconds; the mPOO cap counts per `floor(now / DAY_NS)`.
+const DAY_NS: u64 = 86_400_000_000_000;
+
 /// The first six fields are the version-1 layout, in order (see `migrate.rs`).
 /// Map `c` (`balances`) keeps its prefix and value type forever.
 #[near(serializers = [borsh])]
@@ -61,6 +64,21 @@ pub struct PaymentConfig {
     pub near_per_credit: U128,
     pub mpoo_per_credit: U128,
     pub registration_fee: U128,
+}
+
+/// What `get_mpoo_sales_today` returns: the C8 daily cap as of the current block day.
+#[near(serializers = [json])]
+pub struct MpooSalesToday {
+    /// `floor(block_timestamp / 86,400 s)`.
+    pub day_index: u64,
+    /// Credits sold for mPOO today; 0 if nothing has sold since the day began.
+    pub sold_today: U128,
+    /// `mpoo_daily_credit_cap`. 0 = mPOO sales closed.
+    pub cap: U128,
+    /// Credits that can still be bought for mPOO today.
+    pub remaining: U128,
+    /// Start of the next UTC day, in nanoseconds.
+    pub resets_at_ns: u64,
 }
 
 // Prices and minimum output travel with the payment, preventing an interface
@@ -177,6 +195,55 @@ impl Payments {
         Ok(credits)
     }
 
+    /// The mPOO credit path: `credit` behind the C8 daily cap. The mPOO price is
+    /// set by hand weekly, so if mPOO rises between updates its credits get cheap;
+    /// the cap bounds how many can be bought cheaply in one UTC day.
+    ///
+    /// `daily_cap` 0 = mPOO sales closed. A purchase that would cross the cap is
+    /// rejected whole (the caller refunds the entire transfer), never part-filled.
+    /// Checks run before `credit` mutates anything, and `credit` itself mutates
+    /// only on success, so an Err leaves the counter and balances untouched.
+    pub(crate) fn credit_mpoo(
+        &mut self,
+        account: &AccountId,
+        amount: u128,
+        minimum: u128,
+        max_outstanding: u128,
+        daily_cap: u128,
+        now_ns: u64,
+    ) -> Result<u128, &'static str> {
+        if daily_cap == 0 {
+            return Err("MpooSalesClosed");
+        }
+        let price = self.mpoo_price;
+        if amount == 0 || !amount.is_multiple_of(price) {
+            return Err("InvalidPurchaseAmount");
+        }
+        let (day, sold_today) = self.mpoo_sold_on(now_ns);
+        let within_cap = sold_today
+            .checked_add(amount / price)
+            .is_some_and(|sold| sold <= daily_cap);
+        if !within_cap {
+            return Err("MpooDailyCapReached");
+        }
+        let credits = self.credit(account, amount, price, minimum, max_outstanding)?;
+        self.mpoo_day_index = day;
+        self.mpoo_credits_sold_today = sold_today + credits;
+        Ok(credits)
+    }
+
+    /// The UTC day of `now_ns` and the credits sold for mPOO on it. A stored
+    /// counter from an earlier day reads 0; nothing is written here.
+    fn mpoo_sold_on(&self, now_ns: u64) -> (u64, u128) {
+        let day = now_ns / DAY_NS;
+        let sold = if day == self.mpoo_day_index {
+            self.mpoo_credits_sold_today
+        } else {
+            0
+        };
+        (day, sold)
+    }
+
     pub(crate) fn spend(&mut self, account: &AccountId, count: u128) {
         if count == 0 {
             return;
@@ -196,67 +263,58 @@ impl Payments {
 
 #[near]
 impl Board {
+    /// Owner-only, 1 yocto. Move the NEAR price per credit by at most ×2 / ÷2,
+    /// once per `near_price_cooldown_ns` (≥ 24 h). Repaint credit changes in
+    /// `set_tunables` share this cooldown (C1). The mPOO cooldown is untouched.
+    ///
     /// ECONOMY NEXT: move pricing authority to governed, bounded quotes with
     /// freshness checks if USD pricing is automated. No pool spot-price oracle.
     #[payable]
-    pub fn set_credit_prices(&mut self, near_per_credit: U128, mpoo_per_credit: U128) {
-        near_sdk::assert_one_yocto();
-        assert_eq!(
-            env::predecessor_account_id(),
-            self.payments.owner,
-            "OwnerOnly"
-        );
-        assert!(near_per_credit.0 > 0 && mpoo_per_credit.0 > 0, "ZeroPrice");
-        // Compare via differences rather than multiplication: even a u128::MAX
-        // price can be checked without wrapping at 2 × old_price.
-        for (old, new) in [
-            (self.payments.near_price, near_per_credit.0),
-            (self.payments.mpoo_price, mpoo_per_credit.0),
-        ] {
-            assert!(
-                if new >= old {
-                    new - old <= old
-                } else {
-                    old - new <= new
-                },
-                "PriceStepTooLarge"
-            );
-        }
+    pub fn set_near_price(&mut self, near_per_credit: U128) {
+        self.assert_price_owner();
         let now = env::block_timestamp();
-        // This setter moves both prices, so both cooldowns must have passed and
-        // both restart. Version 1 had one shared cooldown; the migration seeds both
-        // histories from it, so behaviour is unchanged. REV-B splits the setter.
-        for (last, cooldown) in [
-            (
-                self.tunables.last_near_price_change_ns,
-                self.tunables.near_price_cooldown_ns,
-            ),
-            (
-                self.tunables.last_mpoo_price_change_ns,
-                self.tunables.mpoo_price_cooldown_ns,
-            ),
-        ] {
-            if let Some(last) = last {
-                assert!(
-                    now.checked_sub(last)
-                        .is_some_and(|elapsed| elapsed >= cooldown),
-                    "PriceCooldown"
-                );
-            }
-        }
+        assert!(
+            self.tunables.near_price_cooldown_elapsed(now),
+            "NearPriceCooldown"
+        );
+        let old = self.payments.near_price;
+        check_price_step(old, near_per_credit.0);
         Self::safety_event(
             "price_changed",
             near_sdk::serde_json::json!({
-                "old_near_per_credit": U128(self.payments.near_price),
+                "asset": "near",
+                "old_near_per_credit": U128(old),
                 "new_near_per_credit": near_per_credit,
-                "old_mpoo_per_credit": U128(self.payments.mpoo_price),
-                "new_mpoo_per_credit": mpoo_per_credit,
                 "changed_at_ns": now.to_string()
             }),
         );
         self.payments.near_price = near_per_credit.0;
-        self.payments.mpoo_price = mpoo_per_credit.0;
         self.tunables.last_near_price_change_ns = Some(now);
+    }
+
+    /// Owner-only, 1 yocto. Move the mPOO price per credit by at most ×2 / ÷2,
+    /// once per `mpoo_price_cooldown_ns` (≥ 24 h). A weekly mPOO update never
+    /// blocks an urgent NEAR change: the NEAR cooldown is untouched.
+    #[payable]
+    pub fn set_mpoo_price(&mut self, mpoo_per_credit: U128) {
+        self.assert_price_owner();
+        let now = env::block_timestamp();
+        assert!(
+            self.tunables.mpoo_price_cooldown_elapsed(now),
+            "MpooPriceCooldown"
+        );
+        let old = self.payments.mpoo_price;
+        check_price_step(old, mpoo_per_credit.0);
+        Self::safety_event(
+            "price_changed",
+            near_sdk::serde_json::json!({
+                "asset": "mpoo",
+                "old_mpoo_per_credit": U128(old),
+                "new_mpoo_per_credit": mpoo_per_credit,
+                "changed_at_ns": now.to_string()
+            }),
+        );
+        self.payments.mpoo_price = mpoo_per_credit.0;
         self.tunables.last_mpoo_price_change_ns = Some(now);
     }
 
@@ -266,6 +324,20 @@ impl Board {
             near_per_credit: U128(self.payments.near_price),
             mpoo_per_credit: U128(self.payments.mpoo_price),
             registration_fee: U128(REGISTRATION),
+        }
+    }
+
+    /// The mPOO daily cap as of the current block day, so the page can offer
+    /// NEAR before a transfer is refunded with `MpooDailyCapReached`.
+    pub fn get_mpoo_sales_today(&self) -> MpooSalesToday {
+        let (day, sold) = self.payments.mpoo_sold_on(env::block_timestamp());
+        let cap = self.tunables.mpoo_daily_credit_cap;
+        MpooSalesToday {
+            day_index: day,
+            sold_today: U128(sold),
+            cap: U128(cap),
+            remaining: U128(cap.saturating_sub(sold)),
+            resets_at_ns: (day + 1).saturating_mul(DAY_NS),
         }
     }
 
@@ -313,6 +385,7 @@ impl Board {
                 cap,
             )
             .unwrap_or_else(|code| env::panic_str(code));
+        self.mark_purchased(&account);
         Self::purchase_event(&account, "near", amount, credits);
         U128(credits)
     }
@@ -325,6 +398,11 @@ impl Board {
             self.payments.token,
             "WrongToken"
         );
+        // R2: mPOO swapped back by the buyback operator. Checked before pause:
+        // pause stops paint and purchases, not revenue (see `revenue.rs`).
+        if crate::revenue::is_revenue_message(&msg) {
+            return self.receive_mpoo_revenue(&sender_id, amount);
+        }
         if self.tunables.paused {
             return amount;
         }
@@ -342,15 +420,18 @@ impl Board {
             return amount;
         }
         let cap = self.tunables.max_outstanding_credits;
-        match self.payments.credit(
+        match self.payments.credit_mpoo(
             &sender_id,
             amount.0,
-            self.payments.mpoo_price,
             purchase.min_credits.0,
             cap,
+            self.tunables.mpoo_daily_credit_cap,
+            env::block_timestamp(),
         ) {
             Ok(credits) => {
+                self.mark_purchased(&sender_id);
                 Self::purchase_event(&sender_id, "mpoo", amount.0, credits);
+                self.add_mpoo_revenue(amount.0); // R2: every accepted mPOO is revenue
                 U128(0) // All delivered tokens accepted; no manual refund transfer.
             }
             Err(code) => {
@@ -362,7 +443,40 @@ impl Board {
     }
 }
 
+/// ×2 / ÷2 per change. Compare via differences rather than multiplication: even
+/// a u128::MAX price can be checked without wrapping at 2 × old_price.
+fn check_price_step(old: u128, new: u128) {
+    assert!(new > 0, "ZeroPrice");
+    assert!(
+        if new >= old {
+            new - old <= old
+        } else {
+            old - new <= new
+        },
+        "PriceStepTooLarge"
+    );
+}
+
 impl Board {
+    fn assert_price_owner(&self) {
+        near_sdk::assert_one_yocto();
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.payments.owner,
+            "OwnerOnly"
+        );
+    }
+
+    /// F2 reads this: any successful credit purchase, NEAR or mPOO, sets it.
+    /// Writes only on the first purchase, so later purchases add no storage.
+    fn mark_purchased(&mut self, account: &AccountId) {
+        let mut extra = self.account_extra(account);
+        if !extra.has_purchased {
+            extra.has_purchased = true;
+            self.account_extra.insert(account.clone(), extra);
+        }
+    }
+
     fn purchase_event(account: &AccountId, asset: &str, amount: u128, credits: u128) {
         let event = near_sdk::serde_json::json!({
             "standard": "mpoo_payments", "version": "1.0.0", "event": "credits_purchased",
@@ -388,10 +502,19 @@ mod tests {
     }
     fn setup() -> Board {
         context(0, 0, 0);
-        let mut board = Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback());
+        let mut board = Board::new(
+            accounts(5),
+            U128(100),
+            crate::test_team(),
+            crate::test_buyback(),
+        );
         // Tiny prices keep arithmetic edge-case tests readable; production
         // initialization is exercised separately below.
         board.payments.near_price = 10;
+        // mPOO sales are closed at deploy (cap 0); open them for the purchase tests.
+        board.tunables.mpoo_daily_credit_cap = 1_000_000;
+        // Paid-path tests: F1 free first paints are covered in `free_paint.rs`.
+        board.tunables.free_first_paints_per_account = 0;
         context(1, 1, REGISTRATION);
         board.register_credit_account();
         board
@@ -405,13 +528,18 @@ mod tests {
     fn threefold_price_change_is_rejected() {
         let mut board = setup();
         context(0, 0, 1);
-        board.set_credit_prices(U128(30), U128(100));
+        board.set_near_price(U128(30));
     }
 
     #[test]
     fn launch_price_is_exactly_0025_near_per_pixel() {
         context(0, 0, 0);
-        let mut board = Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback());
+        let mut board = Board::new(
+            accounts(5),
+            U128(100),
+            crate::test_team(),
+            crate::test_buyback(),
+        );
         let price = 2_500_000_000_000_000_000_000u128;
         assert_eq!(board.get_payment_config().near_per_credit, U128(price));
         context(1, 1, REGISTRATION);
@@ -427,7 +555,7 @@ mod tests {
         context(1, 1, 30);
         assert_eq!(board.buy_credits_near(U128(3), U128(10)), U128(3));
         context(1, 1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         board.draw_many(vec![
             crate::DrawCell {
                 x: 1,
@@ -439,7 +567,7 @@ mod tests {
                 y: 0,
                 color: 1,
             },
-        ]);
+        ], u32::MAX);
         assert_eq!(board.get_credits(accounts(1)), Some(U128(0)));
     }
     #[test]
@@ -530,21 +658,21 @@ mod tests {
     fn free_draw_rejected() {
         let mut board = setup();
         context(1, 1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
     }
     #[test]
     #[should_panic(expected = "OwnerOnly")]
     fn price_update_requires_owner() {
         let mut board = setup();
         context(1, 1, 1);
-        board.set_credit_prices(U128(20), U128(200));
+        board.set_near_price(U128(20));
     }
     #[test]
     #[should_panic(expected = "PriceChanged")]
     fn stale_near_price_rejected() {
         let mut board = setup();
         context(0, 0, 1);
-        board.set_credit_prices(U128(20), U128(200));
+        board.set_near_price(U128(20));
         context(1, 1, 20);
         board.buy_credits_near(U128(1), U128(10));
     }
@@ -577,7 +705,7 @@ mod tests {
                     y: 0,
                     color: 1,
                 },
-            ]);
+            ], u32::MAX);
         }));
         assert!(result.is_err());
         assert_eq!(board.get_credits(accounts(1)), Some(U128(1)));
@@ -590,7 +718,7 @@ mod tests {
         context(1, 1, 20);
         board.buy_credits_near(U128(2), U128(10));
         context(0, 0, 1);
-        board.set_credit_prices(U128(20), U128(200));
+        board.set_mpoo_price(U128(200));
         context(5, 1, 0);
         assert_eq!(
             board.ft_on_transfer(accounts(1), U128(200), message()),
@@ -646,9 +774,9 @@ mod tests {
         board.buy_credits_near(U128(3), U128(10));
         assert_eq!(board.get_outstanding_credits(), U128(3));
         context(1, 1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         assert_eq!(board.get_outstanding_credits(), U128(2));
-        board.draw(1, 0, 1);
+        board.draw(1, 0, 1, u32::MAX);
         assert_eq!(board.get_outstanding_credits(), U128(1));
     }
 
@@ -669,7 +797,7 @@ mod tests {
         assert_eq!(board.get_credits(accounts(1)), Some(U128(2)));
         // Painting consumes the float, so room exists again.
         context(1, 1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(1, 1, 10);
         assert_eq!(board.buy_credits_near(U128(1), U128(10)), U128(1));
         assert_eq!(board.get_outstanding_credits(), U128(2));
@@ -682,5 +810,188 @@ mod tests {
         context(1, 1, 100);
         board.buy_credits_near(U128(10), U128(10));
         assert_eq!(board.get_outstanding_credits(), U128(10));
+    }
+
+    // --- C8: mPOO daily cap ------------------------------------------------
+
+    fn mpoo_context(ts: u64) {
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(accounts(4))
+            .predecessor_account_id(accounts(5))
+            .signer_account_id(accounts(1))
+            .block_timestamp(ts)
+            .build());
+    }
+    fn buy_msg(credits: u128) -> String {
+        format!(r#"{{"min_credits":"{credits}","expected_price":"100"}}"#)
+    }
+
+    #[test]
+    fn mpoo_purchase_over_the_daily_cap_refunds_the_whole_transfer() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 3;
+        mpoo_context(5);
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)),
+            U128(0)
+        );
+        // 2 sold + 2 more would cross 3: refund all of it, not a partial fill.
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(200), buy_msg(1)),
+            U128(200)
+        );
+        assert!(near_sdk::test_utils::get_logs()
+            .iter()
+            .any(|log| log == "purchase_rejected: MpooDailyCapReached"));
+        assert_eq!(board.get_credits(accounts(1)), Some(U128(2)));
+        assert_eq!(board.get_outstanding_credits(), U128(2));
+        // Exactly reaching the cap is allowed.
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(100), buy_msg(1)),
+            U128(0)
+        );
+        assert_eq!(board.get_credits(accounts(1)), Some(U128(3)));
+        // NEAR purchases are not counted against the mPOO cap.
+        context(1, 1, 50);
+        assert_eq!(board.buy_credits_near(U128(5), U128(10)), U128(5));
+    }
+
+    #[test]
+    fn mpoo_daily_counter_resets_at_the_next_utc_day() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 2;
+        mpoo_context(3 * DAY_NS - 1);
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)),
+            U128(0)
+        );
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(100), buy_msg(1)),
+            U128(100)
+        );
+        mpoo_context(3 * DAY_NS);
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)),
+            U128(0)
+        );
+        assert_eq!(board.get_credits(accounts(1)), Some(U128(4)));
+        assert_eq!(board.payments.mpoo_day_index, 3);
+        assert_eq!(board.payments.mpoo_credits_sold_today, 2);
+    }
+
+    #[test]
+    fn mpoo_cap_of_zero_closes_mpoo_sales() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 0;
+        mpoo_context(5);
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)),
+            U128(200)
+        );
+        assert!(near_sdk::test_utils::get_logs()
+            .iter()
+            .any(|log| log == "purchase_rejected: MpooSalesClosed"));
+        assert_eq!(board.get_credits(accounts(1)), Some(U128(0)));
+    }
+
+    #[test]
+    fn raising_the_mpoo_cap_takes_effect_immediately() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 1;
+        mpoo_context(5);
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)),
+            U128(200)
+        );
+        let mut tunables = board.get_tunables();
+        tunables.mpoo_daily_credit_cap = 3;
+        context(0, 0, 1);
+        board.set_tunables(tunables);
+        mpoo_context(5);
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)),
+            U128(0)
+        );
+    }
+
+    // --- get_mpoo_sales_today ---------------------------------------------
+
+    #[test]
+    fn mpoo_sales_today_reads_zero_on_a_fresh_day() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 5;
+        mpoo_context(2 * DAY_NS + 7);
+        let view = board.get_mpoo_sales_today();
+        assert_eq!(view.day_index, 2);
+        assert_eq!(view.sold_today, U128(0));
+        assert_eq!(view.cap, U128(5));
+        assert_eq!(view.remaining, U128(5));
+        assert_eq!(view.resets_at_ns, 3 * DAY_NS);
+    }
+
+    #[test]
+    fn mpoo_sales_today_remaining_drops_after_a_purchase() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 5;
+        mpoo_context(10);
+        assert_eq!(board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)), U128(0));
+        let view = board.get_mpoo_sales_today();
+        assert_eq!(view.sold_today, U128(2));
+        assert_eq!(view.remaining, U128(3));
+    }
+
+    #[test]
+    fn mpoo_sales_today_reads_zero_after_rollover_without_mutating() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 5;
+        mpoo_context(10);
+        assert_eq!(board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)), U128(0));
+        mpoo_context(DAY_NS + 1);
+        let view = board.get_mpoo_sales_today();
+        assert_eq!(view.day_index, 1);
+        assert_eq!(view.sold_today, U128(0));
+        assert_eq!(view.remaining, U128(5));
+        assert_eq!(view.resets_at_ns, 2 * DAY_NS);
+        // A view: the stored counter still describes day 0.
+        assert_eq!(board.payments.mpoo_day_index, 0);
+        assert_eq!(board.payments.mpoo_credits_sold_today, 2);
+    }
+
+    #[test]
+    fn mpoo_sales_today_with_cap_zero_has_nothing_remaining() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 0;
+        mpoo_context(10);
+        let view = board.get_mpoo_sales_today();
+        assert_eq!(view.cap, U128(0));
+        assert_eq!(view.remaining, U128(0));
+    }
+
+    // --- has_purchased (read by F2 happy hour) ------------------------------
+
+    #[test]
+    fn near_purchase_sets_has_purchased() {
+        let mut board = setup();
+        assert!(!board.account_extra(&accounts(1)).has_purchased);
+        context(1, 1, 10);
+        board.buy_credits_near(U128(1), U128(10));
+        assert!(board.account_extra(&accounts(1)).has_purchased);
+    }
+
+    #[test]
+    fn mpoo_purchase_sets_has_purchased_and_a_refund_does_not() {
+        let mut board = setup();
+        mpoo_context(5);
+        // Refunded (bad amount): no flag.
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(150), buy_msg(1)),
+            U128(150)
+        );
+        assert!(!board.account_extra(&accounts(1)).has_purchased);
+        assert_eq!(
+            board.ft_on_transfer(accounts(1), U128(100), buy_msg(1)),
+            U128(0)
+        );
+        assert!(board.account_extra(&accounts(1)).has_purchased);
     }
 }

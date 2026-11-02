@@ -399,7 +399,7 @@ mod tests {
         let mut board: Board = env::state_read().unwrap();
         // bob held 3 credits; a base-tier repaint of his own old cell costs 1.
         ctx(accounts(1), 0, 1_762_000_000_000_000_000);
-        board.draw(2, 0, 6);
+        board.draw(2, 0, 6, u32::MAX);
         assert_eq!(board.get_credits(accounts(1)), Some(U128(2)));
         assert_eq!(board.get_outstanding_credits(), U128(23));
         assert_eq!(board.get_pixel(2, 0).color, Some(6));
