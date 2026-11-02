@@ -66,6 +66,21 @@ pub struct PaymentConfig {
     pub registration_fee: U128,
 }
 
+/// What `get_mpoo_sales_today` returns: the C8 daily cap as of the current block day.
+#[near(serializers = [json])]
+pub struct MpooSalesToday {
+    /// `floor(block_timestamp / 86,400 s)`.
+    pub day_index: u64,
+    /// Credits sold for mPOO today; 0 if nothing has sold since the day began.
+    pub sold_today: U128,
+    /// `mpoo_daily_credit_cap`. 0 = mPOO sales closed.
+    pub cap: U128,
+    /// Credits that can still be bought for mPOO today.
+    pub remaining: U128,
+    /// Start of the next UTC day, in nanoseconds.
+    pub resets_at_ns: u64,
+}
+
 // Prices and minimum output travel with the payment, preventing an interface
 // from silently purchasing fewer credits than the buyer agreed to.
 #[near(serializers = [json])]
@@ -204,12 +219,7 @@ impl Payments {
         if amount == 0 || !amount.is_multiple_of(price) {
             return Err("InvalidPurchaseAmount");
         }
-        let day = now_ns / DAY_NS;
-        let sold_today = if day == self.mpoo_day_index {
-            self.mpoo_credits_sold_today
-        } else {
-            0
-        };
+        let (day, sold_today) = self.mpoo_sold_on(now_ns);
         let within_cap = sold_today
             .checked_add(amount / price)
             .is_some_and(|sold| sold <= daily_cap);
@@ -220,6 +230,18 @@ impl Payments {
         self.mpoo_day_index = day;
         self.mpoo_credits_sold_today = sold_today + credits;
         Ok(credits)
+    }
+
+    /// The UTC day of `now_ns` and the credits sold for mPOO on it. A stored
+    /// counter from an earlier day reads 0; nothing is written here.
+    fn mpoo_sold_on(&self, now_ns: u64) -> (u64, u128) {
+        let day = now_ns / DAY_NS;
+        let sold = if day == self.mpoo_day_index {
+            self.mpoo_credits_sold_today
+        } else {
+            0
+        };
+        (day, sold)
     }
 
     pub(crate) fn spend(&mut self, account: &AccountId, count: u128) {
@@ -302,6 +324,20 @@ impl Board {
             near_per_credit: U128(self.payments.near_price),
             mpoo_per_credit: U128(self.payments.mpoo_price),
             registration_fee: U128(REGISTRATION),
+        }
+    }
+
+    /// The mPOO daily cap as of the current block day, so the page can offer
+    /// NEAR before a transfer is refunded with `MpooDailyCapReached`.
+    pub fn get_mpoo_sales_today(&self) -> MpooSalesToday {
+        let (day, sold) = self.payments.mpoo_sold_on(env::block_timestamp());
+        let cap = self.tunables.mpoo_daily_credit_cap;
+        MpooSalesToday {
+            day_index: day,
+            sold_today: U128(sold),
+            cap: U128(cap),
+            remaining: U128(cap.saturating_sub(sold)),
+            resets_at_ns: (day + 1).saturating_mul(DAY_NS),
         }
     }
 
@@ -868,6 +904,59 @@ mod tests {
             board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)),
             U128(0)
         );
+    }
+
+    // --- get_mpoo_sales_today ---------------------------------------------
+
+    #[test]
+    fn mpoo_sales_today_reads_zero_on_a_fresh_day() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 5;
+        mpoo_context(2 * DAY_NS + 7);
+        let view = board.get_mpoo_sales_today();
+        assert_eq!(view.day_index, 2);
+        assert_eq!(view.sold_today, U128(0));
+        assert_eq!(view.cap, U128(5));
+        assert_eq!(view.remaining, U128(5));
+        assert_eq!(view.resets_at_ns, 3 * DAY_NS);
+    }
+
+    #[test]
+    fn mpoo_sales_today_remaining_drops_after_a_purchase() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 5;
+        mpoo_context(10);
+        assert_eq!(board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)), U128(0));
+        let view = board.get_mpoo_sales_today();
+        assert_eq!(view.sold_today, U128(2));
+        assert_eq!(view.remaining, U128(3));
+    }
+
+    #[test]
+    fn mpoo_sales_today_reads_zero_after_rollover_without_mutating() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 5;
+        mpoo_context(10);
+        assert_eq!(board.ft_on_transfer(accounts(1), U128(200), buy_msg(2)), U128(0));
+        mpoo_context(DAY_NS + 1);
+        let view = board.get_mpoo_sales_today();
+        assert_eq!(view.day_index, 1);
+        assert_eq!(view.sold_today, U128(0));
+        assert_eq!(view.remaining, U128(5));
+        assert_eq!(view.resets_at_ns, 2 * DAY_NS);
+        // A view: the stored counter still describes day 0.
+        assert_eq!(board.payments.mpoo_day_index, 0);
+        assert_eq!(board.payments.mpoo_credits_sold_today, 2);
+    }
+
+    #[test]
+    fn mpoo_sales_today_with_cap_zero_has_nothing_remaining() {
+        let mut board = setup();
+        board.tunables.mpoo_daily_credit_cap = 0;
+        mpoo_context(10);
+        let view = board.get_mpoo_sales_today();
+        assert_eq!(view.cap, U128(0));
+        assert_eq!(view.remaining, U128(0));
     }
 
     // --- has_purchased (read by F2 happy hour) ------------------------------

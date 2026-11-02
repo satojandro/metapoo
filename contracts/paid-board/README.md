@@ -79,7 +79,8 @@ one price each, with exactly 1 yoctoNEAR attached. Existing credits are unaffect
   through `set_tunables` with immediate effect. 0 (the deploy default) closes mPOO
   sales. A purchase that is refused refunds the whole transfer and logs
   `purchase_rejected: MpooSalesClosed` or `purchase_rejected: MpooDailyCapReached`.
-  NEAR purchases do not count against it.
+  NEAR purchases do not count against it. `get_mpoo_sales_today()` returns
+  `{day_index, sold_today, cap, remaining, resets_at_ns}` for the current block day.
 - `get_withdrawable_near()` returns the maximum available now, as a decimal string:
   account balance minus current storage stake, minus outstanding credits ×
   664,000,000,000,000,000,000 yoctoNEAR, minus the configured reserve floor.
