@@ -47,6 +47,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 |---|---|
 | what is next, in what order | [`implementation/2026-11-01-work-queue.md`](implementation/2026-11-01-work-queue.md): parallel work orders, 1 Nov |
 | what is left, with proof | [`backlog.md`](backlog.md) |
+| wall page front-end: what is broken, and the plan | [`2026-11-02-wall-frontend-audit.md`](2026-11-02-wall-frontend-audit.md): audit 2 Nov, plan awaiting owner approval |
 
 The task orders in [`implementation/`](implementation/) (repaint price, checkout, safety, TOILET token,
 D4, accrual claim) are **all delivered** (PRs #15–#23). The 2026-10-28 work queue is superseded by the
