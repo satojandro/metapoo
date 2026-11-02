@@ -27,10 +27,11 @@ fresh-init only.
 | T7 | Unstaking pays a **10% exit tax, burned**, on each unstaked amount only. A partial withdrawal is taxed on what comes out. |
 | T8 | An **exchange tax** on TOILET is a nice-to-have, matching mPOO's 2% buy and 3% sell. |
 | T9 | The staking contract has **no owner and no upgrade**: full decentralisation. |
+| T10 | The **buyback** runs as a keeper script holding the buyback account's key for now, with a buyback contract with no owner as the goal. |
 
 Still open, and not blocking the build: the launch emission rate (T1), whether the daily paint allowance
-(`quota_*`) is still wanted now repaint pricing exists, the minimum claim size (B5), and the exchange-tax split and
-treasury account (X1).
+(`quota_*`) is still wanted now repaint pricing exists, the minimum claim size (B5), the exchange-tax split and
+treasury account (X1), and the buyback keeper's mainnet limits (K2).
 
 ## What the drip does, in plain numbers
 
@@ -210,6 +211,76 @@ review.
 - Workspace simulation: board `distribute_mpoo` → `sync_inflow` → time passes → two stakers claim, with the
   exact amounts asserted.
 
+## K — the buyback (T10)
+
+### What the board already does
+
+`distribute_near` sends 90% of NEAR revenue to `buyback_account` as a plain NEAR transfer. The board
+accepts mPOO back only from that account, by `ft_transfer_call` with `msg = {"revenue":{}}`, and adds it to
+`mpoo_undistributed`. The next `distribute_mpoo` splits it 10 / 20 / 70. The staking contract only ever
+receives mPOO. Nothing performs the swap in between today: no script, no work order, no runbook.
+
+### Decision: a buyback keeper now, a buyback contract later
+
+Owner, 2 Nov: start with **a keeper script that holds the buyback account's key** (option B), and aim for
+**a buyback contract with no owner** (option C) later. `buyback_account` can be changed once every 7
+days, so moving from B to C needs no board change.
+
+This is the one trusted step left in the revenue path. Until C exists, 90% of NEAR revenue passes through
+an account controlled by a key. The keeper keeps that exposure small: it swaps in small chunks, often, and
+publishes every step.
+
+### K1. The keeper (`ops/buyback`, new, separate from `ops/keeper`)
+
+The buyback account needs a key that can attach deposits (wrapping NEAR and paying for the swap), which a
+function-call key can't do. So the keeper is a separate script with its own account and key, not an
+extension of the distribution keeper, whose key can't move funds.
+
+Each run, hourly, after the distribution keeper:
+
+1. **Return first.** If the buyback account holds any mPOO (from an earlier run whose return failed), send
+   all of it to the board with `ft_transfer_call` and `{"revenue":{}}`.
+2. **Size one chunk.** `available = NEAR balance - BUYBACK_GAS_RESERVE`. `chunk = min(available,
+   BUYBACK_MAX_CHUNK_NEAR, the largest amount whose quoted price impact is under BUYBACK_MAX_IMPACT_BPS)`.
+   Skip the run if the chunk is below `BUYBACK_MIN_CHUNK_NEAR`.
+3. **Swap.** Wrap the chunk and swap it to mPOO on the route the task establishes (see K3), with
+   `min_amount_out` from a fresh quote less `BUYBACK_SLIPPAGE_BPS`. NEARLY applies its 2% buy tax **after**
+   the exchange's minimum-output check, so the keeper compares what actually arrived with the quote and
+   logs both.
+4. **Return.** Send the mPOO received to the board as in step 1.
+5. **Log one JSON line per step**, the same style as `ops/keeper`: chunk, quote, minimum out, received,
+   tax and fees as observed, transaction hashes.
+
+Failures leave value where it is and safe: a failed swap leaves NEAR or wNEAR on the buyback account (the
+next run unwraps or retries); a failed return leaves mPOO there for step 1 next time.
+
+### K2. Configuration and the key
+
+Environment variables only, checked before signing, never printed: network, RPC, board, buyback account,
+private key, `BUYBACK_GAS_RESERVE` (proposed 1 NEAR), `BUYBACK_MAX_CHUNK_NEAR`, `BUYBACK_MIN_CHUNK_NEAR`,
+`BUYBACK_MAX_IMPACT_BPS` (proposed 50), `BUYBACK_SLIPPAGE_BPS` (proposed 100). The account is dedicated:
+it holds nothing but NEAR waiting to be swapped and mPOO waiting to go back. Testnet first; mainnet keys
+and values are the owner's call.
+
+### K3. The route
+
+The recorded NEARLY launch pool is `diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000`, and an
+mPOO/stNEAR pool also exists (economy doc §14). Neither is a direct wNEAR/mPOO pool. The task finds the
+route with the best depth on chain, records it with evidence, and makes it configuration rather than code.
+
+### K4. Public accounting
+
+`/money` shows, from board events, the total NEAR sent to the buyback next to the total mPOO returned
+(`near_distributed` and `mpoo_revenue_received`), plus NEAR waiting on the buyback account. If the buyback
+stops, anyone can see it.
+
+### K5. Toward the buyback contract (later round)
+
+The keeper's limits become the contract's rules: a permissionless `buy()` that swaps at most one capped
+chunk per interval, sized against pool depth, and returns the mPOO itself, with no owner (like T9). The
+keeper's testnet and mainnet logs (chunk sizes, impact, slippage, tax observed) are the evidence that
+sets those caps. Specify it once the keeper has run long enough to show realistic numbers.
+
 ## X — TOILET exchange tax (nice-to-have, T8)
 
 The token already supports a venue tax fixed at `new` (`buy_bps`, `sell_bps`, `exchange`, `burn_bps`,
@@ -229,10 +300,12 @@ The token already supports a venue tax fixed at `new` (`buy_bps`, `sell_bps`, `e
 - **F2.** `/toilet`, from [`../visual-concepts/toilet-draft.html`](../visual-concepts/toilet-draft.html), with
   the review layer removed. Blocked on B and S being on a testnet board.
 - **F3.** Claim and staking UI in the wallet panel. Blocked on B and S.
+- **F4.** `/money` buyback ledger (K4): NEAR sent to the buyback, mPOO returned, NEAR waiting. Not blocked;
+  it reads existing board events.
 
 ## Order and gates
 
-1. B and S in parallel. They meet only through `distribute_mpoo` → `ft_transfer` → `sync_inflow`.
+1. B, S and K1 in parallel. They meet only through `distribute_mpoo` → `ft_transfer` → `sync_inflow`.
 2. Fresh testnet board plus token plus staking contract; rehearse the whole loop with chain evidence.
 3. External review of the staking contract before `set_staking_contract` anywhere it matters.
 4. F2 and F3 against the rehearsed testnet deployment.
@@ -240,5 +313,7 @@ The token already supports a venue tax fixed at `new` (`buy_bps`, `sell_bps`, `e
 Work orders: [`toilet-round-board`](../implementation/toilet-round-board.task.json),
 [`toilet-staking`](../implementation/toilet-staking.task.json),
 [`toilet-exchange-tax`](../implementation/toilet-exchange-tax.task.json),
+[`buyback-keeper`](../implementation/buyback-keeper.task.json),
+[`fe-buyback-ledger`](../implementation/fe-buyback-ledger.task.json),
 [`fe-how-it-works`](../implementation/fe-how-it-works.task.json),
 [`fe-toilet-page`](../implementation/fe-toilet-page.task.json).

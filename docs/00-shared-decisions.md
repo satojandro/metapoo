@@ -67,6 +67,9 @@ Full spec, open items and work orders: [TOILET round spec](economy/2026-11-02-to
   proven on a real pool first.
 - **T9 — the staking contract has no owner and no upgrade.** No admin method of any kind, and the deploy
   key is removed after initialisation. A bug means a new contract and a new board.
+- **T10 — the buyback is a keeper script for now, a contract later.** A dedicated account and key swap the
+  90% NEAR share to mPOO in small, capped chunks and return it to the board, logging every step. A
+  buyback contract with no owner replaces it later through `set_buyback_account`, with no board change.
 
 Evidence and the full contradiction list: [paid model v1 decisions](payments/2026-10-28-paid-model-decisions.md).
 

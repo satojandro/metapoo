@@ -36,8 +36,10 @@ next PR to `main`), or retarget the next PR by hand.
 |---|---|---|---|
 | **TR-B** | [`toilet-round-board`](toilet-round-board.task.json) | Codex | can start now from `main` |
 | **TR-S** | [`toilet-staking`](toilet-staking.task.json) | Codex | can start now from `main` (no owner, no upgrade: T9) |
+| **TR-K** | [`buyback-keeper`](buyback-keeper.task.json) | Codex, then Hermes for the testnet run | can start now; the route needs on-chain research |
 | **TR-X** | [`toilet-exchange-tax`](toilet-exchange-tax.task.json) | Hermes | owner choice of tax split and treasury; a testnet venue |
 | **FE-HIW** | [`fe-how-it-works`](fe-how-it-works.task.json) | Claude | can start now |
+| **FE-BUYBACK** | [`fe-buyback-ledger`](fe-buyback-ledger.task.json) | Claude | can start now |
 | **FE-TOILET** | [`fe-toilet-page`](fe-toilet-page.task.json) | Claude | TR-B and TR-S rehearsed on testnet |
 
 Frontend consistency (owner, 2 Nov): Claude takes the public-facing pages so they share one voice and look.
