@@ -1,8 +1,6 @@
-import type { NetworkId } from "@shared/types.ts";
 import type { PageMount } from "../../app/page-registry";
 import type { ParsedRoute } from "../../app/routes";
 import type { AppServices } from "../../app/services";
-import { PAGE_NETWORK } from "../../config";
 import type { DrawRequest } from "../../draw-request";
 import type { Cell } from "../../selection";
 import { describeSponsorship } from "../../sponsorship";
@@ -15,12 +13,20 @@ import { createPricingController } from "./pricing-controller";
 import type { RepaintChrome } from "./repaint-price";
 import { wallPageHtml } from "./wall-template";
 import { createWallView, fillBlock } from "./wall-view";
-import type { WallScope } from "./wall-scope";
+import { createWallScope } from "./wall-scope";
 
 /**
  * Lifecycle-safe wall mount.
  * mountWall(root, services) → dispose() cancels timers, aborts polls, removes listeners,
  * and clears unsent queue paints (already-broadcast ops stay on services.operations).
+ *
+ * The page is five controllers, each owning its own state:
+ * - camera-controller: zoom, pan, gestures, pointer preview
+ * - board-controller: load, poll, freshness, contract metadata, pixel cache
+ * - wall-view: status text, selection panel, palette, rules
+ * - pricing-controller: credits, cell prices, buy-credits sheet
+ * - paint-controller: draws, strokes, the direct-paint queue, drawing session
+ * This file only finds DOM nodes, creates them, connects them and disposes them.
  */
 
 export interface MountWallOptions {
@@ -71,51 +77,43 @@ export function mountWall(
 ): () => void {
   root.innerHTML = wallPageHtml();
   const pageRoot = root;
+  const el = <T extends Element = HTMLElement>(selector: string) => mustFindIn<T>(pageRoot, selector);
 
-  const canvas = mustFindIn<HTMLCanvasElement>(pageRoot, "#board");
-  const stallScene = mustFindIn<HTMLElement>(pageRoot, ".stall-scene");
-  const selectionRing = mustFindIn<HTMLElement>(pageRoot, "#selection-ring");
-  const boardFocus = mustFindIn<HTMLElement>(pageRoot, "#board-focus");
-  const boardViewport = mustFindIn<HTMLElement>(pageRoot, "#board-viewport");
-  const boardStage = mustFindIn<HTMLElement>(pageRoot, "#board-stage");
-  const boardToolbar = mustFindIn<HTMLElement>(pageRoot, ".board-toolbar");
-  const selectionSummary = mustFindIn<HTMLElement>(pageRoot, "#selection-summary");
-  const preview = mustFindIn<HTMLElement>(pageRoot, "#selection-preview");
-  const palette = mustFindIn<HTMLElement>(pageRoot, "#palette");
-  const drawButton = mustFindIn<HTMLButtonElement>(pageRoot, "#draw-button");
+  const canvas = el<HTMLCanvasElement>("#board");
+  const stallScene = el(".stall-scene");
+  const selectionRing = el("#selection-ring");
+  const boardFocus = el("#board-focus");
+  const boardViewport = el("#board-viewport");
+  const boardStage = el("#board-stage");
+  const boardToolbar = el(".board-toolbar");
+  const selectionSummary = el("#selection-summary");
+  const preview = el("#selection-preview");
+  const palette = el("#palette");
+  const drawButton = el<HTMLButtonElement>("#draw-button");
   const repaintChrome: RepaintChrome = {
-    legend: mustFindIn<HTMLElement>(pageRoot, "#repaint-legend"),
-    badge: mustFindIn<HTMLElement>(pageRoot, "#cell-price"),
-    strokeTotal: mustFindIn<HTMLElement>(pageRoot, "#stroke-total"),
+    legend: el("#repaint-legend"),
+    badge: el("#cell-price"),
+    strokeTotal: el("#stroke-total"),
     submit: drawButton,
   };
-  const drawState = mustFindIn<HTMLElement>(pageRoot, "#draw-state");
-  const result = mustFindIn<HTMLElement>(pageRoot, "#result");
-  const rules = mustFindIn<HTMLElement>(pageRoot, "#rules");
-  const sponsorNote = mustFindIn<HTMLElement>(pageRoot, "#sponsor-note");
-  const evidence = mustFindIn<HTMLElement>(pageRoot, "#evidence");
-  const lede = mustFindIn<HTMLElement>(pageRoot, "#lede");
-  const refreshButton = mustFindIn<HTMLButtonElement>(pageRoot, "#refresh-board");
-  const boardLoadStatus = mustFindIn<HTMLElement>(pageRoot, "#board-load-status");
-  const boardFreshness = mustFindIn<HTMLElement>(pageRoot, "#board-freshness");
-  const zoomPaintButton = mustFindIn<HTMLButtonElement>(pageRoot, "#zoom-paint");
-  const drawingSessionStatus = mustFindIn<HTMLElement>(pageRoot, "#drawing-session-status");
-  const drawingSessionNote = mustFindIn<HTMLElement>(pageRoot, "#drawing-session-note");
-  const authorizeSessionButton = mustFindIn<HTMLButtonElement>(
-    pageRoot,
-    "#authorize-session-button",
-  );
-  const forgetSessionButton = mustFindIn<HTMLButtonElement>(
-    pageRoot,
-    "#forget-session-button",
-  );
-  const revokeSessionButton = mustFindIn<HTMLButtonElement>(
-    pageRoot,
-    "#revoke-session-button",
-  );
-  const hoverSummary = mustFindIn<HTMLElement>(pageRoot, "#hover-summary");
-  const contractLine = mustFindIn<HTMLElement>(pageRoot, "#wall-contract-line");
-  const directPaintToggle = mustFindIn<HTMLInputElement>(pageRoot, "#direct-paint-toggle");
+  const drawState = el("#draw-state");
+  const result = el("#result");
+  const rules = el("#rules");
+  const sponsorNote = el("#sponsor-note");
+  const evidence = el("#evidence");
+  const lede = el("#lede");
+  const refreshButton = el<HTMLButtonElement>("#refresh-board");
+  const boardLoadStatus = el("#board-load-status");
+  const boardFreshness = el("#board-freshness");
+  const zoomPaintButton = el<HTMLButtonElement>("#zoom-paint");
+  const drawingSessionStatus = el("#drawing-session-status");
+  const drawingSessionNote = el("#drawing-session-note");
+  const authorizeSessionButton = el<HTMLButtonElement>("#authorize-session-button");
+  const forgetSessionButton = el<HTMLButtonElement>("#forget-session-button");
+  const revokeSessionButton = el<HTMLButtonElement>("#revoke-session-button");
+  const hoverSummary = el("#hover-summary");
+  const contractLine = el("#wall-contract-line");
+  const directPaintToggle = el<HTMLInputElement>("#direct-paint-toggle");
   const tapToPaintAffordanceCandidate = directPaintToggle.closest<HTMLLabelElement>("label");
   if (!tapToPaintAffordanceCandidate) {
     throw new Error("The wall page is missing the tap-to-paint affordance.");
@@ -124,55 +122,29 @@ export function mountWall(
   // The status line is presentation, so it lives in the template with a real
   // class. It used to be created here with no styling at all, which is how a
   // developer-facing sentence ended up as raw body text in the paint dock.
-  const tapToPaintAnnouncement = mustFindIn<HTMLElement>(
-    pageRoot,
-    "#tap-to-paint-status",
-  );
+  const tapToPaintAnnouncement = el("#tap-to-paint-status");
   directPaintToggle.setAttribute("aria-describedby", tapToPaintAnnouncement.id);
 
   // One-approval unlock. This is the visible entry point to the drawing
   // session; the authorise/revoke panel stays in About / details for people
   // who want the details, but nobody should have to find it to start painting.
-  const paintUnlock = mustFindIn<HTMLElement>(pageRoot, "#paint-unlock");
-  const paintUnlocked = mustFindIn<HTMLElement>(pageRoot, "#paint-unlocked");
-  const unlockPaintButton = mustFindIn<HTMLButtonElement>(
-    pageRoot,
-    "#unlock-paint-button",
-  );
-  const creditsDock = mustFindIn<HTMLElement>(pageRoot, "#credits-dock");
-  const creditsBalance = mustFindIn<HTMLElement>(pageRoot, "#credits-balance");
-  const buyCreditsButton = mustFindIn<HTMLButtonElement>(
-    pageRoot,
-    "#buy-credits-button",
-  );
-  const buyCreditsHost = mustFindIn<HTMLElement>(pageRoot, "#buy-credits-host");
+  const paintUnlock = el("#paint-unlock");
+  const paintUnlocked = el("#paint-unlocked");
+  const unlockPaintButton = el<HTMLButtonElement>("#unlock-paint-button");
+  const creditsDock = el("#credits-dock");
+  const creditsBalance = el("#credits-balance");
+  const buyCreditsButton = el<HTMLButtonElement>("#buy-credits-button");
+  const buyCreditsHost = el("#buy-credits-host");
+  const focusCanvas = el<HTMLButtonElement>("#focus-canvas");
   // Keep the current cell coordinates available when keyboard users reach Place.
   drawButton.setAttribute("aria-describedby", "selection-summary cell-price stroke-total");
 
-  const listenerCleanups: Array<() => void> = [];
-  function listen(
-    target: EventTarget,
-    type: string,
-    handler: EventListenerOrEventListenerObject,
-    options?: boolean | AddEventListenerOptions,
-  ): void {
-    target.addEventListener(type, handler, options);
-    listenerCleanups.push(() =>
-      target.removeEventListener(type, handler, options),
-    );
-  }
-  let disposed = false;
-  const scope: WallScope = {
-    listen,
-    onDispose: (cleanup) => {
-      listenerCleanups.push(cleanup);
-    },
-    isDisposed: () => disposed,
-    walletAccount: () => walletAccount,
-    walletNetwork: () => walletNetwork,
-    walletNetworkId: () => walletNetworkId(),
-  };
+  const scope = createWallScope();
 
+  // Controllers reach each other only through these closures, so creation
+  // order is free except where the DOM cares: the buy-credits sheet subscribes
+  // to the wallet before the wall does, and the camera's pointer preview sits
+  // in the viewport before the paint controller's placement-outcome layer.
   const pricing = createPricingController({
     scope,
     services,
@@ -256,9 +228,6 @@ export function mountWall(
     onManualRefresh: () => pricing.manualRefresh(),
   });
 
-  let walletAccount: string | null = null;
-  let walletNetwork: string | null = null;
-
   const view = createWallView({
     scope,
     pageRoot,
@@ -270,7 +239,7 @@ export function mountWall(
     sponsorNote,
     drawState,
     boardLoadStatus,
-    focusCanvas: mustFindIn<HTMLButtonElement>(pageRoot, "#focus-canvas"),
+    focusCanvas,
     flowState,
     compactStatus,
     sponsorship,
@@ -337,18 +306,17 @@ export function mountWall(
   });
 
   const unsubWallet = services.wallet.subscribe((session) => {
-    if (disposed) return;
-    const previousAccount = walletAccount;
-    const previousNetwork = walletNetwork;
-    walletAccount = session.accountId;
-    walletNetwork = session.networkId;
+    if (scope.isDisposed()) return;
+    const previousAccount = scope.walletAccount();
+    const previousNetwork = scope.walletNetwork();
+    scope.setWallet(session.accountId, session.networkId);
     if (
-      previousAccount !== walletAccount ||
-      previousNetwork !== walletNetwork
+      previousAccount !== session.accountId ||
+      previousNetwork !== session.networkId
     ) {
       paint.onWalletChanged();
     }
-    if (!walletAccount) {
+    if (!session.accountId) {
       view.setFlow("disconnected");
     } else if (view.uiPhase() === "disconnected" || view.uiPhase() === "failed") {
       view.setFlow(view.selected() ? "editing" : "connected");
@@ -356,38 +324,18 @@ export function mountWall(
     paint.showDrawingSession();
     void pricing.refreshCreditsDock();
   });
-  listenerCleanups.push(unsubWallet);
-  listenerCleanups.push(() => {
+  scope.onDispose(unsubWallet);
+  scope.onDispose(() => {
     pricing.dispose();
   });
 
-function walletNetworkId(): NetworkId {
-  if (
-    walletNetwork === "mock" ||
-    walletNetwork === "localnet" ||
-    walletNetwork === "testnet" ||
-    walletNetwork === "mainnet"
-  ) {
-    return walletNetwork;
-  }
-  return PAGE_NETWORK;
-}
-
   function disposeWall(): void {
-    if (disposed) return;
-    disposed = true;
+    if (!scope.markDisposed()) return;
     board.dispose();
     wallHint.dispose();
     paint.dispose();
     camera.dispose();
-    for (const cleanup of listenerCleanups) {
-      try {
-        cleanup();
-      } catch {
-        // ignore listener cleanup errors
-      }
-    }
-    listenerCleanups.length = 0;
+    scope.runCleanups();
     // Do NOT clear services.operations — broadcast ops must survive navigation.
     pageRoot.replaceChildren();
   }

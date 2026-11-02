@@ -87,7 +87,7 @@ waves, each with its own `*.task.json`. Specs: [paid board revision](payments/20
 | id | item | evidence / gate | size |
 |---|---|---|---|
 | **REV-1** | Paid board revision (REV-A…REV-F in the queue) | spec reviewed by the owner 1 Nov; open: testnet account ids, mPOO cap value; not started | **L** |
-| **F1-REFACTOR** | `mount-wall.ts` split (FE-0 in the queue) | [spec](implementation/2026-11-01-wall-split-spec.md); not started | **M** |
+| **F1-REFACTOR** | `mount-wall.ts` split (FE-0 in the queue) | [spec](implementation/2026-11-01-wall-split-spec.md); **done on branch `claude/gifted-knuth-bm5wrf-fe-0`, pending review** (characterization tests `mount-wall.behaviour.test.ts` first, then one commit per controller; `mount-wall.ts` 2,538 → 344 lines). Not merged; testnet manual check on board3 still owed (replaced by a local Playwright mock-mode check) | **M** |
 | **TOILET-REVIEW** | Full TOILET cycle review: emission, claim, earning cap, staking contract, exit tax, distribution to stakers | next review round (owner, 1 Nov); out of this queue | — |
 
 ## Blocked on a human decision
