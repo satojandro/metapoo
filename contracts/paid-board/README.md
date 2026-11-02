@@ -21,8 +21,9 @@ still open (`PAY-INTEGRATION` in the backlog).
   hidden in the UI (`TOKEN_PAYMENTS_ENABLED=false`).
 - [Upgrade policy proposal](../../docs/payments/upgrade-policy.md): the board keeps an
   owner-only `upgrade()` so a bug in credit or pixel custody stays repairable; TOILET
-  deliberately exposes no upgrade entrypoint (D4). Migration design and a state-preserving
-  rehearsal remain pending.
+  deliberately exposes no upgrade entrypoint (D4). State version 2 and the v1 → v2 `migrate`
+  exist (REV-A, `src/migrate.rs`, tested against real v1 state in `fixtures/state_v1.json`); the
+  testnet rehearsal is still pending.
 
 ## Product rules
 
@@ -61,7 +62,10 @@ exactly 1 yoctoNEAR attached. Existing credits are unaffected. Buyers submit
   prior value (odd-number halving rounds up). The first change is allowed immediately;
   subsequent changes require at least 24 hours. `price_changed` includes both old
   and new prices. Invalid steps fail `PriceStepTooLarge`; early changes fail
-  `PriceCooldown`. Even a no-op update starts the cooldown.
+  `PriceCooldown`. Even a no-op update starts the cooldown. Since state version 2 the
+  tunables hold `near_price_cooldown_ns` / `last_near_price_change_ns` (the v1
+  `price_cooldown_ns` / `last_price_change_ns`, renamed) and `mpoo_price_cooldown_ns` /
+  `last_mpoo_price_change_ns`; this setter checks and restarts both until REV-B splits it.
 - `get_withdrawable_near()` returns the maximum available now, as a decimal string:
   account balance minus current storage stake, minus outstanding credits ×
   664,000,000,000,000,000,000 yoctoNEAR, minus the configured reserve floor.
@@ -96,7 +100,9 @@ including liquidity, slippage and tax, not nominal market capitalization.
 
 ## Calls
 
-- `new(mpoo_token, mpoo_per_credit)`: initializer becomes pricing owner.
+- `new(mpoo_token, mpoo_per_credit, team_account, buyback_account)`: initializer becomes pricing
+  owner; writes state version 2. Revenue accounts may not be the board itself.
+- `get_state_version()`: storage layout version (2).
 - `get_payment_config()`: token address, prices and registration fee; amounts are strings.
 - `register_credit_account()`: exact 0.01 NEAR, once per caller, before purchasing.
 - `get_credits(account_id)`: decimal-string balance, or null if unregistered.
@@ -127,10 +133,15 @@ transaction rather than a redeploy plus a migration:
   is ~129 round-trips (each cell also needs `get_pixel`) before the wallet prompt.
 - `get_cells_owned(account_id)` — cells an account holds; the input to the quota and the earning cap.
 - `get_outstanding_credits()` — credits sold and not yet spent. Prepaid service, never profit.
-- `upgrade(code)` — owner-only, one yocto. The board keeps this; TOILET does not (D4), because the board
-  custodies credits and pixels. A logic-only change needs no migration; adding a field to `Board` or
-  `Payments` does, so it needs an `#[init(ignore_state)]` migration rehearsed against testnet state first.
+- `upgrade(code, migrate_args)` — owner-only, one yocto. Deploys `code` and calls its
+  `migrate(migrate_args)` in **one receipt** on the board account, so a rejected migration rolls the
+  deploy back. For v1 → v2, `migrate_args` is `{"team_account": "…", "buyback_account": "…"}`. The
+  board keeps this; TOILET does not (D4), because the board custodies credits and pixels.
   Never call `new` over live state.
+- `migrate(team_account, buyback_account)` — `#[private]`, `#[init(ignore_state)]`. Accepts only
+  version-1 state (detected by its first u32, see `src/migrate.rs`); rejects a second run, a fresh
+  v2 board, or anything unknown with `UnsupportedStateVersion`. Maps `p`, `h`, `c` keep prefix and
+  value type; new maps `a` (account extras) and `f` (free cells) start empty.
 
 The board account must also be registered on the mPOO token before receiving it.
 The board credit-registration fee does not perform that token registration.
@@ -224,9 +235,8 @@ arbitrage. Use separate inventory capital, never credit-service or storage reser
 
 ## TOILET accrual and claims
 
-This state layout is **fresh init only, no migration**. Do not deserialize an older
-board into this layout or run `new` over live state. The existing board `upgrade`
-entrypoint remains unchanged; it does not migrate this state.
+Do not run `new` over live state. An existing board moves to a new layout only through
+`upgrade` → `migrate` (see Calls).
 
 `toilet_per_cell_second` in `Tunables` defaults to 0, so no emission begins until
 the owner sets a rate. It counts atomic units (18 decimals) per held cell per

@@ -12,12 +12,20 @@
 //! testnet or mainnet result.
 
 mod emission;
+mod migrate;
 mod payments;
 mod safety;
 use emission::Holder;
-use near_sdk::store::{IterableMap, LookupMap};
+use near_sdk::store::{IterableMap, LookupMap, LookupSet};
 use near_sdk::{env, near, AccountId, PanicOnDefault};
 use payments::Payments;
+
+/// Storage prefixes. `p`, `h` and `c` are deployed with live data: never change
+/// their prefix or value type (spec §C7, Finding 3). New facts get new prefixes.
+const PREFIX_PIXELS: &[u8] = b"p";
+const PREFIX_HOLDERS: &[u8] = b"h";
+const PREFIX_ACCOUNT_EXTRA: &[u8] = b"a";
+const PREFIX_FREE_CELLS: &[u8] = b"f";
 
 /// Board width in pixels. Coordinate x must be 0 through 127.
 const WIDTH: u32 = 128;
@@ -95,9 +103,15 @@ pub struct Tunables {
     pub paused: bool,
     /// Additional liquid NEAR retained after existing storage and credit obligations.
     pub reserve_floor: near_sdk::json_types::U128,
-    pub price_cooldown_ns: u64,
+    /// Minimum time between NEAR price changes (v1 `price_cooldown_ns`).
+    pub near_price_cooldown_ns: u64,
     /// None permits the first price change, including at timestamp zero.
-    pub last_price_change_ns: Option<u64>,
+    /// History, not a knob: `set_tunables` refuses to change it.
+    pub last_near_price_change_ns: Option<u64>,
+    /// Minimum time between mPOO price changes (C8). Stored now; REV-B splits the setter.
+    pub mpoo_price_cooldown_ns: u64,
+    /// History, not a knob: `set_tunables` refuses to change it.
+    pub last_mpoo_price_change_ns: Option<u64>,
     /// A cell repainted within this many nanoseconds costs the "young" rate.
     pub repaint_young_ns: u64,
     pub repaint_young_credits: u32,
@@ -117,6 +131,25 @@ pub struct Tunables {
     pub max_earning_cells: u32,
     /// Atomic TOILET units per held cell per second; zero disables emission.
     pub toilet_per_cell_second: u128,
+    // ---- Revision 2 (state version 2). Stored at defaults by REV-A; the
+    // ---- behaviour that reads them lands in REV-B/C/D. Nothing reads them yet.
+    /// C8: credits that may be sold for mPOO per UTC day. 0 = mPOO sales closed.
+    pub mpoo_daily_credit_cap: u128,
+    /// F1: free first paints per account until the first fill. 0 = off.
+    pub free_first_paints_per_account: u32,
+    /// F2: weekly happy hour. Off by default.
+    pub happy_hour_enabled: bool,
+    /// 0 = Monday … 6 = Sunday.
+    pub happy_hour_weekday: u32,
+    /// Seconds after midnight UTC.
+    pub happy_hour_start_s: u32,
+    pub happy_hour_length_s: u32,
+    pub happy_hour_cap_per_account: u32,
+    pub happy_hour_requires_purchase: bool,
+    /// History for the happy-hour cooldown; `set_tunables` refuses to change it.
+    pub last_happy_hour_change_ns: Option<u64>,
+    /// R1/R2: minimum time between `distribute_near` (or `distribute_mpoo`) calls.
+    pub distribution_interval_ns: u64,
 }
 
 impl Tunables {
@@ -143,7 +176,8 @@ impl Tunables {
             "ReserveFloorTooLow"
         );
         assert!(
-            self.price_cooldown_ns >= safety::MIN_COOLDOWN_NS,
+            self.near_price_cooldown_ns >= safety::MIN_COOLDOWN_NS
+                && self.mpoo_price_cooldown_ns >= safety::MIN_COOLDOWN_NS,
             "PriceCooldownTooShort"
         );
         assert!(
@@ -171,8 +205,10 @@ impl Default for Tunables {
         Self {
             paused: false,
             reserve_floor: near_sdk::json_types::U128(safety::MIN_RESERVE),
-            price_cooldown_ns: safety::MIN_COOLDOWN_NS,
-            last_price_change_ns: None,
+            near_price_cooldown_ns: safety::MIN_COOLDOWN_NS,
+            last_near_price_change_ns: None,
+            mpoo_price_cooldown_ns: safety::MIN_COOLDOWN_NS,
+            last_mpoo_price_change_ns: None,
             repaint_young_ns: 600_000_000_000, // 10 minutes
             repaint_young_credits: 4,
             repaint_mid_ns: 3_600_000_000_000, // 60 minutes
@@ -184,8 +220,33 @@ impl Default for Tunables {
             quota_max: 512,
             max_earning_cells: 128,
             toilet_per_cell_second: 0,
+            mpoo_daily_credit_cap: 0, // mPOO sales closed until the owner sets a cap
+            free_first_paints_per_account: 25,
+            happy_hour_enabled: false,
+            happy_hour_weekday: 6,      // Sunday
+            happy_hour_start_s: 72_000, // 20:00 UTC
+            happy_hour_length_s: 3_600,
+            happy_hour_cap_per_account: 100,
+            happy_hour_requires_purchase: true,
+            last_happy_hour_change_ns: None,
+            distribution_interval_ns: 3_600_000_000_000, // 1 hour
         }
     }
+}
+
+/// Per-account facts added by revision 2, in the map under prefix `a`.
+/// Absent means all zeros: no migration ever has to visit every account.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AccountExtra {
+    /// F1: free first paints already used.
+    pub free_first_used: u8,
+    /// F2: set by any successful credit purchase, NEAR or mPOO.
+    pub has_purchased: bool,
+    /// F2: which happy-hour window `happy_hour_used` counts for.
+    pub happy_hour_window: u32,
+    /// F2: free cells used in `happy_hour_window`.
+    pub happy_hour_used: u16,
 }
 
 /// What `get_board` returns. Field names stay snake_case, matching NEAR's usual JSON.
@@ -238,9 +299,9 @@ pub struct PixelsPage {
     pub next_from_index: Option<u32>,
 }
 
-/// One painted cell in contract storage.
+/// One painted cell in contract storage. Value type of map `p`: never change it.
 #[near(serializers = [borsh])]
-pub struct PixelRecord {
+pub(crate) struct PixelRecord {
     color: u32,
     artist: AccountId,
     written_at_ns: u64,
@@ -253,9 +314,15 @@ pub struct PixelRecord {
 ///
 /// `IterableMap` (not `LookupMap`) keeps keys so `get_pixels` can walk every
 /// painted cell exactly once.
+///
+/// Layout version 2. `state_version` must stay the first field: `migrate` tells
+/// layouts apart by the first four bytes of the state (see `migrate.rs`).
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Board {
+    /// Storage layout version. v1 (deployed 2026-10-29) had no such field.
+    state_version: u32,
+    /// Public API schema reported by `get_board` (4). Not the storage layout.
     schema_version: u32,
     payments: Payments,
     /// Every tunable rule. Everything here can change without a code upgrade.
@@ -268,25 +335,71 @@ pub struct Board {
     last_accrual_ns: u64,
     accrued_total: u128,
     total_cells: u32,
+    /// F1 latch: true once every cell has been painted. Never goes back.
+    first_fill_complete: bool,
+    /// Revision-2 per-account facts, prefix `a`. Read with `account_extra()`.
+    account_extra: LookupMap<AccountId, AccountExtra>,
+    /// Cells whose latest paint was free (F1/F2), prefix `f`. Key as `pixels`.
+    free_cells: LookupSet<u32>,
 }
 
 #[near]
 impl Board {
-    /// Create a fresh paid board at 0.0025 NEAR per credit and an explicit mPOO price.
-    /// ECONOMY NEXT: a reviewed migration must preserve outstanding credits.
+    /// Create a fresh paid board (state version 2) at 0.0025 NEAR per credit and an
+    /// explicit mPOO price. Revenue accounts are fixed here; changing them later is
+    /// an owner call with a cooldown (REV-C). Never call `new` over live state:
+    /// an existing board moves forward with `upgrade` → `migrate`.
     #[init]
-    pub fn new(mpoo_token: AccountId, mpoo_per_credit: near_sdk::json_types::U128) -> Self {
+    pub fn new(
+        mpoo_token: AccountId,
+        mpoo_per_credit: near_sdk::json_types::U128,
+        team_account: AccountId,
+        buyback_account: AccountId,
+    ) -> Self {
         Self {
+            state_version: migrate::STATE_VERSION,
             schema_version: SCHEMA_VERSION,
-            payments: Payments::new(mpoo_token, payments::INITIAL_NEAR_PRICE, mpoo_per_credit.0),
+            payments: Payments::new(
+                mpoo_token,
+                payments::INITIAL_NEAR_PRICE,
+                mpoo_per_credit.0,
+                team_account,
+                buyback_account,
+            ),
             tunables: Tunables::default(),
-            pixels: IterableMap::new(b"p"),
-            holders: LookupMap::new(b"h"),
+            pixels: IterableMap::new(PREFIX_PIXELS),
+            holders: LookupMap::new(PREFIX_HOLDERS),
             acc_per_cell: 0,
             last_accrual_ns: env::block_timestamp(),
             accrued_total: 0,
             total_cells: 0,
+            first_fill_complete: false,
+            account_extra: LookupMap::new(PREFIX_ACCOUNT_EXTRA),
+            free_cells: LookupSet::new(PREFIX_FREE_CELLS),
         }
+    }
+
+    /// Move version-1 state to version 2. Called by `upgrade` in the same receipt as
+    /// the code deploy; `#[private]` so only this account can run it.
+    ///
+    /// Reads the raw state, accepts only version 1 and rejects anything else with
+    /// `UnsupportedStateVersion` (including a second run). Existing maps keep their
+    /// prefixes and contents; the new fields start at their defaults.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate(team_account: AccountId, buyback_account: AccountId) -> Self {
+        let v1 = migrate::read_v1();
+        let board = Self::from_v1(v1, team_account, buyback_account);
+        env::log_str(&format!(
+            "EVENT_JSON:{{\"standard\":\"mpoo_board\",\"version\":\"1.0.0\",\"event\":\"state_migrated\",\"data\":[{{\"from\":1,\"to\":{}}}]}}",
+            migrate::STATE_VERSION
+        ));
+        board
+    }
+
+    /// Storage layout version: 2 for this code. Lets a rehearsal prove the migration ran.
+    pub fn get_state_version(&self) -> u32 {
+        self.state_version
     }
 
     /// Read the board description. A view method does not change state.
@@ -395,11 +508,16 @@ impl Board {
             "OwnerOnly"
         );
         tunables.validate();
-        // This timestamp is history, not an owner-editable knob. Otherwise the
-        // general setter could silently defeat the price-change cooldown.
-        assert_eq!(
-            tunables.last_price_change_ns, self.tunables.last_price_change_ns,
+        // These timestamps are history, not owner-editable knobs. Otherwise the
+        // general setter could silently defeat a cooldown.
+        assert!(
+            tunables.last_near_price_change_ns == self.tunables.last_near_price_change_ns
+                && tunables.last_mpoo_price_change_ns == self.tunables.last_mpoo_price_change_ns,
             "PriceHistoryImmutable"
+        );
+        assert_eq!(
+            tunables.last_happy_hour_change_ns, self.tunables.last_happy_hour_change_ns,
+            "HappyHourHistoryImmutable"
         );
         // Rate changes apply from now, never retroactively to the idle interval.
         self.accrue(env::block_timestamp());
@@ -453,21 +571,38 @@ impl Board {
     /// its emitter and its configuration is frozen at `new`, so a code-swap power would buy
     /// nothing that is worth the trust.
     ///
-    /// A logic-only change needs no migration because the layout is unchanged. Changing the
-    /// layout — adding a field to `Board` or `Payments` — needs an `#[init(ignore_state)]`
-    /// migration written and rehearsed first. Never call `new` over live state. Before
-    /// mainnet money this belongs behind a delay; that is tracked as an M2 item, not a
-    /// reason to delete the method.
+    /// Deploy and migrate are **one receipt** on this account: `DeployContract`, then a
+    /// `migrate(migrate_args)` call. Actions in one receipt succeed or fail together, so
+    /// if `migrate` rejects, the deploy is rolled back and the old code keeps running
+    /// over the old state. The board is never left with new code over old state.
+    ///
+    /// `migrate_args` is the JSON object passed to the new code's `migrate`, e.g.
+    /// `{"team_account": "…", "buyback_account": "…"}` for version 1 → 2. Never call
+    /// `new` over live state. Before mainnet money this belongs behind a delay; that is
+    /// tracked as an M2 item, not a reason to delete the method.
     #[payable]
-    pub fn upgrade(&mut self, code: near_sdk::json_types::Base64VecU8) {
+    pub fn upgrade(
+        &mut self,
+        code: near_sdk::json_types::Base64VecU8,
+        migrate_args: near_sdk::serde_json::Value,
+    ) {
         near_sdk::assert_one_yocto();
         assert_eq!(
             env::predecessor_account_id(),
             self.payments.owner,
             "OwnerOnly"
         );
+        let args = near_sdk::serde_json::to_vec(&migrate_args).expect("SerializationFailed");
         // The promise is the action itself; its result is observable on chain.
-        let _deploy = near_sdk::Promise::new(env::current_account_id()).deploy_contract(code.0);
+        let _upgrade = near_sdk::Promise::new(env::current_account_id())
+            .deploy_contract(code.0)
+            .function_call_weight(
+                "migrate",
+                args,
+                near_sdk::NearToken::from_yoctonear(0),
+                near_sdk::Gas::from_tgas(20),
+                near_sdk::GasWeight(1),
+            );
     }
 
     /// Paint one cell. Any predecessor may overwrite any cell (Open wall).
@@ -599,6 +734,14 @@ fn pixel_key(x: u32, y: u32) -> u32 {
     y * WIDTH + x
 }
 
+impl Board {
+    /// Revision-2 facts for one account; absent means all zeros.
+    #[allow(dead_code)] // first reader arrives with F1/F2 (REV-D)
+    pub(crate) fn account_extra(&self, account: &AccountId) -> AccountExtra {
+        self.account_extra.get(account).copied().unwrap_or_default()
+    }
+}
+
 /// Read a cell's current owner and write time without holding a borrow, so the
 /// caller can mutate payments and ownership counts in the same function.
 fn read_cell(board: &Board, key: u32) -> (Option<AccountId>, Option<u64>) {
@@ -650,6 +793,17 @@ fn reject(code: &str) -> ! {
     ));
 }
 
+/// Revenue accounts for unit-test boards. Not `accounts(n)`, so no test caller
+/// is accidentally also a revenue account.
+#[cfg(test)]
+pub(crate) fn test_team() -> AccountId {
+    "team.metapoo.testnet".parse().unwrap()
+}
+#[cfg(test)]
+pub(crate) fn test_buyback() -> AccountId {
+    "buyback.metapoo.testnet".parse().unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -667,7 +821,7 @@ mod tests {
 
     fn setup() -> Board {
         context(accounts(0), 1_000);
-        let mut board = Board::new(accounts(5), near_sdk::json_types::U128(100));
+        let mut board = Board::new(accounts(5), near_sdk::json_types::U128(100), crate::test_team(), crate::test_buyback());
         // Geometry tests start with funded accounts; payment tests use public methods.
         for i in 0..6 {
             board.payments.balances.insert(accounts(i), 1000);
@@ -1190,6 +1344,9 @@ mod tests {
     fn upgrade_requires_owner() {
         let mut board = setup();
         paying_context(1, 1, 1_000);
-        board.upgrade(near_sdk::json_types::Base64VecU8(Vec::new()));
+        board.upgrade(
+            near_sdk::json_types::Base64VecU8(Vec::new()),
+            near_sdk::serde_json::json!({}),
+        );
     }
 }

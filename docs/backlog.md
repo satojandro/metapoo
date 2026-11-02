@@ -86,8 +86,8 @@ waves, each with its own `*.task.json`. Specs: [paid board revision](payments/20
 
 | id | item | evidence / gate | size |
 |---|---|---|---|
-| **REV-1** | Paid board revision (REV-A…REV-F in the queue) | spec reviewed by the owner 1 Nov; open: testnet account ids, mPOO cap value; not started | **L** |
-| **REV-F** | Revenue keeper: hourly `distribute_near` / `distribute_mpoo` caller (`ops/keeper/`, `.github/workflows/keeper.yml`, off until repo var `KEEPER_ENABLED=true`) | code + unit tests done on branch `claude/gifted-knuth-bm5wrf-rev-f`, not merged; **unverified on chain**: pending REV-D (the methods don't exist yet) and a 24 h testnet run with tx hashes (REV-E) | **S** |
+| **REV-1** | Paid board revision (REV-A…REV-F in the queue) | spec reviewed by the owner 1 Nov; open: testnet account ids, mPOO cap value. **REV-A (state v2 + migration, no behaviour change) done on this branch, merged to `main` via PR #34** (`cargo test` 96/96, wasm builds); REV-B…E not merged | **L** |
+| **REV-F** | Revenue keeper: hourly `distribute_near` / `distribute_mpoo` caller (`ops/keeper/`, `.github/workflows/keeper.yml`, off until repo var `KEEPER_ENABLED=true`) | merged in PR #33 (`2c30870`); 30/30 keeper unit tests pass. **Unverified on chain**: needs REV-D's `distribute_*` methods deployed and a 24 h testnet run with tx hashes (REV-E) | **S** |
 | **F1-REFACTOR** | `mount-wall.ts` split (FE-0 in the queue) | [spec](implementation/2026-11-01-wall-split-spec.md); not started | **M** |
 | **TOILET-REVIEW** | Full TOILET cycle review: emission, claim, earning cap, staking contract, exit tax, distribution to stakers | next review round (owner, 1 Nov); out of this queue | — |
 
