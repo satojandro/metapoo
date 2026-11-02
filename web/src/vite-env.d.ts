@@ -10,6 +10,7 @@ interface ImportMetaEnv {
   readonly VITE_NEAR_NETWORK?: string;
   readonly VITE_NEAR_RPC_URL?: string;
   readonly VITE_SPONSORSHIP_ENABLED?: string;
+  readonly VITE_TOILET_ID?: string;
 }
 
 interface ImportMeta {

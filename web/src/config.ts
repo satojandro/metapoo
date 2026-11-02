@@ -48,6 +48,14 @@ export const WALLET_NETWORK: "mainnet" | "testnet" =
  */
 export const CONTRACT_ID = envString("VITE_CONTRACT_ID");
 
+/**
+ * TOILET token account. The board mints into it on `claim_toilet` but does not
+ * store its address, so the page has to be told. Empty hides claim and balances.
+ *
+ * Set `VITE_TOILET_ID` in `web/.env` (see `.env.example`).
+ */
+export const TOILET_ID = envString("VITE_TOILET_ID");
+
 /** Public JSON-RPC endpoint for free view calls (reads). */
 export const RPC_URL =
   envString("VITE_NEAR_RPC_URL") || defaultRpcUrl(PAGE_NETWORK);

@@ -30,6 +30,7 @@ export type PageId =
   | "wall"
   | "how"
   | "money"
+  | "toilet"
   | "admin"
   | "not-found";
 

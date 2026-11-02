@@ -3,6 +3,7 @@
  */
 
 import { mountPaintWalletPanel } from "./paint-wallet-panel";
+import { mountToiletClaim, toiletConfigured } from "./toilet-claim";
 import type { ParsedRoute } from "./routes";
 import { mountWalletChrome, type WalletChromeDispose } from "./wallet-chrome";
 import { wireWalletDetailsClose } from "./wallet-details-close";
@@ -17,6 +18,7 @@ export interface ShellHandles {
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: string }> = [
   { href: "/wall", label: "Wall", match: "wall" },
   { href: "/how-it-works", label: "How it works", match: "how" },
+  { href: "/toilet", label: "TOILET", match: "toilet" },
   { href: "/money", label: "Where the money goes", match: "money" },
 ];
 
@@ -86,10 +88,12 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     <button id="connect-button" class="mp-btn mp-btn-primary shell-connect" type="button">Connect wallet</button>
     <details class="wallet-details"><summary>Wallet</summary>
     <section id="paint-wallet-panel" aria-label="Paint and wallet balances"></section>
+    <section id="toilet-wallet-panel" aria-label="Your TOILET" hidden></section>
     <h2>Connection details</h2>
     <p id="wallet-summary"></p>
     <p id="network-summary"></p>
     <p class="wallet-money-link"><a href="/money">Where the money goes →</a></p>
+    <p class="wallet-toilet-link"><a href="/toilet">What TOILET is for →</a></p>
     <label class="drawing-session-opt-in" for="authorize-drawing-session">
       <input id="authorize-drawing-session" type="checkbox" disabled />
       Also allow painting without a popup each time
@@ -124,10 +128,17 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   walletPanel.querySelector(".wallet-money-link a")?.addEventListener("click", () => {
     walletDetails.open = false;
   });
+  walletPanel.querySelector(".wallet-toilet-link a")?.addEventListener("click", () => {
+    walletDetails.open = false;
+  });
 
   const paintWalletDispose = mountPaintWalletPanel(
     walletPanel.querySelector<HTMLElement>("#paint-wallet-panel")!, services,
   );
+
+  const toiletHost = walletPanel.querySelector<HTMLElement>("#toilet-wallet-panel")!;
+  const toiletDispose = toiletConfigured() ? mountToiletClaim(toiletHost, services) : () => {};
+  toiletHost.hidden = !toiletConfigured();
 
   function setActiveNav(route: ParsedRoute): void {
     const matchKey = route.pageId === "home" ? "" : route.pageId;
@@ -147,6 +158,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     setActiveNav,
     dispose() {
       paintWalletDispose();
+      toiletDispose();
       detailsClose.dispose();
       walletDispose();
       host.replaceChildren();
