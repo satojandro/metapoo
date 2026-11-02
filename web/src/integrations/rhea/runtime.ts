@@ -149,7 +149,11 @@ export function createRheaRuntime(
     if (!sameIdentity(context, deps.context()))
       throw new Error("Wallet changed while quoting");
     // Already completed wrap/input is not a second native outlay on a continuation.
-    const planBudget = previous
+    const originalInputAlreadyWrapped =
+      previous?.plan.checkpoints
+        .slice(0, previous.checkpoint)
+        .some((checkpoint) => checkpoint.kind === "swap") ?? false;
+    const planBudget = originalInputAlreadyWrapped
       ? {
           ...budget,
           spendableNativeYocto: (

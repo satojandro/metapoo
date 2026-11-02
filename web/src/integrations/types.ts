@@ -31,7 +31,7 @@ export interface ApprovedTransactionRequest {
 }
 export interface ApprovedTransactionStep {
   index: number;
-  status: "confirmed" | "failed" | "unknown";
+  status: "confirmed" | "failed" | "unknown" | "not_submitted";
   transactionHash: string | null;
   detail?: string;
 }

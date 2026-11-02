@@ -56,13 +56,11 @@ function setup(
   const sign = vi.fn().mockResolvedValue(undefined);
   const runtime: PrivyPageRuntime = {
     initialize: vi.fn().mockResolvedValue(undefined),
-    handshake: vi
-      .fn()
-      .mockResolvedValue({
-        payload: request,
-        targetOrigin: config.origin,
-        sign,
-      }),
+    handshake: vi.fn().mockResolvedValue({
+      payload: request,
+      targetOrigin: config.origin,
+      sign,
+    }),
     user: { get: vi.fn().mockResolvedValue({ user }) },
     createNearWallet: vi.fn(),
     logout: vi.fn(),
@@ -71,6 +69,7 @@ function setup(
     googleUrl: vi.fn().mockResolvedValue("https://accounts.google.com/"),
     completeOAuth: vi.fn(),
     assertReady: vi.fn(),
+    rejectBeforeBroadcast: vi.fn(),
     dispose: vi.fn(),
   };
   const root = document.createElement("main");
@@ -236,6 +235,47 @@ describe("standalone Privy approval page", () => {
     await flush();
     expect(sign).not.toHaveBeenCalled();
   });
+  it("emits a trusted rejection only for explicit Cancel before signing", async () => {
+    const { root, runtime, sign, page, options } = setup();
+    await page.ready;
+    button(root, "Cancel").click();
+    expect(sign).not.toHaveBeenCalled();
+    expect(runtime.rejectBeforeBroadcast).toHaveBeenCalledOnce();
+    expect(runtime.rejectBeforeBroadcast).toHaveBeenCalledWith(config.origin);
+    expect(options.close).toHaveBeenCalledOnce();
+  });
+
+  it("never labels a possible broadcast as unsent when Cancel is clicked after signing fails", async () => {
+    const { root, runtime, sign, page, options } = setup();
+    await page.ready;
+    sign.mockRejectedValue(new Error("Lost response after possible broadcast"));
+    button(root, "Approve").click();
+    await flush();
+    button(root, "Cancel").click();
+    expect(sign).toHaveBeenCalledOnce();
+    expect(runtime.rejectBeforeBroadcast).not.toHaveBeenCalled();
+    expect(options.close).toHaveBeenCalledOnce();
+  });
+
+  it("ignores even a dispatched Cancel event while signing is in progress", async () => {
+    const { root, runtime, sign, page, options } = setup();
+    await page.ready;
+    let finish!: () => void;
+    sign.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    button(root, "Approve").click();
+    await flush();
+    button(root, "Cancel").dispatchEvent(new Event("click"));
+    expect(runtime.rejectBeforeBroadcast).not.toHaveBeenCalled();
+    expect(options.close).not.toHaveBeenCalled();
+    finish();
+    await flush();
+  });
+
   it("disposal aborts provider resources and a late completion cannot sign", async () => {
     const { root, runtime, sign, page } = setup();
     await page.ready;

@@ -63,6 +63,12 @@ narrowing of the spec's proposed fallback. Read-only history is still accessible
 records are released only through matching original hashes, signer/receiver/actions and final
 receipts, under the same lock; a missing callback hash remains unresolved and is never auto-retried.
 
+Explicit pre-sign cancellation is different from an unknown wallet result. The owned Privy Cancel
+button emits a typed rejection only before invoking the signer; the gateway releases that unsent
+attempt without charging gas. Generic popup closure, provider rejection strings/codes and RPC errors
+remain unknown. A partial registration batch preserves and verifies the already submitted subset
+before offering a fresh review of the unsent remainder; it never resends automatically.
+
 The provider SDK's generated-function dependency imports Node's `util`. A passing Vite build that
 externalizes it is not browser compatibility. The build now explicitly resolves the pinned browser
 polyfill. Privy code stays lazy-loaded; the SDK chunk is large and remains a performance follow-up.

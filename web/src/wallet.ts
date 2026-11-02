@@ -19,12 +19,14 @@ import {
 import {
   setPrivyHostIdentity,
   setPrivyPendingDrawingAuthorization,
+  isPrivyUnsubmittedRejection,
 } from "./integrations/privy/session";
 import { withCapitalLock } from "./integrations/operation-store";
 import { createAcquisitionRpc } from "./integrations/rpc";
 import { resolveAccountReadiness } from "./integrations/account-readiness";
 import {
   createApprovedTransactionGateway,
+  ApprovalNotSubmittedError,
   validateAcquisitionTransaction,
   type AcquisitionPolicy,
   reconcilePendingCapitalAttempt,
@@ -733,6 +735,9 @@ export async function signAndSendApprovedTransactions(
   const rpc = createAcquisitionRpc(RPC_URL);
   const selectedWallet = await ensureConnector().wallet();
   const gateway = createApprovedTransactionGateway({
+    isUnsubmittedRejection: (error) =>
+      selectedWallet.manifest?.id === PRIVY_WALLET_ID &&
+      isPrivyUnsubmittedRejection(error),
     context: () => getAcquisitionContext(request.context.operationId),
     storage: window.localStorage,
     now: Date.now,
@@ -759,12 +764,22 @@ export async function signAndSendApprovedTransactions(
             txs: readonly import("./integrations/types").ApprovedNearTransaction[],
             context: OperationContext,
           ) {
-            if (
-              (await accountIdFromWallet(selectedWallet)) !==
-                context.accountId ||
-              !sameIdentity(context, getAcquisitionContext(context.operationId))
-            )
-              throw new Error("Wallet account changed");
+            try {
+              if (
+                (await accountIdFromWallet(selectedWallet)) !==
+                  context.accountId ||
+                !sameIdentity(
+                  context,
+                  getAcquisitionContext(context.operationId),
+                )
+              )
+                throw new Error("Wallet account changed");
+            } catch {
+              // No signing method has been called at this point.
+              throw new ApprovalNotSubmittedError(
+                "Wallet preflight failed before signing",
+              );
+            }
             return selectedWallet.signAndSendTransactions({
               transactions: txs.map((tx) => ({
                 receiverId: tx.receiverId,
@@ -780,12 +795,19 @@ export async function signAndSendApprovedTransactions(
         }
       : {}),
     async send(tx, context) {
-      const wallet = await ensureConnector().wallet();
-      if (
-        (await accountIdFromWallet(wallet)) !== context.accountId ||
-        !sameIdentity(context, getAcquisitionContext(context.operationId))
-      )
-        throw new Error("Wallet account changed");
+      const wallet = selectedWallet;
+      try {
+        if (
+          (await accountIdFromWallet(wallet)) !== context.accountId ||
+          !sameIdentity(context, getAcquisitionContext(context.operationId))
+        )
+          throw new Error("Wallet account changed");
+      } catch {
+        // Keep provider errors outside this catch: after invocation they may have broadcast.
+        throw new ApprovalNotSubmittedError(
+          "Wallet preflight failed before signing",
+        );
+      }
       return wallet.signAndSendTransaction({
         receiverId: tx.receiverId,
         actions: tx.actions.map((a) => ({ ...a, params: { ...a.params } })),

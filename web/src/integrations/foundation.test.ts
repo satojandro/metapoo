@@ -11,6 +11,7 @@ import {
 } from "./operation-store";
 import type { AcquisitionRecord } from "./operation-store";
 import {
+  ApprovalNotSubmittedError,
   reconcilePendingCapitalAttempt,
   completeReceiptStatus,
   createApprovedTransactionGateway,
@@ -254,6 +255,131 @@ describe("ordinary-wallet acquisition gateway", () => {
       s.gateway({ ...req(), context: { ...context, operationId: "op-2" } }),
     ).rejects.toThrow(/reconciliation/);
     expect(s.deps.send).toHaveBeenCalledTimes(1);
+  });
+  it("clears a certified pre-signing cancellation without spending and permits a deliberate retry", async () => {
+    const s = setup();
+    s.deps.send.mockRejectedValueOnce(
+      new ApprovalNotSubmittedError("Player declined before the signer ran"),
+    );
+    const cancelled = await s.gateway(req());
+    expect(cancelled.completedSteps).toBe(0);
+    expect(cancelled.steps).toMatchObject([
+      { index: 0, status: "not_submitted", transactionHash: null },
+    ]);
+    expect(
+      s.storage.getItem("metapoo:capital:pending:mainnet:alice.near"),
+    ).toBeNull();
+    expect(
+      s.storage.getItem("metapoo:capital:spent:mainnet:alice.near:op-1"),
+    ).toBeNull();
+    expect(s.deps.send).toHaveBeenCalledTimes(1); // Cancellation never retries itself.
+    const retried = await s.gateway(req()); // A separate explicit caller action.
+    expect(retried.completedSteps).toBe(1);
+    expect(s.deps.send).toHaveBeenCalledTimes(2);
+    expect(
+      s.storage.getItem("metapoo:capital:spent:mainnet:alice.near:op-1"),
+    ).toBe("21");
+  });
+  it("does not certify a generic popup-close error as unsubmitted", async () => {
+    const s = setup();
+    s.deps.send.mockRejectedValue(
+      Object.assign(new Error("Popup closed; user rejected"), { code: 4001 }),
+    );
+    const result = await s.gateway(req());
+    expect(result.steps[0].status).toBe("unknown");
+    expect(
+      s.storage.getItem("metapoo:capital:pending:mainnet:alice.near"),
+    ).not.toBeNull();
+    await expect(s.gateway(req())).rejects.toThrow(/reconciliation/);
+    expect(s.deps.send).toHaveBeenCalledTimes(1);
+  });
+  it("clears an entire batch only when the trusted boundary certifies no submission", async () => {
+    const s = setup();
+    s.deps.validateTransaction = () => undefined;
+    const certified = { providerCode: "CERTIFIED_BEFORE_SIGNING" };
+    const sendBatch = vi.fn(async (): Promise<unknown[]> => {
+      throw certified;
+    });
+    const gateway = createApprovedTransactionGateway({
+      ...s.deps,
+      sendBatch,
+      isUnsubmittedRejection: (error) => error === certified,
+    });
+    const registration: ApprovedNearTransaction = {
+      receiverId: "token.near",
+      actions: [
+        {
+          type: "FunctionCall",
+          params: {
+            methodName: "storage_deposit",
+            args: { account_id: context.accountId, registration_only: true },
+            gas: "1",
+            deposit: "1",
+          },
+        },
+      ],
+    };
+    const result = await gateway({
+      ...req(),
+      purpose: "mpoo-acquisition",
+      transactions: [registration, registration],
+    });
+    expect(result.completedSteps).toBe(0);
+    expect(result.steps).toMatchObject([
+      { index: 0, status: "not_submitted", transactionHash: null },
+      { index: 1, status: "not_submitted", transactionHash: null },
+    ]);
+    expect(
+      s.storage.getItem("metapoo:capital:pending:mainnet:alice.near"),
+    ).toBeNull();
+    expect(
+      s.storage.getItem("metapoo:capital:spent:mainnet:alice.near:op-1"),
+    ).toBeNull();
+    expect(sendBatch).toHaveBeenCalledTimes(1);
+    expect(s.deps.send).not.toHaveBeenCalled();
+  });
+  it("charges only confirmed sequential registrations when a later approval is not submitted", async () => {
+    const s = setup();
+    s.deps.validateTransaction = () => undefined;
+    const registration: ApprovedNearTransaction = {
+      receiverId: "token.near",
+      actions: [
+        {
+          type: "FunctionCall",
+          params: {
+            methodName: "storage_deposit",
+            args: { account_id: context.accountId, registration_only: true },
+            gas: "1",
+            deposit: "1",
+          },
+        },
+      ],
+    };
+    s.deps.send
+      .mockResolvedValueOnce({
+        ...success,
+        transaction: { hash: "confirmed-first" },
+      })
+      .mockRejectedValueOnce(
+        new ApprovalNotSubmittedError("Cancelled second approval"),
+      );
+    const result = await s.gateway({
+      ...req(),
+      purpose: "mpoo-acquisition",
+      transactions: [registration, registration, registration],
+    });
+    expect(result.completedSteps).toBe(1);
+    expect(result.steps).toMatchObject([
+      { index: 0, status: "confirmed", transactionHash: "confirmed-first" },
+      { index: 1, status: "not_submitted", transactionHash: null },
+    ]);
+    expect(s.deps.send).toHaveBeenCalledTimes(2); // No third approval and no retry of the second.
+    expect(
+      s.storage.getItem("metapoo:capital:spent:mainnet:alice.near:op-1"),
+    ).toBe("3");
+    expect(
+      s.storage.getItem("metapoo:capital:pending:mainnet:alice.near"),
+    ).toBeNull();
   });
   it("keeps the all-in ceiling across separately approved checkpoints", async () => {
     const s = setup();

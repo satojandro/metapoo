@@ -183,3 +183,15 @@ export function getPrivyPendingDrawingAuthorization(
     return null;
   }
 }
+
+/** Only our explicit Cancel button, before invoking the signer, emits this adapter error type. */
+export const PRIVY_UNSUBMITTED_REJECTION = "MetaPooRejectedBeforeBroadcast";
+export function isPrivyUnsubmittedRejection(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { type?: unknown; name?: unknown };
+  // The pinned executor copies ERROR.error.type into both fields. Never classify by message.
+  return (
+    value.type === PRIVY_UNSUBMITTED_REJECTION &&
+    value.name === PRIVY_UNSUBMITTED_REJECTION
+  );
+}

@@ -29,7 +29,8 @@ export function mountPrivySignPage(
 ): { dispose(): void; ready: Promise<void> } {
   const { runtime, config, storage } = options;
   let disposed = false,
-    busy = false;
+    busy = false,
+    signingStarted = false;
   let original: SigningSession | null = null;
   let bound: SigningSession | null = null;
   let wallet: PrivyNearWallet | null = null;
@@ -47,7 +48,12 @@ export function mountPrivySignPage(
   cancel.type = "button";
   cancel.textContent = "Cancel";
   cancel.addEventListener("click", () => {
-    if (!busy) options.close();
+    if (!busy) {
+      // After invoking the signer, a lost response can still mean funds moved.
+      // Only this explicit pre-sign action can release the host's unsent marker.
+      if (!signingStarted) runtime.rejectBeforeBroadcast(config.origin);
+      options.close();
+    }
   });
   root.append(heading, status, content, cancel);
   const say = (text: string) => {
@@ -170,6 +176,7 @@ export function mountPrivySignPage(
           "Requesting your wallet approval. Do not submit this request again while its outcome is unknown.",
         );
         try {
+          signingStarted = true;
           await bound.sign();
           content.replaceChildren();
           say(

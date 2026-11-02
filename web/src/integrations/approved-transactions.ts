@@ -17,7 +17,10 @@ export interface AcquisitionPolicy {
   poolIds: readonly string[];
   storageMaximums: Readonly<Record<string, string>>;
 }
+/** Only the application boundary may certify that the signing provider was never invoked. */
+export class ApprovalNotSubmittedError extends Error {}
 export interface GatewayDependencies {
+  isUnsubmittedRejection?(error: unknown): boolean;
   context(): OperationContext | null;
   storage: DurableStorage;
   now(): number;
@@ -264,6 +267,9 @@ export function createApprovedTransactionGateway(deps: GatewayDependencies) {
         if (originalLimit === null)
           deps.storage.setItem(limitKey(request.context), limit.toString());
       };
+      const notSubmitted = (error: unknown) =>
+        error instanceof ApprovalNotSubmittedError ||
+        deps.isUnsubmittedRejection?.(error) === true;
       const result: ApprovedTransactionResult = {
         steps: [],
         completedSteps: 0,
@@ -369,6 +375,19 @@ export function createApprovedTransactionGateway(deps: GatewayDependencies) {
               .length,
           };
         } catch (error) {
+          if (notSubmitted(error)) {
+            deps.storage.removeItem(pendingKey(request.context));
+            return {
+              steps: request.transactions.map((_, index) => ({
+                index,
+                status: "not_submitted" as const,
+                transactionHash: null,
+                detail:
+                  "Approval cancelled before signing; no transaction submitted.",
+              })),
+              completedSteps: 0,
+            };
+          }
           return {
             steps: [
               {
@@ -450,6 +469,20 @@ export function createApprovedTransactionGateway(deps: GatewayDependencies) {
           if (status === "failed") break;
           result.completedSteps++;
         } catch (error) {
+          if (
+            notSubmitted(error) &&
+            !result.steps.some((step) => step.index === index)
+          ) {
+            deps.storage.removeItem(pendingKey(request.context));
+            result.steps.push({
+              index,
+              status: "not_submitted",
+              transactionHash: null,
+              detail:
+                "Approval cancelled before signing; no transaction submitted.",
+            });
+            break;
+          }
           if (!result.steps.some((step) => step.index === index))
             result.steps.push({
               index,

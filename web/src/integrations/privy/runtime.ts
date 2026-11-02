@@ -9,6 +9,7 @@ import type { PrivyConfig } from "./config";
 import type { SigningSession } from "./approval";
 import type { PrivyNearWallet, PrivySessionClient } from "./session";
 import { checkedSdkWallet } from "./sdk-wallet";
+import { PRIVY_UNSUBMITTED_REJECTION } from "./session";
 
 export interface PrivyPageRuntime extends PrivySessionClient {
   initialize(): Promise<void>;
@@ -18,6 +19,7 @@ export interface PrivyPageRuntime extends PrivySessionClient {
   googleUrl(): Promise<string>;
   completeOAuth(code: string, state: string): Promise<void>;
   assertReady(wallet: PrivyNearWallet): Promise<void>;
+  rejectBeforeBroadcast(targetOrigin: string): void;
   dispose(): void;
 }
 
@@ -100,6 +102,27 @@ export function createPrivyRuntime(config: PrivyConfig): PrivyPageRuntime {
         );
       if (BigInt(result.spendableBeforeGasYocto) <= 0n)
         throw new Error("Add native NEAR to pay your network fees.");
+    },
+    rejectBeforeBroadcast(targetOrigin) {
+      if (
+        targetOrigin !== config.origin ||
+        typeof window === "undefined" ||
+        !window.opener
+      )
+        throw new Error("The signing request origin could not be verified.");
+      // initSigningPage exposes sign(), but no rejection callback. Use the pinned
+      // adapter's ERROR envelope, which it converts into an Error with name/type.
+      window.opener.postMessage(
+        {
+          source: "privy-near-connect",
+          type: "ERROR",
+          error: {
+            type: PRIVY_UNSUBMITTED_REJECTION,
+            message: "Cancelled before signing.",
+          },
+        },
+        targetOrigin,
+      );
     },
     dispose: () => abort.abort(),
   };

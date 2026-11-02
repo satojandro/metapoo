@@ -106,7 +106,7 @@ export function mountRheaPanel(
   };
   const refreshContinuation = () => {
     next.hidden =
-      operation?.phase !== "next_checkpoint_review" ||
+      !["review", "next_checkpoint_review"].includes(operation?.phase ?? "") ||
       !deps.prepareContinuation ||
       !canContinue();
     // Identity changes must also remove any earlier signing review.

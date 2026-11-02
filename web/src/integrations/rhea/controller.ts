@@ -225,9 +225,85 @@ async function executeCheckpoint(
         x.transactionHash ? [x.transactionHash] : [],
       ),
     );
+    const hasUnknown = result.steps.some((step) => step.status === "unknown");
+    const hasUnsubmitted = result.steps.some(
+      (step) => step.status === "not_submitted",
+    );
+    if (
+      !hasUnknown &&
+      hasUnsubmitted &&
+      result.steps.every(
+        (step) =>
+          step.status === "confirmed" || step.status === "not_submitted",
+      )
+    ) {
+      const confirmed = result.steps.filter(
+        (step) => step.status === "confirmed",
+      );
+      if (!confirmed.length) {
+        op.phase = previousPhase;
+        op.message =
+          "Wallet approval was cancelled before submission. No transaction was sent; review a fresh quote to try again.";
+        return persist(op, deps);
+      }
+      // Independent registrations may already have landed before a later approval is cancelled.
+      // Reconcile only those actual attempts; the unsent remainder has no hash to wait for.
+      if (
+        checkpoint.kind === "registration" &&
+        confirmed.every(
+          (step) =>
+            Number.isSafeInteger(step.index) &&
+            step.index >= 0 &&
+            step.index < checkpoint.transactions.length &&
+            !!step.transactionHash,
+        )
+      ) {
+        const completedIndices = new Set(confirmed.map((step) => step.index));
+        if (completedIndices.size !== confirmed.length)
+          throw new Error("Duplicate registration result index");
+        const completedTransactions = checkpoint.transactions.filter(
+          (_, index) => completedIndices.has(index),
+        );
+        const remainingTransactions = checkpoint.transactions.filter(
+          (_, index) => !completedIndices.has(index),
+        );
+        op.plan.checkpoints.splice(
+          op.checkpoint,
+          1,
+          {
+            ...checkpoint,
+            transactions: completedTransactions,
+            approvalCount: completedTransactions.length,
+          },
+          ...(remainingTransactions.length
+            ? [
+                {
+                  ...checkpoint,
+                  transactions: remainingTransactions,
+                  approvalCount: remainingTransactions.length,
+                },
+              ]
+            : []),
+        );
+        op.phase = "reconciling";
+        persist(op, deps);
+        const reconciled = applyReconciliation(
+          op,
+          await deps.reconcile(op),
+          deps,
+        );
+        if (reconciled.phase === "next_checkpoint_review") {
+          reconciled.message =
+            "A later registration approval was cancelled before submission. Confirmed registrations remain; review the remaining costs and a fresh quote before continuing.";
+          persist(reconciled, deps);
+        }
+        return reconciled;
+      }
+    }
     if (
       result.steps.length !== checkpoint.transactions.length ||
-      result.steps.some((x) => x.status === "unknown")
+      hasUnknown ||
+      hasUnsubmitted
     ) {
       op.phase = "unresolved";
       op.message =

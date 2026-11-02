@@ -323,6 +323,91 @@ describe("RHEA quote and transaction boundaries", () => {
 });
 
 describe("RHEA approval, receipts and recovery", () => {
+  it("a trusted pre-sign cancellation returns to review without waiting for a nonexistent hash", async () => {
+    const { deps } = controllerDeps();
+    const original = await plan();
+    deps.approve = vi.fn(async () => ({
+      steps: [
+        { index: 0, status: "not_submitted" as const, transactionHash: null },
+      ],
+      completedSteps: 0,
+    }));
+    const cancelled = await executeMpooBuy(original, deps);
+    expect(cancelled.phase).toBe("review");
+    expect(cancelled.message).toContain("No transaction was sent");
+    expect(cancelled.hashes).toEqual([]);
+    expect(deps.reconcile).not.toHaveBeenCalled();
+    expect((await resumeMpooBuy(context.operationId, deps)).phase).toBe(
+      "review",
+    );
+    const fresh = structuredClone(original);
+    fresh.quote.id = "quote-after-cancel";
+    deps.approve = vi.fn(async () => ({
+      steps: [
+        {
+          index: 0,
+          status: "confirmed" as const,
+          transactionHash: "new-approved-hash",
+        },
+      ],
+      completedSteps: 1,
+    }));
+    expect(
+      (await continueMpooBuy(context.operationId, fresh, deps)).phase,
+    ).toBe("complete");
+    expect(deps.approve).toHaveBeenCalledOnce();
+  });
+  it("keeps confirmed registrations when a later registration approval is explicitly cancelled", async () => {
+    const { deps } = controllerDeps();
+    const original = await plan(true, true);
+    deps.approve = vi.fn(async () => ({
+      steps: [
+        {
+          index: 0,
+          status: "confirmed" as const,
+          transactionHash: "confirmed-registration",
+        },
+        { index: 1, status: "not_submitted" as const, transactionHash: null },
+      ],
+      completedSteps: 1,
+    }));
+    deps.reconcile = vi.fn(async () => ({
+      state: "received" as const,
+      attributableOutputAtomic: "0",
+      nativeOutlayYocto: "1100",
+      message: "One registration confirmed",
+    }));
+    const result = await executeMpooBuy(original, deps);
+    expect(result.phase).toBe("next_checkpoint_review");
+    expect(result.completed).toBe(1);
+    expect(result.hashes).toEqual(["confirmed-registration"]);
+    expect(result.plan.maxNativeSpendYocto).toBe(original.maxNativeSpendYocto);
+    expect(result.plan.checkpoints[0].transactions).toHaveLength(1);
+    expect(result.plan.checkpoints[1].transactions).toHaveLength(2);
+    expect(result.message).toContain("Confirmed registrations remain");
+    expect(deps.reconcile).toHaveBeenCalledOnce();
+    expect(deps.approve).toHaveBeenCalledOnce();
+    await resumeMpooBuy(context.operationId, deps);
+    expect(deps.approve).toHaveBeenCalledOnce();
+  });
+  it("an unknown attempt takes precedence over a later unsubmitted step", async () => {
+    const { deps } = controllerDeps();
+    deps.approve = vi.fn(async () => ({
+      steps: [
+        {
+          index: 0,
+          status: "unknown" as const,
+          transactionHash: "possibly-broadcast",
+        },
+        { index: 1, status: "not_submitted" as const, transactionHash: null },
+      ],
+      completedSteps: 0,
+    }));
+    expect((await executeMpooBuy(await plan(true, true), deps)).phase).toBe(
+      "unresolved",
+    );
+    expect(deps.reconcile).not.toHaveBeenCalled();
+  });
   it("confirms attributable net output and does not purchase credits", async () => {
     const { deps } = controllerDeps();
     const result = await executeMpooBuy(await plan(), deps);
@@ -546,6 +631,9 @@ describe("RHEA accessible panel", () => {
       current = { ...context, sessionEpoch: context.sessionEpoch + 10 };
       notify();
       expect(next.hidden).toBe(false);
+      saved.phase = "review";
+      notify();
+      expect(next.hidden).toBe(false);
       current = null;
       notify();
       expect(next.hidden).toBe(true);
@@ -704,6 +792,7 @@ describe("RHEA actual transaction-trace adapter", () => {
       },
     };
     let approved: ApprovedTransactionRequest | null = null;
+    let availableNative = "10000000000000000000000000";
     let verifiedEventsAvailable = false;
     const readClient = client();
     const fetcher: typeof fetch = vi.fn(async (_url, init) => {
@@ -728,7 +817,7 @@ describe("RHEA actual transaction-trace adapter", () => {
       } else if (request.params.request_type === "view_account")
         result = {
           code_hash: "code",
-          amount: "10000000000000000000000000",
+          amount: availableNative,
           locked: "0",
           storage_usage: 0,
           block_hash: "block",
@@ -785,6 +874,16 @@ describe("RHEA actual transaction-trace adapter", () => {
     expect(candidate.approvalCount).toBe(1);
     expect((await runtime.approve(candidate)).phase).toBe("unresolved");
     expect(onReconciled).not.toHaveBeenCalled();
+    // A cancelled/pre-swap review must not credit the original input as already wrapped.
+    const notYetSwapped = createRheaOperationStore(storage).load(
+      context.operationId,
+    )!;
+    notYetSwapped.phase = "review";
+    availableNative = amount;
+    await expect(
+      runtime.prepareContinuation!(notYetSwapped, new AbortController().signal),
+    ).rejects.toThrow("Not enough native");
+    availableNative = "10000000000000000000000000";
     expect(runtime.lastOperationId?.()).toBe(context.operationId);
     verifiedEventsAvailable = true;
     expect((await runtime.resume(context.operationId)).phase).toBe("complete");
