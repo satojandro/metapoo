@@ -46,6 +46,13 @@ const MAX_PIXELS_PAGE: u32 = 256;
 /// transaction stores every cell of the stroke, or none of them.
 const MAX_DRAW_BATCH: u32 = 64;
 
+/// C1: no repaint tier may cost more than this many credits.
+const MAX_REPAINT_CREDITS: u32 = 8;
+/// C1: the mid-tier window (and so the young one) is at most 24 hours.
+const MAX_REPAINT_WINDOW_NS: u64 = 86_400_000_000_000;
+/// C8: `mpoo_daily_credit_cap` is at most this many credits a day.
+const MAX_MPOO_DAILY_CREDIT_CAP: u128 = 1_000_000;
+
 /// One cell inside a batched stroke.
 ///
 /// `draw_many` takes a list of these so a drag costs one wallet approval
@@ -170,6 +177,16 @@ impl Tunables {
         }
     }
 
+    /// True when no NEAR price change happened within `near_price_cooldown_ns`.
+    pub(crate) fn near_price_cooldown_elapsed(&self, now: u64) -> bool {
+        cooldown_elapsed(self.last_near_price_change_ns, self.near_price_cooldown_ns, now)
+    }
+
+    /// True when no mPOO price change happened within `mpoo_price_cooldown_ns`.
+    pub(crate) fn mpoo_price_cooldown_elapsed(&self, now: u64) -> bool {
+        cooldown_elapsed(self.last_mpoo_price_change_ns, self.mpoo_price_cooldown_ns, now)
+    }
+
     fn validate(&self) {
         assert!(
             self.reserve_floor.0 >= safety::MIN_RESERVE,
@@ -180,15 +197,34 @@ impl Tunables {
                 && self.mpoo_price_cooldown_ns >= safety::MIN_COOLDOWN_NS,
             "PriceCooldownTooShort"
         );
+        // C1: a compromised or careless owner key cannot multiply every pixel's
+        // price by 1000 in one call. 8 is the ceiling for the most expensive tier.
         assert!(
-            self.repaint_base_credits > 0
-                && self.repaint_young_credits > 0
-                && self.repaint_mid_credits > 0,
-            "ZeroRepaintCost"
+            [
+                self.repaint_base_credits,
+                self.repaint_mid_credits,
+                self.repaint_young_credits,
+            ]
+            .iter()
+            .all(|credits| (1..=MAX_REPAINT_CREDITS).contains(credits)),
+            "RepaintCreditsOutOfRange"
+        );
+        assert!(
+            self.repaint_base_credits <= self.repaint_mid_credits
+                && self.repaint_mid_credits <= self.repaint_young_credits,
+            "RepaintCreditsOutOfOrder"
         );
         assert!(
             self.repaint_young_ns <= self.repaint_mid_ns,
             "RepaintTiersOutOfOrder"
+        );
+        assert!(
+            self.repaint_mid_ns <= MAX_REPAINT_WINDOW_NS,
+            "RepaintWindowTooLong"
+        );
+        assert!(
+            self.mpoo_daily_credit_cap <= MAX_MPOO_DAILY_CREDIT_CAP,
+            "MpooDailyCapTooHigh"
         );
         assert!(
             self.toilet_per_cell_second <= emission::MAX_RATE,
@@ -519,9 +555,33 @@ impl Board {
             tunables.last_happy_hour_change_ns, self.tunables.last_happy_hour_change_ns,
             "HappyHourHistoryImmutable"
         );
+        // C1: a float cap below what is already sold would block every sale with a
+        // confusing FloatCapExceeded. 0 (uncapped) is always allowed.
+        assert!(
+            tunables.max_outstanding_credits == 0
+                || tunables.max_outstanding_credits >= self.payments.outstanding,
+            "FloatCapBelowOutstanding"
+        );
+        let now = env::block_timestamp();
+        // C1: repaint credits are a NEAR price. Changing them needs the NEAR price
+        // cooldown to have passed, and restarts it. The windows are not prices.
+        let repaint_changed = tunables.repaint_base_credits != self.tunables.repaint_base_credits
+            || tunables.repaint_mid_credits != self.tunables.repaint_mid_credits
+            || tunables.repaint_young_credits != self.tunables.repaint_young_credits;
+        if repaint_changed {
+            assert!(
+                self.tunables.near_price_cooldown_elapsed(now),
+                "RepaintPriceCooldown"
+            );
+        }
         // Rate changes apply from now, never retroactively to the idle interval.
-        self.accrue(env::block_timestamp());
+        // mpoo_daily_credit_cap applies immediately too (C8): it bounds protocol
+        // loss, not what users pay, so it has no cooldown.
+        self.accrue(now);
         self.tunables = tunables;
+        if repaint_changed {
+            self.tunables.last_near_price_change_ns = Some(now);
+        }
     }
 
     /// What this cell costs to paint right now. The page must display this rather
@@ -728,6 +788,11 @@ impl Board {
             events.join(",")
         ));
     }
+}
+
+/// None (never changed) always permits the change, including at timestamp zero.
+fn cooldown_elapsed(last: Option<u64>, cooldown: u64, now: u64) -> bool {
+    last.is_none_or(|last| now.checked_sub(last).is_some_and(|elapsed| elapsed >= cooldown))
 }
 
 fn pixel_key(x: u32, y: u32) -> u32 {
@@ -1302,7 +1367,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "ZeroRepaintCost")]
+    #[should_panic(expected = "RepaintCreditsOutOfRange")]
     fn a_free_repaint_is_rejected() {
         let mut board = setup();
         let tunables = Tunables {
@@ -1327,16 +1392,148 @@ mod tests {
     fn the_owner_can_retune_without_a_redeploy() {
         let mut board = setup();
         let tunables = Tunables {
-            repaint_young_credits: 9,
+            repaint_young_credits: 8,
             ..Tunables::default()
         };
         paying_context(0, 1, 1_000);
         board.set_tunables(tunables);
-        assert_eq!(board.get_tunables().repaint_young_credits, 9);
+        assert_eq!(board.get_tunables().repaint_young_credits, 8);
         paying_context(0, 0, 1_000);
         board.draw(0, 0, 1);
         paying_context(0, 0, 1_000 + 60_000_000_000);
-        assert_eq!(board.get_cell_cost(0, 0), 9);
+        assert_eq!(board.get_cell_cost(0, 0), 8);
+    }
+
+    // --- C1: bounded repaint costs -----------------------------------------
+
+    fn rejected_with(code: &str, f: impl FnOnce()) {
+        let err =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).expect_err("must reject");
+        let message = err
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| err.downcast_ref::<&str>().copied())
+            .unwrap_or("");
+        assert!(message.contains(code), "expected {code}, got {message}");
+    }
+
+    #[test]
+    fn repaint_tier_above_eight_credits_is_rejected() {
+        let mut board = setup();
+        paying_context(0, 1, 1_000);
+        let tunables = Tunables {
+            repaint_young_credits: 9,
+            ..Tunables::default()
+        };
+        rejected_with("RepaintCreditsOutOfRange", || board.set_tunables(tunables));
+    }
+
+    #[test]
+    fn repaint_tier_credits_out_of_order_are_rejected() {
+        let mut board = setup();
+        paying_context(0, 1, 1_000);
+        // mid above young
+        let tunables = Tunables {
+            repaint_mid_credits: 5,
+            ..Tunables::default()
+        };
+        rejected_with("RepaintCreditsOutOfOrder", || board.set_tunables(tunables));
+        // base above mid
+        let tunables = Tunables {
+            repaint_base_credits: 3,
+            ..Tunables::default()
+        };
+        rejected_with("RepaintCreditsOutOfOrder", || board.set_tunables(tunables));
+    }
+
+    #[test]
+    fn repaint_mid_window_over_a_day_is_rejected() {
+        let mut board = setup();
+        paying_context(0, 1, 1_000);
+        let tunables = Tunables {
+            repaint_mid_ns: safety::MIN_COOLDOWN_NS + 1,
+            ..Tunables::default()
+        };
+        rejected_with("RepaintWindowTooLong", || board.set_tunables(tunables));
+        // Exactly 24 h is allowed.
+        let tunables = Tunables {
+            repaint_mid_ns: safety::MIN_COOLDOWN_NS,
+            ..Tunables::default()
+        };
+        board.set_tunables(tunables);
+    }
+
+    #[test]
+    fn float_cap_below_outstanding_is_rejected_but_zero_is_allowed() {
+        let mut board = setup(); // 6000 outstanding
+        paying_context(0, 1, 1_000);
+        let tunables = Tunables {
+            max_outstanding_credits: 5_999,
+            ..Tunables::default()
+        };
+        rejected_with("FloatCapBelowOutstanding", || board.set_tunables(tunables));
+        board.set_tunables(Tunables {
+            max_outstanding_credits: 6_000,
+            ..Tunables::default()
+        });
+        board.set_tunables(Tunables {
+            max_outstanding_credits: 0,
+            ..Tunables::default()
+        });
+    }
+
+    #[test]
+    fn mpoo_daily_cap_above_one_million_is_rejected() {
+        let mut board = setup();
+        paying_context(0, 1, 1_000);
+        let tunables = Tunables {
+            mpoo_daily_credit_cap: 1_000_001,
+            ..Tunables::default()
+        };
+        rejected_with("MpooDailyCapTooHigh", || board.set_tunables(tunables));
+        board.set_tunables(Tunables {
+            mpoo_daily_credit_cap: 1_000_000,
+            ..Tunables::default()
+        });
+        assert_eq!(board.get_tunables().mpoo_daily_credit_cap, 1_000_000);
+    }
+
+    #[test]
+    fn repaint_change_inside_near_cooldown_is_rejected() {
+        let mut board = setup();
+        board.tunables.last_near_price_change_ns = Some(1_000);
+        paying_context(0, 1, 1_000 + safety::MIN_COOLDOWN_NS - 1);
+        let tunables = Tunables {
+            repaint_young_credits: 8,
+            ..board.get_tunables()
+        };
+        rejected_with("RepaintPriceCooldown", || board.set_tunables(tunables));
+        assert_eq!(board.get_tunables().repaint_young_credits, 4);
+    }
+
+    #[test]
+    fn repaint_change_after_near_cooldown_is_accepted_and_restarts_it() {
+        let mut board = setup();
+        board.tunables.last_near_price_change_ns = Some(1_000);
+        let now = 1_000 + safety::MIN_COOLDOWN_NS;
+        paying_context(0, 1, now);
+        let tunables = Tunables {
+            repaint_young_credits: 8,
+            ..board.get_tunables()
+        };
+        board.set_tunables(tunables);
+        assert_eq!(board.get_tunables().repaint_young_credits, 8);
+        assert_eq!(board.get_tunables().last_near_price_change_ns, Some(now));
+        // The mPOO cooldown is untouched.
+        assert_eq!(board.get_tunables().last_mpoo_price_change_ns, None);
+        // A non-price tunable inside the restarted cooldown is still fine.
+        paying_context(0, 1, now + 1);
+        let tunables = Tunables {
+            quota_base: 33,
+            ..board.get_tunables()
+        };
+        board.set_tunables(tunables);
+        assert_eq!(board.get_tunables().last_near_price_change_ns, Some(now));
     }
 
     #[test]
