@@ -39,6 +39,18 @@ function createCanvas(): {
 }
 
 describe("renderBoard", () => {
+  it("paints Grime & Gum colours by index (12 is Bleach #9ccbdc)", () => {
+    const { canvas, fills } = createCanvas();
+    renderBoard(canvas, [
+      { x: 3, y: 4, colorIndex: 12, artistAccountId: "a", lastWriteTimestampNs: "1" },
+      { x: 4, y: 4, colorIndex: 15, artistAccountId: "a", lastWriteTimestampNs: "1" },
+    ]);
+    expect(fills.slice(-2)).toEqual([
+      expect.objectContaining({ style: "#9ccbdc", x: 12, y: 16 }),
+      expect.objectContaining({ style: "#ef7a2c", x: 16, y: 16 }),
+    ]);
+  });
+
   it("fills each adjacent painted cell as its complete bitmap rectangle", () => {
     const { canvas, fills, context } = createCanvas();
 
