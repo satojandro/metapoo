@@ -65,6 +65,8 @@ Full spec, open items and work orders: [TOILET round spec](economy/2026-11-02-to
 - **T7 — unstaking burns 10%** of each unstaked amount, and only that amount.
 - **T8 — an exchange tax matching mPOO (2% buy, 3% sell) is a nice-to-have**, configured before deploy and
   proven on a real pool first.
+- **T9 — the staking contract has no owner and no upgrade.** No admin method of any kind, and the deploy
+  key is removed after initialisation. A bug means a new contract and a new board.
 
 Evidence and the full contradiction list: [paid model v1 decisions](payments/2026-10-28-paid-model-decisions.md).
 

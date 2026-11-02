@@ -26,10 +26,11 @@ fresh-init only.
 | T6 | **TOILET is for staking.** It will not be spendable on paint. |
 | T7 | Unstaking pays a **10% exit tax, burned**, on each unstaked amount only. A partial withdrawal is taxed on what comes out. |
 | T8 | An **exchange tax** on TOILET is a nice-to-have, matching mPOO's 2% buy and 3% sell. |
+| T9 | The staking contract has **no owner and no upgrade**: full decentralisation. |
 
 Still open, and not blocking the build: the launch emission rate (T1), whether the daily paint allowance
-(`quota_*`) is still wanted now repaint pricing exists, the minimum claim size (B5), whether the staking
-contract has any owner at all (S8), and the exchange-tax split and treasury account (X1).
+(`quota_*`) is still wanted now repaint pricing exists, the minimum claim size (B5), and the exchange-tax split and
+treasury account (X1).
 
 ## What the drip does, in plain numbers
 
@@ -179,18 +180,21 @@ restores `pending`. Rewards can be claimed without unstaking, and unstaking does
 `get_config()`. Events: `staked`, `unstaked`, `rewards_claimed`, `pool_funded`, `inflow_synced`,
 `tax_burned`.
 
-### S8. Ownership: decide before building
+### S8. No owner, no upgrade (T9)
 
-The board can point at a staking contract **once, ever** (`set_staking_contract`). So this contract must
-be right before that call, and it can't be swapped later.
+The board can point at a staking contract **once, ever** (`set_staking_contract`), so this contract must
+be right before that call, and it can't be swapped later. Owner decision, 2 Nov: **full decentralisation.**
 
-- **Proposed: no owner, no upgrade, no pause**, like the TOILET token (D4). Every parameter is a constant
-  or set at `new`. The cost: a bug can't be patched, only routed around by a new board.
-- The alternative is an owner who can pause staking and claims but can't move funds. The cost: an owner
-  key that every staker has to trust.
+- No owner account, no upgrade entrypoint, no pause, no admin method of any kind. Every parameter is a
+  constant or an argument to `new`, and `new` can run once.
+- The deploying key must not remain a full-access key on the contract account after deployment: deploy,
+  initialise, then delete the full-access key, and record the transaction as evidence. Without that step
+  "no upgrade" is only true until someone redeploys over it.
+- The accepted cost: a bug can't be patched. The response to a bug is a new staking contract and a new
+  board, so testing, a testnet rehearsal and an external review carry the whole weight.
 
-Either way, the work order ends at testnet. The owner calls `set_staking_contract` on mainnet only after an
-external review.
+The work order ends at testnet. The owner calls `set_staking_contract` on mainnet only after an external
+review.
 
 ### S tests
 
@@ -228,11 +232,10 @@ The token already supports a venue tax fixed at `new` (`buy_bps`, `sell_bps`, `e
 
 ## Order and gates
 
-1. Owner decides S8 (and, when convenient, the open items above).
-2. B and S in parallel. They meet only through `distribute_mpoo` → `ft_transfer` → `sync_inflow`.
-3. Fresh testnet board plus token plus staking contract; rehearse the whole loop with chain evidence.
-4. External review of the staking contract before `set_staking_contract` anywhere it matters.
-5. F2 and F3 against the rehearsed testnet deployment.
+1. B and S in parallel. They meet only through `distribute_mpoo` → `ft_transfer` → `sync_inflow`.
+2. Fresh testnet board plus token plus staking contract; rehearse the whole loop with chain evidence.
+3. External review of the staking contract before `set_staking_contract` anywhere it matters.
+4. F2 and F3 against the rehearsed testnet deployment.
 
 Work orders: [`toilet-round-board`](../implementation/toilet-round-board.task.json),
 [`toilet-staking`](../implementation/toilet-staking.task.json),

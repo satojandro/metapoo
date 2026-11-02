@@ -35,7 +35,7 @@ next PR to `main`), or retarget the next PR by hand.
 | id | work order | who could take it | needs |
 |---|---|---|---|
 | **TR-B** | [`toilet-round-board`](toilet-round-board.task.json) | Codex | can start now from `main` |
-| **TR-S** | [`toilet-staking`](toilet-staking.task.json) | Codex | owner decision S8 (staking contract ownership) |
+| **TR-S** | [`toilet-staking`](toilet-staking.task.json) | Codex | can start now from `main` (no owner, no upgrade: T9) |
 | **TR-X** | [`toilet-exchange-tax`](toilet-exchange-tax.task.json) | Hermes | owner choice of tax split and treasury; a testnet venue |
 | **FE-HIW** | [`fe-how-it-works`](fe-how-it-works.task.json) | Claude | can start now |
 | **FE-TOILET** | [`fe-toilet-page`](fe-toilet-page.task.json) | Claude | TR-B and TR-S rehearsed on testnet |
