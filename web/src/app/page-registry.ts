@@ -29,6 +29,7 @@ export type PageId =
   | "home"
   | "wall"
   | "money"
+  | "admin"
   | "not-found";
 
 const mounts = new Map<PageId, PageMount>();

@@ -2,6 +2,7 @@ import { NearConnector } from "@hot-labs/near-connect";
 import { Account as NearAccount } from "@near-js/accounts";
 import { JsonRpcProvider } from "@near-js/providers";
 import { CONTRACT_ID, RPC_URL, WALLET_NETWORK } from "./config";
+import { stringifyChainJson } from "./app/admin-settings";
 import {
   buildAddFunctionCallKeyParams,
   createDrawingSessionKeypair,
@@ -485,4 +486,29 @@ export async function signAndSendDistribution(args: {
       },
     ],
   });
+}
+
+/** Normal owner-wallet call; never uses the browser's drawing-session key. */
+export async function signAndSendAdminChange(args: {
+  contractId: string;
+  owner: string;
+  methodName: "set_tunables" | "set_near_price" | "set_mpoo_price" | "set_paused" | "set_team_account" | "set_buyback_account" | "set_staking_contract";
+  args: Record<string, unknown>;
+}): Promise<unknown> {
+  const wallet = await ensureConnector().wallet();
+  const actual = await accountIdFromWallet(wallet);
+  if (actual !== args.owner || session.networkId !== WALLET_NETWORK) throw new Error("OwnerWalletRequired");
+  const json = stringifyChainJson(args.args);
+  // A JSON round-trip through normal JS numbers would corrupt nanosecond history.
+  // Meteor's published adapter accepts Uint8Array arguments and serializes them
+  // directly (stringifyJsonOrBytes). Other adapters need an explicit byte-path check.
+  const hasBigInteger = /"(?:[^"\\]|\\.)*"|-?\d+/g;
+  const needsBytes = [...json.matchAll(hasBigInteger)].some(m => !m[0].startsWith('"') && !Number.isSafeInteger(Number(m[0])));
+  if (needsBytes && wallet.manifest.id !== "meteor-wallet") {
+    throw new Error("ExactSettingsWalletRequired: use Meteor Wallet to preserve the board’s full-precision settings history.");
+  }
+  return wallet.signAndSendTransaction({ receiverId: args.contractId, actions: [{ type: "FunctionCall", params: {
+    methodName: args.methodName, args: needsBytes ? new TextEncoder().encode(json) : args.args,
+    gas: "50000000000000", deposit: "1",
+  } }] });
 }

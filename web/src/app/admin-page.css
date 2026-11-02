@@ -1,0 +1,50 @@
+/* Public board settings: the same dark wall and yellow labels as /money. */
+.admin { --admin-card:#1b1c1f; --admin-line:#3a3b40; --admin-fg:#f1ede6; --admin-muted:#b1b0b4; --admin-tag:#f1dc5e;
+  max-width:1080px; margin:0 auto; padding:28px 0 64px; display:grid; gap:24px; color:var(--admin-fg); font:15px/1.55 Arial,Helvetica,sans-serif; }
+.admin *, .admin *::before, .admin *::after { box-sizing:border-box; }
+.admin h2,.admin h3,.admin h4,.admin p { margin:0; }
+.admin-head { display:grid; gap:12px; max-width:72ch; }
+.admin-head h2 { font-size:clamp(30px,5vw,48px); line-height:1.08; font-weight:900; letter-spacing:-1px; color:var(--admin-tag); }
+.admin-head .action { justify-self:start; }
+.admin-eyebrow,.admin-label { font:600 11px/1.4 ui-monospace,Menlo,monospace; text-transform:uppercase; letter-spacing:.1em; color:var(--admin-muted); }
+.admin-source { font:12px/1.5 ui-monospace,Menlo,monospace; overflow-wrap:anywhere; color:var(--admin-muted); }
+.admin-notice { border-left:3px solid var(--admin-tag); background:var(--admin-card); padding:12px 16px; overflow-wrap:anywhere; }
+.admin-notice:empty,.admin-result:empty { display:none; }
+.admin-status { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+.admin-status:empty { display:none; }
+.admin-stat { display:grid; gap:6px; border:1px solid var(--admin-line); padding:12px; border-radius:3px; background:var(--admin-card); min-width:0; }
+.admin-stat span { color:var(--admin-muted); font-size:12px; }
+.admin-stat strong { font-size:16px; overflow-wrap:anywhere; }
+.admin-stat[data-tone=active] strong { color:#7fd6a8; }
+.admin-stat[data-tone=paused] strong { color:#ffb27a; }
+.admin-filters { display:flex; flex-wrap:wrap; gap:8px; }
+.admin .action { min-height:44px; max-width:100%; white-space:normal; text-align:left; border-radius:3px; }
+.admin-filters .action { font-size:13px; padding:8px 12px; }
+.admin-filters button[aria-pressed=true] { background:var(--admin-tag); color:#191a1c; border-color:var(--admin-tag); }
+.admin-groups { display:grid; gap:32px; }
+.admin-group { display:grid; gap:10px; min-width:0; }
+.admin-group h3 { font-size:21px; }
+.admin-row { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr); gap:16px; padding:18px; border:1px solid var(--admin-line); background:var(--admin-card); border-radius:3px; }
+.admin-row h4 { font-size:15px; }
+.admin-name,.admin-values,.admin-controls { min-width:0; display:grid; gap:6px; align-content:start; }
+.admin-name p,.admin-controls p { font-size:13px; }
+.admin-muted { color:var(--admin-muted); font-size:13px; }
+.admin-value { font:600 14px/1.6 ui-monospace,Menlo,monospace; overflow-wrap:anywhere; }
+.admin-pill { justify-self:start; font:600 11px/1.4 ui-monospace,Menlo,monospace; color:#7fd6a8; border:1px solid #7fd6a8; border-radius:2px; padding:4px 7px; }
+.admin-controls button { justify-self:start; }
+.admin-editor { display:grid; gap:12px; padding:22px; background:#222327; border:2px solid var(--admin-tag); border-radius:3px; scroll-margin-top:20px; }
+.admin-editor label { font-size:14px; font-weight:600; }
+.admin-editor input,.admin-editor select { min-height:44px; width:100%; max-width:32rem; padding:10px 12px; border:1px solid #8b8b90; border-radius:3px; background:#111214; color:var(--admin-fg); font:15px ui-monospace,Menlo,monospace; }
+.admin-editor .action { justify-self:start; }
+.admin-preview { padding:14px; border-left:3px solid var(--admin-tag); background:#141517; }
+.admin-preview:empty,.admin-feedback:empty { display:none; }
+.admin-feedback { color:#ffb7ac; }
+.admin-result { border:1px solid var(--admin-line); padding:16px; overflow-wrap:anywhere; }
+.admin a { color:#8fdbf0; text-decoration:underline; text-underline-offset:3px; }
+.admin-history { display:grid; gap:12px; border-top:1px solid var(--admin-line); padding-top:24px; }
+.admin-history ol { margin:0; padding-left:22px; display:grid; gap:12px; }
+.admin-history li { overflow-wrap:anywhere; }
+.admin button:focus-visible,.admin input:focus-visible,.admin select:focus-visible,.admin a:focus-visible { outline:3px solid #73d7ee; outline-offset:3px; }
+.admin [hidden] { display:none !important; }
+@media (max-width:760px) { .admin-row { grid-template-columns:1fr; gap:14px; } .admin-status { grid-template-columns:repeat(2,minmax(0,1fr)); } .admin { padding-top:20px; } }
+@media (prefers-reduced-motion:reduce) { .admin * { scroll-behavior:auto; } }
