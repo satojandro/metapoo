@@ -119,4 +119,9 @@ describe("session stroke submission", () => {
     expect(result.confirmedChunks).toBe(3);
     expect(result.executedBlocks).toEqual([]);
   });
+  it("sends each chunk's quoted max_credits on a paid board", async () => {
+    await signAndSendStrokeLocally({ ...args, maxCredits: [64, 70, 2] });
+    expect(mocks.call.mock.calls.map(([call]) => call.args.max_credits)).toEqual([64, 70, 2]);
+    expect(Object.keys(mocks.call.mock.calls[0]![0].args)).toEqual(["cells", "max_credits"]);
+  });
 });

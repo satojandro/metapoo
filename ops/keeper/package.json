@@ -1,0 +1,17 @@
+{
+  "name": "metapoo-keeper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hourly keeper that calls distribute_near and distribute_mpoo on the Meta Poo board",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "near-api-js": "7.3.1"
+  }
+}

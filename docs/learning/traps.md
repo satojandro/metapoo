@@ -165,6 +165,23 @@ drag-to-paint, which made drag silently pan for anyone who had not found the but
 
 ---
 
+## Contract state
+
+**Capture old state with the old code before you change the struct.** Once `Board` changes, the
+code that wrote the old layout is gone, and a test that builds "old state" with the new types
+only proves the new code agrees with itself. REV-A dumped the mocked trie from the v1 code
+(`contracts/paid-board/fixtures/state_v1.json`, generator in commit `7cb1558`) and the migration
+test loads those bytes. Do the same for every later layout change.
+
+**The paid board tells layouts apart by the first u32 of `STATE`.** v1 starts with
+`schema_version = 4`; v2+ start with `state_version`. Never assign `state_version = 4`, and keep
+`state_version` the first field of `Board`. See `contracts/paid-board/src/migrate.rs`.
+
+**`#[payable]` cannot go on a `&self` method** in near-sdk 5 ("View function can't be
+payable"). Owner calls that only schedule a promise still take `&mut self`.
+
+---
+
 ## Repository
 
 **`~/Hermes-crypto-builder/mpoo` and `mpoov2` are stale copies** pointing at superseded
