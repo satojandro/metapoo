@@ -82,7 +82,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   walletPanel.className = "wallet-chrome";
   walletPanel.setAttribute("aria-label", "Wallet");
   walletPanel.innerHTML = `
-    <button id="connect-button" class="action" type="button">Connect wallet</button>
+    <button id="connect-button" class="mp-btn mp-btn-primary shell-connect" type="button">Connect wallet</button>
     <details class="wallet-details"><summary>Wallet</summary>
     <section id="paint-wallet-panel" aria-label="Paint and wallet balances"></section>
     <h2>Connection details</h2>

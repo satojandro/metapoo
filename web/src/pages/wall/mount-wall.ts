@@ -18,6 +18,7 @@ import { createWallModes } from "./wall-modes";
 import { mountDockPrimary } from "./dock-primary";
 import { createWallViews, type WallViews } from "./wall-views";
 import { createTileInspector, parseTileHash, type TileInspector } from "./tile-inspector";
+import { createWallInvite, type WallInvite } from "./wall-invite";
 import { PAGE_NETWORK } from "../../config";
 import { viewFunction } from "../../contract";
 import "./wall-page.css";
@@ -54,6 +55,8 @@ export interface WallMountTestApi {
   /** Test-only read seam for verifying board-load ordering. */
   refreshPixel: (cell: Cell) => Promise<void>;
   cachedPixelColor: (cell: Cell) => number | null | undefined;
+  /** Zoom to painting size on the selection (what the old Paint zoom button did). */
+  paintZoom: () => void;
 }
 
 function mustFindIn<T extends Element>(root: ParentNode, selector: string): T {
@@ -111,7 +114,6 @@ export function mountWall(
   const refreshButton = el<HTMLButtonElement>("#refresh-board");
   const boardLoadStatus = el("#board-load-status");
   const boardFreshness = el("#board-freshness");
-  const zoomPaintButton = el<HTMLButtonElement>("#zoom-paint");
   const drawingSessionStatus = el("#drawing-session-status");
   const drawingSessionNote = el("#drawing-session-note");
   const authorizeSessionButton = el<HTMLButtonElement>("#authorize-session-button");
@@ -141,13 +143,14 @@ export function mountWall(
   const creditsBalance = el("#credits-balance");
   const buyCreditsButton = el<HTMLButtonElement>("#buy-credits-button");
   const buyCreditsHost = el("#buy-credits-host");
-  const focusCanvas = el<HTMLButtonElement>("#focus-canvas");
   // Keep the current cell coordinates available when keyboard users reach Place.
   drawButton.setAttribute("aria-describedby", "selection-summary place-reason cell-price stroke-total");
 
   const scope = createWallScope();
   let views: WallViews | null = null;
   let inspector: TileInspector | null = null;
+  let invite: WallInvite | null = null;
+  let invitePrimed = false;
 
   // Look / Paint and Move decide what a gesture means; they never change the camera
   // maths or the paint path. Look is the default (owner, 2 Nov).
@@ -190,7 +193,6 @@ export function mountWall(
     boardFocus,
     selectionRing,
     hoverSummary,
-    zoomPaintButton,
     paintedPixels: () => board.paintedPixels(),
     overlayPixels: () => paint.overlayPixels(),
     selection: {
@@ -258,6 +260,12 @@ export function mountWall(
       pricing.onBoardUpdated();
       views?.refresh();
       inspector?.render();
+      // The invite's wet count and free-paints line need the board's tunables.
+      if (!invitePrimed && views) {
+        invitePrimed = true;
+        views.prime();
+      }
+      invite?.render();
     },
     onSchemaChanged: () => pricing.onSchemaChanged(),
     onManualRefresh: () => pricing.manualRefresh(),
@@ -277,7 +285,6 @@ export function mountWall(
     sponsorNote,
     drawState,
     boardLoadStatus,
-    focusCanvas,
     flowState,
     compactStatus,
     sponsorship,
@@ -341,8 +348,36 @@ export function mountWall(
     readTunables: () => pricing.viewTunables(),
     readFreeFirst: (account) => viewFunction("get_free_first_paints", { account_id: account }),
     render: () => camera.render(),
-    onChange: () => inspector?.render(),
+    onChange: () => {
+      inspector?.render();
+      invite?.render();
+    },
   });
+
+  // The Look-mode invite: real counts, and the nearly-empty wall's own pitch.
+  invite = createWallInvite({
+    scope,
+    card: el<HTMLElement>(".wall-invite"),
+    pixels: () => board.paintedPixels(),
+    loaded: () => board.syncState().lastAppliedAtMs !== null,
+    tunables: () => views?.tunables() ?? null,
+    viewerFree: () => views?.free() ?? { kind: "unknown" },
+    connected: () => scope.walletAccount() !== null,
+  });
+  invite.render();
+
+  // The drawing-key opt-in ("Also allow painting without a popup each time") is
+  // shell-owned. On the wall it sits in the dock, next to Connect, not in the header.
+  const optIn = document.querySelector<HTMLLabelElement>("label.drawing-session-opt-in");
+  const optInSlot = pageRoot.querySelector<HTMLElement>("#wall-optin-slot");
+  if (optIn && optInSlot && !pageRoot.contains(optIn)) {
+    const home = optIn.parentElement;
+    const next = optIn.nextSibling;
+    optInSlot.append(optIn);
+    scope.onDispose(() => {
+      if (home && home.isConnected) home.insertBefore(optIn, next && next.parentNode === home ? next : null);
+    });
+  }
 
   // The Tile card: painter, age, cost to cover, Paint over this, Copy link.
   inspector = createTileInspector({
@@ -356,6 +391,7 @@ export function mountWall(
     free: () => views?.free() ?? { kind: "unknown" },
     knownCost: (cell) => pricing.knownCost(cell),
     network: PAGE_NETWORK,
+    loaded: () => board.syncState().lastAppliedAtMs !== null,
     prime: () => views?.prime(),
     paintOver: (cell) => {
       modes.setMode("paint");
@@ -417,6 +453,7 @@ export function mountWall(
     pendingPaintCount: () => paint.pendingCount(),
     refreshPixel: (cell) => board.refreshSelectedPixel(cell),
     cachedPixelColor: (cell) => board.cachedPixel(cell)?.colorIndex,
+    paintZoom: () => camera.zoomToPaint(),
   });
 
   const unsubWallet = services.wallet.subscribe((session) => {
@@ -439,6 +476,7 @@ export function mountWall(
     void pricing.refreshCreditsDock();
     dockPrimary.sync();
     if (previousAccount !== session.accountId) views?.onWalletChanged();
+    invite?.render();
   });
   scope.onDispose(unsubWallet);
   scope.onDispose(() => {

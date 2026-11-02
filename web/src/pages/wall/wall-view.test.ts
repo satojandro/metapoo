@@ -46,7 +46,6 @@ function setup(options: { route?: string; wallet?: string | null } = {}) {
     sponsorNote: el("sponsor"),
     drawState: el("draw-state"),
     boardLoadStatus: el("status"),
-    focusCanvas: el("focus") as HTMLButtonElement,
     flowState: el("flow"),
     compactStatus: el("compact"),
     sponsorship: { flagEnabled: false, message: "Sponsorship is off." } as never,
@@ -79,6 +78,14 @@ describe("wall view", () => {
     expect(deps.lede.textContent).toMatch(/^A live communal pixel wall on NEAR/);
     expect(deps.rules.querySelectorAll("li")).toHaveLength(8);
     expect(deps.rules.textContent).toContain("Game contract: board.view.testnet on testnet.");
+  });
+
+  it("a chosen square says the wall is loading until the first read", () => {
+    const { view, deps } = setup();
+    view.select({ x: 3, y: 4 });
+    view.showSelection();
+    expect(deps.selectionSummary.textContent).toContain("Reading the wall…");
+    expect(deps.selectionSummary.textContent).not.toContain("Nobody has painted");
   });
 
   it("setFlow writes the shell strip and the dock line", () => {
@@ -235,12 +242,6 @@ describe("wall view", () => {
     expect(deps.refreshSelectedPixel).toHaveBeenCalled();
   });
 
-  it("focus canvas toggles the layout and its own label", () => {
-    const { deps } = setup();
-    deps.focusCanvas.click();
-    expect(document.querySelector(".wall-layout")!.classList.contains("is-focused")).toBe(true);
-    expect(deps.focusCanvas.textContent).toBe("Back to the stall ↙");
-  });
 });
 
 describe("wall view helpers", () => {

@@ -34,14 +34,14 @@ export function mountWalletChrome(
   const cleanups: Array<() => void> = [];
   const walletDetails = root.querySelector<HTMLDetailsElement>("details.wallet-details");
   const walletSummaryToggle = walletDetails?.querySelector("summary") ?? null;
-  const optInLabel = authorizeDrawingSession?.closest("label") ?? null;
   let recoverableOps = 0;
 
   /**
-   * One wallet control in the header. Disconnected: a Connect button (with the
-   * drawing-key opt-in beside it). Connected: the account name opens the wallet
-   * panel, and Disconnect lives inside it. The panel also shows while a
-   * broadcast operation is still recoverable, connected or not.
+   * One wallet control in the header. Disconnected: a Connect button. Connected:
+   * the account name opens the wallet panel, and Disconnect lives inside it. The
+   * panel also shows while a broadcast operation is still recoverable, connected
+   * or not. The drawing-key opt-in is not in the header: it stays in the wallet
+   * panel, and the wall page shows it in its paint dock while disconnected.
    */
   function placeWalletControls(connectedAccount: string | null): void {
     if (!walletDetails) return;
@@ -54,10 +54,8 @@ export function mountWalletChrome(
     }
     if (connectedAccount) {
       walletDetails.append(connectButton);
-      if (optInLabel) walletDetails.append(optInLabel);
     } else {
       walletDetails.before(connectButton);
-      if (optInLabel) connectButton.after(optInLabel);
     }
   }
 

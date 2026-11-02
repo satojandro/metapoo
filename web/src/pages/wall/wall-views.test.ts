@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { PixelView } from "@shared/types.ts";
 import {
   ageColor,
+  assignTurfColors,
   blankIsFree,
   createWallViews,
   legendFor,
@@ -142,6 +143,28 @@ describe("turf", () => {
     const painter = tilePainterFor({ mode: "turf", now: NOW, tunables: null, free: { kind: "unknown" }, viewer: "me", palette })!;
     expect(painter.painted(px(0, "me"))).toBe(palette.you);
     expect(painter.painted(px(0, "other"))).toBe(turfColor("other"));
+  });
+
+  it("gives the top painters distinct colours by rank, you excluded, hash colour beyond the set", () => {
+    const colors = ["#111111", "#222222", "#333333"];
+    const pixels = [
+      px(0, "carol"), px(1, "carol"), px(2, "carol"),
+      px(3, "bob"), px(4, "bob"),
+      px(5, "alice"), px(6, "alice"),
+      px(7, "me"), px(8, "me"), px(9, "me"), px(10, "me"),
+      px(11, "dan"),
+    ];
+    const map = assignTurfColors(pixels, "me", colors);
+    expect([...map.entries()]).toEqual([
+      ["carol", "#111111"], ["alice", "#222222"], ["bob", "#333333"], ["dan", turfColor("dan")],
+    ]);
+    expect(map.has("me")).toBe(false);
+    // Ten distinct colours, none of them the "you" yellow.
+    expect(new Set(palette.turf).size).toBe(10);
+    expect(palette.turf).not.toContain(palette.you);
+    const painter = tilePainterFor({ mode: "turf", now: NOW, tunables: null, free: { kind: "unknown" }, viewer: "me", palette, turf: map })!;
+    expect(painter.painted(px(0, "carol"))).toBe("#111111");
+    expect(painter.painted(px(0, "me"))).toBe(palette.you);
   });
 });
 

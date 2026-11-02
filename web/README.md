@@ -177,11 +177,12 @@ for access-key deletion (wallet prompt).
 Automated suite: `cd web && npm test` (**mock** / unit). Production build:
 `npm run build` (**mock** compile check).
 
-### Layout check: nothing on top of the wall
+### Layout check: nothing on top of the wall, nothing cut off
 
-`scripts/layout-check.mjs` loads a running dev server at 1440 × 900 and 390 × 844 and fails if any
-visible element overlaps the board canvas (`#board`), apart from the board's ancestors and the
-selection and pending overlays inside `#board-viewport`. It uses the machine's Playwright and
+`scripts/layout-check.mjs` loads a running dev server at 1440 × 900 and 390 × 844, in Look and in
+Paint mode, and fails if any visible element overlaps the board canvas (`#board`), apart from the
+board's ancestors and the selection and pending overlays inside `#board-viewport`, or if the board
+sticks out sideways past the window or a clipping ancestor. It uses the machine's Playwright and
 Chromium; nothing is added to `package.json`.
 
 ```bash
@@ -190,7 +191,8 @@ npx vite --port 5174                      # terminal 1; .env.local can point at 
 node scripts/layout-check.mjs              # terminal 2; defaults to http://localhost:5174/
 ```
 
-It prints the board's box at each size and exits 1 with the overlapping elements listed. Run it
+It prints the board's box at each size and mode, and exits 1 with the overlapping or clipping
+elements listed. Run it
 after any change to the wall page's layout or the paint dock.
 
 ## Beginner map of the folders

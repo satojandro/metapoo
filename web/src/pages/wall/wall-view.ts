@@ -42,7 +42,6 @@ export interface WallViewDeps {
   sponsorNote: HTMLElement;
   drawState: HTMLElement;
   boardLoadStatus: HTMLElement;
-  focusCanvas: HTMLButtonElement;
   /** Shell-owned status strip. */
   flowState: HTMLElement;
   compactStatus: HTMLElement;
@@ -102,7 +101,6 @@ export function createWallView(deps: WallViewDeps): WallView {
     sponsorNote,
     drawState,
     boardLoadStatus,
-    focusCanvas,
     flowState,
     compactStatus,
     sponsorship,
@@ -116,16 +114,6 @@ export function createWallView(deps: WallViewDeps): WallView {
   // Today's boards reject 8–15 with ColorOutOfRange.
   let paletteLength = DEFAULT_PALETTE_LENGTH;
   let paletteBuilt = false;
-
-  // Enlarge the real canvas without altering its pixels or wallet state.
-  scope.listen(focusCanvas, "click", () => {
-    // Step 1 folds Focus canvas into Fit; the button stays mounted but hidden until step 4.
-    const page = pageRoot.querySelector(".wall-layout, [data-page='wall']");
-    if (!page) return;
-    const focused = page.classList.toggle("is-focused");
-    focusCanvas.setAttribute("aria-pressed", String(focused));
-    focusCanvas.textContent = focused ? "Back to the stall ↙" : "Focus canvas ↗";
-  });
 
   sponsorNote.textContent = sponsorship.message;
 
@@ -188,7 +176,10 @@ export function createWallView(deps: WallViewDeps): WallView {
 
     const cached = deps.cachedPixel(selected);
     let cellText: string;
-    if (!cached || cached.colorIndex === null) {
+    if (isContractConfigured() && deps.boardSync().lastAppliedAtMs === null && (!cached || cached.colorIndex === null)) {
+      // The wall hasn't been read yet: we don't know who painted this square.
+      cellText = "Square chosen. Reading the wall…";
+    } else if (!cached || cached.colorIndex === null) {
       cellText = isContractConfigured()
         ? "Square chosen. Nobody has painted it yet."
         : "Square chosen. Empty on the preview board.";

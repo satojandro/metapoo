@@ -86,6 +86,16 @@ describe("inspector content", () => {
     expect(inspectorModel({ ...base, pixel: painted(3), tunables: null }).cost).toBe("Price unavailable");
   });
 
+  it("says the wall is loading, not that a tile is blank, before the first read", () => {
+    const loading = inspectorModel({ ...base, pixel: null, loaded: false });
+    expect(loading.loading).toBe(true);
+    expect(loading.colour).toBeNull();
+    expect(loading.cost).toBe("");
+    // A tile already in the cache (for example, just painted) shows its facts anyway.
+    expect(inspectorModel({ ...base, pixel: painted(3), loaded: false }).loading).toBe(false);
+    expect(inspectorModel({ ...base, pixel: null, loaded: true }).loading).toBe(false);
+  });
+
   it("formats ages", () => {
     expect(formatAgo(0n)).toBe("just now");
     expect(formatAgo(59n * MIN)).toBe("59 min ago");

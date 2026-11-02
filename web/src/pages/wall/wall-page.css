@@ -2,8 +2,7 @@
  * Wall page, Phase 1 step 1: the wall first, one panel beside it (a bottom sheet on
  * phone), Look / Paint modes. Approved design: docs/visual-concepts/wall-draft.html.
  * Tokens only (web/src/design/tokens.css); no literal colours. Selectors are scoped
- * under .wall-page so they win over the older style.css / wall-design.css layers,
- * which step 4 removes.
+ * under .wall-page so they win over the older style.css layer.
  */
 
 .wall-page {
@@ -26,6 +25,8 @@
 /* ——— The stage: bar, framed wall, foot line ——— */
 .wall-page .wall-stage {
   display: grid;
+  /* One column the stage's width: a wide view bar must never widen the wall. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   justify-items: center;
   min-width: 0;
@@ -42,6 +43,8 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--mp-space-2);
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
 }
 
@@ -458,7 +461,7 @@
   .wall-page[data-mode="paint"] .wall-inspect { order: 2; }
 }
 
-@media (max-width: 430px) {
+@media (max-width: 760px) {
   /* Four views fit in their own scroller; the page never scrolls sideways. */
   .wall-page .wall-views {
     flex: 1 1 auto;
@@ -587,3 +590,39 @@
   color: var(--mp-fg);
   font: var(--mp-text-md) var(--mp-mono);
 }
+
+/* ——— Invite card counts and the free first paints line (Phase 1 step 4) ——— */
+.wall-page .wall-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--mp-space-2);
+  margin: 0;
+}
+.wall-page .wall-stats div { display: grid; gap: 2px; min-width: 0; }
+.wall-page .wall-stats dt { color: var(--mp-muted); font-size: var(--mp-text-sm); }
+.wall-page .wall-stats dd { margin: 0; color: var(--mp-fg); font: 700 var(--mp-text-lead) var(--mp-mono); font-variant-numeric: tabular-nums; }
+.wall-page .wall-invite-free {
+  padding: var(--mp-space-2) var(--mp-space-3);
+  border: 1px solid var(--mp-line);
+  border-left: 3px solid var(--mp-near);
+  border-radius: var(--mp-radius-md);
+  background: var(--mp-card-2);
+  color: var(--mp-fg);
+  font-weight: 700;
+}
+.wall-page .wall-invite-free[hidden] { display: none; }
+.wall-page .tile-loading { color: var(--mp-muted); }
+
+/* The drawing-key opt-in, borrowed from the wallet panel. It only matters before
+   connecting, so it shows only while the primary action is Connect. */
+.wall-page .wall-optin:empty { display: none; }
+.wall-page .wall-dock:not(:has(.wall-action[data-primary="connect"])) .wall-optin { display: none; }
+.wall-page .wall-optin .drawing-session-opt-in {
+  display: flex;
+  align-items: center;
+  gap: var(--mp-space-2);
+  margin: 0;
+  color: var(--mp-soft);
+  font-size: var(--mp-text-md);
+}
+.wall-page .wall-optin input { width: 18px; height: 18px; accent-color: var(--mp-tag); }

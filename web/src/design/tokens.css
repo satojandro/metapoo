@@ -26,6 +26,28 @@
   --mp-team: #c9c4ba;
   --mp-focus: #56c9ec;
 
+  /* Turf view: ten clearly different colours for the top painters, by rank.
+     No yellow: on the wall, yellow (--mp-tag) always means "your tiles". */
+  --mp-turf-1: #73d7ee;
+  --mp-turf-2: #ff8fa3;
+  --mp-turf-3: #7ee081;
+  --mp-turf-4: #b79ad0;
+  --mp-turf-5: #ff9f5a;
+  --mp-turf-6: #5f8dff;
+  --mp-turf-7: #e86fd8;
+  --mp-turf-8: #3fc7a5;
+  --mp-turf-9: #ff5f5f;
+  --mp-turf-10: #c9c4ba;
+
+  /* App chrome: the page glow behind every route, and the soft `.action` button
+     still used by /money and the About details. Named so no page needs a literal. */
+  --mp-glow: #282629;
+  --mp-soft-btn: #f0ddd9;
+  --mp-soft-btn-hover: #fff0ec;
+  --mp-soft-btn-ink: #251d22;
+  --mp-soft-btn-line: #515156;
+  --mp-shadow: #0009;
+
   /* Semantic status, separate from the accents' meaning */
   --mp-good: var(--mp-stake);
   --mp-warn: var(--mp-tag);

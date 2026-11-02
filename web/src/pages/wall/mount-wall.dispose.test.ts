@@ -204,7 +204,8 @@ describe("mountWall dispose", () => {
     });
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
-    const dispose = mountWall(root, services);
+    let paintApi: WallMountTestApi | null = null;
+    const dispose = mountWall(root, services, { attachTestApi: (a) => { paintApi = a; } });
     // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
     root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
@@ -213,7 +214,7 @@ describe("mountWall dispose", () => {
       left: 0, top: 0, right: 512, bottom: 512, width: 512, height: 512,
     } as DOMRect);
     root.querySelector<HTMLButtonElement>(".swatch")!.click();
-    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    (paintApi as WallMountTestApi | null)!.paintZoom();
     // A drawing session exists, so Direct paint is on without a second
     // decision (product decision 2026-10-27). Wait for it rather than poking
     // the checkbox, so the negative assertions below stay meaningful.
@@ -236,14 +237,15 @@ describe("mountWall dispose", () => {
     vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
-    const dispose = mountWall(root, services);
+    let paintApi: WallMountTestApi | null = null;
+    const dispose = mountWall(root, services, { attachTestApi: (a) => { paintApi = a; } });
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
       left: 0, top: 0, right: 512, bottom: 512, width: 512, height: 512,
     } as DOMRect);
     root.querySelector<HTMLButtonElement>(".swatch")!.click();
-    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    (paintApi as WallMountTestApi | null)!.paintZoom();
     // A drawing session exists, so Direct paint is on without a second
     // decision (product decision 2026-10-27). Wait for it rather than poking
     // the checkbox, so the negative assertions below stay meaningful.
@@ -405,7 +407,8 @@ describe("mountWall dispose", () => {
 
     const services = createAppServices();
     const root = document.querySelector<HTMLElement>("#root")!;
-    const dispose = mountWall(root, services);
+    let paintApi: WallMountTestApi | null = null;
+    const dispose = mountWall(root, services, { attachTestApi: (a) => { paintApi = a; } });
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
 
@@ -451,7 +454,7 @@ describe("mountWall dispose", () => {
     tap(195, 240);
     expectSelection(64, 64);
 
-    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    (paintApi as WallMountTestApi | null)!.paintZoom();
     const ring = root.querySelector<HTMLElement>("#selection-ring")!;
     expect(ring.style.width).toBe("20px");
     expect(ring.style.height).toBe("20px");
@@ -1228,14 +1231,15 @@ describe("mounted paint strokes", () => {
       return () => {};
     };
     const root = document.querySelector<HTMLElement>("#root")!;
-    const dispose = mountWall(root, services);
+    let paintApi: WallMountTestApi | null = null;
+    const dispose = mountWall(root, services, { attachTestApi: (a) => { paintApi = a; } });
     // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
     root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
     await vi.waitFor(() => expect(root.querySelector("#board-load-status")?.textContent).toContain("painted cell"));
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 390, height: 480 } as DOMRect);
-    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    (paintApi as WallMountTestApi | null)!.paintZoom();
     root.querySelector<HTMLButtonElement>("#palette button")!.click();
     vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
     const paintToggle = root.querySelector<HTMLInputElement>("#direct-paint-toggle")!;

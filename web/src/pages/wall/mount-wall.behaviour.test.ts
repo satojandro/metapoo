@@ -286,7 +286,7 @@ describe("wall behaviour: free board", () => {
     const { root, api, dispose, viewport } = mount(services);
     await booted(root);
     root.querySelectorAll<HTMLButtonElement>(".swatch")[2]!.click();
-    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    api.paintZoom();
     await vi.waitFor(() =>
       expect(root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked).toBe(true),
     );
@@ -336,7 +336,7 @@ describe("wall behaviour: free board", () => {
     controllableWallet(services, ALICE);
     const { root, api, dispose, viewport } = mount(services, { width: 390, height: 480 });
     await booted(root);
-    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    api.paintZoom();
     root.querySelectorAll<HTMLButtonElement>(".swatch")[4]!.click();
     await vi.waitFor(() =>
       expect(root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked).toBe(true),
@@ -588,7 +588,7 @@ describe("wall behaviour: camera", () => {
   it("zoom-to-paint centres the board at paint zoom and Fit returns to the whole wall", async () => {
     const services = createAppServices();
     controllableWallet(services, { accountId: null, networkId: null });
-    const { root, dispose } = mount(services);
+    const { root, api, dispose } = mount(services);
     await booted(root);
     const readout = () => text(root, ".position-readout");
     const fit = root.querySelector<HTMLButtonElement>("#zoom-fit")!;
@@ -598,7 +598,7 @@ describe("wall behaviour: camera", () => {
     // A 512 px viewport fits the 128-cell board at 3.875 px/cell (8 px inset).
     expect(readout()).toBe("Zoom 100% · Cell: none selected");
     expect(fit.disabled).toBe(true);
-    root.querySelector<HTMLButtonElement>("#zoom-paint")!.click();
+    api.paintZoom();
     expect(readout()).toBe("Zoom 516% · Cell: none selected");
     expect(text(document.body, "#compact-status")).toContain("~20.0 px/cell");
     expect(fit.disabled).toBe(false);
