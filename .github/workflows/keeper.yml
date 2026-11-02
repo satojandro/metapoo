@@ -1,0 +1,54 @@
+# Revenue keeper (REV-F): calls distribute_near and distribute_mpoo on the board every hour.
+# See ops/keeper/README.md.
+#
+# Harmless until switched on: the job is skipped unless the repository variable
+# KEEPER_ENABLED is exactly "true". It also needs:
+#   secret    KEEPER_PRIVATE_KEY        function-call key limited to the two distribute methods
+#   variables KEEPER_NETWORK            testnet | mainnet
+#             KEEPER_BOARD_CONTRACT_ID  e.g. board3.<owner>.testnet
+#             KEEPER_ACCOUNT_ID         the dedicated keeper account
+#             KEEPER_RPC_URL            optional; defaults to the public RPC for the network
+#
+# A run fails (red X, and GitHub's failed-run email) only when both calls failed for a reason
+# other than "interval not elapsed".
+name: keeper
+
+on:
+  schedule:
+    # Minute 17, not 0: GitHub's scheduler is busiest on the hour and delays or drops runs there.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keeper
+  cancel-in-progress: false
+
+jobs:
+  distribute:
+    if: ${{ vars.KEEPER_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ops/keeper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ops/keeper/package-lock.json
+      - run: npm ci --omit=dev
+      - name: Call distribute_near and distribute_mpoo
+        env:
+          KEEPER_NETWORK: ${{ vars.KEEPER_NETWORK }}
+          KEEPER_RPC_URL: ${{ vars.KEEPER_RPC_URL }}
+          KEEPER_BOARD_CONTRACT_ID: ${{ vars.KEEPER_BOARD_CONTRACT_ID }}
+          KEEPER_ACCOUNT_ID: ${{ vars.KEEPER_ACCOUNT_ID }}
+          KEEPER_GAS_NEAR_TGAS: ${{ vars.KEEPER_GAS_NEAR_TGAS }}
+          KEEPER_GAS_MPOO_TGAS: ${{ vars.KEEPER_GAS_MPOO_TGAS }}
+          KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+        run: node src/main.js
