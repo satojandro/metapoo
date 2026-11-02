@@ -67,28 +67,12 @@ import {
   setPendingPaint,
   clearPendingPaint,
 } from "../../pending-paint";
-import { renderBoard } from "../../render-board";
-import { createGestureState, updateGesture } from "../../gesture";
-import { moveSelection, type Cell } from "../../selection";
+import type { Cell } from "../../selection";
 import { describeSponsorship } from "../../sponsorship";
 import { submitDraw } from "../../submit-draw";
-import {
-  createCameraTransform,
-  fitCamera,
-  fitCellSize,
-  FIT_MIN_CELL_PX,
-  isPaintZoom,
-  MAX_CELL_PX,
-  paintZoomCamera,
-  PAINT_CELL_PX,
-  panBy,
-  wheelZoomFactor,
-  zoomAt,
-  type Camera,
-  type CameraTransform,
-  type ViewportSize,
-} from "../../viewport";
-import { mountWallZoomControls } from "../../wall-zoom-controls";
+import { fitCamera, paintZoomCamera, PAINT_CELL_PX } from "../../viewport";
+import { createCameraController, type CameraStrokeHooks } from "./camera-controller";
+import type { WallScope } from "./wall-scope";
 import { revokeDrawingSessionKeyOnChain } from "../../wallet";
 import type { PageMount } from "../../app/page-registry";
 import type { ParsedRoute } from "../../app/routes";
@@ -247,19 +231,132 @@ export function mountWall(
   // Keep the current cell coordinates available when keyboard users reach Place.
   drawButton.setAttribute("aria-describedby", "selection-summary cell-price stroke-total");
 
-  // The pointer preview is mount-owned so the wall template remains presentation-only.
-  // It is deliberately separate from selection: moving or dragging never paints.
-  const pointerPreview = document.createElement("div");
-  pointerPreview.className = "pointer-preview";
-  pointerPreview.hidden = true;
-  pointerPreview.setAttribute("aria-hidden", "true");
-  boardViewport.append(pointerPreview);
+  const listenerCleanups: Array<() => void> = [];
+  function listen(
+    target: EventTarget,
+    type: string,
+    handler: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ): void {
+    target.addEventListener(type, handler, options);
+    listenerCleanups.push(() =>
+      target.removeEventListener(type, handler, options),
+    );
+  }
+  let disposed = false;
+  const scope: WallScope = {
+    listen,
+    onDispose: (cleanup) => {
+      listenerCleanups.push(cleanup);
+    },
+    isDisposed: () => disposed,
+    walletAccount: () => walletAccount,
+    walletNetwork: () => walletNetwork,
+    walletNetworkId: () => walletNetworkId(),
+  };
 
-  const positionReadout = document.createElement("div");
-  positionReadout.className = "position-readout";
-  positionReadout.setAttribute("role", "status");
-  positionReadout.setAttribute("aria-live", "off");
-  boardFocus.append(positionReadout);
+  const strokeHooks: CameraStrokeHooks = {
+    active: () => activeStroke !== null,
+    begin(cell, wantsPan) {
+      // One failed price read must not dead-end painting. `priceUnavailable`
+      // is a display state, but it also gated gesture start, so a single 4xx or
+      // 429 left the board refusing every tap and drag until a full reload --
+      // reported as "I click and nothing happens, then I am stuck". Clear it
+      // here so each gesture gets its own attempt; a fresh failure re-latches.
+      if (paidBoard() && priceUnavailable) {
+        priceUnavailable = false;
+      }
+
+      if (cell && !wantsPan && directPaintToggle.checked &&
+          walletAccount && selectedColor !== null && contractMetaOk &&
+          !drawInFlight && !paintQueue.inFlight && !paintQueueLength(paintQueue) &&
+          canUseLocalDrawingSession(walletAccount, walletNetwork)) {
+        activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
+          networkId: walletNetworkId(), color: selectedColor };
+        camera.render();
+      } else {
+        // Say which precondition is missing. A drag that silently pans reads as
+        // "painting is broken", which is how this was first reported.
+        const blocked = strokeBlockedReason({
+          directPaint: directPaintToggle.checked,
+          accountId: walletAccount,
+          colorIndex: selectedColor,
+          contractOk: contractMetaOk,
+          sessionActive: walletAccount
+            ? canUseLocalDrawingSession(walletAccount, walletNetwork)
+            : false,
+          priceOk: !paidBoard() || !priceUnavailable,
+          drawInFlight,
+          queueBusy: paintQueue.inFlight || paintQueueLength(paintQueue) > 0,
+        });
+        if (cell && !wantsPan && blocked) {
+          drawState.textContent = blocked;
+        }
+      }
+    },
+    extend(cell) {
+      if (!activeStroke) return;
+      if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
+      camera.render();
+      if (activeStroke.state.truncated) fillBlock(result, "Stroke limit", TRUNCATED_STROKE_COPY);
+    },
+    finish(cell, completedKind, selectHere) {
+      if (!activeStroke) return;
+      if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
+      const stroke = activeStroke;
+      activeStroke = null;
+      // Long presses and cancelled gestures retain the classifier's guards.
+      if (completedKind === "tap" || completedKind === "drag") {
+        if (stroke.state.cells.length > 1) void commitStroke(stroke);
+        else if (completedKind === "tap") selectHere();
+      }
+    },
+    cancel() {
+      activeStroke = null;
+    },
+  };
+
+  const camera = createCameraController({
+    scope,
+    canvas,
+    boardViewport,
+    boardStage,
+    boardToolbar,
+    boardFocus,
+    selectionRing,
+    hoverSummary,
+    zoomPaintButton,
+    paintedPixels: () => paintedPixels(pixelCache),
+    overlayPixels: () => [
+      ...listPendingPaints(pendingPaints),
+      ...(activeStroke?.state.cells.map(cell => ({ ...cell,
+        colorIndex: activeStroke!.color, accountId: activeStroke!.accountId,
+        transactionId: null, phase: "submitted" as const,
+      })) ?? []),
+    ],
+    selection: {
+      selected: () => selected,
+      selectedColor: () => selectedColor,
+      select(cell) {
+        selected = cell;
+        wallHint.selectionSucceeded();
+        if (walletAccount) {
+          setFlow("editing");
+        }
+      },
+      showSelection: () => showSelection(),
+      refreshSelectedPixel: () => {
+        void refreshSelectedPixel();
+      },
+    },
+    strokes: strokeHooks,
+    updateCompactStatus: () => updateCompactStatus(),
+    attemptDraw: () => {
+      void attemptDraw();
+    },
+    tapSelected: (cell, tapOptions) => maybeEnqueueDirectPaint(cell, tapOptions),
+    hoverCell: (cell) => requestCellPrice(cell),
+  });
 
   const wallHint = mountWallHint(stallScene);
 
@@ -339,9 +436,6 @@ export function mountWall(
   // "this contract is not this board".
   let contractMetaIssue: ContractMetaIssue | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
-  let camera: Camera = { cellSize: 4, panX: 0, panY: 0 };
-  let viewTransform: CameraTransform = createCameraTransform(camera);
-  let disposed = false;
   let loadAbort: AbortController = new AbortController();
   /** High-level UI phase for the status strip. */
   let uiPhase:
@@ -354,32 +448,6 @@ export function mountWall(
     | "confirmation_delayed"
     | "overwritten"
     | "failed" = "disconnected";
-
-  const listenerCleanups: Array<() => void> = [];
-  const zoomStateListeners = new Set<() => void>();
-  function listen(
-    target: EventTarget,
-    type: string,
-    handler: EventListenerOrEventListenerObject,
-    options?: boolean | AddEventListenerOptions,
-  ): void {
-    target.addEventListener(type, handler, options);
-    listenerCleanups.push(() =>
-      target.removeEventListener(type, handler, options),
-    );
-  }
-
-  listenerCleanups.push(
-    mountWallZoomControls(boardToolbar, {
-      getCurrentZoom: readZoomState,
-      zoomBy: zoomFromCenter,
-      zoomToFit: fitWallToView,
-      subscribe: (listener) => {
-        zoomStateListeners.add(listener);
-        return () => zoomStateListeners.delete(listener);
-      },
-    }),
-  );
 
   // Enlarge the real canvas without altering its pixels or wallet state.
   const focusCanvas = mustFindIn<HTMLButtonElement>(pageRoot, "#focus-canvas");
@@ -399,8 +467,8 @@ export function mountWall(
   fillRules();
   buildPalette();
   setFlow("disconnected");
-  applyCamera(fitCamera(readViewportSize()));
-  render();
+  camera.applyCamera(fitCamera(camera.readViewportSize()));
+  camera.render();
   showSelection();
   showDrawingSession();
   applyRoutePaintingContext();
@@ -419,7 +487,7 @@ export function mountWall(
         transactionId: null,
         phase: "submitted",
       });
-      render();
+      camera.render();
     },
     queueLength: () => paintQueueLength(paintQueue),
     kickDrain: () => drainPaintQueue(),
@@ -443,14 +511,6 @@ export function mountWall(
     void refreshBoardFromContract({ reason: "reconnect" });
     scheduleBoardPoll();
   });
-
-  const resizeObserver = new ResizeObserver(() => {
-    if (disposed) return;
-    camera = clampToViewport(camera);
-    applyCamera(camera);
-    positionSelection();
-  });
-  resizeObserver.observe(boardViewport);
 
   listen(drawButton, "click", () => {
     void attemptDraw();
@@ -492,92 +552,10 @@ export function mountWall(
     void refreshBoardFromContract();
   });
 
-  listen(zoomPaintButton, "click", () => {
-    const focus = selected ?? { x: Math.floor(BOARD_WIDTH / 2), y: Math.floor(BOARD_HEIGHT / 2) };
-    applyCamera(paintZoomCamera(readViewportSize(), focus));
-    positionSelection();
-    updateCompactStatus();
-  });
-
   refreshButton.disabled = !isContractConfigured();
   refreshButton.title = isContractConfigured()
     ? "Reload every painted cell from the contract"
     : "Configure VITE_CONTRACT_ID to load chain state";
-
-  wirePointerGestures();
-
-  listen(
-    boardViewport,
-    "wheel",
-    (event) => {
-      const wheelEvent = event as WheelEvent;
-      wheelEvent.preventDefault();
-      const rect = boardViewport.getBoundingClientRect();
-      const factor = wheelZoomFactor(wheelEvent.deltaY, wheelEvent.deltaMode);
-      if (factor === 1) {
-        return;
-      }
-      applyCamera(
-        zoomAt(
-          camera,
-          readViewportSize(),
-          factor,
-          wheelEvent.clientX - rect.left,
-          wheelEvent.clientY - rect.top,
-        ),
-      );
-      positionSelection();
-      updateCompactStatus();
-    },
-    { passive: false },
-  );
-
-  listen(boardFocus, "keydown", (event) => {
-    const keyEvent = event as KeyboardEvent;
-    if (keyEvent.key === "Enter") {
-      keyEvent.preventDefault();
-      void attemptDraw();
-      return;
-    }
-    if (keyEvent.key === "+" || keyEvent.key === "=") {
-      keyEvent.preventDefault();
-      zoomFromCenter(1.25);
-      return;
-    }
-    if (keyEvent.key === "-" || keyEvent.key === "_") {
-      keyEvent.preventDefault();
-      zoomFromCenter(1 / 1.25);
-      return;
-    }
-    if (keyEvent.key === "0") {
-      keyEvent.preventDefault();
-      fitWallToView();
-      return;
-    }
-    const next = moveSelection(selected, keyEvent.key);
-    if (next === selected) {
-      return;
-    }
-    if (
-      keyEvent.key === "ArrowUp" ||
-      keyEvent.key === "ArrowDown" ||
-      keyEvent.key === "ArrowLeft" ||
-      keyEvent.key === "ArrowRight"
-    ) {
-      keyEvent.preventDefault();
-      selected = next;
-      wallHint.selectionSucceeded();
-      if (walletAccount) {
-        setFlow("editing");
-      }
-      if (selected) {
-        applyCamera(paintZoomCamera(readViewportSize(), selected, camera.cellSize));
-      }
-      render();
-      showSelection();
-      void refreshSelectedPixel();
-    }
-  });
 
   const unsubWallet = services.wallet.subscribe((session) => {
     if (disposed) return;
@@ -630,7 +608,7 @@ function applyRoutePaintingContext(): void {
   selected = { x: parsed.x, y: parsed.y };
   wallHint.selectionSucceeded();
   const cellPx = parsed.zoom ?? PAINT_CELL_PX;
-  applyCamera(paintZoomCamera(readViewportSize(), selected, cellPx));
+  camera.applyCamera(paintZoomCamera(camera.readViewportSize(), selected, cellPx));
 
   const contextBits: string[] = [
     `Focused square x=${parsed.x}, y=${parsed.y} from the link.`,
@@ -645,7 +623,7 @@ function applyRoutePaintingContext(): void {
     setFlow("editing");
   }
   showSelection();
-  render();
+  camera.render();
   void refreshSelectedPixel();
 }
 
@@ -777,7 +755,7 @@ async function refreshBoardFromContract(options?: {
     reconcilePendingWithConfirmed(pendingPaints, snapshot.pixels);
     markBoardLoadApplied(boardSync, loadId, snapshot.blockHeight, Date.now());
     showBoardFreshness();
-    render();
+    camera.render();
     // A refresh can change how old a cell is, so the last quoted price is stale.
     pricedCellKey = null;
     showSelection();
@@ -818,7 +796,7 @@ async function refreshSelectedPixel(cell = selected): Promise<void> {
     reconcilePendingWithConfirmed(pendingPaints, [pixel]);
     markBoardLoadApplied(boardSync, loadId, blockHeight, Date.now());
     showBoardFreshness();
-    render();
+    camera.render();
     showSelection();
   } catch {
     // Keep the last cached view; selection text still works offline.
@@ -898,7 +876,7 @@ async function attemptDraw(
       "Paint cancelled",
       "The wallet account or network no longer matches this paint request, so it was not submitted.",
     );
-    render();
+    camera.render();
     return;
   }
 
@@ -947,7 +925,7 @@ async function attemptDraw(
       }
     }
     if (!disposed) {
-      render();
+      camera.render();
       syncSubmitEnabled();
     }
     return;
@@ -987,7 +965,7 @@ async function attemptDraw(
     transactionId: null,
     phase: "submitted",
   });
-  render();
+  camera.render();
   fillBlock(
     result,
     "Waiting for your wallet",
@@ -1039,7 +1017,7 @@ async function attemptDraw(
             transactionId: progress.transactionId,
             phase: "submitted",
           });
-          render();
+          camera.render();
           fillResultWithLink(
             "Transaction pending",
             progress.phase === "pending"
@@ -1114,7 +1092,7 @@ async function attemptDraw(
         submitResult.observedBlockHeight,
       );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
-      render();
+      camera.render();
       setFlow("confirmed");
       fillResultWithLink(
         submitResult.title,
@@ -1147,7 +1125,7 @@ async function attemptDraw(
         transactionId: submitResult.transactionId,
         phase: "confirmation_delayed",
       });
-      render();
+      camera.render();
       setFlow("confirmation_delayed");
       fillResultWithLink(
         submitResult.title,
@@ -1178,7 +1156,7 @@ async function attemptDraw(
         submitResult.observedBlockHeight,
       );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
-      render();
+      camera.render();
       setFlow("overwritten");
       fillResultWithLink(
         submitResult.title,
@@ -1203,7 +1181,7 @@ async function attemptDraw(
       meta: { x: frozen.x, y: frozen.y, colorIndex: frozen.colorIndex },
     });
     clearPendingPaint(pendingPaints, frozen.x, frozen.y);
-    render();
+    camera.render();
     setFlow("failed");
     fillResultWithLink(
       submitResult.title,
@@ -1267,390 +1245,6 @@ async function onAuthorizeSessionClick(): Promise<void> {
   }
 }
 
-function render(): void {
-  renderBoard(canvas, paintedPixels(pixelCache), [
-    ...listPendingPaints(pendingPaints),
-    ...(activeStroke?.state.cells.map(cell => ({ ...cell,
-      colorIndex: activeStroke!.color, accountId: activeStroke!.accountId,
-      transactionId: null, phase: "submitted" as const,
-    })) ?? []),
-  ]);
-  positionSelection();
-  updatePositionReadout();
-  updateCompactStatus();
-}
-
-function updatePositionReadout(): void {
-  const fitCellSize = fitCamera(readViewportSize()).cellSize;
-  const zoomPercent = Math.max(1, Math.round((camera.cellSize / fitCellSize) * 100));
-  const cellLabel = selected
-    ? `Cell (${selected.x}, ${selected.y})`
-    : "Cell: none selected";
-  positionReadout.textContent = `Zoom ${zoomPercent}% · ${cellLabel}`;
-  positionReadout.setAttribute(
-    "aria-label",
-    selected
-      ? `Zoom ${zoomPercent} percent of whole-wall view. Selected cell: column ${selected.x}, row ${selected.y}.`
-      : `Zoom ${zoomPercent} percent of whole-wall view. No cell selected.`,
-  );
-}
-
-function positionSelection(): void {
-  if (!selected) {
-    selectionRing.hidden = true;
-    return;
-  }
-  const rect = viewTransform.cellRect(selected);
-  selectionRing.hidden = false;
-  selectionRing.style.left = `${rect.left}px`;
-  selectionRing.style.top = `${rect.top}px`;
-  selectionRing.style.width = `${rect.width}px`;
-  selectionRing.style.height = `${rect.height}px`;
-  selectionRing.dataset.hasColor = selectedColor !== null ? "true" : "false";
-}
-
-function applyCamera(next: Camera): void {
-  viewTransform = createCameraTransform(next);
-  camera = viewTransform.camera;
-  boardStage.style.width = `${viewTransform.stage.width}px`;
-  boardStage.style.height = `${viewTransform.stage.height}px`;
-  boardStage.style.transform = viewTransform.stage.transform;
-  positionSelection();
-  updatePositionReadout();
-  for (const listener of zoomStateListeners) listener();
-}
-
-function readZoomState() {
-  const viewport = readViewportSize();
-  const fittedCamera = fitCamera(viewport);
-  const fitted =
-    Math.abs(camera.cellSize - fittedCamera.cellSize) < 1e-6 &&
-    Math.abs(camera.panX - fittedCamera.panX) < 1e-6 &&
-    Math.abs(camera.panY - fittedCamera.panY) < 1e-6;
-  return {
-    current: camera.cellSize,
-    // The floor is the fitted size, not the smallest representable cell: a
-    // board smaller than the viewport is only empty space with a picture in it.
-    minimum: fitCellSize(viewport),
-    maximum: MAX_CELL_PX,
-    fitted,
-  };
-}
-
-function clampToViewport(current: Camera): Camera {
-  const viewport = readViewportSize();
-  // Re-fit if we were essentially in overview; otherwise keep zoom and reclamps.
-  if (current.cellSize <= fitCamera(viewport).cellSize * 1.05) {
-    return fitCamera(viewport);
-  }
-  return panBy(current, viewport, 0, 0);
-}
-
-function readViewportSize(): ViewportSize {
-  const rect = boardViewport.getBoundingClientRect();
-  return {
-    width: Math.max(1, rect.width),
-    height: Math.max(1, rect.height),
-  };
-}
-
-function zoomFromCenter(factor: number): void {
-  const viewport = readViewportSize();
-  applyCamera(zoomAt(camera, viewport, factor, viewport.width / 2, viewport.height / 2));
-  positionSelection();
-  updateCompactStatus();
-}
-
-function fitWallToView(): void {
-  applyCamera(fitCamera(readViewportSize()));
-  positionSelection();
-  updateCompactStatus();
-}
-
-/**
- * Pointer rules:
- * - direct paint armed (session + colour + consent): one pointer paints a stroke
- * - panning while armed is a deliberate gesture: middle/right button, held
- *   space, two fingers, or a drag that starts outside the board
- * - otherwise one finger / mouse drag past threshold → pan (never paint)
- * - release without much movement → select cell
- * - two pointers → pinch zoom (never paint)
- *
- * Paint zoom is deliberately NOT part of arming. Requiring a zoom level to be
- * allowed to drag-paint was an invented precondition: it made drag silently
- * pan for every user who had not discovered the zoom button, and the button
- * carried no state to discover.
- */
-function wirePointerGestures(): void {
-  let gesture = createGestureState();
-  let strokeCancelled = false;
-  let spaceHeld = false;
-  const cancelStroke = () => { activeStroke = null; strokeCancelled = true; render(); };
-  listen(boardViewport, "wheel", () => { if (gesture.points.length) cancelStroke(); });
-  listen(boardViewport, "lostpointercapture", cancelStroke);
-
-  // Space is the conventional "temporarily pan" modifier. Ignore it while a
-  // control is focused so the keyboard path for the palette keeps working.
-  listen(window, "keydown", (event) => {
-    const key = (event as KeyboardEvent).key;
-    if (key !== " " || (event as KeyboardEvent).repeat) return;
-    const target = event.target as HTMLElement | null;
-    if (target && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName)) return;
-    spaceHeld = true;
-  });
-  listen(window, "keyup", (event) => {
-    if ((event as KeyboardEvent).key === " ") spaceHeld = false;
-  });
-  // Right-drag is a pan gesture here, so the browser menu must not interrupt it.
-  listen(boardViewport, "contextmenu", (event) => event.preventDefault());
-
-  let lastX = 0;
-  let lastY = 0;
-  let pinchStartDistance = 0;
-  let pinchStartCamera: Camera | null = null;
-  // The reducer decides whether a sequence is a tap. Keep its originating
-  // cell alongside that state so a sub-threshold move across tiny fitted
-  // cells cannot turn a touch scroll/pan into a placement on another cell.
-  let tapStartCell: Cell | null = null;
-
-  const gestureEvent = (
-    event: PointerEvent,
-    beganOnPanSurface = false,
-  ) => ({
-    type: event.type as
-      | "pointerdown"
-      | "pointermove"
-      | "pointerup"
-      | "pointercancel",
-    pointerId: event.pointerId,
-    clientX: event.clientX,
-    clientY: event.clientY,
-    timeStamp: event.timeStamp,
-    beganOnPanSurface,
-  });
-
-  listen(boardViewport, "pointerdown", (event) => {
-    const pointerEvent = event as PointerEvent;
-    boardViewport.setPointerCapture(pointerEvent.pointerId);
-    const rect = boardViewport.getBoundingClientRect();
-    const beganCell = viewTransform.cellAt(
-      pointerEvent.clientX - rect.left,
-      pointerEvent.clientY - rect.top,
-    );
-    const beganOnPanSurface = beganCell === null;
-    if (gesture.points.length === 0) {
-      tapStartCell = beganCell;
-    }
-    const update = updateGesture(
-      gesture,
-      gestureEvent(pointerEvent, beganOnPanSurface),
-    );
-    gesture = update.state;
-
-    if (gesture.points.length === 1) {
-      strokeCancelled = false;
-      const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
-      // A non-primary button or a held space means "I want to move the board",
-      // not "I want to paint here". That is the only way drag-painting can be
-      // unconditional at every zoom level.
-      const wantsPan =
-        pointerEvent.button === 1 ||
-        pointerEvent.button === 2 ||
-        spaceHeld ||
-        beganOnPanSurface;
-      // One failed price read must not dead-end painting. `priceUnavailable`
-      // is a display state, but it also gated gesture start, so a single 4xx or
-      // 429 left the board refusing every tap and drag until a full reload --
-      // reported as "I click and nothing happens, then I am stuck". Clear it
-      // here so each gesture gets its own attempt; a fresh failure re-latches.
-      if (paidBoard() && priceUnavailable) {
-        priceUnavailable = false;
-      }
-
-      if (cell && !wantsPan && directPaintToggle.checked &&
-          walletAccount && selectedColor !== null && contractMetaOk &&
-          !drawInFlight && !paintQueue.inFlight && !paintQueueLength(paintQueue) &&
-          canUseLocalDrawingSession(walletAccount, walletNetwork)) {
-        activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
-          networkId: walletNetworkId(), color: selectedColor };
-        render();
-      } else {
-        // Say which precondition is missing. A drag that silently pans reads as
-        // "painting is broken", which is how this was first reported.
-        const blocked = strokeBlockedReason({
-          directPaint: directPaintToggle.checked,
-          accountId: walletAccount,
-          colorIndex: selectedColor,
-          contractOk: contractMetaOk,
-          sessionActive: walletAccount
-            ? canUseLocalDrawingSession(walletAccount, walletNetwork)
-            : false,
-          priceOk: !paidBoard() || !priceUnavailable,
-          drawInFlight,
-          queueBusy: paintQueue.inFlight || paintQueueLength(paintQueue) > 0,
-        });
-        if (cell && !wantsPan && blocked) {
-          drawState.textContent = blocked;
-        }
-      }
-      lastX = pointerEvent.clientX;
-      lastY = pointerEvent.clientY;
-    } else if (gesture.points.length === 2) {
-      cancelStroke();
-      const pts = gesture.points;
-      pinchStartDistance = Math.hypot(
-        pts[0].clientX - pts[1].clientX,
-        pts[0].clientY - pts[1].clientY,
-      );
-      // Every pinch frame derives from the same camera. Mixing a prior frame's
-      // pan with the initial cell size makes the board jump under two fingers.
-      pinchStartCamera = { ...camera };
-      boardViewport.classList.add("is-panning");
-    }
-  });
-
-  listen(boardViewport, "pointermove", (event) => {
-    const pointerEvent = event as PointerEvent;
-    if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
-      updatePointerPreview(pointerEvent);
-      return;
-    }
-    const update = updateGesture(gesture, gestureEvent(pointerEvent));
-    gesture = update.state;
-
-    if (update.activeKind === "pinch" && gesture.points.length >= 2) {
-      const pts = gesture.points;
-      const distance = Math.hypot(
-        pts[0].clientX - pts[1].clientX,
-        pts[0].clientY - pts[1].clientY,
-      );
-      if (pinchStartDistance > 0 && pinchStartCamera) {
-        const rect = boardViewport.getBoundingClientRect();
-        const midX = (pts[0].clientX + pts[1].clientX) / 2 - rect.left;
-        const midY = (pts[0].clientY + pts[1].clientY) / 2 - rect.top;
-        const factor = distance / pinchStartDistance;
-        applyCamera(
-          zoomAt(
-            pinchStartCamera,
-            readViewportSize(),
-            factor,
-            midX,
-            midY,
-          ),
-        );
-        positionSelection();
-        updateCompactStatus();
-      }
-      updatePointerPreview(pointerEvent);
-      return;
-    }
-
-    if (pointerEvent.pointerId !== gesture.primaryId) {
-      return;
-    }
-
-    if (activeStroke) {
-      const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
-      if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
-      render();
-      if (activeStroke.state.truncated) fillBlock(result, "Stroke limit", TRUNCATED_STROKE_COPY);
-      updatePointerPreview(pointerEvent);
-      return;
-    }
-    if (update.activeKind === "drag" || update.activeKind === "pan") {
-      boardViewport.classList.add("is-panning");
-      applyCamera(
-        panBy(
-          camera,
-          readViewportSize(),
-          pointerEvent.clientX - lastX,
-          pointerEvent.clientY - lastY,
-        ),
-      );
-      positionSelection();
-      lastX = pointerEvent.clientX;
-      lastY = pointerEvent.clientY;
-    }
-    updatePointerPreview(pointerEvent);
-  });
-
-  const endPointer = (event: Event): void => {
-    const pointerEvent = event as PointerEvent;
-    if (pointerEvent.type === "pointercancel") {
-      cancelStroke();
-      clearPointerPreview();
-    }
-    if (!gesture.points.some((point) => point.pointerId === pointerEvent.pointerId)) {
-      return;
-    }
-    const update = updateGesture(gesture, gestureEvent(pointerEvent));
-    gesture = update.state;
-
-    if (gesture.points.length < 2) {
-      pinchStartDistance = 0;
-      pinchStartCamera = null;
-    }
-
-    if (update.completedKind !== null) {
-      boardViewport.classList.remove("is-panning");
-
-      if (activeStroke) {
-        const cell = cellAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
-        if (cell) activeStroke.state = strokeExtend(activeStroke.state, cell);
-        const stroke = activeStroke;
-        activeStroke = null;
-        // Long presses and cancelled gestures retain the classifier's guards.
-        if (update.completedKind === "tap" || update.completedKind === "drag") {
-          if (stroke.state.cells.length > 1) void commitStroke(stroke);
-          else if (update.completedKind === "tap") selectAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
-        }
-        render();
-        return;
-      }
-      if (strokeCancelled) { updateCompactStatus(); return; }
-      // Only the pure classifier's deliberate-tap result may reach selection
-      // or direct paint. It must also end in the cell where it started:
-      // fitted cells can be smaller than the movement threshold. Drag, pan,
-      // pinch, long press, cancel, and cross-cell releases are discarded.
-      const beganCell = tapStartCell;
-      tapStartCell = null;
-      const rect = boardViewport.getBoundingClientRect();
-      const endedCell = viewTransform.cellAt(
-        pointerEvent.clientX - rect.left,
-        pointerEvent.clientY - rect.top,
-      );
-      if (
-        update.completedKind === "tap" &&
-        beganCell !== null &&
-        endedCell !== null &&
-        beganCell.x === endedCell.x &&
-        beganCell.y === endedCell.y
-      ) {
-        selectAtClientPoint(pointerEvent.clientX, pointerEvent.clientY);
-      } else {
-        updateCompactStatus();
-      }
-      return;
-    }
-
-    if (gesture.points.length === 1) {
-      const remaining = gesture.points[0];
-      lastX = remaining.clientX;
-      lastY = remaining.clientY;
-      boardViewport.classList.add("is-panning");
-    }
-  };
-
-  listen(boardViewport, "pointerup", endPointer);
-  listen(boardViewport, "pointercancel", endPointer);
-  listen(boardViewport, "pointerleave", clearPointerPreview);
-}
-
-function cellAtClientPoint(clientX: number, clientY: number): Cell | null {
-  const rect = boardViewport.getBoundingClientRect();
-  return viewTransform.cellAt(clientX - rect.left, clientY - rect.top);
-}
-
 async function commitStroke(stroke: AnchoredStroke): Promise<void> {
   if (disposed || drawInFlight || stroke.accountId !== walletAccount ||
       stroke.networkId !== walletNetworkId() || !directPaintToggle.checked) return;
@@ -1675,7 +1269,7 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     ...cell, colorIndex: stroke.color, accountId: stroke.accountId,
     transactionId: null, phase: "submitted",
   });
-  render();
+  camera.render();
   setFlow("submitted");
   try {
     const outcome = await signAndSendStrokeLocally({
@@ -1741,7 +1335,7 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     drawInFlight = false;
     if (!disposed) {
       syncSubmitEnabled();
-      render();
+      camera.render();
       void refreshCreditsDock();
       if (selected && paidBoard()) {
         pricedCellKey = null;
@@ -1749,28 +1343,6 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
       }
     }
   }
-}
-
-function selectAtClientPoint(clientX: number, clientY: number): void {
-  const next = cellAtClientPoint(clientX, clientY);
-  if (!next) {
-    return;
-  }
-  selected = next;
-  wallHint.selectionSucceeded();
-  if (walletAccount) {
-    setFlow("editing");
-  }
-  render();
-  showSelection();
-  boardFocus.focus();
-  void refreshSelectedPixel();
-  // Paint zoom is the deliberate, r/place-style direct-placement mode. It
-  // relaxes the two-step form (tap = place), but NEVER the consent toggle:
-  // direct submission requires the user to have opted in, same as 2-step
-  // mode, plus the pre-authorized local drawing session. A gesture never
-  // routes through a form submission, and never submits unrequested.
-  maybeEnqueueDirectPaint(next, { paintZoom: isPaintZoom(camera) });
 }
 
 function directPaintReady(): boolean {
@@ -1857,40 +1429,8 @@ async function enqueuePricedDirectPaint(
     transactionId: null,
     phase: "submitted",
   });
-  render();
+  camera.render();
   void drainPaintQueue();
-}
-
-function updatePointerPreview(event: PointerEvent): void {
-  // Hover is a fine-pointer affordance only. On a touch pointer, or on a
-  // surface that owns touch gestures, it must neither show a prospective cell
-  // nor participate in the tap-to-paint route.
-  // Gate on the pointer, not on `touch-action`. `.board-viewport` sets
-  // `touch-action: none`, so the old check meant this branch always ran and the
-  // per-cell price could never appear on hover on any desktop.
-  if (event.pointerType === "touch") {
-    clearPointerPreview();
-    return;
-  }
-  const rect = boardViewport.getBoundingClientRect();
-  const cell = viewTransform.cellAt(event.clientX - rect.left, event.clientY - rect.top);
-  if (!cell) {
-    clearPointerPreview();
-    return;
-  }
-  const cellRect = viewTransform.cellRect(cell);
-  pointerPreview.hidden = false;
-  pointerPreview.style.left = `${cellRect.left}px`;
-  pointerPreview.style.top = `${cellRect.top}px`;
-  pointerPreview.style.width = `${cellRect.width}px`;
-  pointerPreview.style.height = `${cellRect.height}px`;
-  hoverSummary.textContent = `x ${cell.x} · y ${cell.y}`;
-  requestCellPrice(cell);
-}
-
-function clearPointerPreview(): void {
-  pointerPreview.hidden = true;
-  hoverSummary.textContent = "";
 }
 
 function updateDirectPaintAvailability(): void {
@@ -1957,7 +1497,7 @@ function cancelUnsentPaintQueue(reason: string, options?: { quiet?: boolean }): 
   if (options?.quiet || disposed) {
     return;
   }
-  render();
+  camera.render();
   fillBlock(result, "Queued paints cancelled", reason);
 }
 
@@ -1978,7 +1518,7 @@ async function drainPaintQueue(): Promise<void> {
   }
   if (!next) {
     if (!disposed) {
-      render();
+      camera.render();
     }
     return;
   }
@@ -2256,7 +1796,7 @@ function showSelection(): void {
     selectedColor === null ? "none yet" : `${colorName(selectedColor)} (index ${selectedColor})`;
 
   updatePreview();
-  positionSelection();
+  camera.positionSelection();
 
   if (!selected) {
     selectionSummary.textContent = `No square selected. Chosen paint: ${colorLabel}. Unpainted squares have no artist.`;
@@ -2363,7 +1903,7 @@ async function refreshAllowanceNote(
 function updateCompactStatus(): void {
   const network = isContractConfigured() ? PAGE_NETWORK : "mock";
   const account = walletAccount ? walletAccount : "not connected";
-  const zoom = `~${camera.cellSize.toFixed(1)} px/cell`;
+  const zoom = `~${camera.camera().cellSize.toFixed(1)} px/cell`;
   const pendingCount = listPendingPaints(pendingPaints).length;
   const pendingLabel =
     pendingCount > 0 ? ` · ${pendingCount} pending` : "";
@@ -2424,7 +1964,7 @@ function buildPalette(): void {
       if (walletAccount && selected) {
         setFlow("editing");
       }
-      render();
+      camera.render();
       showSelection();
     });
     palette.append(button);
@@ -2521,7 +2061,7 @@ function walletNetworkId(): NetworkId {
     cancelUnsentPaintQueue("Left the wall before these paints were sent.", {
       quiet: true,
     });
-    resizeObserver.disconnect();
+    camera.dispose();
     for (const cleanup of listenerCleanups) {
       try {
         cleanup();
