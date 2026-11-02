@@ -325,6 +325,11 @@ impl Board {
             self.payments.token,
             "WrongToken"
         );
+        // R2: mPOO swapped back by the buyback operator. Checked before pause:
+        // pause stops paint and purchases, not revenue (see `revenue.rs`).
+        if crate::revenue::is_revenue_message(&msg) {
+            return self.receive_mpoo_revenue(&sender_id, amount);
+        }
         if self.tunables.paused {
             return amount;
         }
@@ -351,6 +356,7 @@ impl Board {
         ) {
             Ok(credits) => {
                 Self::purchase_event(&sender_id, "mpoo", amount.0, credits);
+                self.add_mpoo_revenue(amount.0); // R2: every accepted mPOO is revenue
                 U128(0) // All delivered tokens accepted; no manual refund transfer.
             }
             Err(code) => {
