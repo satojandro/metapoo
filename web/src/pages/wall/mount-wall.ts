@@ -3,35 +3,14 @@ import { planStrokeCommit, strokeBlockedReason, strokeResultCopy, TRUNCATED_STRO
 import { PALETTE } from "@shared/palette.ts";
 import { BOARD_HEIGHT, BOARD_WIDTH, type NetworkId } from "@shared/types.ts";
 import {
-  createPixelCache,
-  getCachedPixel,
-  paintedPixels,
-  rememberPixelAtBlock,
-  replaceCacheAtBlock,
-} from "../../board-cache";
-import {
   createDrawRequest,
   drawRequestMatchesSession,
   type DrawRequest,
 } from "../../draw-request";
-import {
-  beginBoardLoad,
-  createBoardSyncState,
-  formatFreshness,
-  markBoardLoadApplied,
-  markBoardLoadFailed,
-  nextPollDelayMs,
-  shouldApplyBoardLoad,
-  shouldPollNow,
-} from "../../board-sync";
+import { formatFreshness } from "../../board-sync";
 import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
-import {
-  fetchAllPaintedPixels,
-  getBoard,
-  getPixelWithBlock,
-  isContractConfigured,
-} from "../../contract";
-import { contractMetaBlockCopy, PAID_BOARD_SCHEMA_VERSION, validateContractMetadata, type ContractMetaIssue } from "../../contract-meta";
+import { isContractConfigured } from "../../contract";
+import { contractMetaBlockCopy, PAID_BOARD_SCHEMA_VERSION } from "../../contract-meta";
 import {
   chainRepaintReaders,
   creditShortfall,
@@ -71,6 +50,7 @@ import type { Cell } from "../../selection";
 import { describeSponsorship } from "../../sponsorship";
 import { submitDraw } from "../../submit-draw";
 import { fitCamera, paintZoomCamera, PAINT_CELL_PX } from "../../viewport";
+import { createBoardController } from "./board-controller";
 import { createCameraController, type CameraStrokeHooks } from "./camera-controller";
 import type { WallScope } from "./wall-scope";
 import { revokeDrawingSessionKeyOnChain } from "../../wallet";
@@ -268,7 +248,7 @@ export function mountWall(
       }
 
       if (cell && !wantsPan && directPaintToggle.checked &&
-          walletAccount && selectedColor !== null && contractMetaOk &&
+          walletAccount && selectedColor !== null && board.contractMetaOk() &&
           !drawInFlight && !paintQueue.inFlight && !paintQueueLength(paintQueue) &&
           canUseLocalDrawingSession(walletAccount, walletNetwork)) {
         activeStroke = { state: strokeBegin(cell), accountId: walletAccount,
@@ -281,7 +261,7 @@ export function mountWall(
           directPaint: directPaintToggle.checked,
           accountId: walletAccount,
           colorIndex: selectedColor,
-          contractOk: contractMetaOk,
+          contractOk: board.contractMetaOk(),
           sessionActive: walletAccount
             ? canUseLocalDrawingSession(walletAccount, walletNetwork)
             : false,
@@ -326,7 +306,7 @@ export function mountWall(
     selectionRing,
     hoverSummary,
     zoomPaintButton,
-    paintedPixels: () => paintedPixels(pixelCache),
+    paintedPixels: () => board.paintedPixels(),
     overlayPixels: () => [
       ...listPendingPaints(pendingPaints),
       ...(activeStroke?.state.cells.map(cell => ({ ...cell,
@@ -346,7 +326,7 @@ export function mountWall(
       },
       showSelection: () => showSelection(),
       refreshSelectedPixel: () => {
-        void refreshSelectedPixel();
+        void board.refreshSelectedPixel();
       },
     },
     strokes: strokeHooks,
@@ -365,7 +345,6 @@ export function mountWall(
   const compactStatus =
     shellEl<HTMLElement>("#compact-status") ?? document.createElement("p");
 
-  const pixelCache = createPixelCache();
   const pendingPaints = createPendingPaintMap();
   const placementOutcomes = createPlacementOutcomeController();
   const queuedPlacementOutcomes = new WeakMap<DrawRequest, string>();
@@ -373,24 +352,40 @@ export function mountWall(
     boardViewport,
     placementOutcomes,
   );
-  const boardSync = createBoardSyncState();
   const paintQueue = createPaintQueue();
+  const sponsorship = describeSponsorship();
 
-  function showBoardFreshness(): void {
-    if (boardSync.lastAppliedAtMs === null) {
-      boardFreshness.textContent = boardSync.consecutiveFailures > 0
-        ? "Board update failed; not read successfully yet."
-        : "Board not read yet.";
-      return;
-    }
-    const freshness = formatFreshness(boardSync, Date.now()).replace(
-      /^Board freshness: /,
-      "",
-    );
-    boardFreshness.textContent = boardSync.consecutiveFailures > 0
-      ? `Board update failed; last ${freshness}`
-      : `Board last updated ${freshness}`;
-  }
+  const board = createBoardController({
+    scope,
+    evidence,
+    contractLine,
+    boardLoadStatus,
+    boardFreshness,
+    refreshButton,
+    sponsorNote,
+    sponsorship,
+    routeFocusesCell: Boolean(options.route?.query.x),
+    selected: () => selected,
+    fillResult: (title, message) => fillBlock(result, title, message),
+    render: () => camera.render(),
+    showSelection: () => showSelection(),
+    updateCompactStatus: () => updateCompactStatus(),
+    updateDirectPaintAvailability: () => updateDirectPaintAvailability(),
+    applyRoutePaintingContext: () => applyRoutePaintingContext(),
+    reconcilePending: (pixels) => reconcilePendingWithConfirmed(pendingPaints, pixels),
+    onBoardUpdated: () => {
+      pricedCellKey = null;
+    },
+    onSchemaChanged: () => onBoardSchemaChanged(),
+    onManualRefresh: () => {
+      if (paidBoard()) {
+        pricedCellKey = null;
+        // Tunables only change on set_tunables; Refresh is the one deliberate re-read.
+        repaintReaders.clearTunablesCache();
+        void refreshPaidLegend();
+      }
+    },
+  });
 
   let selected: Cell | null = null;
   let selectedColor: number | null = null;
@@ -405,11 +400,6 @@ export function mountWall(
   type AnchoredStroke = { state: StrokeState; accountId: string; networkId: string; color: number };
   let activeStroke: AnchoredStroke | null = null;
 
-  let boardLoadInFlight = false;
-  /** False until get_board metadata matches shared constants (or mock mode). */
-  let contractMetaOk = !isContractConfigured();
-  /** Schema from the last successful get_board. 4 means paid credits. */
-  let boardSchema: number | null = null;
   /** A failed get_cell_cost / get_tunables read. Submit stays off until a later read works. */
   let priceUnavailable = false;
   /**
@@ -426,17 +416,10 @@ export function mountWall(
   let submitQuoteInFlight = false;
   const repaintReaders = chainRepaintReaders({
     writtenAtNsFromCache: (cell) => {
-      const cached = getCachedPixel(pixelCache, cell.x, cell.y);
+      const cached = board.cachedPixel(cell);
       return cached ? cached.lastWriteTimestampNs : null;
     },
   });
-  // A failed *read* and a real metadata *mismatch* both leave contractMetaOk
-  // false, and the draw path used to report both as "did not match the shared
-  // schema". They need different advice: one is "try again", the other is
-  // "this contract is not this board".
-  let contractMetaIssue: ContractMetaIssue | null = null;
-  let pollTimer: ReturnType<typeof setTimeout> | null = null;
-  let loadAbort: AbortController = new AbortController();
   /** High-level UI phase for the status strip. */
   let uiPhase:
     | "disconnected"
@@ -457,7 +440,6 @@ export function mountWall(
     focusCanvas.textContent = focused ? "Back to the stall ↙" : "Focus canvas ↗";
   });
 
-  const sponsorship = describeSponsorship();
   sponsorNote.textContent = sponsorship.message;
 
   lede.textContent = isContractConfigured()
@@ -472,8 +454,8 @@ export function mountWall(
   showSelection();
   showDrawingSession();
   applyRoutePaintingContext();
-  void bootstrapBoard();
-  scheduleBoardPoll();
+  void board.bootstrap();
+  board.scheduleBoardPoll();
 
   options.attachTestApi?.({
     enqueueUnsent: (request) => {
@@ -492,24 +474,8 @@ export function mountWall(
     queueLength: () => paintQueueLength(paintQueue),
     kickDrain: () => drainPaintQueue(),
     pendingPaintCount: () => listPendingPaints(pendingPaints).length,
-    refreshPixel: (cell) => refreshSelectedPixel(cell),
-    cachedPixelColor: (cell) => getCachedPixel(pixelCache, cell.x, cell.y)?.colorIndex,
-  });
-
-  listen(document, "visibilitychange", () => {
-    if (disposed) return;
-    if (document.visibilityState === "visible") {
-      void refreshBoardFromContract({ reason: "visible" });
-      scheduleBoardPoll();
-    } else {
-      clearBoardPoll();
-    }
-  });
-
-  listen(window, "online", () => {
-    if (disposed) return;
-    void refreshBoardFromContract({ reason: "reconnect" });
-    scheduleBoardPoll();
+    refreshPixel: (cell) => board.refreshSelectedPixel(cell),
+    cachedPixelColor: (cell) => board.cachedPixel(cell)?.colorIndex,
   });
 
   listen(drawButton, "click", () => {
@@ -537,25 +503,6 @@ export function mountWall(
   listen(unlockPaintButton, "click", () => {
     void onAuthorizeSessionClick();
   });
-
-  listen(refreshButton, "click", () => {
-    // A transient read failure at load used to block drawing until a full page
-    // reload, because nothing re-ran the metadata check. Refresh now does.
-    if (!contractMetaOk) {
-      void revalidateContractMeta();
-    } else if (paidBoard()) {
-      pricedCellKey = null;
-      // Tunables only change on set_tunables; Refresh is the one deliberate re-read.
-      repaintReaders.clearTunablesCache();
-      void refreshPaidLegend();
-    }
-    void refreshBoardFromContract();
-  });
-
-  refreshButton.disabled = !isContractConfigured();
-  refreshButton.title = isContractConfigured()
-    ? "Reload every painted cell from the contract"
-    : "Configure VITE_CONTRACT_ID to load chain state";
 
   const unsubWallet = services.wallet.subscribe((session) => {
     if (disposed) return;
@@ -624,223 +571,7 @@ function applyRoutePaintingContext(): void {
   }
   showSelection();
   camera.render();
-  void refreshSelectedPixel();
-}
-
-/**
- * Re-run the `get_board` comparison after a failed load.
- *
- * The boot path validates metadata once. When that read threw — RPC hiccup, rate
- * limit, offline — drawing stayed disabled until the page was reloaded, and the
- * only explanation offered was a metadata mismatch that never happened. This
- * lets "Refresh board" recover without a reload.
- */
-async function revalidateContractMeta(): Promise<boolean> {
-  if (!isContractConfigured()) {
-    contractMetaOk = true;
-    contractMetaIssue = null;
-    rememberBoardSchema(null);
-    updateDirectPaintAvailability();
-    return true;
-  }
-  try {
-    const board = await getBoard();
-    const meta = validateContractMetadata(board);
-    contractMetaOk = meta.ok;
-    contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
-    rememberBoardSchema(meta.ok ? board.schema_version : null);
-    if (meta.ok) {
-      contractLine.textContent =
-        `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
-        `Painting a square replaces the colour that was there, and the contract ` +
-        `records which account painted it and when.`;
-    } else {
-      fillBlock(result, meta.title, meta.message);
-    }
-    return meta.ok;
-  } catch (error) {
-    contractMetaOk = false;
-    const detail = error instanceof Error ? error.message : "Unknown read error";
-    contractMetaIssue = { kind: "read", detail };
-    rememberBoardSchema(null);
-    return false;
-  } finally {
-    updateDirectPaintAvailability();
-  }
-}
-
-async function bootstrapBoard(): Promise<void> {
-  if (!isContractConfigured()) {
-    contractMetaOk = true;
-    rememberBoardSchema(null);
-    evidence.textContent =
-      "Evidence: local mock. This picture is an empty board drawn in your browser. It is not testnet or mainnet state. Set VITE_CONTRACT_ID to read a real contract.";
-    contractLine.textContent =
-      "This is a local demo board. Nothing here is on a blockchain."
-    if (!options.route?.query.x) {
-      boardLoadStatus.textContent =
-        "Board load: mock only (no contract id). Refresh stays disabled.";
-    }
-    updateCompactStatus();
-    updateDirectPaintAvailability();
-    applyRoutePaintingContext();
-    return;
-  }
-
-  evidence.textContent = `Evidence: reading contract ${CONTRACT_ID} on ${PAGE_NETWORK}. Validating metadata, then loading painted cells…`;
-  try {
-    const board = await getBoard();
-    const meta = validateContractMetadata(board);
-    contractMetaOk = meta.ok;
-    contractMetaIssue = meta.ok ? null : { kind: "mismatch", detail: meta.message };
-    rememberBoardSchema(meta.ok ? board.schema_version : null);
-    if (!meta.ok) {
-      evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK} failed metadata checks — ${meta.message}`;
-      fillBlock(result, meta.title, meta.message);
-      boardLoadStatus.textContent = `Board metadata rejected: ${meta.title}`;
-      updateCompactStatus();
-      updateDirectPaintAvailability();
-      return;
-    }
-    if (board.sponsorship_enabled && !sponsorship.flagEnabled) {
-      sponsorNote.textContent = `${sponsorship.message} (Contract reported sponsorship_enabled=true; this page still does not offer a sponsored submit path.)`;
-    }
-    evidence.textContent = `Evidence: contract ${CONTRACT_ID} on ${PAGE_NETWORK}. ${meta.summary} sponsorship_enabled=${board.sponsorship_enabled}.`;
-    // One sentence a non-crypto visitor can repeat. Everything here is enforced
-    // by the contract (`overwrite_rule: open_wall`), not by this page.
-    contractLine.textContent =
-      `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
-      `Painting a square replaces the colour that was there, and the contract ` +
-      `records which account painted it and when.`;
-    await refreshBoardFromContract();
-    applyRoutePaintingContext();
-  } catch (error) {
-    contractMetaOk = false;
-    const detail = error instanceof Error ? error.message : "Unknown read error";
-    contractMetaIssue = { kind: "read", detail };
-    rememberBoardSchema(null);
-    evidence.textContent = `Evidence: contract id is set (${CONTRACT_ID}), but the initial board read failed: ${detail}. You can still look at the local empty picture and try Refresh. Drawing stays blocked until metadata validates.`;
-    contractLine.textContent =
-      "The board contract could not be read, so nothing here is confirmed chain state.";
-    boardLoadStatus.textContent = `Board load failed: ${detail}`;
-    updateCompactStatus();
-  } finally {
-    updateDirectPaintAvailability();
-  }
-}
-
-/**
- * Replace the local picture from a full paginated walk of `get_pixels`,
- * pinned to one block. Safe without a wallet. Does not invent pixels from clicks.
- * Older snapshots are ignored so a slow refresh cannot overwrite a newer one.
- */
-async function refreshBoardFromContract(options?: {
-  reason?: "manual" | "poll" | "visible" | "reconnect" | "after_draw";
-}): Promise<void> {
-  if (disposed || !isContractConfigured() || boardLoadInFlight) {
-    return;
-  }
-  const loadId = beginBoardLoad(boardSync);
-  boardLoadInFlight = true;
-  refreshButton.disabled = true;
-  const reason = options?.reason ?? "manual";
-  boardLoadStatus.textContent = `Board load (${reason}): fetching painted pages at one block…`;
-  try {
-    const snapshot = await fetchAllPaintedPixels();
-    if (!shouldApplyBoardLoad(boardSync, loadId, snapshot.blockHeight)) {
-      boardLoadStatus.textContent = `Board load skipped stale snapshot (block ${snapshot.blockHeight}). ${formatFreshness(boardSync, Date.now())}`;
-      return;
-    }
-    replaceCacheAtBlock(pixelCache, snapshot.pixels, snapshot.blockHeight);
-    reconcilePendingWithConfirmed(pendingPaints, snapshot.pixels);
-    markBoardLoadApplied(boardSync, loadId, snapshot.blockHeight, Date.now());
-    showBoardFreshness();
-    camera.render();
-    // A refresh can change how old a cell is, so the last quoted price is stale.
-    pricedCellKey = null;
-    showSelection();
-    boardLoadStatus.textContent = `Board load: ${snapshot.pixels.length} painted cell${
-      snapshot.pixels.length === 1 ? "" : "s"
-    } at block ${snapshot.blockHeight}. ${formatFreshness(boardSync, Date.now())}`;
-  } catch (error) {
-    markBoardLoadFailed(boardSync);
-    showBoardFreshness();
-    const detail = error instanceof Error ? error.message : "Unknown read error";
-    boardLoadStatus.textContent = `Board load failed: ${detail}. ${formatFreshness(boardSync, Date.now())}`;
-  } finally {
-    boardLoadInFlight = false;
-    refreshButton.disabled = !isContractConfigured();
-    updateCompactStatus();
-    scheduleBoardPoll();
-  }
-}
-
-async function refreshSelectedPixel(cell = selected): Promise<void> {
-  if (!cell || !isContractConfigured()) {
-    showSelection();
-    return;
-  }
-  const loadId = beginBoardLoad(boardSync);
-  try {
-    const { pixel, blockHeight } = await getPixelWithBlock(cell.x, cell.y);
-    // A cell response is board evidence too.  Do not let it replace a newer
-    // full snapshot (or another cell read), including after unmount.
-    if (
-      disposed ||
-      loadAbort.signal.aborted ||
-      !shouldApplyBoardLoad(boardSync, loadId, blockHeight)
-    ) {
-      return;
-    }
-    rememberPixelAtBlock(pixelCache, pixel, blockHeight);
-    reconcilePendingWithConfirmed(pendingPaints, [pixel]);
-    markBoardLoadApplied(boardSync, loadId, blockHeight, Date.now());
-    showBoardFreshness();
-    camera.render();
-    showSelection();
-  } catch {
-    // Keep the last cached view; selection text still works offline.
-    showSelection();
-  }
-}
-
-function clearBoardPoll(): void {
-  if (pollTimer !== null) {
-    clearTimeout(pollTimer);
-    pollTimer = null;
-  }
-}
-
-function scheduleBoardPoll(): void {
-  clearBoardPoll();
-  if (
-    disposed ||
-    !isContractConfigured() ||
-    document.visibilityState === "hidden"
-  ) {
-    return;
-  }
-  // Healthy visible tabs poll every 4s (BOARD_POLL_BASE_MS), keeping the
-  // expected cross-session update window auditable at roughly 3–5 seconds.
-  // Read failures back off through nextPollDelayMs; hidden tabs schedule none.
-  const delay = nextPollDelayMs(boardSync.consecutiveFailures);
-  pollTimer = setTimeout(() => {
-    void runBoardPoll();
-  }, delay);
-}
-
-async function runBoardPoll(): Promise<void> {
-  if (
-    !shouldPollNow({
-      contractConfigured: isContractConfigured(),
-      documentHidden: document.visibilityState === "hidden",
-      loadInFlight: boardLoadInFlight,
-    })
-  ) {
-    scheduleBoardPoll();
-    return;
-  }
-  await refreshBoardFromContract({ reason: "poll" });
+  void board.refreshSelectedPixel();
 }
 
 async function attemptDraw(
@@ -897,9 +628,9 @@ async function attemptDraw(
     return;
   }
 
-  if (!contractMetaOk) {
+  if (!board.contractMetaOk()) {
     setFlow("failed");
-    const copy = contractMetaBlockCopy(contractMetaIssue);
+    const copy = contractMetaBlockCopy(board.contractMetaIssue());
     fillBlock(result, copy.title, copy.message);
     return;
   }
@@ -1086,9 +817,7 @@ async function attemptDraw(
         meta: { x: frozen.x, y: frozen.y, colorIndex: frozen.colorIndex },
       });
       // Use the confirming get_pixel's block height only — never a later tip.
-      rememberPixelAtBlock(
-        pixelCache,
-        submitResult.pixel,
+      board.rememberPixel(submitResult.pixel,
         submitResult.observedBlockHeight,
       );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
@@ -1101,7 +830,7 @@ async function attemptDraw(
         submitResult.explorerUrl,
       );
       showSelection();
-      void refreshBoardFromContract({ reason: "after_draw" });
+      void board.refreshBoardFromContract({ reason: "after_draw" });
       return;
     }
 
@@ -1150,9 +879,7 @@ async function attemptDraw(
         detail: submitResult.message,
         meta: { x: frozen.x, y: frozen.y, colorIndex: frozen.colorIndex },
       });
-      rememberPixelAtBlock(
-        pixelCache,
-        submitResult.pixel,
+      board.rememberPixel(submitResult.pixel,
         submitResult.observedBlockHeight,
       );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
@@ -1165,7 +892,7 @@ async function attemptDraw(
         submitResult.explorerUrl,
       );
       showSelection();
-      void refreshBoardFromContract({ reason: "after_draw" });
+      void board.refreshBoardFromContract({ reason: "after_draw" });
       return;
     }
 
@@ -1291,9 +1018,7 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     for (const { chunkIndex, blockHeight } of outcome.executedBlocks ?? []) {
       const start = chunkIndex * MAX_BATCH;
       for (const cell of stroke.state.cells.slice(start, start + MAX_BATCH)) {
-        rememberPixelAtBlock(
-          pixelCache,
-          {
+        board.rememberPixel({
             x: cell.x,
             y: cell.y,
             colorIndex: stroke.color,
@@ -1330,7 +1055,7 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     drawState.textContent = failureReason
       ? `${statusText} Reason: ${failureReason}`
       : statusText;
-    await refreshBoardFromContract({ reason: "after_draw" });
+    await board.refreshBoardFromContract({ reason: "after_draw" });
   } finally {
     drawInFlight = false;
     if (!disposed) {
@@ -1351,7 +1076,7 @@ function directPaintReady(): boolean {
     canUseLocalDrawingSession(walletAccount, walletNetwork) &&
     selectedColor !== null &&
     walletAccount !== null &&
-    contractMetaOk &&
+    board.contractMetaOk() &&
     !disposed
   );
 }
@@ -1435,7 +1160,7 @@ async function enqueuePricedDirectPaint(
 
 function updateDirectPaintAvailability(): void {
   const allowed =
-    canUseLocalDrawingSession(walletAccount, walletNetwork) && contractMetaOk;
+    canUseLocalDrawingSession(walletAccount, walletNetwork) && board.contractMetaOk();
   const connected = walletAccount !== null;
 
   // A disabled checkbox is not an explanation. With no session there is
@@ -1452,7 +1177,7 @@ function updateDirectPaintAvailability(): void {
   paintUnlock.hidden = !(
     connected &&
     !allowed &&
-    contractMetaOk &&
+    board.contractMetaOk() &&
     isContractConfigured()
   );
   tapToPaintAffordance.hidden = !allowed;
@@ -1588,15 +1313,14 @@ function chainNowNs(): bigint {
 }
 
 function paidBoard(): boolean {
-  return boardSchema === PAID_BOARD_SCHEMA_VERSION;
+  return board.boardSchema() === PAID_BOARD_SCHEMA_VERSION;
 }
 
 function syncSubmitEnabled(): void {
   drawButton.disabled = drawInFlight || (paidBoard() && priceUnavailable);
 }
 
-function rememberBoardSchema(schema: number | null): void {
-  boardSchema = schema;
+function onBoardSchemaChanged(): void {
   if (!paidBoard()) {
     priceUnavailable = false;
     pricedCellKey = null;
@@ -1805,7 +1529,7 @@ function showSelection(): void {
   // Touch has no hover. Selecting a square is how a finger reads the price.
   requestCellPrice(selected);
 
-  const cached = getCachedPixel(pixelCache, selected.x, selected.y);
+  const cached = board.cachedPixel(selected);
   let cellText: string;
   if (!cached || cached.colorIndex === null) {
     cellText = isContractConfigured()
@@ -1908,9 +1632,9 @@ function updateCompactStatus(): void {
   const pendingLabel =
     pendingCount > 0 ? ` · ${pendingCount} pending` : "";
   const fresh =
-    boardSync.lastAppliedAtMs === null
+    board.syncState().lastAppliedAtMs === null
       ? ""
-      : ` · ${formatFreshness(boardSync, Date.now()).replace(/^Board freshness: /, "")}`;
+      : ` · ${formatFreshness(board.syncState(), Date.now()).replace(/^Board freshness: /, "")}`;
   compactStatus.textContent = `${network} · ${account} · ${zoom}${pendingLabel}${fresh} · no app fee`;
 }
 
@@ -2052,8 +1776,7 @@ function walletNetworkId(): NetworkId {
   function disposeWall(): void {
     if (disposed) return;
     disposed = true;
-    clearBoardPoll();
-    loadAbort.abort();
+    board.dispose();
     wallHint.dispose();
     unmountPlacementOutcomes();
     // Drop unsent queue work; an in-flight attemptDraw may still settle into
