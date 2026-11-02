@@ -33,6 +33,12 @@ describe('loadConfig', () => {
     assert.equal(c.privateKey, FAKE_KEY);
   });
 
+  it('defaults distribute_mpoo to 150 TGas and distribute_near to 50 TGas', () => {
+    // Three ft_transfer legs plus callbacks (REV-G). Literal numbers, not DEFAULT_GAS_TGAS:
+    // comparing the default with itself pins nothing.
+    assert.deepEqual(loadConfig(base).gasTgas, { distribute_near: 50, distribute_mpoo: 150 });
+  });
+
   it('never exposes the private key through serialisation', () => {
     const c = loadConfig(base);
     assert.ok(!JSON.stringify(c).includes(FAKE_KEY));

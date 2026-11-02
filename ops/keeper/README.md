@@ -50,7 +50,7 @@ names the error differently, change that one line.
 | `KEEPER_ACCOUNT_ID` | yes | the dedicated keeper account (below) |
 | `KEEPER_PRIVATE_KEY` | yes | `ed25519:…` private key of the keeper's **function-call** key. Comes from a secret env var only. Never put it in a file in this repo |
 | `KEEPER_GAS_NEAR_TGAS` | no | prepaid gas for `distribute_near`, default 50 |
-| `KEEPER_GAS_MPOO_TGAS` | no | prepaid gas for `distribute_mpoo`, default 100 (three transfers with callbacks) |
+| `KEEPER_GAS_MPOO_TGAS` | no | prepaid gas for `distribute_mpoo`, default 150 (three `ft_transfer` legs plus callbacks) |
 
 The gas defaults are guesses until the testnet rehearsal measures them. Unused gas is refunded.
 

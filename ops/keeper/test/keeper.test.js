@@ -44,7 +44,7 @@ describe('runKeeper', () => {
     const { client, exitCode } = await run({ distribute_near: ok('h1'), distribute_mpoo: ok('h2') });
     assert.deepEqual(client.calls, [
       { method: 'distribute_near', gasTgas: 50 },
-      { method: 'distribute_mpoo', gasTgas: 100 },
+      { method: 'distribute_mpoo', gasTgas: 150 },
     ]);
     assert.equal(exitCode, 0);
   });

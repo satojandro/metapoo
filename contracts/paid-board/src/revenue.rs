@@ -618,6 +618,27 @@ mod tests {
         assert_eq!(transfers().len(), 2);
     }
 
+    /// Owner decision, 2 Nov (docs/handover-2026-10-29.md): pause stops paint and
+    /// purchases, never revenue. Both distributions must keep running.
+    #[test]
+    fn distributions_run_while_paused() {
+        let mut board = setup();
+        ctx(accounts(0), 0, 1);
+        board.set_paused(true);
+        assert!(board.get_tunables().paused);
+        board.payments.mpoo_undistributed = 1_000;
+        ctx(accounts(3), 0, 0);
+        board.distribute_near();
+        assert_eq!(transfers().len(), 2);
+        assert_eq!(board.payments.last_near_distribution_ns, Some(0));
+        ctx(accounts(3), 0, 0);
+        board.distribute_mpoo();
+        assert_eq!(ft_legs().len(), 2);
+        assert_eq!(board.payments.mpoo_undistributed, 0);
+        assert_eq!(board.payments.last_mpoo_distribution_ns, Some(0));
+        assert!(board.get_tunables().paused);
+    }
+
     // ---------------- R2: receiving mPOO ----------------
 
     #[test]
