@@ -32,13 +32,12 @@ describe("wallPageHtml", () => {
 
     expect(root.querySelector(".wall-runtime-status")?.textContent).toMatch(/Testnet/);
     expect(root.querySelectorAll(".wall-layout details")).toHaveLength(1);
-    expect(root.querySelector(".scene-label")?.textContent).toMatch(
-      /DEMO STALL ART[\s\S]*LIVE BOARD/,
-    );
+    // Phase 0: no "DEMO STALL ART / LIVE BOARD" label over the scene.
+    expect(root.querySelector(".scene-label")).toBeNull();
     const sceneryLayers = [
       ...root.querySelectorAll<HTMLElement>("[data-stall-scenery]"),
     ];
-    expect(sceneryLayers.length).toBeGreaterThanOrEqual(7);
+    expect(sceneryLayers.length).toBeGreaterThanOrEqual(6);
     expect(sceneryLayers.every((layer) => !layer.contains(board))).toBe(true);
     expect(
       root

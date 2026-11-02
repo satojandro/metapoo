@@ -1,5 +1,8 @@
 export const WALL_HINT_STORAGE_KEY = "metapoo.wallHint.dismissed.v1";
 
+export const HINT_TEXT =
+  "New here? Tap a square, pick a colour, then Place paint. Pinch or scroll to zoom. Anyone can paint over anyone.";
+
 type HintStorage = Pick<Storage, "getItem" | "setItem">;
 
 // A Set also tolerates DOM shims that expose an unavailable storage sentinel
@@ -60,38 +63,23 @@ export function mountWallHint(
     };
   }
 
-  const hint = document.createElement("aside");
+  // One dismissible line inside the paint dock. It used to be a card floating
+  // over the stall, where on a phone it covered most of the wall.
+  const hint = document.createElement("p");
   hint.className = "wall-hint";
   hint.setAttribute("aria-label", "How to paint");
-  hint.style.pointerEvents = "none";
+
+  const text = document.createElement("span");
+  text.className = "wall-hint-text";
+  text.textContent = HINT_TEXT;
 
   const dismissButton = document.createElement("button");
   dismissButton.type = "button";
   dismissButton.className = "wall-hint-dismiss";
   dismissButton.setAttribute("aria-label", "Dismiss hint");
-  dismissButton.style.pointerEvents = "auto";
   dismissButton.textContent = "×";
 
-  const title = document.createElement("strong");
-  title.textContent = "Paint the wall";
-
-  const steps = [
-    "Tap a cell to select it",
-    "Pick a color, then press Place",
-    "Pinch or scroll to zoom — drag to pan",
-  ];
-  const list = document.createElement("ol");
-  for (const step of steps) {
-    const item = document.createElement("li");
-    item.textContent = step;
-    list.append(item);
-  }
-
-  const rule = document.createElement("p");
-  rule.className = "wall-hint-rule";
-  rule.textContent = "Open wall: anyone can paint over any cell.";
-
-  hint.append(dismissButton, title, list, rule);
+  hint.append(text, dismissButton);
   host.append(hint);
 
   let active = true;

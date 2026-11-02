@@ -1,0 +1,133 @@
+/*
+ * Meta Poo design tokens. One source for colour, type, spacing and the small shared components.
+ * Values come from /money and the approved drafts in docs/visual-concepts/ (the dark wall scene).
+ * Everything is prefixed `--mp-` / `.mp-` so it never collides with the older style.css layer.
+ * Rule: new and migrated pages use these tokens, never literal colours. See ./README.md.
+ */
+:root {
+  /* Surfaces */
+  --mp-bg: #111214;
+  --mp-card: #1b1c1f;
+  --mp-card-2: #232427;
+  --mp-line: #343537;
+
+  /* Text */
+  --mp-fg: #f4f1e9;
+  --mp-soft: #d8d4cc;
+  --mp-soft-2: #cfcbc3;
+  --mp-muted: #a9aaad;
+  --mp-on-tag: #17171a;
+
+  /* Accents: tag is the brand yellow; the rest each mean one money flow */
+  --mp-tag: #f1dc5e;
+  --mp-near: #73d7ee;
+  --mp-stake: #65d5ae;
+  --mp-burn: #ff9f8f;
+  --mp-team: #c9c4ba;
+  --mp-focus: #56c9ec;
+
+  /* Semantic status, separate from the accents' meaning */
+  --mp-good: var(--mp-stake);
+  --mp-warn: var(--mp-tag);
+  --mp-bad: var(--mp-burn);
+
+  /* Type */
+  --mp-font: Arial, Helvetica, sans-serif;
+  --mp-mono: ui-monospace, Menlo, monospace;
+  --mp-text-xs: 11px;
+  --mp-text-sm: 12px;
+  --mp-text-md: 13px;
+  --mp-text-body: 14px;
+  --mp-text-base: 15px;
+  --mp-text-lead: 16px;
+  --mp-text-h3: 17px;
+  --mp-text-h2: clamp(26px, 4.4vw, 40px);
+  --mp-text-h1: clamp(28px, 5vw, 44px);
+  --mp-text-figure: clamp(30px, 6vw, 40px);
+  --mp-leading: 1.55;
+
+  /* Spacing */
+  --mp-space-1: 4px;
+  --mp-space-2: 8px;
+  --mp-space-3: 12px;
+  --mp-space-4: 16px;
+  --mp-space-5: 20px;
+  --mp-space-6: 24px;
+  --mp-space-7: 32px;
+  --mp-space-8: 56px;
+
+  /* Radii */
+  --mp-radius-sm: 3px;
+  --mp-radius-md: 6px;
+  --mp-radius-lg: 8px;
+  --mp-radius-pill: 999px;
+
+  /* Touch target */
+  --mp-hit: 44px;
+}
+
+/* Shared components. Opt-in by class; nothing here styles bare elements. */
+.mp-eyebrow {
+  font: 600 var(--mp-text-xs)/1.2 var(--mp-mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--mp-muted);
+}
+
+.mp-card {
+  background: var(--mp-card);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  padding: var(--mp-space-5);
+  display: grid;
+  gap: var(--mp-space-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.mp-btn {
+  font: 700 var(--mp-text-md) var(--mp-font);
+  color: var(--mp-fg);
+  background: var(--mp-card-2);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-md);
+  padding: var(--mp-space-2) var(--mp-space-3);
+  min-height: var(--mp-hit);
+  cursor: pointer;
+}
+.mp-btn:hover { border-color: var(--mp-muted); }
+.mp-btn:disabled { opacity: .45; cursor: not-allowed; }
+.mp-btn-primary { background: var(--mp-tag); color: var(--mp-on-tag); border-color: var(--mp-tag); }
+.mp-btn-primary:hover { border-color: var(--mp-tag); filter: brightness(1.05); }
+
+.mp-chip {
+  font: 600 var(--mp-text-md) var(--mp-font);
+  color: var(--mp-soft);
+  background: var(--mp-card);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-pill);
+  padding: var(--mp-space-2) 14px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.mp-chip[aria-pressed="true"] { background: var(--mp-tag); color: var(--mp-on-tag); border-color: var(--mp-tag); }
+
+.mp-figure {
+  font-size: var(--mp-text-figure);
+  font-weight: 900;
+  letter-spacing: -1px;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.mp-focus-ring:focus-visible,
+.mp-btn:focus-visible,
+.mp-chip:focus-visible {
+  outline: 2px solid var(--mp-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mp-btn, .mp-chip { transition: none; }
+}

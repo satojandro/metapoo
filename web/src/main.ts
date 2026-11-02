@@ -1,6 +1,7 @@
 // Must be first: installs browser globals (Buffer/global/process) that the
 // NEAR client libraries need before any of them is evaluated.
 import "./polyfills";
+import "./design/tokens.css";
 import "./style.css";
 import "./wall-design.css";
 import { createAppServices } from "./app/services";

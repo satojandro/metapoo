@@ -116,7 +116,8 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
   positionReadout.className = "position-readout";
   positionReadout.setAttribute("role", "status");
   positionReadout.setAttribute("aria-live", "off");
-  boardFocus.append(positionReadout);
+  // In the toolbar, not under the board: inside the stall frame it was clipped.
+  boardToolbar.append(positionReadout);
 
   let camera: Camera = { cellSize: 4, panX: 0, panY: 0 };
   let viewTransform: CameraTransform = createCameraTransform(camera);

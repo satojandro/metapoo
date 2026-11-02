@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mountWallHint, WALL_HINT_STORAGE_KEY } from "./wall-hint";
+import { HINT_TEXT, mountWallHint, WALL_HINT_STORAGE_KEY } from "./wall-hint";
 
 function storageWith(initialValue: string | null = null) {
   let value = initialValue;
@@ -28,18 +28,10 @@ describe("mountWallHint", () => {
 
     const hint = host.querySelector<HTMLElement>(".wall-hint")!;
     expect(hint).not.toBeNull();
-    expect([...hint.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
-      "Tap a cell to select it",
-      "Pick a color, then press Place",
-      "Pinch or scroll to zoom — drag to pan",
-    ]);
-    expect(hint.textContent).toContain("Open wall: anyone can paint over any cell.");
+    expect(hint.textContent).toContain(HINT_TEXT);
+    expect(hint.textContent).toContain("Anyone can paint over anyone.");
     expect(hint.textContent).not.toMatch(/payment|token|session/i);
-    expect(hint.style.pointerEvents).toBe("none");
-    expect(
-      hint.querySelector<HTMLButtonElement>('[aria-label="Dismiss hint"]')?.style
-        .pointerEvents,
-    ).toBe("auto");
+    expect(hint.querySelector('[aria-label="Dismiss hint"]')).not.toBeNull();
 
     const dismissedHost = document.createElement("div");
     mountWallHint(dismissedHost, storageWith("1"));

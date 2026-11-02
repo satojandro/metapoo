@@ -85,9 +85,9 @@ describe("wall view", () => {
     const { view, deps } = setup();
     view.setFlow("wallet_prompt");
     expect(view.uiPhase()).toBe("wallet_prompt");
-    expect(deps.flowState.textContent).toBe("State: wallet prompt — approve or reject in your wallet.");
+    expect(deps.flowState.textContent).toBe("Approve or reject in your wallet.");
     expect(deps.flowState.dataset.phase).toBe("wallet_prompt");
-    expect(deps.drawState.textContent).toBe("wallet prompt — approve or reject in your wallet.");
+    expect(deps.drawState.textContent).toBe("Approve or reject in your wallet.");
   });
 
   it("palette clicks pick a colour, press one swatch and update the preview", () => {
@@ -102,7 +102,7 @@ describe("wall view", () => {
     expect([...swatches].map((s) => s.getAttribute("aria-pressed"))).toEqual([
       ...PALETTE.slice(0, 8).map((_, i) => (i === 2 ? "true" : "false")),
     ]);
-    expect(deps.preview.textContent).toBe("Paint preview: Brick (palette index 2)");
+    expect(deps.preview.textContent).toBe("Your colour: Brick");
     expect(deps.render).toHaveBeenCalled();
     // No square yet, so the flow does not move to editing.
     expect(view.uiPhase()).toBe("disconnected");
@@ -142,7 +142,7 @@ describe("wall view", () => {
     expect(view.selectedColor()).toBe(0);
     const swatches = [...deps.palette.querySelectorAll<HTMLButtonElement>(".swatch")];
     expect(swatches[0]!.getAttribute("aria-pressed")).toBe("true");
-    expect(deps.preview.textContent).toBe("Paint preview: Ink (palette index 0)");
+    expect(deps.preview.textContent).toBe("Your colour: Ink");
     // A colour inside the palette survives a change.
     swatches[5]!.click();
     view.setPaletteLength(16);
@@ -203,7 +203,7 @@ describe("wall view", () => {
     const { view, deps } = setup();
     view.showSelection();
     expect(deps.selectionSummary.textContent).toBe(
-      "No square selected. Chosen paint: none yet. Unpainted squares have no artist.",
+      "No square selected. Tap a square on the wall to choose it.",
     );
     expect(deps.requestCellPrice).not.toHaveBeenCalled();
     deps.cachedPixel.mockReturnValue({
@@ -213,7 +213,7 @@ describe("wall view", () => {
     view.showSelection();
     expect(deps.requestCellPrice).toHaveBeenCalledWith({ x: 5, y: 6 });
     expect(deps.selectionSummary.textContent).toBe(
-      "Selected square x=5, y=6. Chosen paint: none yet. Counting starts at the top-left. On-chain credit: Moss (index 4) by bob.testnet. Credit is the latest writer, not legal ownership.",
+      "Selected square x=5, y=6. Square chosen. Painted Moss by bob.testnet.",
     );
   });
 

@@ -178,3 +178,63 @@ summary { cursor:pointer; }
 .palette[data-count="16"] .swatch,
 .wall-layout .paint-dock .palette[data-count="16"] .swatch { width:auto; min-width:0; max-width:none; height:44px; min-height:44px; }
 }
+
+/* ——— Phase 0 (2 Nov audit): nothing sits on top of the wall ——— */
+.visually-hidden { position:absolute !important; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+
+/* The dock is in the page flow below the wall at every width. It used to be
+   sticky to the bottom of the viewport, which put it over the board. */
+.paint-dock,
+.wall-layout .paint-dock { position:static; bottom:auto; }
+
+/* First-use hint: one dismissible line at the top of the dock. */
+.wall-hint-host { flex:1 1 100%; }
+.wall-hint-host:empty { display:none; }
+.wall-hint,
+.wall-layout .wall-hint { position:static; z-index:auto; width:auto; display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0; padding:6px 6px 6px 12px; border:1px solid #c9c1b4; border-radius:6px; background:#fff; box-shadow:none; color:#25252b; font:13px/1.35 Arial, Helvetica, sans-serif; pointer-events:auto; }
+.wall-hint-dismiss,
+.wall-layout .wall-hint-dismiss { position:static; flex:0 0 auto; width:36px; height:36px; color:#25252b; }
+.wall-hint-dismiss:hover,
+.wall-hint-dismiss:focus-visible { background:#0001; }
+
+/* What you chose, inside the dock, next to the colours. */
+.dock-selection { flex:1 1 100%; display:flex; flex-wrap:wrap; align-items:center; gap:4px 16px; }
+.paint-dock .summary,
+.wall-layout .paint-dock .summary { margin:0; font-size:13px; color:#25252b; white-space:normal; overflow:visible; }
+.paint-dock .selection-preview,
+.wall-layout .paint-dock .selection-preview { display:flex; align-items:center; gap:6px; margin:0; min-height:0; color:#25252b; white-space:normal; overflow:visible; }
+.paint-dock .selection-preview .chip { width:14px; height:14px; border-radius:2px; border:1px solid #0003; }
+.paint-dock .selection-preview .preview-label { font-size:13px; }
+
+/* Why Place paint is off, beside it; and every dock message in view. */
+.place-reason { flex:1 1 160px; margin:0; font-size:12px; color:#4a4650; }
+.place-reason:empty { display:none; }
+.draw-state { font:12px/1.35 Arial, Helvetica, sans-serif; }
+.paint-dock .result { flex:1 1 100%; margin:0; padding:10px 12px; border:1px solid #c9c1b4; border-left:3px solid #56c9ec; background:#fff; color:#25252b; }
+.paint-dock .result h3 { margin:0 0 4px; font-size:14px; }
+.paint-dock .result p { margin:0; font-size:13px; }
+
+/* The zoom readout lives in the toolbar now, unclipped. */
+.board-toolbar { display:flex; flex-wrap:wrap; align-items:center; }
+.board-toolbar .position-readout { width:auto; min-height:0; margin-left:auto; padding:4px 8px; border:0; border-radius:3px; background:transparent; color:#a9aaad; font:11px/1.25 monospace; text-align:right; }
+
+/* Header: one wallet control. Disconnected, the opt-in sits under Connect. */
+.wallet-chrome > .drawing-session-opt-in { display:flex; align-items:center; gap:6px; max-width:220px; color:#a9aaad; font-size:11px; }
+.wallet-details > summary { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:10px 14px; border:1px solid #46474c; border-radius:4px; background:#222327; color:#e6e6e9; font-size:12px; font-weight:700; }
+.wallet-details[open] > #connect-button { margin-top:12px; }
+.wallet-details[hidden] { display:none; }
+
+@media (max-width:600px) {
+  /* Phone: the page scrolls; the wall keeps its full size above the dock. */
+  .page-outlet > .wall-layout,
+  .page-outlet .wall-layout > main { height:auto; min-height:0; }
+  .wall-layout .stall { display:block; }
+  .wall-layout .stall-scene,
+  .wall-layout.is-focused .stall-scene { min-height:calc(min(92vw, 360px) + 48px); }
+  .wall-layout .stall-back,
+  .wall-layout.is-focused .stall-back { top:24px; }
+  .wall-layout .paint-dock { width:auto; margin:8px 0; border:1px solid #c9c1b4; border-radius:8px; padding:10px; }
+  .wallet-chrome > .drawing-session-opt-in { display:none; }
+  .wallet-details > summary { max-width:150px; padding:8px 10px; font-size:11px; }
+  .board-toolbar .position-readout { flex-basis:100%; margin-left:0; text-align:left; }
+}

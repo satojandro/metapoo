@@ -302,10 +302,10 @@ describe("wall behaviour: free board", () => {
       "https://explorer.test/tx-64-64",
     );
     expect(text(document.body, "#flow-state")).toBe(
-      "State: confirmed — the transaction executed and the confirming read matched.",
+      "Painted. Your square is on the wall.",
     );
     expect(text(root, "#draw-state")).toBe(
-      "confirmed — the transaction executed and the confirming read matched.",
+      "Painted. Your square is on the wall.",
     );
     const op = services.operations.list().find((o) => o.kind === "paint");
     expect(op).toMatchObject({ phase: "confirmed", transactionId: "tx-64-64" });
@@ -384,7 +384,7 @@ describe("wall behaviour: free board", () => {
     focus.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     expect(text(root, "#selection-summary")).toContain("Selected square x=1, y=1");
     expect(text(document.body, "#flow-state")).toBe(
-      "State: editing — review the pixel rule, then Place paint.",
+      "Choose a colour, then Place paint.",
     );
     focus.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await vi.waitFor(() => expect(text(root, "#result")).toContain("Paint confirmed"));
@@ -397,13 +397,32 @@ describe("wall behaviour: free board", () => {
     controllableWallet(services, ALICE);
     const { root, dispose } = mount(services);
     await booted(root);
-    root.querySelector<HTMLButtonElement>("#draw-button")!.click();
+    // Place paint stays off until a square is chosen, and says why beside it.
+    const drawButton = root.querySelector<HTMLButtonElement>("#draw-button")!;
+    expect(drawButton.disabled).toBe(true);
+    expect(text(root, "#place-reason")).toBe("Choose a square on the wall first.");
+    drawButton.click();
     await Promise.resolve();
     expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
-    expect(root.querySelector("#result h3")?.textContent).toBeTruthy();
-    expect(text(document.body, "#flow-state")).toBe(
-      "State: editing — review the pixel rule, then Place paint.",
-    );
+    dispose();
+  });
+
+  it("Place paint turns on once a square is chosen, and the reason goes away", async () => {
+    const services = createAppServices();
+    controllableWallet(services, ALICE);
+    const { root, dispose } = mount(services);
+    await booted(root);
+    const drawButton = root.querySelector<HTMLButtonElement>("#draw-button")!;
+    expect(drawButton.disabled).toBe(true);
+    expect(text(root, "#place-reason")).toBe("Choose a square on the wall first.");
+
+    const focus = root.querySelector<HTMLElement>("#board-focus")!;
+    focus.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(text(root, "#selection-summary")).toContain("Selected square x=0, y=0");
+    expect(drawButton.disabled).toBe(false);
+    expect(text(root, "#place-reason")).toBe("");
+    // Messages caused by the dock land in the dock.
+    expect(root.querySelector(".paint-dock #result")).not.toBeNull();
     dispose();
   });
 });
@@ -504,7 +523,7 @@ describe("wall behaviour: paid board", () => {
     await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("Credits: connect wallet"));
     expect(root.querySelector<HTMLButtonElement>("#buy-credits-button")!.disabled).toBe(true);
     expect(text(document.body, "#flow-state")).toBe(
-      "State: disconnected — look freely; draw needs a wallet.",
+      "Look around freely. Connect a wallet to paint.",
     );
     dispose();
   });
@@ -537,7 +556,7 @@ describe("wall behaviour: polling", () => {
     await vi.advanceTimersByTimeAsync(4_000);
     expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
     expect(text(root, "#board-load-status")).toMatch(/^Board load failed: rpc down\./);
-    expect(text(root, "#board-freshness")).toMatch(/^Board update failed; last /);
+    expect(text(root, "#board-freshness")).toMatch(/^Wall updated .*The latest refresh failed; retrying\.$/);
 
     await vi.advanceTimersByTimeAsync(7_999);
     expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
@@ -550,7 +569,7 @@ describe("wall behaviour: polling", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(3);
     expect(text(root, "#board-load-status")).toMatch(/^Board load: 0 painted cells at block 9\./);
-    expect(text(root, "#board-freshness")).toMatch(/^Board last updated /);
+    expect(text(root, "#board-freshness")).toMatch(/^Wall updated /);
 
     await vi.advanceTimersByTimeAsync(4_000);
     expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(4);
@@ -642,7 +661,7 @@ describe("wall behaviour: wallet changes", () => {
     expect(root.querySelector("#result h3")?.textContent).toBe("Queued paints cancelled");
     expect(root.querySelector("#result p")?.textContent).toBe("Wallet account or network changed.");
     expect(text(document.body, "#flow-state")).toBe(
-      "State: disconnected — look freely; draw needs a wallet.",
+      "Look around freely. Connect a wallet to paint.",
     );
 
     pending.resolve({
