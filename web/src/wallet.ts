@@ -285,6 +285,8 @@ export interface DrawCallArgs {
   color: number;
   gas: string;
   deposit: string;
+  /** Paid board: the quoted price, sent as `max_credits`. */
+  maxCredits?: number | null;
 }
 
 /**
@@ -299,11 +301,14 @@ export interface DrawCallArgs {
 export async function signAndSendDraw(args: DrawCallArgs): Promise<unknown> {
   const current = ensureConnector();
   const wallet = await current.wallet();
-  const callArgs = {
+  const callArgs: Record<string, unknown> = {
     x: args.x,
     y: args.y,
     color: args.color,
-  } as Record<string, unknown>;
+  };
+  if (typeof args.maxCredits === "number") {
+    callArgs.max_credits = args.maxCredits;
+  }
   return wallet.signAndSendTransaction({
     receiverId: args.contractId,
     actions: [

@@ -105,8 +105,10 @@ describe("pricing controller", () => {
     expect(pricing.paidBoard()).toBe(false);
     pricing.onSchemaChanged();
     expect(deps.creditsDock.hidden).toBe(true);
-    expect(await pricing.ensurePaidQuote([{ x: 1, y: 1 }], "alice.testnet")).toBe(true);
-    expect(pricing.admitTap({ x: 1, y: 1 })).toBe(true);
+    expect(await pricing.ensurePaidQuote([{ x: 1, y: 1 }], "alice.testnet")).toEqual({
+      maxCredits: null, chunkMaxCredits: null, reservation: null,
+    });
+    expect(pricing.admitTap({ x: 1, y: 1 })).toBeTruthy();
     pricing.requestCellPrice({ x: 1, y: 1 });
     expect(chain.calls).toEqual([]);
     dispose();
@@ -137,7 +139,7 @@ describe("pricing controller", () => {
   it("a failed price read latches price unavailable until a gesture retries", async () => {
     chain.cellCost = new Error("429");
     const { pricing, deps, dispose } = setup();
-    expect(await pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet")).toBe(false);
+    expect(await pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet")).toBeNull();
     expect(pricing.priceUnavailable()).toBe(true);
     expect(deps.result.querySelector("h3")?.textContent).toBe("Price unavailable");
     expect(deps.repaintChrome.badge.textContent).toBe("price unavailable");
@@ -151,10 +153,10 @@ describe("pricing controller", () => {
     chain.cellCost = 2;
     chain.credits = ["5"];
     const { pricing, deps, dispose } = setup();
-    expect(await pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet")).toBe(true);
+    expect(await pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet")).toMatchObject({ maxCredits: 2 });
     expect(deps.repaintChrome.strokeTotal.textContent).toBe("this stroke: 1 cell · 2 credits");
     // The balance (5) and cost (2) are now known; a tap is admitted.
-    expect(pricing.admitTap({ x: 2, y: 3 })).toBe(true);
+    expect(pricing.admitTap({ x: 2, y: 3 })).toBeTruthy();
     dispose();
   });
 
@@ -164,7 +166,7 @@ describe("pricing controller", () => {
     const { pricing, deps, dispose } = setup();
     // The sheet only opens on a board it is visible for.
     await pricing.refreshCreditsDock();
-    expect(await pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet")).toBe(false);
+    expect(await pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet")).toBeNull();
     expect(deps.result.querySelector("h3")?.textContent).toBe("Not enough credits");
     expect(deps.result.querySelector("button")?.textContent).toBe("Buy credits");
     expect(sheet().hidden).toBe(false);
@@ -179,7 +181,7 @@ describe("pricing controller", () => {
     pricing.requestCellPrice({ x: 7, y: 7 });
     await vi.waitFor(() => expect(deps.repaintChrome.badge.textContent).toContain("3 credits"));
     await pricing.refreshCreditsDock();
-    expect(pricing.admitTap({ x: 7, y: 7 })).toBe(false);
+    expect(pricing.admitTap({ x: 7, y: 7 })).toBeNull();
     expect(deps.result.querySelector("p")?.textContent).toBe(
       "This stroke needs 3 credits and this account has 2 credits. Nothing was submitted.",
     );
