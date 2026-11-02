@@ -2,7 +2,7 @@
 //!
 //! A smart contract is a program that a blockchain runs. People call its
 //! change methods with signed transactions. This crate:
-//! - describes a 128 by 128 board and an 8-color palette
+//! - describes a 128 by 128 board and a 16-color palette
 //! - stores only painted cells (sparse storage)
 //! - lets funded callers paint in-range cells at one credit per entry
 //! - pages every currently painted cell for readers (`get_pixels`)
@@ -12,6 +12,7 @@
 //! testnet or mainnet result.
 
 mod emission;
+mod free_paint;
 mod migrate;
 mod payments;
 mod revenue;
@@ -79,7 +80,8 @@ pub struct CellRef {
 
 /// Index 0 is Ink, a real paint color. An unpainted square is not index 0.
 /// Names and hex values match `shared/palette.ts`. Change both together.
-const PALETTE: [(&str, &str); 8] = [
+/// Indices 8-15 are Grime & Gum (spec §P1); existing cells keep their index.
+const PALETTE: [(&str, &str); 16] = [
     ("Ink", "#1c1917"),
     ("Paper", "#f4efe4"),
     ("Brick", "#b23a2f"),
@@ -88,6 +90,14 @@ const PALETTE: [(&str, &str); 8] = [
     ("River", "#2f6f8f"),
     ("Grape", "#6b4c7a"),
     ("Clay", "#c47b5a"),
+    ("Grout", "#8a857c"),
+    ("Rust", "#7a4528"),
+    ("Nicotine", "#ecd9a0"),
+    ("Bubblegum", "#ec8fb0"),
+    ("Bleach", "#9ccbdc"),
+    ("Bruise", "#263552"),
+    ("Bile", "#9fb53a"),
+    ("Cone", "#ef7a2c"),
 ];
 
 /// One named paint color returned to the page.
@@ -196,7 +206,14 @@ impl Tunables {
         )
     }
 
+    /// True when a cell last written at `written_at` is at the base tier at `now`:
+    /// empty, or older than `repaint_mid_ns`. Happy hour (F2) frees only these.
+    pub fn is_base_tier(&self, now: u64, written_at: Option<u64>) -> bool {
+        written_at.is_none_or(|w| now.saturating_sub(w) >= self.repaint_mid_ns)
+    }
+
     fn validate(&self) {
+        free_paint::validate_tunables(self);
         assert!(
             self.reserve_floor.0 >= safety::MIN_RESERVE,
             "ReserveFloorTooLow"
@@ -546,6 +563,7 @@ impl Board {
     /// not a migration — that is the whole point of storing the knobs on chain.
     #[payable]
     pub fn set_tunables(&mut self, tunables: Tunables) {
+        let mut tunables = tunables;
         near_sdk::assert_one_yocto();
         assert_eq!(
             env::predecessor_account_id(),
@@ -583,6 +601,7 @@ impl Board {
                 "RepaintPriceCooldown"
             );
         }
+        free_paint::apply_happy_hour_change(&self.tunables, &mut tunables, now);
         // Rate changes apply from now, never retroactively to the idle interval.
         // mpoo_daily_credit_cap applies immediately too (C8): it bounds protocol
         // loss, not what users pay, so it has no cooldown.
@@ -676,52 +695,34 @@ impl Board {
 
     /// Paint one cell. Any predecessor may overwrite any cell (Open wall).
     ///
+    /// `max_credits` is the most the caller agreed to pay (spec §C2): if the cell
+    /// costs more at execution, the call rejects with `PriceRoseAboveMax` and nothing
+    /// is stored or charged. A free paint (F1/F2) counts as 0 against it.
+    ///
     /// On NEAR, a panic cancels the whole transaction. A successful return
     /// means the cell was stored for this call.
-    pub fn draw(&mut self, x: u32, y: u32, color: u32) {
-        self.accrue(env::block_timestamp());
-        self.assert_unpaused();
-        if let Err(code) = validate_draw_args(x, y, color) {
-            reject(code);
-        }
-
-        let artist = env::predecessor_account_id();
-        let written_at_ns = env::block_timestamp();
-        let key = pixel_key(x, y);
-        let (prior_artist, prior_written) = read_cell(self, key);
-        let cost = u128::from(self.tunables.cost(written_at_ns, prior_written));
-        self.payments.spend(&artist, cost);
-        self.pixels.insert(
-            key,
-            PixelRecord {
-                color,
-                artist: artist.clone(),
-                written_at_ns,
-            },
-        );
-        if prior_artist.as_ref() != Some(&artist) {
-            if let Some(previous) = prior_artist {
-                bump_cells_owned(self, &previous, -1);
-            }
-            bump_cells_owned(self, &artist, 1);
-        }
-
-        // Simple log for indexers / debugging. Not a full NEP event schema yet.
-        env::log_str(&format!(
-            "EVENT_JSON:{{\"standard\":\"mpoo_board\",\"version\":\"1.0.0\",\"event\":\"draw\",\"data\":[{{\"x\":{x},\"y\":{y},\"color\":{color},\"artist\":\"{artist}\",\"written_at_ns\":{written_at_ns},\"credits\":{cost}}}]}}"
-        ));
+    pub fn draw(&mut self, x: u32, y: u32, color: u32, max_credits: u32) {
+        self.paint(&[DrawCell { x, y, color }], max_credits, "draw");
     }
 
     /// Paint many cells in one transaction, so a drag is one wallet approval.
     ///
-    /// All-or-nothing: if any cell is out of range or has an unknown color the
-    /// whole call panics and nothing is stored, so a painter can never end up
-    /// with half a stroke on the wall and half rejected. Cells apply in order;
-    /// if the same cell appears twice, the last entry wins.
+    /// All-or-nothing: if any cell is out of range or has an unknown color, or the
+    /// stroke's total (after free paints) is above `max_credits`, the whole call
+    /// panics and nothing is stored, so a painter can never end up with half a
+    /// stroke on the wall and half rejected. Cells apply in order; if the same cell
+    /// appears twice, the last entry wins and the repeat pays the repaint rate.
     ///
     /// The stroke is capped at `MAX_DRAW_BATCH` cells. Longer drags are
     /// split by the client into several calls, each of which is still atomic.
-    pub fn draw_many(&mut self, cells: Vec<DrawCell>) {
+    pub fn draw_many(&mut self, cells: Vec<DrawCell>, max_credits: u32) {
+        self.paint(&cells, max_credits, "draw_many");
+    }
+}
+
+impl Board {
+    /// The one paint path behind `draw` and `draw_many`.
+    fn paint(&mut self, cells: &[DrawCell], max_credits: u32, event: &str) {
         self.accrue(env::block_timestamp());
         self.assert_unpaused();
         if cells.is_empty() {
@@ -738,44 +739,50 @@ impl Board {
 
         let artist = env::predecessor_account_id();
         let written_at_ns = env::block_timestamp();
+        let keys: Vec<u32> = cells.iter().map(|c| pixel_key(c.x, c.y)).collect();
 
-        // Price the stroke entry by entry. A cell that appears twice in one drag
-        // was just repainted by the earlier entry, so it pays the repaint rate.
+        // Price the stroke entry by entry, free paints included (F1/F2). A cell that
+        // appears twice in one drag was just repainted by the earlier entry, so it
+        // pays the repaint rate.
+        let plan = self.plan_stroke(Some(&artist), &keys, written_at_ns);
+        if plan.total > u128::from(max_credits) {
+            reject("PriceRoseAboveMax");
+        }
+
+        // Whoever held each distinct cell before this stroke.
         let mut charged: Vec<(u32, Option<AccountId>)> = Vec::with_capacity(cells.len());
-        let mut costs: Vec<u128> = Vec::with_capacity(cells.len());
-        let mut total: u128 = 0;
-        for cell in cells.iter() {
-            let key = pixel_key(cell.x, cell.y);
-            let (previous_owner, written) = match charged.iter().find(|(k, _)| *k == key) {
-                Some(_) => (None, Some(written_at_ns)),
-                None => read_cell(self, key),
-            };
-            let cost = u128::from(self.tunables.cost(written_at_ns, written));
-            total = total.saturating_add(cost);
-            costs.push(cost);
+        for &key in keys.iter() {
             if !charged.iter().any(|(k, _)| *k == key) {
-                charged.push((key, previous_owner));
+                charged.push((key, read_cell(self, key).0));
             }
         }
 
         // One debit for the whole stroke: a rejected stroke stores nothing and
         // costs nothing, because a panic rolls back the debit and the writes.
-        self.payments.spend(&artist, total);
+        self.payments.spend(&artist, plan.total);
+        if plan.extra_changed {
+            self.account_extra.insert(artist.clone(), plan.extra);
+        }
 
         let mut events: Vec<String> = Vec::with_capacity(cells.len());
-
-        for (index, cell) in cells.iter().enumerate() {
+        for ((cell, &key), price) in cells.iter().zip(keys.iter()).zip(plan.cells.iter()) {
             self.pixels.insert(
-                pixel_key(cell.x, cell.y),
+                key,
                 PixelRecord {
                     color: cell.color,
                     artist: artist.clone(),
                     written_at_ns,
                 },
             );
+            // A cell is in `free_cells` while its latest paint was free.
+            if price.free {
+                self.free_cells.insert(key);
+            } else {
+                self.free_cells.remove(&key);
+            }
             events.push(format!(
-                "{{\"x\":{},\"y\":{},\"color\":{},\"artist\":\"{artist}\",\"written_at_ns\":{written_at_ns},\"credits\":{}}}",
-                cell.x, cell.y, cell.color, costs[index]
+                "{{\"x\":{},\"y\":{},\"color\":{},\"artist\":\"{artist}\",\"written_at_ns\":{written_at_ns},\"credits\":{},\"free\":{}}}",
+                cell.x, cell.y, cell.color, price.credits, price.free
             ));
         }
 
@@ -790,10 +797,15 @@ impl Board {
             }
         }
 
-        // One event per stroke keeps an indexer's work proportional to drags,
+        // F1 latch: set the first time every cell holds paint. Never unset.
+        if !self.first_fill_complete && self.pixels.len() == WIDTH * HEIGHT {
+            self.first_fill_complete = true;
+        }
+
+        // One event per call keeps an indexer's work proportional to drags,
         // not to pixels.
         env::log_str(&format!(
-            "EVENT_JSON:{{\"standard\":\"mpoo_board\",\"version\":\"1.0.0\",\"event\":\"draw_many\",\"data\":[{}]}}",
+            "EVENT_JSON:{{\"standard\":\"mpoo_board\",\"version\":\"1.0.0\",\"event\":\"{event}\",\"data\":[{}]}}",
             events.join(",")
         ));
     }
@@ -904,6 +916,8 @@ mod tests {
         }
         // Fixture credits must also be included in the global liability counter.
         board.payments.outstanding = 6000;
+        // Paid-path tests: F1 free first paints are covered in `free_paint.rs`.
+        board.tunables.free_first_paints_per_account = 0;
         board
     }
 
@@ -911,7 +925,7 @@ mod tests {
     fn batched_costs_match_the_single_cell_view() {
         let mut board = setup();
         context(accounts(1), 1_000_000_000_000);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         // (0,0) was just painted, so it must quote the young tier while (1,1)
         // is empty and quotes the base tier.
         let batch = board.get_cell_costs(vec![
@@ -956,8 +970,30 @@ mod tests {
         assert_eq!(view.origin, "top-left");
         assert_eq!(view.overwrite_rule, "open_wall");
         assert!(!view.sponsorship_enabled);
-        assert_eq!(view.palette.len(), 8);
         assert_eq!(view.palette[0].name, "Ink");
+    }
+
+    // --- P1: 16 colours ---------------------------------------------------
+
+    #[test]
+    fn p1_get_board_returns_16_colours() {
+        let view = setup().get_board();
+        assert_eq!(view.palette.len(), 16);
+        assert_eq!(view.palette[7].name, "Clay");
+        assert_eq!(view.palette[8].name, "Grout");
+        assert_eq!(view.palette[8].hex, "#8a857c");
+        assert_eq!(view.palette[15].index, 15);
+        assert_eq!(view.palette[15].name, "Cone");
+        assert_eq!(view.palette[15].hex, "#ef7a2c");
+    }
+
+    #[test]
+    fn p1_colour_15_is_accepted() {
+        let mut board = setup();
+        board.draw(1, 1, 15, u32::MAX);
+        board.draw_many(stroke(&[(2, 1, 15), (3, 1, 8)]), u32::MAX);
+        assert_eq!(board.get_pixel(1, 1).color, Some(15));
+        assert_eq!(board.get_pixel(3, 1).color, Some(8));
     }
 
     #[test]
@@ -999,22 +1035,22 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "ColorOutOfRange")]
-    fn invalid_color_is_named() {
+    fn p1_colour_16_is_rejected_with_color_out_of_range() {
         let mut board = setup();
-        board.draw(1, 1, 8);
+        board.draw(1, 1, 16, u32::MAX);
     }
 
     #[test]
     #[should_panic(expected = "CoordinateOutOfRange")]
     fn draw_outside_the_board_is_rejected() {
         let mut board = setup();
-        board.draw(128, 0, 0);
+        board.draw(128, 0, 0, u32::MAX);
     }
 
     #[test]
     fn first_paint_stores_color_artist_and_time() {
         let mut board = setup();
-        board.draw(3, 4, 2);
+        board.draw(3, 4, 2, u32::MAX);
         let pixel = board.get_pixel(3, 4);
         assert_eq!(pixel.color, Some(2));
         assert_eq!(pixel.artist.as_deref(), Some(accounts(0).as_str()));
@@ -1024,10 +1060,10 @@ mod tests {
     #[test]
     fn another_account_may_overwrite_under_open_wall() {
         let mut board = setup();
-        board.draw(3, 4, 2);
+        board.draw(3, 4, 2, u32::MAX);
 
         context(accounts(1), 2_000);
-        board.draw(3, 4, 5);
+        board.draw(3, 4, 5, u32::MAX);
 
         let pixel = board.get_pixel(3, 4);
         assert_eq!(pixel.color, Some(5));
@@ -1038,9 +1074,9 @@ mod tests {
     #[test]
     fn same_account_may_recolor() {
         let mut board = setup();
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(accounts(0), 3_000);
-        board.draw(0, 0, 7);
+        board.draw(0, 0, 7, u32::MAX);
         let pixel = board.get_pixel(0, 0);
         assert_eq!(pixel.color, Some(7));
         assert_eq!(pixel.artist.as_deref(), Some(accounts(0).as_str()));
@@ -1050,7 +1086,7 @@ mod tests {
     #[test]
     fn painting_one_cell_does_not_create_neighbors() {
         let mut board = setup();
-        board.draw(10, 10, 3);
+        board.draw(10, 10, 3, u32::MAX);
         assert!(board.get_pixel(10, 11).color.is_none());
         assert!(board.get_pixel(11, 10).color.is_none());
     }
@@ -1067,10 +1103,10 @@ mod tests {
     #[test]
     fn get_pixels_returns_each_painted_cell_exactly_once_after_overwrite() {
         let mut board = setup();
-        board.draw(3, 4, 2);
-        board.draw(5, 6, 1);
+        board.draw(3, 4, 2, u32::MAX);
+        board.draw(5, 6, 1, u32::MAX);
         context(accounts(1), 2_000);
-        board.draw(3, 4, 5);
+        board.draw(3, 4, 5, u32::MAX);
 
         let page = board.get_pixels(0, 256);
         assert_eq!(page.total, 2);
@@ -1096,7 +1132,7 @@ mod tests {
     fn get_pixels_pages_without_duplicates_across_pages() {
         let mut board = setup();
         for i in 0..5 {
-            board.draw(i, 0, 2);
+            board.draw(i, 0, 2, u32::MAX);
         }
 
         let first = board.get_pixels(0, 2);
@@ -1125,7 +1161,7 @@ mod tests {
     fn second_client_sees_pixel_painted_by_first_via_get_pixels() {
         // Client A (accounts(0)) paints.
         let mut board = setup();
-        board.draw(3, 4, 2);
+        board.draw(3, 4, 2, u32::MAX);
 
         // Client B is a different account that only reads. Open wall does not
         // require B to have painted; the wall is shared state.
@@ -1146,7 +1182,7 @@ mod tests {
     #[test]
     fn get_pixels_clamps_limit_to_max_page() {
         let mut board = setup();
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         let page = board.get_pixels(0, 10_000);
         assert_eq!(page.limit, MAX_PIXELS_PAGE);
         assert_eq!(page.pixels.len(), 1);
@@ -1166,7 +1202,7 @@ mod tests {
     #[test]
     fn a_stroke_stores_every_cell_with_one_artist_and_one_timestamp() {
         let mut board = setup();
-        board.draw_many(stroke(&[(1, 1, 2), (2, 1, 2), (3, 1, 3)]));
+        board.draw_many(stroke(&[(1, 1, 2), (2, 1, 2), (3, 1, 3)]), u32::MAX);
 
         for (x, y, color) in [(1, 1, 2), (2, 1, 2), (3, 1, 3)] {
             let pixel = board.get_pixel(x, y);
@@ -1185,14 +1221,14 @@ mod tests {
     fn a_stroke_is_one_wallet_action_even_for_a_long_drag() {
         let mut board = setup();
         let cells: Vec<(u32, u32, u32)> = (0..MAX_DRAW_BATCH).map(|i| (i, 7, 4)).collect();
-        board.draw_many(stroke(&cells));
+        board.draw_many(stroke(&cells), u32::MAX);
         assert_eq!(board.get_pixels(0, 256).total, MAX_DRAW_BATCH);
     }
 
     #[test]
     fn repeated_cell_inside_one_stroke_keeps_the_last_color() {
         let mut board = setup();
-        board.draw_many(stroke(&[(5, 5, 2), (5, 5, 6)]));
+        board.draw_many(stroke(&[(5, 5, 2), (5, 5, 6)]), u32::MAX);
         assert_eq!(board.get_pixel(5, 5).color, Some(6));
         assert_eq!(board.get_pixels(0, 256).total, 1);
     }
@@ -1201,7 +1237,7 @@ mod tests {
     #[should_panic(expected = "EmptyStroke")]
     fn an_empty_stroke_is_rejected() {
         let mut board = setup();
-        board.draw_many(Vec::new());
+        board.draw_many(Vec::new(), u32::MAX);
     }
 
     #[test]
@@ -1209,28 +1245,28 @@ mod tests {
     fn a_stroke_over_the_cap_is_rejected() {
         let mut board = setup();
         let cells: Vec<(u32, u32, u32)> = (0..=MAX_DRAW_BATCH).map(|i| (i, 0, 1)).collect();
-        board.draw_many(stroke(&cells));
+        board.draw_many(stroke(&cells), u32::MAX);
     }
 
     #[test]
     #[should_panic(expected = "CoordinateOutOfRange")]
     fn one_bad_cell_rejects_the_whole_stroke() {
         let mut board = setup();
-        board.draw_many(stroke(&[(1, 1, 2), (128, 1, 2)]));
+        board.draw_many(stroke(&[(1, 1, 2), (128, 1, 2)]), u32::MAX);
     }
 
     #[test]
     #[should_panic(expected = "ColorOutOfRange")]
     fn one_unknown_color_rejects_the_whole_stroke() {
         let mut board = setup();
-        board.draw_many(stroke(&[(1, 1, 2), (1, 2, 99)]));
+        board.draw_many(stroke(&[(1, 1, 2), (1, 2, 99)]), u32::MAX);
     }
 
     #[test]
     fn draw_and_draw_many_share_the_same_cell_space() {
         let mut board = setup();
-        board.draw(9, 9, 1);
-        board.draw_many(stroke(&[(9, 9, 5), (10, 9, 5)]));
+        board.draw(9, 9, 1, u32::MAX);
+        board.draw_many(stroke(&[(9, 9, 5), (10, 9, 5)]), u32::MAX);
         assert_eq!(board.get_pixel(9, 9).color, Some(5));
         assert_eq!(board.get_pixels(0, 256).total, 2);
     }
@@ -1263,11 +1299,11 @@ mod tests {
     fn repaint_within_ten_minutes_costs_four_credits() {
         let mut board = setup();
         paying_context(0, 0, 1_000);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         assert_eq!(balance_of(&board, 0), 999);
         paying_context(0, 0, 1_000 + 60_000_000_000); // 60 s later
         assert_eq!(board.get_cell_cost(0, 0), 4);
-        board.draw(0, 0, 2);
+        board.draw(0, 0, 2, u32::MAX);
         assert_eq!(balance_of(&board, 0), 995);
     }
 
@@ -1275,10 +1311,10 @@ mod tests {
     fn repaint_between_ten_and_sixty_minutes_costs_two_credits() {
         let mut board = setup();
         paying_context(0, 0, 1_000);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         paying_context(0, 0, 1_000 + 900_000_000_000); // 15 min later
         assert_eq!(board.get_cell_cost(0, 0), 2);
-        board.draw(0, 0, 2);
+        board.draw(0, 0, 2, u32::MAX);
         assert_eq!(balance_of(&board, 0), 997);
     }
 
@@ -1286,10 +1322,10 @@ mod tests {
     fn repaint_after_an_hour_costs_the_base_rate_again() {
         let mut board = setup();
         paying_context(0, 0, 1_000);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         paying_context(0, 0, 1_000 + 3_601_000_000_000); // just over 60 min later
         assert_eq!(board.get_cell_cost(0, 0), 1);
-        board.draw(0, 0, 2);
+        board.draw(0, 0, 2, u32::MAX);
         assert_eq!(balance_of(&board, 0), 998);
     }
 
@@ -1297,10 +1333,10 @@ mod tests {
     fn a_stroke_prices_every_cell_and_debits_once() {
         let mut board = setup();
         paying_context(0, 0, 1_000);
-        board.draw_many(stroke(&[(0, 0, 1), (1, 0, 1)]));
+        board.draw_many(stroke(&[(0, 0, 1), (1, 0, 1)]), u32::MAX);
         assert_eq!(balance_of(&board, 0), 998);
         paying_context(0, 0, 1_000 + 300_000_000_000); // 5 min later
-        board.draw_many(stroke(&[(0, 0, 2), (1, 0, 2)]));
+        board.draw_many(stroke(&[(0, 0, 2), (1, 0, 2)]), u32::MAX);
         // Both cells are young, so 4 + 4.
         assert_eq!(balance_of(&board, 0), 990);
     }
@@ -1309,7 +1345,7 @@ mod tests {
     fn a_duplicate_cell_inside_one_stroke_pays_the_repaint_rate() {
         let mut board = setup();
         paying_context(0, 0, 1_000);
-        board.draw_many(stroke(&[(0, 0, 1), (0, 0, 2)]));
+        board.draw_many(stroke(&[(0, 0, 1), (0, 0, 2)]), u32::MAX);
         // First entry claims empty ground (1), the second repaints it (4).
         assert_eq!(balance_of(&board, 0), 995);
         assert_eq!(board.get_pixel(0, 0).color, Some(2));
@@ -1320,17 +1356,125 @@ mod tests {
     fn young_repaint_rejection_is_all_or_nothing() {
         let mut board = setup();
         paying_context(0, 0, 1_000);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         // Only 2 credits left; a young repaint costs 4.
         board.payments.balances.insert(accounts(0), 2);
         board.payments.outstanding -= 997;
         paying_context(0, 0, 1_000 + 60_000_000_000);
         let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            board.draw(0, 0, 3);
+            board.draw(0, 0, 3, u32::MAX);
         }));
         assert!(rejected.is_err());
         assert_eq!(board.get_pixel(0, 0).color, Some(1));
         assert_eq!(balance_of(&board, 0), 2);
+    }
+
+    // --- C2: max_credits ----------------------------------------------------
+
+    fn rejected_with(code: &str, f: impl FnOnce()) {
+        let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).expect_err("must reject");
+        let message = err
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| err.downcast_ref::<&str>().copied())
+            .unwrap_or("");
+        assert!(message.contains(code), "{message}");
+    }
+
+    #[test]
+    fn c2_cost_equal_to_max_succeeds() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw_many(stroke(&[(0, 0, 1), (1, 0, 1), (2, 0, 1)]), 3);
+        assert_eq!(balance_of(&board, 0), 997);
+        paying_context(0, 0, 2_000);
+        board.draw(0, 0, 2, 4); // young repaint: 4
+        assert_eq!(balance_of(&board, 0), 993);
+    }
+
+    #[test]
+    fn c2_one_credit_above_max_rejects_and_stores_nothing() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        board.draw(0, 0, 1, 1);
+        paying_context(0, 0, 2_000);
+        // Quoted at 1 before someone else's paint made it young (4).
+        rejected_with("PriceRoseAboveMax", || board.draw(0, 0, 2, 3));
+        assert_eq!(board.get_pixel(0, 0).color, Some(1));
+        assert_eq!(balance_of(&board, 0), 999);
+        rejected_with("PriceRoseAboveMax", || {
+            board.draw_many(stroke(&[(5, 5, 1), (6, 5, 1)]), 1)
+        });
+        assert!(board.get_pixel(5, 5).color.is_none());
+        assert_eq!(balance_of(&board, 0), 999);
+        assert_eq!(board.get_outstanding_credits().0, 5999);
+    }
+
+    #[test]
+    fn c2_a_duplicate_cell_raising_the_cost_above_max_rejects() {
+        let mut board = setup();
+        paying_context(0, 0, 1_000);
+        // Two distinct-looking entries priced 1 + 1 by a naive per-cell quote, but the
+        // repeat is a young repaint: 1 + 4 = 5.
+        rejected_with("PriceRoseAboveMax", || {
+            board.draw_many(stroke(&[(0, 0, 1), (0, 0, 2)]), 2)
+        });
+        assert!(board.get_pixel(0, 0).color.is_none());
+        assert_eq!(balance_of(&board, 0), 1000);
+        board.draw_many(stroke(&[(0, 0, 1), (0, 0, 2)]), 5);
+        assert_eq!(balance_of(&board, 0), 995);
+    }
+
+    #[test]
+    fn c2_free_cells_count_as_zero_against_the_max() {
+        let mut board = setup();
+        board.tunables.free_first_paints_per_account = 2;
+        paying_context(0, 0, 1_000);
+        // Three empty cells: two free first paints, one paid.
+        board.draw_many(stroke(&[(0, 0, 1), (1, 0, 1), (2, 0, 1)]), 1);
+        assert_eq!(balance_of(&board, 0), 999);
+        // A single free draw passes with max 0.
+        board.tunables.free_first_paints_per_account = 3;
+        board.draw(3, 0, 1, 0);
+        assert_eq!(balance_of(&board, 0), 999);
+    }
+
+    #[test]
+    fn c2_stroke_quote_matches_what_draw_many_charges() {
+        let mut board = setup();
+        board.tunables.free_first_paints_per_account = 1;
+        paying_context(0, 0, 1_000);
+        board.draw(9, 9, 1, u32::MAX); // uses the one free first paint
+        paying_context(1, 0, 2_000);
+        let cells = [(9, 9, 2), (10, 9, 2), (10, 9, 3)];
+        let refs: Vec<CellRef> = cells.iter().map(|(x, y, _)| CellRef { x: *x, y: *y }).collect();
+        let quote = board.get_stroke_cost(Some(accounts(1)), refs);
+        // young repaint 4, free first paint 0, repeat of a just-painted cell 4.
+        assert_eq!(quote.costs, vec![4, 0, 4]);
+        assert_eq!(quote.free, vec![false, true, false]);
+        assert_eq!(quote.total, 8);
+        board.draw_many(stroke(&cells), quote.total);
+        assert_eq!(balance_of(&board, 1), 992);
+        // Without an account nothing is free.
+        let anon = board.get_stroke_cost(None, vec![CellRef { x: 50, y: 50 }]);
+        assert_eq!((anon.costs, anon.total), (vec![1], 1));
+    }
+
+    #[test]
+    fn c2_draw_events_mark_each_cell_free_or_paid() {
+        let mut board = setup();
+        board.tunables.free_first_paints_per_account = 1;
+        paying_context(0, 0, 1_000);
+        board.draw_many(stroke(&[(0, 0, 1), (1, 0, 1)]), 1);
+        let logs = near_sdk::test_utils::get_logs();
+        let last = logs.last().expect("draw_many event");
+        assert!(last.contains("\"x\":0,\"y\":0,\"color\":1"), "{last}");
+        assert!(last.contains("\"credits\":0,\"free\":true"), "{last}");
+        assert!(last.contains("\"credits\":1,\"free\":false"), "{last}");
+        board.draw(2, 0, 1, 1);
+        let logs = near_sdk::test_utils::get_logs();
+        assert!(logs.last().unwrap().contains("\"event\":\"draw\""));
+        assert!(logs.last().unwrap().contains("\"free\":false"));
     }
 
     // --- ownership counts ------------------------------------------------
@@ -1339,12 +1483,12 @@ mod tests {
     fn cells_owned_follows_the_artist_on_overwrite() {
         let mut board = setup();
         paying_context(0, 0, 1_000);
-        board.draw(4, 4, 1);
+        board.draw(4, 4, 1, u32::MAX);
         assert_eq!(board.get_cells_owned(accounts(0)), 1);
         assert_eq!(board.get_cells_owned(accounts(1)), 0);
 
         paying_context(4, 0, 2_000);
-        board.draw(4, 4, 2);
+        board.draw(4, 4, 2, u32::MAX);
         assert_eq!(board.get_cells_owned(accounts(0)), 0);
         assert_eq!(board.get_cells_owned(accounts(4)), 1);
     }
@@ -1353,7 +1497,7 @@ mod tests {
     fn a_stroke_does_not_count_a_cell_twice() {
         let mut board = setup();
         paying_context(0, 0, 1_000);
-        board.draw_many(stroke(&[(0, 0, 1), (0, 0, 2), (1, 0, 1)]));
+        board.draw_many(stroke(&[(0, 0, 1), (0, 0, 2), (1, 0, 1)]), u32::MAX);
         assert_eq!(board.get_cells_owned(accounts(0)), 2);
     }
 
@@ -1361,9 +1505,9 @@ mod tests {
     fn the_same_artist_repainting_keeps_its_count() {
         let mut board = setup();
         paying_context(0, 0, 1_000);
-        board.draw(2, 2, 1);
+        board.draw(2, 2, 1, u32::MAX);
         paying_context(0, 0, 2_000);
-        board.draw(2, 2, 3);
+        board.draw(2, 2, 3, u32::MAX);
         assert_eq!(board.get_cells_owned(accounts(0)), 1);
     }
 
@@ -1410,23 +1554,12 @@ mod tests {
         board.set_tunables(tunables);
         assert_eq!(board.get_tunables().repaint_young_credits, 8);
         paying_context(0, 0, 1_000);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         paying_context(0, 0, 1_000 + 60_000_000_000);
         assert_eq!(board.get_cell_cost(0, 0), 8);
     }
 
     // --- C1: bounded repaint costs -----------------------------------------
-
-    fn rejected_with(code: &str, f: impl FnOnce()) {
-        let err =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).expect_err("must reject");
-        let message = err
-            .downcast_ref::<String>()
-            .map(String::as_str)
-            .or_else(|| err.downcast_ref::<&str>().copied())
-            .unwrap_or("");
-        assert!(message.contains(code), "expected {code}, got {message}");
-    }
 
     #[test]
     fn repaint_tier_above_eight_credits_is_rejected() {

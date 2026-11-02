@@ -29,7 +29,7 @@ describe("prepareDraw", () => {
   });
 
   it("rejects a palette index the board does not list", () => {
-    expect(prepareDraw({ ...base, x: 4, y: 5, color: 8 }).code).toBe(
+    expect(prepareDraw({ ...base, x: 4, y: 5, color: 16 }).code).toBe(
       "ColorOutOfRange",
     );
   });

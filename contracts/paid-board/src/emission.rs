@@ -216,37 +216,37 @@ mod tests {
     #[test]
     fn accrual_is_zero_until_a_rate_is_set() {
         let mut board = setup(0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(0, 10);
-        board.draw(0, 0, 2);
+        board.draw(0, 0, 2, u32::MAX);
         assert_eq!(board.get_pending_toilet(accounts(0)).0, 0);
         let mut tunables = board.get_tunables();
         tunables.toilet_per_cell_second = 7;
         board.set_tunables(tunables);
         context(0, 20);
-        board.draw(0, 0, 3);
+        board.draw(0, 0, 3, u32::MAX);
         assert_eq!(board.get_pending_toilet(accounts(0)).0, 70);
     }
 
     #[test]
     fn one_cell_accrues_rate_times_elapsed() {
         let mut board = setup(7);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(0, 10);
-        board.draw(0, 0, 2);
+        board.draw(0, 0, 2, u32::MAX);
         assert_eq!(board.get_pending_toilet(accounts(0)).0, 70);
     }
 
     #[test]
     fn overwrite_settles_the_previous_owner_and_starts_the_new_one() {
         let mut board = setup(7);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(1, 10);
-        board.draw(0, 0, 2);
+        board.draw(0, 0, 2, u32::MAX);
         assert_eq!(board.get_pending_toilet(accounts(0)).0, 70);
         assert_eq!(board.get_pending_toilet(accounts(1)).0, 0);
         context(1, 20);
-        board.draw(0, 0, 3);
+        board.draw(0, 0, 3, u32::MAX);
         assert_eq!(board.get_pending_toilet(accounts(0)).0, 70);
         assert_eq!(board.get_pending_toilet(accounts(1)).0, 70);
         assert_eq!(env::block_timestamp(), 20_000_000_000);
@@ -263,9 +263,9 @@ mod tests {
     #[test]
     fn a_holder_keeps_accrual_after_losing_every_cell() {
         let mut board = setup(11);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(1, 10);
-        board.draw_many(vec![crate::DrawCell { x: 0, y: 0, color: 2 }]);
+        board.draw_many(vec![crate::DrawCell { x: 0, y: 0, color: 2 }], u32::MAX);
         assert_eq!(board.get_cells_owned(accounts(0)), 0);
         context(0, 100);
         assert_eq!(board.get_pending_toilet(accounts(0)), U128(110));
@@ -276,12 +276,12 @@ mod tests {
     #[test]
     fn accrual_clamps_at_the_cap_and_stops() {
         let mut board = setup(MAX_RATE);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(1, 10);
-        board.draw(1, 0, 2);
+        board.draw(1, 0, 2, u32::MAX);
         let earlier = board.get_pending_toilet(accounts(0)).0;
         context(1, 10_000_000);
-        board.draw(1, 0, 3);
+        board.draw(1, 0, 3, u32::MAX);
         assert_eq!(board.get_toilet_emission().accrued_total, U128(CAP));
         let pending = board.get_pending_toilet(accounts(0)).0;
         assert!(pending >= earlier);
@@ -300,9 +300,9 @@ mod tests {
     #[test]
     fn accrual_reaches_the_cap_without_overflow() {
         let mut board = setup(100_000_000_000_000_000_000);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(0, 10_000_000);
-        board.draw(0, 0, 2);
+        board.draw(0, 0, 2, u32::MAX);
         assert_eq!(board.accrued_total, CAP);
         assert_eq!(board.acc_per_cell, CAP * SCALE);
         assert_eq!(board.get_pending_toilet(accounts(0)), U128(CAP));
@@ -311,7 +311,7 @@ mod tests {
         // A fresh holder gaining many cells after cap exhaustion must also fit.
         context(1, 10_000_000);
         board.draw_many(
-            (0..64).map(|x| crate::DrawCell { x, y: 0, color: 1 }).collect(),
+            (0..64).map(|x| crate::DrawCell { x, y: 0, color: 1 }).collect(), u32::MAX,
         );
         assert_eq!(board.get_pending_toilet(accounts(1)), U128(0));
         assert_eq!(board.get_cells_owned(accounts(1)), 64);
@@ -321,7 +321,7 @@ mod tests {
     fn claim_mints_exactly_the_pending_and_zeroes_it() {
         use near_sdk::test_utils::{get_created_receipts, get_logs};
         let mut board = setup(7);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(0, 10);
         assert_eq!(board.get_pending_toilet(accounts(0)), U128(70));
         assert_eq!(board.accrued_total, 0); // a view never reserves
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn claim_twice_mints_nothing_the_second_time() {
         let mut board = setup(7);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(0, 10);
         drop(board.claim_toilet(accounts(5)));
         context(0, 10);
@@ -387,19 +387,19 @@ mod tests {
         board.draw_many(vec![
             crate::DrawCell { x: 0, y: 0, color: 1 },
             crate::DrawCell { x: 1, y: 0, color: 1 },
-        ]);
+        ], u32::MAX);
         context(1, 10);
         board.draw_many(vec![
             crate::DrawCell { x: 0, y: 0, color: 2 },
             crate::DrawCell { x: 0, y: 0, color: 3 },
             crate::DrawCell { x: 2, y: 0, color: 2 },
-        ]);
+        ], u32::MAX);
         assert_eq!(board.total_cells, 3);
         assert_eq!(board.get_cells_owned(accounts(0)), 1);
         assert_eq!(board.get_cells_owned(accounts(1)), 2);
         assert_eq!(board.get_pending_toilet(accounts(0)), U128(120));
         context(2, 20);
-        board.draw(1, 0, 4);
+        board.draw(1, 0, 4, u32::MAX);
         assert_eq!(board.get_cells_owned(accounts(0)), 0);
         assert_eq!(board.get_cells_owned(accounts(1)), 2);
         assert_eq!(board.get_cells_owned(accounts(2)), 1);
@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(board.get_pending_toilet(accounts(1)), U128(120));
         context(1, 30);
         // Same-artist repaint does not move ownership or reset debt.
-        board.draw(0, 0, 5);
+        board.draw(0, 0, 5, u32::MAX);
         assert_eq!(board.get_pending_toilet(accounts(0)), U128(180));
         assert_eq!(board.get_pending_toilet(accounts(1)), U128(240));
         assert_eq!(board.get_pending_toilet(accounts(2)), U128(60));
@@ -424,7 +424,7 @@ mod tests {
     fn rate_changes_settle_the_old_rate_and_empty_time_earns_nothing() {
         let mut board = setup(7);
         context(0, 10);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         assert_eq!(board.get_pending_toilet(accounts(0)), U128(0));
         context(0, 20);
         let mut tunables = board.get_tunables();
@@ -459,7 +459,7 @@ mod tests {
     #[test]
     fn claim_requires_exactly_one_yocto() {
         let mut board = setup(7);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         for deposit in [0, 2] {
             let ctx = VMContextBuilder::new()
                 .predecessor_account_id(accounts(0))
@@ -477,7 +477,7 @@ mod tests {
     #[test]
     fn a_failed_mint_restores_the_claim_and_a_successful_one_does_not() {
         let mut board = setup(7);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(0, 10);
         drop(board.claim_toilet(accounts(5)));
         assert_eq!(board.get_pending_toilet(accounts(0)), U128(0));

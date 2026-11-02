@@ -513,6 +513,8 @@ mod tests {
         board.payments.near_price = 10;
         // mPOO sales are closed at deploy (cap 0); open them for the purchase tests.
         board.tunables.mpoo_daily_credit_cap = 1_000_000;
+        // Paid-path tests: F1 free first paints are covered in `free_paint.rs`.
+        board.tunables.free_first_paints_per_account = 0;
         context(1, 1, REGISTRATION);
         board.register_credit_account();
         board
@@ -553,7 +555,7 @@ mod tests {
         context(1, 1, 30);
         assert_eq!(board.buy_credits_near(U128(3), U128(10)), U128(3));
         context(1, 1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         board.draw_many(vec![
             crate::DrawCell {
                 x: 1,
@@ -565,7 +567,7 @@ mod tests {
                 y: 0,
                 color: 1,
             },
-        ]);
+        ], u32::MAX);
         assert_eq!(board.get_credits(accounts(1)), Some(U128(0)));
     }
     #[test]
@@ -656,7 +658,7 @@ mod tests {
     fn free_draw_rejected() {
         let mut board = setup();
         context(1, 1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
     }
     #[test]
     #[should_panic(expected = "OwnerOnly")]
@@ -703,7 +705,7 @@ mod tests {
                     y: 0,
                     color: 1,
                 },
-            ]);
+            ], u32::MAX);
         }));
         assert!(result.is_err());
         assert_eq!(board.get_credits(accounts(1)), Some(U128(1)));
@@ -772,9 +774,9 @@ mod tests {
         board.buy_credits_near(U128(3), U128(10));
         assert_eq!(board.get_outstanding_credits(), U128(3));
         context(1, 1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         assert_eq!(board.get_outstanding_credits(), U128(2));
-        board.draw(1, 0, 1);
+        board.draw(1, 0, 1, u32::MAX);
         assert_eq!(board.get_outstanding_credits(), U128(1));
     }
 
@@ -795,7 +797,7 @@ mod tests {
         assert_eq!(board.get_credits(accounts(1)), Some(U128(2)));
         // Painting consumes the float, so room exists again.
         context(1, 1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         context(1, 1, 10);
         assert_eq!(board.buy_credits_near(U128(1), U128(10)), U128(1));
         assert_eq!(board.get_outstanding_credits(), U128(2));

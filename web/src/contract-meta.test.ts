@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChainBoardView } from "./contract";
 import { contractMetaBlockCopy, validateContractMetadata } from "./contract-meta";
+import { PALETTE } from "@shared/palette.ts";
 
 function validFreeBoard(): ChainBoardView {
   return {
@@ -10,16 +11,7 @@ function validFreeBoard(): ChainBoardView {
     origin: "top-left",
     overwrite_rule: "open_wall",
     sponsorship_enabled: false,
-    palette: [
-      { index: 0, name: "Ink", hex: "#1c1917" },
-      { index: 1, name: "Paper", hex: "#f4efe4" },
-      { index: 2, name: "Brick", hex: "#b23a2f" },
-      { index: 3, name: "Marigold", hex: "#e0a100" },
-      { index: 4, name: "Moss", hex: "#3d7a4a" },
-      { index: 5, name: "River", hex: "#2f6f8f" },
-      { index: 6, name: "Grape", hex: "#6b4c7a" },
-      { index: 7, name: "Clay", hex: "#c47b5a" },
-    ],
+    palette: PALETTE.map((color) => ({ ...color })),
   };
 }
 
@@ -76,6 +68,39 @@ describe("validateContractMetadata", () => {
     if (!result.ok) {
       expect(result.title).toMatch(/schema/i);
     }
+  });
+
+  it("accepts today's 8-colour boards (a prefix of the shared palette)", () => {
+    const board = validFreeBoard();
+    board.palette = PALETTE.slice(0, 8).map((color) => ({ ...color }));
+    for (const view of [board, { ...board, schema_version: 4 }]) {
+      const result = validateContractMetadata(view);
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.paletteLength).toBe(8);
+    }
+  });
+
+  it("accepts the 16-colour paid board", () => {
+    const result = validateContractMetadata(validPaidBoard());
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.paletteLength).toBe(16);
+  });
+
+  it("rejects a 12-colour palette with the palette size reason", () => {
+    const board = validFreeBoard();
+    board.palette = PALETTE.slice(0, 12).map((color) => ({ ...color }));
+    const result = validateContractMetadata(board);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.title).toBe("Incompatible palette size");
+  });
+
+  it("rejects an 8-colour palette with a wrong hex", () => {
+    const board = validFreeBoard();
+    board.palette = PALETTE.slice(0, 8).map((color) => ({ ...color }));
+    board.palette[5] = { ...board.palette[5], hex: "#000000" };
+    const result = validateContractMetadata(board);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.title).toBe("Incompatible palette entry");
   });
 
   it("rejects palette hex drift so stored colors are not reinterpreted", () => {

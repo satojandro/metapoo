@@ -23,8 +23,25 @@ export const PAID_BOARD_SCHEMA_VERSION = 4;
 /** Retired pressure prototype. Named only so the rejection can say what it was. */
 export const RETIRED_PRESSURE_SCHEMA_VERSION = 3;
 
+/**
+ * Palette sizes a deployed board may report. Today's boards (board3, the free board)
+ * have the original 8; the paid-board revision has 16 (spec §P1). Either must be the
+ * first N entries of the shared `PALETTE`, same names and hex, in order.
+ */
+export const ACCEPTED_PALETTE_LENGTHS: readonly number[] = [8, 16];
+
+/** The swatches a board with `paletteLength` colours accepts: the shared palette's prefix. */
+export function boardPalette(paletteLength: number) {
+  return PALETTE.slice(0, paletteLength);
+}
+
 export type ContractMetaStatus =
-  | { ok: true; summary: string }
+  | {
+      ok: true;
+      summary: string;
+      /** Colours this board accepts (8 or 16); swatches past it would be rejected on chain. */
+      paletteLength: number;
+    }
   | { ok: false; title: string; message: string };
 
 export function validateContractMetadata(view: ChainBoardView): ContractMetaStatus {
@@ -63,14 +80,17 @@ export function validateContractMetadata(view: ChainBoardView): ContractMetaStat
       message: `This page expects origin “${board.origin}”, but the contract reported “${view.origin}”. Drawing stays disabled.`,
     };
   }
-  if (!Array.isArray(view.palette) || view.palette.length !== PALETTE.length) {
+  if (
+    !Array.isArray(view.palette) ||
+    !ACCEPTED_PALETTE_LENGTHS.includes(view.palette.length)
+  ) {
     return {
       ok: false,
       title: "Incompatible palette size",
-      message: `This page expects ${PALETTE.length} colors, but the contract reported ${view.palette?.length ?? 0}. Drawing stays disabled.`,
+      message: `This page expects ${ACCEPTED_PALETTE_LENGTHS.join(" or ")} colors, but the contract reported ${view.palette?.length ?? 0}. Drawing stays disabled.`,
     };
   }
-  for (const swatch of PALETTE) {
+  for (const swatch of boardPalette(view.palette.length)) {
     const remote = view.palette.find((item) => item.index === swatch.index);
     if (!remote) {
       return {
@@ -93,6 +113,7 @@ export function validateContractMetadata(view: ChainBoardView): ContractMetaStat
   return {
     ok: true,
     summary: `Contract metadata matches (${modeLabel}): schema ${schema}, ${view.width}×${view.height}, ${view.overwrite_rule}, ${view.palette.length} colors.`,
+    paletteLength: view.palette.length,
   };
 }
 
