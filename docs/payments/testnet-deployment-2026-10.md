@@ -160,3 +160,59 @@ being available. Losing it strands the token's mint authority.
   an absurd rate.
 - Mainnet cost matrix (PAY-COST), NEARLY/AMM tax behaviour, and the "real" mPOO token;
   `metapoo-mpoo.testnet` is a stand-in with zero tax and a mint we control.
+
+## State migration rehearsal — board3 upgraded to state v2 (2 Nov)
+
+The first state-preserving upgrade on this board. **Result: migration succeeded, but the
+atomic `upgrade()` path did not run `migrate`, so it had to be called directly.**
+
+### Sequence
+
+1. Built the merged code (REV-A…REV-D) with `cargo near build non-reproducible-wasm`:
+   **392,563 bytes**, SHA-256 `8c2e47118b3fff1331dceafa23f10adbc3f10a6fbfcde31806f79366184e3cdf`,
+   bs58 `ASD1LebhotCZV9SQA3fGRmnaksja1aTM1cydza9CpGge`.
+2. Called `upgrade(code, migrate_args)` signed by board3 (owner = itself).
+   Tx `CxZKCAn8zwPTzo4wsgRJJhLhcSYAWENf71xZWZft3yUN`. **Code changed; state did not.**
+3. Called `migrate` directly as board3 → board3 (predecessor == current satisfies `#[private]`;
+   `#[init(ignore_state)]` skips deserializing v1). Tx `3U6BhLSHwiJeEDYKvfePpgtTDAhAxXpPtJ3X8Ffh7ogB`.
+
+### Before → after
+
+| | before | after |
+|---|---|---|
+| code hash | `Hn3vMSPMyX9gSdtwaYE9gYQyMPnA5CvaKtmqpXp9ec4w` | `ASD1LebhotCZV9SQA3fGRmnaksja1aTM1cydza9CpGge` |
+| balance | 5.085400588871426 NEAR | ~5.08 NEAR |
+| storage | 296,396 B | 395,221 B |
+| `state_version` | absent (v1) | **2** |
+| outstanding credits | 8 | **8** |
+| credits p1 / p2 / p3 | 2 / 0 / 0 | **2 / 0 / 0** |
+| withdrawable | 0 | 0 |
+
+Migration event on chain: `EVENT_JSON:{"standard":"mpoo_board","version":"1.0.0",
+"event":"state_migrated","data":[{"from":1,"to":2}]}`.
+
+New v2 fields populated from the migrate args: `get_revenue_state` reports
+`team_account = team.metapoo-player1.testnet`, `buyback_account = buyback.metapoo-player1.testnet`.
+`get_free_first_paints` → `{used: 0, remaining: 25, active: true}`. `get_mpoo_sales_today` →
+`{sold_today: "0", cap: "0"}` (mPOO sales closed at deploy, as designed).
+
+### Finding: the atomic upgrade leaves new code over old state
+
+`upgrade()` builds one promise with `deploy_contract(code).function_call_weight("migrate", …)`.
+On chain the transaction returned four successful receipts and burnt ~48.9 Tgas, but the
+`state_migrated` event never appeared and storage grew by exactly the code-size delta
+(98,626 B) with the state blob unchanged at 2,459 B. The board then answered every view with
+`GuestPanic: Cannot deserialize the contract state` — v2 code over v1 state.
+
+The deploy and the migrate call did not execute in the order the code assumes. Until that is
+diagnosed and fixed, **do not treat `upgrade()` as atomic.** Recovery required calling
+`migrate` as a separate self-transaction. Tracked as a GitHub issue; the atomic path must be
+proven on a scratch board before any mainnet use.
+
+### Open follow-ups from this rehearsal
+
+- `migrate` cannot be called externally (it is `#[private]`), so a failed atomic upgrade is
+  only recoverable by the owner signing a board3 → board3 call. Document this recovery path
+  next to `upgrade()`.
+- The 392 KB build is larger than the 288 KB build that produced clean rejection messages.
+  Rejection-code behaviour has not been re-checked against this binary.
