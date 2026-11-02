@@ -2,7 +2,7 @@ import { NearConnector } from "@hot-labs/near-connect";
 import { Account as NearAccount } from "@near-js/accounts";
 import { JsonRpcProvider } from "@near-js/providers";
 import { CONTRACT_ID, RPC_URL, WALLET_NETWORK } from "./config";
-import { stringifyChainJson } from "./app/admin-settings";
+import { stringifyChainJson } from "./chain-json";
 import {
   buildAddFunctionCallKeyParams,
   createDrawingSessionKeypair,

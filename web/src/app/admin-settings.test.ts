@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { decimalUnits, discountedMpooPrice, parseChainJson, stringifyChainJson, prepareTunableChange, validateTunables, priceChange, loadAdmin, type ChainRecord } from "./admin-settings";
+import { decimalUnits, discountedMpooPrice, prepareTunableChange, validateTunables, priceChange, loadAdmin, type ChainRecord } from "./admin-settings";
+import { parseChainJson, stringifyChainJson } from "../chain-json";
 
 import { tunables } from "./admin-test-fixture";
 const NOW = 1793000000000;
