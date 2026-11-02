@@ -24,7 +24,7 @@ describe("app shell", () => {
     const navHrefs = [...host.querySelectorAll<HTMLAnchorElement>(".app-nav a")].map((a) =>
       a.getAttribute("href"),
     );
-    expect(navHrefs).toEqual(["/wall", "/money"]);
+    expect(navHrefs).toEqual(["/wall", "/how-it-works", "/money"]);
     expect(host.querySelector('a[href="/admin"]')).toBeNull();
     shell.dispose();
   });

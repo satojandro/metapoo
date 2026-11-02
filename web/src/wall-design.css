@@ -121,8 +121,12 @@ summary { cursor: pointer; }
   .app-shell-top { grid-template-columns: 1fr auto; padding-top: 18px; }
   .brand h1 { font-size: 27px; }
   .brand .lede { font-size: 8px; letter-spacing: 1px; }
-  .app-nav { display: none; }
-  .shell-chrome { grid-column: 2; }
+  /* Phones get the nav as one compact row under the brand and wallet button. */
+  .app-nav { display: block; grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+  .app-nav-list { justify-content: flex-start; gap: 16px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+  .app-nav-list::-webkit-scrollbar { display: none; }
+  .app-nav-list a { padding: 4px 0; }
+  .shell-chrome { grid-column: 2; grid-row: 1; }
   .wallet-chrome { gap: 0; flex-direction: column; align-items: end; }
   #connect-button { font-size: var(--mp-text-xs); padding: 10px 12px; }
   .wallet-details > summary { max-width: 150px; padding: 8px 10px; font-size: var(--mp-text-xs); }
