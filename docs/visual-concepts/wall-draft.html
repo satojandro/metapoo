@@ -1,0 +1,714 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meta Poo Wall</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: the wall is the stage (largest square that fits), with a slim view bar above it and one
+   rail beside it (a bottom sheet on phone) that holds every message and action. Nothing sits on the wall.
+   Tokens are the app's dark wall scene, same as /money and the approved drafts. */
+:root {
+  --bg: #111214;
+  --card: #1b1c1f;
+  --card-2: #232427;
+  --line: #343537;
+  --fg: #f4f1e9;
+  --soft: #d8d4cc;
+  --muted: #a9aaad;
+  --tag: #f1dc5e;
+  --near: #73d7ee;
+  --stake: #65d5ae;
+  --burn: #ff9f8f;
+  --team: #c9c4ba;
+  --pending: #ff4fd8;
+  --focus: #56c9ec;
+  --font: Arial, Helvetica, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+p { margin: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+button { font: inherit; color: inherit; }
+button:focus-visible, a:focus-visible, canvas:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.draft-banner { width: 100%; margin: 10px auto 0; max-width: 1400px; font: 600 12px/1.5 var(--mono); color: #17171a; background: var(--tag); padding: 5px 10px; border-radius: 3px; }
+
+/* Header */
+.top { width: 100%; max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; padding-block: 12px; border-bottom: 1px solid var(--line); }
+.logo { font: 900 24px/1 var(--font); letter-spacing: -1px; color: var(--fg); text-decoration: none; }
+.logo small { display: block; font: 600 10px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+.nav { display: flex; gap: 20px; justify-content: center; }
+.nav a { color: var(--soft); text-decoration: none; font-size: 14px; padding: 8px 0; border-bottom: 2px solid transparent; }
+.nav a[aria-current="page"] { color: var(--tag); border-color: var(--tag); }
+.wallet-btn { min-height: 40px; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); cursor: pointer; font-weight: 700; font-size: 14px; }
+.wallet-btn[data-connected="false"] { background: var(--tag); color: #17171a; border-color: var(--tag); }
+.wallet-btn .acct { font: 700 13px var(--mono); }
+.wallet-btn .bal { color: var(--tag); font: 700 13px var(--mono); margin-left: 8px; }
+
+/* Main */
+.main { width: 100%; max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; padding-block: 16px 24px; align-items: start; }
+.stage { display: grid; gap: 10px; min-width: 0; justify-items: center; }
+.bar { width: min(100%, calc(100dvh - 250px)); min-width: 280px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 14px; color: var(--soft); min-height: 36px; }
+.seg button[aria-pressed="true"] { background: var(--tag); color: #17171a; }
+.seg.small button { font-size: 13px; padding: 6px 11px; font-weight: 600; }
+.seg.small button[aria-pressed="true"] { background: var(--card-2); color: var(--fg); box-shadow: inset 0 0 0 1px var(--muted); }
+.mode-seg button { min-width: 92px; }
+.zoom { display: inline-flex; gap: 4px; }
+.zoom button { width: 38px; height: 38px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); cursor: pointer; font-weight: 800; font-size: 16px; }
+.zoom button.fit { width: auto; padding: 0 10px; font-size: 13px; font-weight: 700; }
+.zoom button[aria-pressed="true"] { border-color: var(--tag); color: var(--tag); }
+.bar-right { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* The wall, framed by the stall */
+.frame { width: min(100%, calc(100dvh - 250px)); min-width: 280px; padding: 10px; border-radius: 10px;
+  background:
+    linear-gradient(#26272b, #26272b) padding-box,
+    repeating-linear-gradient(0deg, #3a3b3f 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(90deg, #3a3b3f 0 1px, transparent 1px 22px), #2d2e32;
+  border: 1px solid var(--line); box-shadow: 0 30px 60px -30px rgba(0,0,0,.8); }
+.wall { position: relative; aspect-ratio: 1; width: 100%; background: #18191b; border-radius: 3px; overflow: hidden; }
+.wall canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.wall[data-mode="look"] canvas { cursor: grab; }
+.wall[data-mode="look"] canvas.dragging { cursor: grabbing; }
+.wall-foot { width: min(100%, calc(100dvh - 250px)); min-width: 280px; display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; align-items: center; font: 600 12px/1.4 var(--mono); color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 5px; vertical-align: -2px; }
+.hover-line { color: var(--soft); min-height: 1.4em; }
+
+/* Rail / sheet */
+.rail { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.panel h2 { font-size: 17px; font-weight: 800; }
+.panel p { color: var(--soft); font-size: 14px; }
+.eyebrow { font: 600 11px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.invite { border-top: 3px solid var(--tag); }
+.invite h2 { font-size: 22px; font-weight: 900; letter-spacing: -.5px; line-height: 1.1; }
+.invite h2 em { font-style: normal; color: var(--tag); }
+.stats { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stats div { display: grid; gap: 2px; }
+.stats dt { font-size: 12px; color: var(--muted); }
+.stats dd { margin: 0; font: 800 18px var(--mono); font-variant-numeric: tabular-nums; }
+
+.inspect-head { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: center; }
+.chip-swatch { width: 44px; height: 44px; border-radius: 6px; border: 1px solid var(--line); }
+.chip-swatch.blank { background: repeating-linear-gradient(45deg, #1d1e21 0 4px, #26272a 4px 8px); }
+.inspect-head h3 { font-size: 16px; font-weight: 800; }
+.inspect-head p { font: 600 12px var(--mono); color: var(--muted); }
+.rows { margin: 0; display: grid; border-top: 1px solid var(--line); }
+.rows div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--soft); }
+.rows dd { margin: 0; font: 700 13px var(--mono); color: var(--fg); text-align: right; overflow-wrap: anywhere; }
+.pill { display: inline-block; font: 700 11px/1 var(--mono); padding: 4px 7px; border-radius: 3px; color: #17171a; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { flex: 1 1 auto; min-height: 44px; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card-2); cursor: pointer; font-weight: 700; font-size: 14px; }
+.btn.primary { background: var(--tag); color: #17171a; border-color: var(--tag); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.link { background: none; border: 0; color: var(--near); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 0; font-size: 13px; }
+
+/* Dock */
+.dock { border-top: 3px solid var(--tag); }
+.palette { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.sw { aspect-ratio: 1; min-height: 32px; border-radius: 5px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.sw[aria-pressed="true"] { border-color: var(--fg); box-shadow: inset 0 0 0 2px var(--bg); }
+.pick { display: flex; justify-content: space-between; font: 600 12px var(--mono); color: var(--muted); }
+.pick b { color: var(--fg); }
+.cost { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: end; padding-top: 4px; border-top: 1px solid var(--line); }
+.cost .big { font: 900 30px/1 var(--font); letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.cost .big small { font: 700 13px var(--font); color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+.cost .side { text-align: right; font: 600 12px/1.5 var(--mono); color: var(--muted); }
+.cost .side b { color: var(--fg); }
+.cost .break { grid-column: 1 / -1; font: 600 12px var(--mono); color: var(--soft); }
+.status { min-height: 2.9em; font-size: 13px; color: var(--soft); padding: 8px 10px; border-radius: 6px; background: var(--card-2); border-left: 3px solid var(--line); }
+.status[data-tone="good"] { border-left-color: var(--stake); }
+.status[data-tone="warn"] { border-left-color: var(--tag); }
+.status[data-tone="bad"] { border-left-color: var(--burn); }
+.status[data-tone="pending"] { border-left-color: var(--pending); }
+.hint { font-size: 12px; color: var(--muted); }
+
+.draft-ctl { border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; }
+.draft-ctl .eyebrow { color: var(--tag); }
+.draft-ctl .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.draft-ctl label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--soft); min-height: 32px; cursor: pointer; }
+.draft-ctl input { accent-color: var(--tag); width: 16px; height: 16px; }
+
+[hidden] { display: none !important; }
+
+@media (max-width: 900px) {
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .frame, .wall-foot, .bar { width: 100%; min-width: 0; }
+  .nav { display: none; }
+  .top { grid-template-columns: 1fr auto; }
+}
+@media (max-width: 900px) and (min-height: 640px) {
+  /* Phone composition: wall on top at full width, the dock is a sheet that fills what's left. */
+  body { overflow: hidden; }
+  .app { height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+  .main { min-height: 0; grid-template-rows: auto minmax(0, 1fr); padding-block: 8px 0; gap: 8px; align-items: stretch; }
+  .stage { gap: 6px; }
+  .frame { padding: 5px; border-radius: 8px; }
+  .wall-foot { font-size: 11px; }
+  .rail { min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); padding: 12px max(16px, env(safe-area-inset-left, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)); background: #151618; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; }
+  .rail::before { content: ""; width: 40px; height: 4px; border-radius: 4px; background: var(--line); justify-self: center; }
+  .draft-banner { margin-top: 6px; font-size: 11px; }
+}
+@media (max-width: 560px) {
+  .logo small { display: none; }
+  .bar { gap: 6px; }
+  .mode-seg button { min-width: 0; padding: 7px 12px; }
+  .seg.small button { padding: 6px 8px; }
+  .zoom button { width: 36px; height: 36px; }
+  .zoom #zoom-in, .zoom #zoom-out { display: none; }
+  .bar { flex-wrap: nowrap; }
+  .seg button, .seg.small button { padding: 6px 9px; font-size: 13px; min-height: 34px; }
+  .hover-line { display: none; }
+  .wallet-btn { padding: 8px 10px; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="app">
+  <p class="draft-banner">Design draft for the Wall page. Sample data throughout: nothing here is the live wall.</p>
+  <header class="top">
+    <a class="logo" href="#">meta poo.<small>The only public stall on the internet</small></a>
+    <nav class="nav" aria-label="Main">
+      <a href="#" aria-current="page">Wall</a>
+      <a href="#">How it works</a>
+      <a href="#">Where the money goes</a>
+    </nav>
+    <button class="wallet-btn" id="wallet-btn" type="button" data-connected="false">Connect wallet</button>
+  </header>
+
+  <main class="main">
+    <section class="stage" aria-label="The wall">
+      <div class="bar">
+        <div class="seg mode-seg" role="group" aria-label="Mode">
+          <button type="button" data-mode="look" aria-pressed="true">Look</button>
+          <button type="button" data-mode="paint" aria-pressed="false">Paint</button>
+        </div>
+        <div class="bar-right">
+          <div class="seg small" role="group" aria-label="Wall view">
+            <button type="button" data-view="art" aria-pressed="true">Art</button>
+            <button type="button" data-view="price" aria-pressed="false">Price</button>
+            <button type="button" data-view="age" aria-pressed="false">Age</button>
+          </div>
+          <div class="zoom" role="group" aria-label="Zoom">
+            <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+            <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+            <button type="button" id="zoom-fit" class="fit">Fit</button>
+          </div>
+        </div>
+      </div>
+      <div class="frame">
+        <div class="wall" id="wall" data-mode="look">
+          <canvas id="wall-canvas" tabindex="0" aria-label="The wall, 128 by 128 tiles. Arrow keys move, Enter selects."></canvas>
+        </div>
+      </div>
+      <div class="wall-foot">
+        <span id="foot-left">Sample wall · 128 × 128</span>
+        <span class="legend" id="legend"></span>
+        <span class="hover-line" id="hover-line"></span>
+      </div>
+    </section>
+
+    <aside class="rail" id="rail" aria-label="Wall tools">
+      <!-- Look mode -->
+      <section class="panel invite" id="invite" aria-labelledby="invite-h">
+        <p class="eyebrow" id="invite-eyebrow">The wall</p>
+        <h2 id="invite-h">Leave your mark. <em>Cover someone else’s.</em></h2>
+        <dl class="stats">
+          <div><dt>Painted</dt><dd id="st-painted" class="num">0</dd></div>
+          <div><dt>Never painted</dt><dd id="st-blank" class="num">0</dd></div>
+          <div><dt>Wet now</dt><dd id="st-wet" class="num">0</dd></div>
+        </dl>
+        <p id="invite-copy"></p>
+        <div class="btns"><button class="btn primary" type="button" id="start-paint">Start painting</button></div>
+      </section>
+
+      <section class="panel" id="inspector" aria-labelledby="insp-h" aria-live="polite">
+        <p class="eyebrow">Tile</p>
+        <div id="insp-empty"><p>Tap any tile to see who painted it, how long ago, and what it costs to cover.</p></div>
+        <div id="insp-body" hidden>
+          <div class="inspect-head">
+            <span class="chip-swatch" id="insp-swatch"></span>
+            <div><h3 id="insp-h">Tile</h3><p id="insp-pos"></p></div>
+          </div>
+          <dl class="rows">
+            <div><dt>Painted by</dt><dd id="insp-who"></dd></div>
+            <div><dt>When</dt><dd id="insp-when"></dd></div>
+            <div><dt>Cover it now</dt><dd id="insp-cost"></dd></div>
+            <div><dt>Earning TOILET</dt><dd id="insp-earn"></dd></div>
+          </dl>
+          <div class="btns">
+            <button class="btn primary" type="button" id="paint-over">Paint over this</button>
+            <button class="btn" type="button" id="share">Copy link</button>
+          </div>
+          <p class="hint" id="share-note"></p>
+        </div>
+      </section>
+
+      <!-- Paint mode: the dock -->
+      <section class="panel dock" id="dock" aria-labelledby="dock-h" hidden>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+          <h2 id="dock-h">Your stroke</h2>
+          <button class="link" type="button" id="clear">Clear</button>
+        </div>
+        <div class="palette" id="palette" role="group" aria-label="Colour"></div>
+        <p class="pick"><span>Colour <b id="pick-name"></b></span><span id="pick-idx"></span></p>
+        <div class="cost">
+          <p class="big"><span id="cost-credits" class="num">0</span><small>credits</small></p>
+          <p class="side"><b id="cost-tiles" class="num">0 / 64</b> tiles<br>≈ <span id="cost-near" class="num">0 NEAR</span></p>
+          <p class="break" id="cost-break">Drag across the wall to pick tiles.</p>
+        </div>
+        <dl class="rows">
+          <div><dt>Your credits</dt><dd id="d-credits">—</dd></div>
+          <div><dt>Free first paints left</dt><dd id="d-free">—</dd></div>
+        </dl>
+        <p class="status" id="status" role="status" data-tone="">Connect a wallet to paint. Looking is free.</p>
+        <div class="btns"><button class="btn primary" type="button" id="action">Connect wallet</button></div>
+        <p class="hint">Drag to pick tiles, up to 64 per stroke. Two fingers, or hold Space, to move the wall.</p>
+      </section>
+
+      <section class="draft-ctl" aria-label="Draft controls">
+        <p class="eyebrow">Draft controls · not part of the page</p>
+        <div class="row" role="group" aria-label="Sample wall">Sample wall
+          <span class="seg small"><button type="button" data-sample="art" aria-pressed="true">Some art</button><button type="button" data-sample="empty" aria-pressed="false">Nearly empty</button></span>
+        </div>
+        <div class="row" role="group" aria-label="Account">Account
+          <span class="seg small"><button type="button" data-acct="none" aria-pressed="true">Not connected</button><button type="button" data-acct="broke" aria-pressed="false">No credits</button><button type="button" data-acct="rich" aria-pressed="false">40 credits</button></span>
+        </div>
+        <label for="fail-next"><input type="checkbox" id="fail-next"> Next paint fails (price changed)</label>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<script>
+(() => {
+  const PALETTE = [
+    ["Ink","#1c1917"],["Paper","#f4efe4"],["Brick","#b23a2f"],["Marigold","#e0a100"],
+    ["Moss","#3d7a4a"],["River","#2f6f8f"],["Grape","#6b4c7a"],["Clay","#c47b5a"],
+    ["Grout","#8a857c"],["Rust","#7a4528"],["Nicotine","#ecd9a0"],["Bubblegum","#ec8fb0"],
+    ["Bleach","#9ccbdc"],["Bruise","#263552"],["Bile","#9fb53a"],["Cone","#ef7a2c"],
+  ];
+  const C = Object.fromEntries(PALETTE.map(([n], i) => [n, i]));
+  const RGB = PALETTE.map(([, h]) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+  const N = 128, MAX_STROKE = 64, NEAR_PER_CREDIT = 0.0025, FREE_FIRST = 25;
+  const MIN = 60e3;
+  const $ = id => document.getElementById(id);
+
+  /* ---------------- Sample data ---------------- */
+  const color = new Int8Array(N * N).fill(-1);
+  const paintedAt = new Float64Array(N * N);
+  const artist = new Array(N * N).fill(null);
+  const free = new Uint8Array(N * N);
+  const pending = new Set();
+
+  const FONT = {
+    A:[".#.","#.#","###","#.#","#.#"], E:["###","#..","##.","#..","###"], G:["###","#..","#.#","#.#","###"],
+    H:["#.#","#.#","###","#.#","#.#"], M:["#...#","##.##","#.#.#","#...#","#...#"], O:["###","#.#","#.#","#.#","###"],
+    P:["###","#.#","###","#..","#.."], R:["##.","#.#","##.","#.#","#.#"], S:["###","#..","###","..#","###"],
+    T:["###",".#.",".#.",".#.",".#."], W:["#...#","#...#","#.#.#","##.##","#...#"], Y:["#.#","#.#",".#.",".#.",".#."], U:["#.#","#.#","#.#","#.#","###"],
+    N:["#..#","##.#","#.##","#..#","#..#"], D:["##.","#.#","#.#","#.#","##."], " ":["..","..","..","..",".."],
+  };
+  function text(str, x0, y0, c, s = 1) {
+    const px = []; let x = x0;
+    for (const ch of str) { const g = FONT[ch]; if (!g) continue;
+      for (let r = 0; r < 5; r++) for (let k = 0; k < g[r].length; k++) if (g[r][k] === "#")
+        for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) px.push([x + k * s + b, y0 + r * s + a, c]);
+      x += (g[0].length + 1) * s; }
+    return px;
+  }
+  function sprite(rows, map, x0, y0, s = 1) {
+    const px = [];
+    rows.forEach((row, r) => [...row].forEach((ch, k) => { if (map[ch] === undefined) return;
+      for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) px.push([x0 + k * s + b, y0 + r * s + a, map[ch]]); }));
+    return px;
+  }
+  const POO = [".......RR.......","......RCCR......",".....RCCCR......","....RRCCCCRR....","...RCCCCCCCCR...","...RCWKCCWKCR...","..RRCCCCCCCCRR..",".RCCCKCCCCKCCCR.",".RCCCCKKKKCCCCR.","RRRRRRRRRRRRRRRR"];
+  const HEART = [".BBB...BBB.","BBPBB.BBBBB","BPPBBBBBBBB","BBBBBBBBBBB",".BBBBBBBBB.","..BBBBBBB..","...BBBBB...","....BBB....",".....B....."];
+  function sunset(x0, y0, w, h) {
+    const px = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const hill = h * .72 + Math.sin(x / 4) * 2.2 + Math.sin(x / 9 + 1) * 1.6;
+      const dx = x - w * .62, dy = y - h * .62;
+      let c = y < h * .3 ? C.Bruise : y < h * .5 ? C.Grape : y < h * .62 ? C.Cone : C.Marigold;
+      if (dx * dx + dy * dy < (w * .2) ** 2) c = C.Nicotine;
+      if (y > hill) c = y > hill + 4 ? C.Moss : C.Bile;
+      px.push([x0 + x, y0 + y, c]);
+    }
+    return px;
+  }
+  function scribble(x0, y0, w, h, c, seed) {
+    let s = seed; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const px = []; let x = x0, y = y0 + h / 2, dir = 1;
+    for (let i = 0; i < 260; i++) {
+      x += dir * (1 + r() * 1.4); y += (r() - .5) * 4;
+      if (x > x0 + w || x < x0) { dir = -dir; y += 2 + r() * 3; }
+      y = Math.max(y0, Math.min(y0 + h, y));
+      px.push([Math.round(x), Math.round(y), c]);
+    }
+    return px;
+  }
+  function put(list, minsAgo, who, isFree = false) {
+    const t = Date.now() - minsAgo * MIN;
+    for (const [x, y, c] of list) if (x >= 0 && y >= 0 && x < N && y < N) {
+      const i = y * N + x; color[i] = c; paintedAt[i] = t; artist[i] = who; free[i] = isFree ? 1 : 0;
+    }
+  }
+  function seed(kind) {
+    color.fill(-1); artist.fill(null); free.fill(0); pending.clear();
+    if (kind === "art") {
+      put(sunset(8, 84, 34, 32), 600, "early-bird.sample", true);
+      put(text("GM", 10, 10, C.Marigold, 4), 240, "gm-crew.sample");
+      put(sprite(POO, { R: C.Rust, C: C.Clay, W: C.Paper, K: C.Ink }, 44, 40, 3), 90, "stall-legend.sample");
+      put(sprite(HEART, { B: C.Brick, P: C.Bubblegum }, 98, 12, 2), 25, "heart-thief.sample");
+      put(text("META POO WAS HERE", 46, 76, C.Paper), 45, "anon-42.sample");
+      put(scribble(40, 38, 54, 32, C.Bile, 11), 4, "vandal.sample");
+      put(text("WASH YOUR HANDS", 50, 118, C.Bleach), 700, "janitor.sample", true);
+    } else {
+      put([[63, 63, C.Bubblegum], [64, 63, C.Bubblegum], [64, 64, C.Bubblegum]], 3, "first-one.sample", true);
+      put([[20, 30, C.Marigold], [21, 30, C.Marigold], [22, 30, C.Marigold], [22, 31, C.Marigold]], 50, "early-bird.sample", true);
+      put([[100, 90, C.River], [101, 91, C.River], [102, 92, C.River], [103, 93, C.River], [104, 94, C.River], [105, 95, C.River]], 300, "gm-crew.sample", true);
+    }
+  }
+
+  /* ---------------- State ---------------- */
+  const state = {
+    mode: "look", view: "art", sample: "art",
+    acct: "none", credits: 0, freeLeft: FREE_FIRST, me: "you.sample",
+    pick: C.Bubblegum, sel: new Set(), inspect: -1, cursor: 64 * N + 64,
+    busy: false, failNext: false,
+  };
+  const age = i => (Date.now() - paintedAt[i]) / MIN;
+  const tier = i => { if (color[i] < 0) return 1; const a = age(i); return a < 10 ? 4 : a < 60 ? 2 : 1; };
+  const isFreeFor = i => color[i] < 0 && state.acct !== "none";
+  function strokeCost() {
+    let freeLeft = state.acct === "none" ? 0 : state.freeLeft, credits = 0, freeUsed = 0;
+    const tiers = { 1: 0, 2: 0, 4: 0 };
+    for (const i of state.sel) {
+      if (color[i] < 0 && freeLeft > 0) { freeLeft--; freeUsed++; continue; }
+      const t = tier(i); credits += t; tiers[t]++;
+    }
+    return { credits, freeUsed, tiers };
+  }
+
+  /* ---------------- Canvas ---------------- */
+  const wallEl = $("wall"), cv = $("wall-canvas"), ctx = cv.getContext("2d");
+  const base = document.createElement("canvas"); base.width = N; base.height = N;
+  const bctx = base.getContext("2d"), img = bctx.createImageData(N, N);
+  const cam = { s: 1, x: 0, y: 0, fit: true };
+  let W = 0, dpr = 1, dirtyBase = true, raf = 0;
+
+  const AGE_STOPS = [[0, [255, 159, 143]], [10, [241, 220, 94]], [60, [201, 196, 186]], [24 * 60, [74, 75, 79]]];
+  function ageRGB(a) {
+    for (let k = 1; k < AGE_STOPS.length; k++) {
+      const [t1, c1] = AGE_STOPS[k - 1], [t2, c2] = AGE_STOPS[k];
+      if (a <= t2) { const f = (a - t1) / (t2 - t1); return c1.map((v, j) => v + (c2[j] - v) * f); }
+    }
+    return AGE_STOPS[AGE_STOPS.length - 1][1];
+  }
+  const TIER_RGB = { 4: [255, 159, 143], 2: [241, 220, 94], 1: [101, 213, 174] };
+  function buildBase() {
+    const d = img.data;
+    for (let i = 0; i < N * N; i++) {
+      let r, g, b;
+      const x = i % N, y = (i / N) | 0;
+      const emptyShade = ((x >> 3) + (y >> 3)) % 2 ? 27 : 31;
+      if (color[i] < 0) {
+        if (state.view === "price") { const c = state.acct !== "none" && state.freeLeft > 0 ? [115, 215, 238] : TIER_RGB[1]; [r, g, b] = c.map(v => v * .28 + emptyShade * .72); }
+        else { r = g = b = emptyShade; b += 3; }
+      } else if (state.view === "art") { [r, g, b] = RGB[color[i]]; }
+      else if (state.view === "price") { [r, g, b] = TIER_RGB[tier(i)]; }
+      else { [r, g, b] = ageRGB(age(i)); }
+      const o = i * 4; d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
+    }
+    bctx.putImageData(img, 0, 0); dirtyBase = false;
+  }
+  function fitCam() { cam.s = W / N; cam.x = 0; cam.y = 0; cam.fit = true; }
+  function clampCam() {
+    const span = N * cam.s, keep = Math.min(W * .5, span * .5);
+    cam.x = Math.min(W - keep, Math.max(keep - span, cam.x));
+    cam.y = Math.min(W - keep, Math.max(keep - span, cam.y));
+  }
+  function zoomAt(f, px, py) {
+    const ns = Math.max(W / N, Math.min(W / 4, cam.s * f));
+    const tx = (px - cam.x) / cam.s, ty = (py - cam.y) / cam.s;
+    cam.s = ns; cam.x = px - tx * ns; cam.y = py - ty * ns; cam.fit = Math.abs(ns - W / N) < 1e-6;
+    if (cam.fit) fitCam(); clampCam(); draw();
+  }
+  function resize() {
+    const r = wallEl.getBoundingClientRect(); const prev = W;
+    W = r.width; dpr = Math.min(3, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(W * dpr);
+    if (cam.fit || !prev) fitCam(); else { const f = W / prev; cam.s *= f; cam.x *= f; cam.y *= f; clampCam(); }
+    draw();
+  }
+  function draw() { if (!raf) raf = requestAnimationFrame(render); }
+  function render() {
+    raf = 0; if (dirtyBase) buildBase();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#18191b"; ctx.fillRect(0, 0, W, W);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(base, cam.x, cam.y, N * cam.s, N * cam.s);
+    const s = cam.s;
+    if (s >= 9) {
+      ctx.strokeStyle = "rgba(255,255,255,.06)"; ctx.lineWidth = 1; ctx.beginPath();
+      const x0 = Math.max(0, Math.floor(-cam.x / s)), x1 = Math.min(N, Math.ceil((W - cam.x) / s));
+      const y0 = Math.max(0, Math.floor(-cam.y / s)), y1 = Math.min(N, Math.ceil((W - cam.y) / s));
+      for (let x = x0; x <= x1; x++) { const X = Math.round(cam.x + x * s) + .5; ctx.moveTo(X, cam.y + y0 * s); ctx.lineTo(X, cam.y + y1 * s); }
+      for (let y = y0; y <= y1; y++) { const Y = Math.round(cam.y + y * s) + .5; ctx.moveTo(cam.x + x0 * s, Y); ctx.lineTo(cam.x + x1 * s, Y); }
+      ctx.stroke();
+    }
+    const tileRect = i => [cam.x + (i % N) * s, cam.y + ((i / N) | 0) * s];
+    for (const i of state.sel) {
+      const [X, Y] = tileRect(i);
+      ctx.fillStyle = PALETTE[state.pick][1]; const inset = s * .22; ctx.fillRect(X + inset, Y + inset, s - inset * 2, s - inset * 2);
+      ctx.strokeStyle = "#f1dc5e"; ctx.lineWidth = Math.max(1, Math.min(2, s / 6)); ctx.strokeRect(X + .5, Y + .5, s - 1, s - 1);
+    }
+    for (const i of pending) {
+      const [X, Y] = tileRect(i);
+      ctx.fillStyle = PALETTE[state.pick][1]; ctx.fillRect(X, Y, s, s);
+      ctx.fillStyle = "#ff4fd8"; const d = Math.max(2, s * .3); ctx.fillRect(X + s - d, Y, d, d);
+    }
+    if (state.inspect >= 0) {
+      const [X, Y] = tileRect(state.inspect); const pad = Math.max(2, s * .15);
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.strokeRect(X - pad, Y - pad, s + pad * 2, s + pad * 2);
+      ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.strokeRect(X - pad - 1.5, Y - pad - 1.5, s + pad * 2 + 3, s + pad * 2 + 3);
+    }
+    if (document.activeElement === cv && keyboardUsed) {
+      const [X, Y] = tileRect(state.cursor); ctx.strokeStyle = "#56c9ec"; ctx.lineWidth = 2; ctx.strokeRect(X + 1, Y + 1, s - 2, s - 2);
+    }
+  }
+
+  /* ---------------- Input ---------------- */
+  const pts = new Map(); let gesture = null, spaceHeld = false, keyboardUsed = false;
+  const tileAt = (px, py) => { const x = Math.floor((px - cam.x) / cam.s), y = Math.floor((py - cam.y) / cam.s); return x < 0 || y < 0 || x >= N || y >= N ? -1 : y * N + x; };
+  const local = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener("pointerdown", e => {
+    cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, local(e)); keyboardUsed = false;
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; gesture = { kind: "pinch", d: Math.hypot(a[0] - b[0], a[1] - b[1]), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; return; }
+    const [px, py] = local(e);
+    const panMode = state.mode === "look" || spaceHeld || e.button === 1 || e.button === 2;
+    gesture = { kind: panMode ? "pan" : "select", sx: px, sy: py, lx: px, ly: py, moved: false, add: true };
+    if (!panMode) { const i = tileAt(px, py); if (i >= 0) { gesture.add = !state.sel.has(i); toggleSel(i, gesture.add); } }
+  });
+  cv.addEventListener("pointermove", e => {
+    const [px, py] = local(e);
+    if (!pts.has(e.pointerId)) { hover(tileAt(px, py)); return; }
+    pts.set(e.pointerId, [px, py]);
+    if (!gesture) return;
+    if (gesture.kind === "pinch" && pts.size >= 2) {
+      const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      cam.x += mx - gesture.mx; cam.y += my - gesture.my; cam.fit = false;
+      zoomAt(d / gesture.d, mx, my); gesture.d = d; gesture.mx = mx; gesture.my = my; return;
+    }
+    if (Math.hypot(px - gesture.sx, py - gesture.sy) > 4) gesture.moved = true;
+    if (gesture.kind === "pan") {
+      if (gesture.moved) { cv.classList.add("dragging"); cam.x += px - gesture.lx; cam.y += py - gesture.ly; cam.fit = false; clampCam(); draw(); }
+      gesture.lx = px; gesture.ly = py;
+    } else if (gesture.kind === "select") {
+      const i = tileAt(px, py); if (i >= 0) toggleSel(i, gesture.add);
+    }
+    hover(tileAt(px, py));
+  });
+  function end(e) {
+    const p = pts.get(e.pointerId); pts.delete(e.pointerId); cv.classList.remove("dragging");
+    if (gesture && gesture.kind === "pan" && !gesture.moved && p && state.mode === "look") { const i = tileAt(p[0], p[1]); if (i >= 0) inspect(i); }
+    if (pts.size === 0) gesture = null; else if (gesture && gesture.kind === "pinch") gesture = null;
+  }
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  cv.addEventListener("pointerleave", () => { if (!pts.size) $("hover-line").textContent = ""; });
+  cv.addEventListener("contextmenu", e => e.preventDefault());
+  cv.addEventListener("wheel", e => { e.preventDefault(); const [px, py] = local(e); zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? .01 : .0015)), px, py); }, { passive: false });
+  addEventListener("keydown", e => { if (e.code === "Space" && document.activeElement === cv) { spaceHeld = true; e.preventDefault(); } });
+  addEventListener("keyup", e => { if (e.code === "Space") spaceHeld = false; });
+  cv.addEventListener("keydown", e => {
+    const mv = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -N, ArrowDown: N }[e.key];
+    if (mv !== undefined) {
+      e.preventDefault(); keyboardUsed = true;
+      const x = state.cursor % N, y = (state.cursor / N) | 0;
+      if ((mv === -1 && x === 0) || (mv === 1 && x === N - 1) || (mv === -N && y === 0) || (mv === N && y === N - 1)) return;
+      state.cursor += mv; hover(state.cursor); draw();
+    } else if (e.key === "Enter") {
+      e.preventDefault(); keyboardUsed = true;
+      if (state.mode === "look") inspect(state.cursor); else toggleSel(state.cursor, !state.sel.has(state.cursor));
+    } else if (e.key === "+" || e.key === "=") { zoomAt(1.4, W / 2, W / 2); }
+    else if (e.key === "-") { zoomAt(1 / 1.4, W / 2, W / 2); }
+  });
+  cv.addEventListener("focus", draw); cv.addEventListener("blur", draw);
+  $("zoom-in").onclick = () => zoomAt(1.6, W / 2, W / 2);
+  $("zoom-out").onclick = () => zoomAt(1 / 1.6, W / 2, W / 2);
+  $("zoom-fit").onclick = () => { fitCam(); draw(); };
+
+  /* ---------------- Behaviour ---------------- */
+  const fmtAge = a => a < 1 ? "just now" : a < 60 ? `${Math.round(a)} min ago` : a < 48 * 60 ? `${Math.round(a / 60)} h ago` : `${Math.round(a / 1440)} days ago`;
+  const wetness = i => { const a = age(i); return a < 10 ? ["wet", "var(--burn)"] : a < 60 ? ["drying", "var(--tag)"] : ["dry", "var(--stake)"]; };
+  function hover(i) {
+    if (i < 0) { $("hover-line").textContent = ""; return; }
+    const x = i % N, y = (i / N) | 0;
+    $("hover-line").textContent = color[i] < 0 ? `${x}, ${y} · never painted · 1 credit` : `${x}, ${y} · ${PALETTE[color[i]][0]} · ${tier(i)} credit${tier(i) > 1 ? "s" : ""} to cover`;
+  }
+  function inspect(i) {
+    state.inspect = i; draw();
+    const x = i % N, y = (i / N) | 0, blank = color[i] < 0;
+    $("insp-empty").hidden = true; $("insp-body").hidden = false; $("share-note").textContent = "";
+    const sw = $("insp-swatch"); sw.className = "chip-swatch" + (blank ? " blank" : ""); sw.style.background = blank ? "" : PALETTE[color[i]][1];
+    $("insp-h").textContent = blank ? "Never painted" : PALETTE[color[i]][0];
+    $("insp-pos").textContent = `Tile ${x}, ${y}`;
+    $("insp-who").textContent = blank ? "Nobody yet" : artist[i];
+    if (blank) { $("insp-when").textContent = "—"; }
+    else { const [w, c] = wetness(i); $("insp-when").innerHTML = `${fmtAge(age(i))} <span class="pill" style="background:${c}">${w}</span>`; }
+    $("insp-cost").textContent = blank ? `1 credit, or free with first paints` : `${tier(i)} credit${tier(i) > 1 ? "s" : ""}`;
+    $("insp-earn").textContent = blank ? "—" : free[i] ? "No · painted free" : "Yes";
+    $("paint-over").textContent = blank ? "Paint this tile" : "Paint over this";
+    try { history.replaceState(null, "", `#tile-${x}-${y}`); } catch {}
+  }
+  function toggleSel(i, add) {
+    if (state.busy) return;
+    if (add && !state.sel.has(i)) {
+      if (state.sel.size >= MAX_STROKE) { say("A stroke holds 64 tiles. Paint this one, then start the next.", "warn"); return; }
+      state.sel.add(i);
+    } else if (!add) state.sel.delete(i);
+    if (statusTone() !== "bad") say(null); renderDock(); draw();
+  }
+  let statusMsg = null, statusToneV = "";
+  const statusTone = () => statusToneV;
+  function say(msg, tone = "") { statusMsg = msg; statusToneV = tone; renderDock(); }
+
+  function setMode(m) {
+    state.mode = m; wallEl.dataset.mode = m;
+    document.querySelectorAll("[data-mode]").forEach(b => b.tagName === "BUTTON" && b.setAttribute("aria-pressed", String(b.dataset.mode === m)));
+    $("dock").hidden = m !== "paint"; $("invite").hidden = m === "paint"; $("inspector").hidden = m === "paint";
+    if (m === "look") { state.sel.clear(); say(null); }
+    renderDock(); draw();
+  }
+  function setView(v) {
+    state.view = v; dirtyBase = true;
+    document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === v)));
+    const L = {
+      art: "",
+      price: `<span><i style="background:var(--burn)"></i>4 wet</span><span><i style="background:var(--tag)"></i>2 drying</span><span><i style="background:var(--stake)"></i>1 dry</span><span><i style="background:#2c4a4c"></i>blank</span>`,
+      age: `<span><i style="background:var(--burn)"></i>now</span><span><i style="background:var(--tag)"></i>10 min</span><span><i style="background:var(--team)"></i>1 h</span><span><i style="background:#4a4b4f"></i>1 day+</span>`,
+    };
+    $("legend").innerHTML = L[v]; draw();
+  }
+  function setAcct(a) {
+    state.acct = a; state.credits = a === "rich" ? 40 : 0; state.freeLeft = a === "none" ? FREE_FIRST : state.freeLeft;
+    document.querySelectorAll("[data-acct]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.acct === a)));
+    const wb = $("wallet-btn");
+    if (a === "none") { wb.dataset.connected = "false"; wb.textContent = "Connect wallet"; }
+    else { wb.dataset.connected = "true"; wb.innerHTML = `<span class="acct">${state.me}</span><span class="bal">${state.credits} cr</span>`; }
+    dirtyBase = true; say(null); renderDock(); draw();
+  }
+  function setSample(k) {
+    state.sample = k; seed(k); state.sel.clear(); state.inspect = -1; dirtyBase = true;
+    $("insp-empty").hidden = false; $("insp-body").hidden = true;
+    document.querySelectorAll("[data-sample]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.sample === k)));
+    renderInvite(); renderDock(); draw();
+  }
+  function renderInvite() {
+    let painted = 0, wet = 0;
+    for (let i = 0; i < N * N; i++) if (color[i] >= 0) { painted++; if (age(i) < 10) wet++; }
+    const blank = N * N - painted;
+    $("st-painted").textContent = painted.toLocaleString(); $("st-blank").textContent = blank.toLocaleString(); $("st-wet").textContent = wet.toLocaleString();
+    const nearlyEmpty = painted < 200;
+    $("invite-eyebrow").textContent = nearlyEmpty ? "Wide open" : "The wall";
+    $("invite-h").innerHTML = nearlyEmpty ? `The wall is almost blank. <em>Get on it first.</em>` : `Leave your mark. <em>Cover someone else’s.</em>`;
+    $("invite-copy").textContent = nearlyEmpty
+      ? `Only ${painted} of 16,384 tiles have paint. Every account gets 25 tiles free until the wall fills up, and then free paint ends for good.`
+      : "Everything here was painted by someone. Tap a tile to see who. Fresh paint costs more to cover, so new work gets a moment on the wall.";
+    $("start-paint").textContent = nearlyEmpty ? "Paint your free tiles" : "Start painting";
+  }
+  function renderDock() {
+    const { credits, freeUsed, tiers } = strokeCost();
+    const n = state.sel.size;
+    $("cost-credits").textContent = credits;
+    $("cost-tiles").textContent = `${n} / ${MAX_STROKE}`;
+    $("cost-near").textContent = `${(Math.round(credits * NEAR_PER_CREDIT * 1e4) / 1e4).toLocaleString()} NEAR`;
+    const parts = [];
+    if (freeUsed) parts.push(`${freeUsed} free`);
+    if (tiers[1]) parts.push(`${tiers[1]} × 1`); if (tiers[2]) parts.push(`${tiers[2]} × 2 drying`); if (tiers[4]) parts.push(`${tiers[4]} × 4 wet`);
+    $("cost-break").textContent = n ? parts.join(" · ") : "Drag across the wall to pick tiles.";
+    $("d-credits").textContent = state.acct === "none" ? "—" : `${state.credits}`;
+    $("d-free").textContent = state.acct === "none" ? "25 when you join" : `${state.freeLeft} of 25`;
+    const act = $("action"); let label, tone = "", msg, disabled = false;
+    if (state.busy) { label = "Painting…"; disabled = true; msg = `Sent ${pending.size} tiles. Waiting for the network to confirm. The pink corner marks paint that isn’t confirmed yet.`; tone = "pending"; }
+    else if (state.acct === "none") { label = "Connect wallet"; msg = n ? `${n} tile${n > 1 ? "s" : ""} picked. Connect a wallet to paint them. Your first 25 blank tiles are free.` : "Connect a wallet to paint. Looking is free."; }
+    else if (!n) { label = "Pick tiles first"; disabled = true; msg = state.acct === "broke" && state.freeLeft === 0 ? "You’re out of credits. Buy some to keep painting." : "Drag across the wall to pick up to 64 tiles."; }
+    else if (credits > state.credits) { label = `Buy ${credits - state.credits} credits`; tone = "warn"; msg = `This stroke costs ${credits} credits and you have ${state.credits}.${freeUsed ? ` ${freeUsed} blank tiles are free.` : ""}`; }
+    else { label = `Paint ${n} tile${n > 1 ? "s" : ""}${credits ? ` · ${credits} credit${credits > 1 ? "s" : ""}` : " · free"}`; msg = credits ? `You’ll have ${state.credits - credits} credits left.` : `Free: ${freeUsed} of your first paints.`; tone = "good"; }
+    if (statusMsg !== null && !state.busy) { msg = statusMsg; tone = statusToneV; }
+    act.textContent = label; act.disabled = disabled;
+    const st = $("status"); st.textContent = msg; st.dataset.tone = tone;
+  }
+  function act() {
+    if (state.busy) return;
+    if (state.acct === "none") { setAcct("broke"); say("Connected as you.sample. You have no credits yet, but your first 25 blank tiles are free.", "good"); return; }
+    const { credits, freeUsed } = strokeCost();
+    if (!state.sel.size) return;
+    if (credits > state.credits) { setAcct("rich"); state.credits = Math.max(40, credits); setAcctLabel(); say(`Bought credits (sample). You have ${state.credits}.`, "good"); return; }
+    state.busy = true; for (const i of state.sel) pending.add(i); state.sel.clear(); renderDock(); draw();
+    const fail = state.failNext;
+    setTimeout(() => {
+      state.busy = false;
+      if (fail) {
+        for (const i of pending) state.sel.add(i); pending.clear();
+        $("fail-next").checked = false; state.failNext = false;
+        say("Not painted, and nothing was spent. Someone painted part of your stroke first, so its price went up. Check the new cost and try again.", "bad");
+      } else {
+        const now = Date.now(); let n = 0, freeBudget = freeUsed;
+        for (const i of pending) { const wasBlank = color[i] < 0; color[i] = state.pick; paintedAt[i] = now; artist[i] = state.me; free[i] = wasBlank && freeBudget > 0 ? (freeBudget--, 1) : 0; n++; }
+        pending.clear(); state.credits -= credits; state.freeLeft -= freeUsed; dirtyBase = true; setAcctLabel();
+        say(`Painted ${n} tile${n > 1 ? "s" : ""}. They’re wet for 10 minutes, so covering them costs 4 credits each.`, "good");
+        renderInvite();
+      }
+      draw();
+    }, 1400);
+  }
+  function setAcctLabel() {
+    const wb = $("wallet-btn"); if (state.acct === "none") return;
+    wb.innerHTML = `<span class="acct">${state.me}</span><span class="bal">${state.credits} cr</span>`;
+    state.acct = state.credits > 0 ? "rich" : "broke";
+    document.querySelectorAll("[data-acct]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.acct === state.acct)));
+  }
+
+  document.querySelectorAll("button[data-mode]").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+  document.querySelectorAll("button[data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
+  document.querySelectorAll("button[data-acct]").forEach(b => b.onclick = () => setAcct(b.dataset.acct));
+  document.querySelectorAll("button[data-sample]").forEach(b => b.onclick = () => setSample(b.dataset.sample));
+  $("fail-next").onchange = e => { state.failNext = e.target.checked; };
+  $("wallet-btn").onclick = () => setAcct(state.acct === "none" ? "rich" : "none");
+  $("action").onclick = act;
+  $("clear").onclick = () => { state.sel.clear(); say(null); draw(); };
+  $("start-paint").onclick = () => setMode("paint");
+  $("paint-over").onclick = () => { const i = state.inspect; setMode("paint"); if (i >= 0) { state.sel.add(i); renderDock(); draw(); } };
+  $("share").onclick = async () => {
+    const url = location.href;
+    try { await navigator.clipboard.writeText(url); $("share-note").textContent = "Link copied."; }
+    catch { $("share-note").textContent = url; }
+  };
+  const pal = $("palette");
+  PALETTE.forEach(([name, hex], i) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "sw"; b.style.background = hex;
+    b.setAttribute("aria-label", name); b.title = name; b.setAttribute("aria-pressed", String(i === state.pick));
+    b.onclick = () => { state.pick = i; pal.querySelectorAll(".sw").forEach((s, j) => s.setAttribute("aria-pressed", String(j === i))); $("pick-name").textContent = name; $("pick-idx").textContent = ""; draw(); };
+    pal.append(b);
+  });
+  $("pick-name").textContent = PALETTE[state.pick][0];
+
+  // Time moves: wet paint dries, so price and age views stay honest.
+  setInterval(() => { if (document.hidden) return; dirtyBase = true; renderInvite(); renderDock(); draw(); }, 15000);
+
+  seed("art"); renderInvite(); setView("art"); setAcct("none");
+  new ResizeObserver(resize).observe(wallEl); resize();
+  const m = /^#tile-(\d+)-(\d+)$/.exec(location.hash);
+  if (m && +m[1] < N && +m[2] < N) inspect(+m[2] * N + +m[1]);
+})();
+</script>
+

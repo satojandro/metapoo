@@ -1,6 +1,6 @@
 # Wall page front-end audit and plan — 2 November 2026
 
-Status: **audit done; plan proposed for owner approval.** Supersedes nothing: the
+Status: **Phase 0 done (#49). Phase 1 draft approved by the owner on 2 Nov; build in progress.** Supersedes nothing: the
 [29 Oct whole-site review](2026-10-29-whole-site-design-review.md) is still the design reasoning, and
 most of its P1/P2 rows are still open (checked below).
 
@@ -73,6 +73,32 @@ canvas (asserted with bounding boxes in a Playwright check), existing 433 tests 
      people can see where paint is wet and where it's cheap.
    - **A truthful empty state** for a mostly empty wall: invite the first marks; never fake pixels.
 2. **Build in steps behind tests**, one PR each: layout and dock; view modes; inspector; empty state.
+
+### Phase 1 — approved design and build steps (owner, 2 Nov)
+
+Approved draft: [`visual-concepts/wall-draft.html`](visual-concepts/wall-draft.html) (also published as an
+artifact). Owner answers to the draft's questions:
+
+| question | decision |
+|---|---|
+| Open in Look or Paint? | **Look.** |
+| More stall framing on phone? | **No.** Owner asked for a recommendation: keep the thin tiled frame and spend the space on the wall. The stall identity lives in the header line and the empty state. |
+| A Move button for touch? | **Yes.** Not being able to move the wall while painting is a major UX problem. In Paint mode a visible Move toggle switches drag to panning, alongside two-finger pan. |
+| Price view shows blank tiles as free while you have free paints? | **Yes.** |
+| Show who painted? | **Yes, for the turf war.** Built as its own **Turf** view: tiles coloured by painter, your tiles highlighted, a legend of who holds the most tiles. Age stays about age. |
+
+Build steps, one PR each, in order (they share files, so they don't run in parallel):
+
+1. **Layout and modes.** Wall-first layout (wall beside a side panel on desktop, bottom sheet on phone),
+   Look / Paint switch (Look default), the Move toggle, view bar (Art / Price / Age / Turf placeholders, −,
+   +, Fit), one dark dock on the design tokens with its state-driven primary button. Existing selection,
+   stroke, pricing and submission logic is reused, not rewritten. No camera-maths changes.
+2. **Views.** Art / Price / Age / Turf recolour the live wall from data the page already reads
+   (`artistAccountId`, `lastWriteTimestampNs`, repaint tiers), refreshing as paint dries.
+3. **Tile inspector.** Painter, time ago with wet/drying/dry, cost to cover now, "Paint over this", copy a
+   `#tile-x-y` link that opens the wall on that tile.
+4. **Empty state and clean-up.** The nearly-empty-wall state with the free first paints; remove the old
+   stall photo layers and the cream dock styles; the wall page fully on tokens.
 
 ### Phase 2 — one design system for the site
 

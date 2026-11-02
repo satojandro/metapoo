@@ -7,6 +7,7 @@ Design references for the site. Open the `.html` files directly in a browser; th
 | page | draft | what it settles |
 |---|---|---|
 | `/how-it-works` | [`how-it-works-draft.html`](how-it-works-draft.html) | the voice (the only public stall on the internet), the sample-wall story, the practice wall with Art / Price / Age views, free paint as the loud section, and the stall as an autonomous money machine |
+| `/` (the wall) | [`wall-draft.html`](wall-draft.html) | the wall-first layout, Look / Paint modes, the dark dock, the tile inspector, Art / Price / Age views (Turf added by the owner), the empty state. Approved 2 Nov; owner answers are in [`../2026-11-02-wall-frontend-audit.md`](../2026-11-02-wall-frontend-audit.md) |
 | `/toilet` | [`toilet-draft.html`](toilet-draft.html) | the TOILET pitch and its explorers. Its **review notes** (on by default, switch at the top) pin each claim to what the code does today; the app page ships without them |
 
 Both use the `/money` page's tokens: the dark wall scene, Arial at heavy weights, the yellow tag colour,
