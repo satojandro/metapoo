@@ -2,7 +2,7 @@
 //! changes Borsh state: an older deployed board needs an explicit migration.
 use crate::{Board, BoardExt};
 use near_sdk::json_types::U128;
-use near_sdk::{env, near, AccountId, Gas, NearToken, Promise};
+use near_sdk::{env, near, Gas, NearToken, Promise};
 
 pub(crate) const MIN_RESERVE: u128 = 5_000_000_000_000_000_000_000_000;
 pub(crate) const MIN_COOLDOWN_NS: u64 = 86_400_000_000_000;
@@ -16,10 +16,11 @@ const BOARD_CELLS: u32 = crate::WIDTH * crate::HEIGHT;
 #[near]
 impl Board {
     /// Reach the token's emitter-only circuit breaker from this board account.
+    /// Targets the TOILET token stored at `new` (§B4); the caller cannot choose it.
     #[payable]
-    pub fn set_toilet_paused(&mut self, toilet: AccountId, paused: bool) -> Promise {
+    pub fn set_toilet_paused(&mut self, paused: bool) -> Promise {
         self.assert_safety_owner();
-        Promise::new(toilet).function_call(
+        Promise::new(self.toilet_token.clone()).function_call(
             "set_paused",
             near_sdk::serde_json::to_vec(&near_sdk::serde_json::json!({"paused": paused}))
                 .expect("SerializationFailed"),
@@ -112,6 +113,7 @@ mod tests {
             U128(100),
             crate::test_team(),
             crate::test_buyback(),
+            crate::test_toilet(),
         );
         // Paid-path tests: F1 free first paints are covered in `free_paint.rs`.
         board.tunables.free_first_paints_per_account = 0;
@@ -306,7 +308,7 @@ mod tests {
         let mut board = setup();
         context(1, 0);
         rejected("OwnerOnly", || {
-            drop(board.set_toilet_paused(accounts(5), true));
+            drop(board.set_toilet_paused(true));
         });
         for deposit in [0, 2] {
             testing_env!(VMContextBuilder::new()
@@ -314,7 +316,7 @@ mod tests {
                 .attached_deposit(NearToken::from_yoctonear(deposit))
                 .build());
             rejected("OneYoctoRequired", || {
-                drop(board.set_toilet_paused(accounts(5), true));
+                drop(board.set_toilet_paused(true));
             });
             assert!(get_created_receipts().is_empty());
         }
@@ -326,10 +328,11 @@ mod tests {
         board.set_paused(true);
         for paused in [true, false] {
             context(0, 0);
-            drop(board.set_toilet_paused(accounts(5), paused));
+            drop(board.set_toilet_paused(paused));
             let receipts = get_created_receipts();
             assert_eq!(receipts.len(), 1);
-            assert_eq!(receipts[0].receiver_id, accounts(5));
+            // The stored TOILET token (§B4), not an argument.
+            assert_eq!(receipts[0].receiver_id, crate::test_toilet());
             assert_eq!(receipts[0].actions.len(), 1);
             match &receipts[0].actions[0] {
                 near_sdk::mock::MockAction::FunctionCallWeight {

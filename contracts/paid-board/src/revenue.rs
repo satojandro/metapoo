@@ -445,6 +445,7 @@ mod tests {
             U128(100),
             crate::test_team(),
             crate::test_buyback(),
+            crate::test_toilet(),
         )
     }
     fn rejected(code: &str, f: impl FnOnce()) {

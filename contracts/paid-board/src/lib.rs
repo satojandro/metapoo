@@ -24,6 +24,8 @@ use payments::Payments;
 
 /// Storage prefixes. `p`, `h` and `c` are deployed with live data: never change
 /// their prefix or value type (spec §C7, Finding 3). New facts get new prefixes.
+/// `h` values only ever grow at the end, and still decode a version-1 record
+/// (see `emission::Holder`).
 const PREFIX_PIXELS: &[u8] = b"p";
 const PREFIX_HOLDERS: &[u8] = b"h";
 const PREFIX_ACCOUNT_EXTRA: &[u8] = b"a";
@@ -153,9 +155,8 @@ pub struct Tunables {
     pub quota_base: u32,
     pub quota_per_cell: u32,
     pub quota_max: u32,
-    /// Cells that accrue TOILET emission per account. 0 = uncapped.
-    pub max_earning_cells: u32,
-    /// Atomic TOILET units per held cell per second; zero disables emission.
+    /// Atomic TOILET units per earning cell per second; zero disables emission.
+    /// Changed only by `set_toilet_rate`; `set_tunables` refuses it (`RateViaSetter`).
     pub toilet_per_cell_second: u128,
     // ---- Revision 2 (state version 2). Stored at defaults by REV-A; the
     // ---- behaviour that reads them lands in REV-B/C/D. Nothing reads them yet.
@@ -313,7 +314,6 @@ impl Tunables {
             quota_base,
             quota_per_cell,
             quota_max,
-            max_earning_cells,
             toilet_per_cell_second,
             mpoo_daily_credit_cap,
             free_first_paints_per_account,
@@ -361,7 +361,6 @@ impl Default for Tunables {
             quota_base: 32,
             quota_per_cell: 4,
             quota_max: 512,
-            max_earning_cells: 128,
             toilet_per_cell_second: 0,
             mpoo_daily_credit_cap: 0, // mPOO sales closed until the owner sets a cap
             free_first_paints_per_account: 25,
@@ -484,20 +483,32 @@ pub struct Board {
     account_extra: LookupMap<AccountId, AccountExtra>,
     /// Cells whose latest paint was free (F1/F2), prefix `f`. Key as `pixels`.
     free_cells: LookupSet<u32>,
+    /// B1: painted cells whose latest paint was paid with credits (not in
+    /// `free_cells`). Accrual divides by this, not by `total_cells`.
+    total_earning: u32,
+    /// B4: the TOILET token, fixed at `new`. `claim_toilet` mints on it and
+    /// `set_toilet_paused` targets it; no caller chooses it.
+    toilet_token: AccountId,
+    /// B3: when the rate was last set to a non-zero value.
+    last_toilet_rate_change_ns: Option<u64>,
+    /// B3: the last non-zero rate; bounds a switch-on after an emergency stop.
+    last_nonzero_toilet_rate: u128,
 }
 
 #[near]
 impl Board {
     /// Create a fresh paid board (state version 2) at 0.0025 NEAR per credit and an
     /// explicit mPOO price. Revenue accounts are fixed here; changing them later is
-    /// an owner call with a cooldown (REV-C). Never call `new` over live state:
-    /// an existing board moves forward with `upgrade` → `migrate`.
+    /// an owner call with a cooldown (REV-C). `toilet` is the TOILET token this
+    /// board mints on, fixed for the board's life (§B4). Never call `new` over live
+    /// state: an existing board moves forward with `upgrade` → `migrate`.
     #[init]
     pub fn new(
         mpoo_token: AccountId,
         mpoo_per_credit: near_sdk::json_types::U128,
         team_account: AccountId,
         buyback_account: AccountId,
+        toilet: AccountId,
     ) -> Self {
         Self {
             state_version: migrate::STATE_VERSION,
@@ -519,6 +530,10 @@ impl Board {
             first_fill_complete: false,
             account_extra: LookupMap::new(PREFIX_ACCOUNT_EXTRA),
             free_cells: LookupSet::new(PREFIX_FREE_CELLS),
+            total_earning: 0,
+            toilet_token: toilet,
+            last_toilet_rate_change_ns: None,
+            last_nonzero_toilet_rate: 0,
         }
     }
 
@@ -530,9 +545,9 @@ impl Board {
     /// prefixes and contents; the new fields start at their defaults.
     #[private]
     #[init(ignore_state)]
-    pub fn migrate(team_account: AccountId, buyback_account: AccountId) -> Self {
+    pub fn migrate(team_account: AccountId, buyback_account: AccountId, toilet: AccountId) -> Self {
         let v1 = migrate::read_v1();
-        let board = Self::from_v1(v1, team_account, buyback_account);
+        let board = Self::from_v1(v1, team_account, buyback_account, toilet);
         env::log_str(&format!(
             "EVENT_JSON:{{\"standard\":\"mpoo_board\",\"version\":\"1.0.0\",\"event\":\"state_migrated\",\"data\":[{{\"from\":1,\"to\":{}}}]}}",
             migrate::STATE_VERSION
@@ -675,6 +690,11 @@ impl Board {
             tunables.last_happy_hour_change_ns, self.tunables.last_happy_hour_change_ns,
             "HappyHourHistoryImmutable"
         );
+        // B3: the emission rate has its own guarded setter.
+        assert_eq!(
+            tunables.toilet_per_cell_second, self.tunables.toilet_per_cell_second,
+            "RateViaSetter"
+        );
         // C1: a float cap below what is already sold would block every sale with a
         // confusing FloatCapExceeded. 0 (uncapped) is always allowed.
         assert!(
@@ -695,9 +715,9 @@ impl Board {
             );
         }
         free_paint::apply_happy_hour_change(&self.tunables, &mut tunables, now);
-        // Rate changes apply from now, never retroactively to the idle interval.
-        // mpoo_daily_credit_cap applies immediately too (C8): it bounds protocol
-        // loss, not what users pay, so it has no cooldown.
+        // Settle emission before any rule changes. mpoo_daily_credit_cap applies
+        // immediately (C8): it bounds protocol loss, not what users pay, so it has
+        // no cooldown.
         self.accrue(now);
         let old = std::mem::replace(&mut self.tunables, tunables);
         if repaint_changed {
@@ -768,7 +788,7 @@ impl Board {
     /// over the old state. The board is never left with new code over old state.
     ///
     /// `migrate_args` is the JSON object passed to the new code's `migrate`, e.g.
-    /// `{"team_account": "…", "buyback_account": "…"}` for version 1 → 2. Never call
+    /// `{"team_account": "…", "buyback_account": "…", "toilet": "…"}` for version 1 → 2. Never call
     /// `new` over live state. Before mainnet money this belongs behind a delay; that is
     /// tracked as an M2 item, not a reason to delete the method.
     #[payable]
@@ -852,11 +872,14 @@ impl Board {
             reject("PriceRoseAboveMax");
         }
 
-        // Whoever held each distinct cell before this stroke.
-        let mut charged: Vec<(u32, Option<AccountId>)> = Vec::with_capacity(cells.len());
+        // Whoever held each distinct cell before this stroke, and whether it was
+        // earning then (painted, latest paint not free). Read before any write.
+        let mut charged: Vec<(u32, Option<AccountId>, bool)> = Vec::with_capacity(cells.len());
         for &key in keys.iter() {
-            if !charged.iter().any(|(k, _)| *k == key) {
-                charged.push((key, read_cell(self, key).0));
+            if !charged.iter().any(|(k, ..)| *k == key) {
+                let previous = read_cell(self, key).0;
+                let was_earning = previous.is_some() && !self.free_cells.contains(&key);
+                charged.push((key, previous, was_earning));
             }
         }
 
@@ -889,14 +912,22 @@ impl Board {
             ));
         }
 
-        // Ownership counts move once per distinct cell, from whoever held it
-        // before this stroke to the artist who just took it.
-        for (_, previous_owner) in charged.iter() {
-            if previous_owner.as_ref() != Some(&artist) {
-                if let Some(previous) = previous_owner {
-                    bump_cells_owned(self, previous, -1);
-                }
-                bump_cells_owned(self, &artist, 1);
+        // Ownership and earning counts move once per distinct cell, from whoever
+        // held it before this stroke to the artist who just took it (§B1). The
+        // cell's final state decides `now_earning`: the last entry for it wins.
+        // Even a same-artist repaint can move the earning count, free → paid.
+        let mut deltas: Vec<(AccountId, i64, i64)> = Vec::new();
+        for (key, previous_owner, was_earning) in charged.iter() {
+            let now_earning = !self.free_cells.contains(key);
+            let moved = previous_owner.as_ref() != Some(&artist);
+            if let Some(previous) = previous_owner {
+                add_delta(&mut deltas, previous, -i64::from(moved), -i64::from(*was_earning));
+            }
+            add_delta(&mut deltas, &artist, i64::from(moved), i64::from(now_earning));
+        }
+        for (account, cells_delta, earning_delta) in deltas {
+            if cells_delta != 0 || earning_delta != 0 {
+                adjust_holder(self, &account, cells_delta, earning_delta);
             }
         }
 
@@ -915,7 +946,7 @@ impl Board {
 }
 
 /// None (never changed) always permits the change, including at timestamp zero.
-fn cooldown_elapsed(last: Option<u64>, cooldown: u64, now: u64) -> bool {
+pub(crate) fn cooldown_elapsed(last: Option<u64>, cooldown: u64, now: u64) -> bool {
     last.is_none_or(|last| {
         now.checked_sub(last)
             .is_some_and(|elapsed| elapsed >= cooldown)
@@ -942,23 +973,31 @@ fn read_cell(board: &Board, key: u32) -> (Option<AccountId>, Option<u64>) {
     }
 }
 
-/// Settle before changing the holder's weight, then checkpoint the new weight.
-fn bump_cells_owned(board: &mut Board, account: &AccountId, delta: i32) {
-    let mut holder = board.settled_holder(account, board.acc_per_cell);
-    if delta >= 0 {
-        holder.cells = holder.cells.checked_add(delta as u32).expect("CellCountOverflow");
-        board.total_cells = board.total_cells
-            .checked_add(delta as u32)
-            .expect("CellCountOverflow");
-    } else {
-        holder.cells = holder.cells
-            .checked_sub(delta.unsigned_abs())
-            .expect("CellCountInvariant");
-        board.total_cells = board.total_cells
-            .checked_sub(delta.unsigned_abs())
-            .expect("CellCountInvariant");
+/// Sum one cell's `(cells, earning)` change into the stroke's per-account deltas.
+fn add_delta(deltas: &mut Vec<(AccountId, i64, i64)>, account: &AccountId, cells: i64, earning: i64) {
+    match deltas.iter_mut().find(|(a, ..)| a == account) {
+        Some(entry) => {
+            entry.1 += cells;
+            entry.2 += earning;
+        }
+        None => deltas.push((account.clone(), cells, earning)),
     }
-    holder.debt = emission::entitlement(holder.cells, board.acc_per_cell);
+}
+
+/// Apply a signed change to a `u32` count, panicking with `code` on under/overflow.
+fn shift(count: u32, delta: i64, code: &str) -> u32 {
+    u32::try_from(i64::from(count) + delta).unwrap_or_else(|_| env::panic_str(code))
+}
+
+/// Settle at the old earning weight, change ownership and earning counts, then
+/// checkpoint the debt at the new earning weight.
+fn adjust_holder(board: &mut Board, account: &AccountId, cells: i64, earning: i64) {
+    let mut holder = board.settled_holder(account, board.acc_per_cell);
+    holder.cells = shift(holder.cells, cells, "CellCountInvariant");
+    holder.earning = shift(holder.earning, earning, "EarningCountInvariant");
+    board.total_cells = shift(board.total_cells, cells, "CellCountInvariant");
+    board.total_earning = shift(board.total_earning, earning, "EarningCountInvariant");
+    holder.debt = emission::entitlement(holder.earning, board.acc_per_cell);
     board.holders.insert(account.clone(), holder);
 }
 
@@ -994,6 +1033,11 @@ pub(crate) fn test_team() -> AccountId {
 pub(crate) fn test_buyback() -> AccountId {
     "buyback.metapoo.testnet".parse().unwrap()
 }
+/// The TOILET token for unit-test boards; deliberately not the mPOO token.
+#[cfg(test)]
+pub(crate) fn test_toilet() -> AccountId {
+    "toilet.metapoo.testnet".parse().unwrap()
+}
 
 #[cfg(test)]
 mod tests {
@@ -1012,7 +1056,7 @@ mod tests {
 
     fn setup() -> Board {
         context(accounts(0), 1_000);
-        let mut board = Board::new(accounts(5), near_sdk::json_types::U128(100), crate::test_team(), crate::test_buyback());
+        let mut board = Board::new(accounts(5), near_sdk::json_types::U128(100), crate::test_team(), crate::test_buyback(), crate::test_toilet());
         // Geometry tests start with funded accounts; payment tests use public methods.
         for i in 0..6 {
             board.payments.balances.insert(accounts(i), 1000);
@@ -1887,6 +1931,7 @@ mod tests {
             near_sdk::json_types::U128(100),
             crate::test_team(),
             crate::test_buyback(),
+            crate::test_toilet(),
         );
         context(accounts(3), 2_000);
         assert_eq!(board.get_owner(), accounts(2));
