@@ -28,6 +28,7 @@ export type PageMount = (root: HTMLElement, ctx: PageContext) => PageDispose;
 export type PageId =
   | "home"
   | "wall"
+  | "how"
   | "money"
   | "admin"
   | "not-found";
