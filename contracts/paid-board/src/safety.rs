@@ -10,6 +10,8 @@ pub(crate) const MIN_COOLDOWN_NS: u64 = 86_400_000_000_000;
 // 152,724 bytes / 2,301 painted cells ≈ 66.4 bytes, at 10^19 yoctoNEAR/byte.
 // This is a baseline estimate, not a measurement of the new paid-board layout.
 pub(crate) const STORAGE_PER_PIXEL: u128 = 664_000_000_000_000_000_000;
+/// Every cell the board can ever hold (128 × 128).
+const BOARD_CELLS: u32 = crate::WIDTH * crate::HEIGHT;
 
 #[near]
 impl Board {
@@ -36,40 +38,24 @@ impl Board {
         );
     }
 
-    /// Reserve existing storage as well as the future storage purchased by
-    /// outstanding credits. Saturation makes an underfunded board return zero.
+    /// NEAR above the protected reserve: what the next `distribute_near` sends.
+    ///
+    /// `protected = storage used now + empty cells × STORAGE_PER_PIXEL + reserve floor`,
+    /// with `empty cells = 16,384 − painted cells` (spec §C5). Outstanding credits
+    /// no longer reserve storage: each one either paints an empty cell, already
+    /// covered by the empty-cell term, or repaints one, which needs no new storage.
+    /// Saturation makes an underfunded board return zero.
     pub fn get_withdrawable_near(&self) -> U128 {
         let storage =
             u128::from(env::storage_usage()).checked_mul(env::storage_byte_cost().as_yoctonear());
-        let protected = self
-            .payments
-            .outstanding
+        let empty_cells = u128::from(BOARD_CELLS.saturating_sub(self.pixels.len()));
+        let protected = empty_cells
             .checked_mul(STORAGE_PER_PIXEL)
             .and_then(|owed| owed.checked_add(self.tunables.reserve_floor.0))
             .and_then(|reserve| storage.and_then(|used| reserve.checked_add(used)));
         U128(protected.map_or(0, |amount| {
             env::account_balance().as_yoctonear().saturating_sub(amount)
         }))
-    }
-
-    #[payable]
-    pub fn withdraw_near(&mut self, recipient: AccountId, amount: U128) -> Promise {
-        self.assert_safety_owner();
-        assert!(amount.0 > 0, "ZeroAmount");
-        assert_ne!(recipient, env::current_account_id(), "InvalidRecipient");
-        assert!(
-            amount.0 <= self.get_withdrawable_near().0,
-            "ReserveBreached"
-        );
-        // A log proves the request, not delivery. Follow this returned promise
-        // to the transfer receipt; a failed transfer leaves the funds here.
-        Self::safety_event(
-            "treasury_withdrawn",
-            near_sdk::serde_json::json!({
-                "recipient": recipient, "amount": amount, "status": "scheduled"
-            }),
-        );
-        Promise::new(recipient).transfer(NearToken::from_yoctonear(amount.0))
     }
 }
 
@@ -174,42 +160,57 @@ mod tests {
     }
 
     #[test]
-    fn withdrawal_exact_boundary_protects_existing_storage_and_outstanding_credits() {
+    fn withdrawable_reserves_storage_empty_cells_and_floor_but_not_credits() {
         let mut board = setup();
+        let storage = u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear();
         let before = board.get_withdrawable_near().0;
         assert_eq!(
             before,
             env::account_balance().as_yoctonear()
                 - MIN_RESERVE
-                - u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear()
+                - storage
+                - u128::from(BOARD_CELLS) * STORAGE_PER_PIXEL
         );
+        // Outstanding credits no longer reserve storage (spec C5).
         board.payments.outstanding = 10_000;
-        let available = board.get_withdrawable_near().0;
-        assert_eq!(before - available, 10_000 * STORAGE_PER_PIXEL);
-        rejected("ReserveBreached", || {
-            let _ = board.withdraw_near(accounts(2), U128(available + 1));
-        });
-        drop(board.withdraw_near(accounts(2), U128(available)));
-        // Promise creation reserves funds in the runtime immediately. A second
-        // withdrawal cannot count the money already committed to this receipt.
-        assert_eq!(board.get_withdrawable_near(), U128(0));
-        rejected("ReserveBreached", || {
-            let _ = board.withdraw_near(accounts(2), U128(1));
-        });
-        assert!(!get_created_receipts().is_empty());
-        assert!(get_logs()
-            .iter()
-            .any(|log| log.contains("treasury_withdrawn")));
+        assert_eq!(board.get_withdrawable_near().0, before);
+        // A painted cell releases its empty-cell reservation.
+        board.payments.balances.insert(accounts(1), 1);
+        board.payments.outstanding = 1;
+        context(1, 0);
+        board.draw(0, 0, 1);
+        assert_eq!(
+            board.get_withdrawable_near().0,
+            before + STORAGE_PER_PIXEL
+                - (u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear()
+                    - storage)
+        );
     }
 
     #[test]
-    fn underfunded_or_overflowed_liability_has_no_withdrawable_balance() {
-        let mut board = setup();
-        board.payments.outstanding = u128::MAX;
+    fn underfunded_board_has_no_withdrawable_balance() {
+        let board = setup();
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(accounts(4))
+            .account_balance(NearToken::from_near(10))
+            .storage_usage(1000)
+            .build());
         assert_eq!(board.get_withdrawable_near(), U128(0));
-        rejected("ReserveBreached", || {
-            let _ = board.withdraw_near(accounts(2), U128(1));
-        });
+    }
+
+    #[test]
+    fn withdraw_near_is_not_a_contract_method() {
+        // Owner decision, 1 Nov 2026: revenue leaves only through the split.
+        for source in [
+            include_str!("safety.rs"),
+            include_str!("lib.rs"),
+            include_str!("payments.rs"),
+            include_str!("revenue.rs"),
+            include_str!("emission.rs"),
+            include_str!("migrate.rs"),
+        ] {
+            assert!(!source.contains(concat!("fn withdraw", "_near(")));
+        }
     }
 
     #[test]
@@ -352,9 +353,6 @@ mod tests {
         let mut board = setup();
         context(1, 0);
         rejected("OwnerOnly", || board.set_paused(true));
-        rejected("OwnerOnly", || {
-            let _ = board.withdraw_near(accounts(2), U128(1));
-        });
         testing_env!(VMContextBuilder::new()
             .predecessor_account_id(accounts(0))
             .build());

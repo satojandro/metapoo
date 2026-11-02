@@ -41,15 +41,15 @@ NEAR price of $4.35, it is about $0.03 (three cents), not 0.03 cents.
 Initialization automatically uses this NEAR price and requires a nonzero mPOO
 price in atomic units. Owner price updates remain available as previously agreed;
 there is no automatic repricing. Test prices 10 and 100 are arithmetic fixtures,
-not economically valid launch prices. `set_near_price` and `set_mpoo_price` change
-one price each, with exactly 1 yoctoNEAR attached. Existing credits are unaffected. Buyers submit
+not economically valid launch prices. `set_credit_prices` changes prices with
+exactly 1 yoctoNEAR attached. Existing credits are unaffected. Buyers submit
 `expected_price` and `min_credits`; stale prices reject/refund.
 
 ## Safety controls (local, 2026-10-28)
 
 - Owner-only `set_paused(paused)`, with 1 yoctoNEAR, stops `draw`, `draw_many`, and
   native purchases with `Paused`. Authenticated FT purchases return the full unused
-  amount for refund. Views, upgrades and treasury withdrawals remain available.
+  amount for refund. Views, upgrades and both distributions remain available.
   `get_tunables().paused` exposes the state.
 - Owner-only `set_toilet_paused(toilet, paused)` requires exactly 1 yoctoNEAR
   and returns a promise calling the supplied token's `set_paused` with 1 yoctoNEAR
@@ -58,38 +58,48 @@ one price each, with exactly 1 yoctoNEAR attached. Existing credits are unaffect
   even while painting is paused. Follow the returned receipt to confirm success:
   scheduling does not prove the token paused. The token address is an argument,
   so this passthrough adds no state or migration. Emitter handoff passthroughs remain outside this task.
-- `set_near_price(near_per_credit)` and `set_mpoo_price(mpoo_per_credit)` (REV-B, C8)
-  each move one price between half and double its prior value (odd-number halving
-  rounds up; `PriceStepTooLarge`, `ZeroPrice`). Each has its own cooldown, at least
-  24 hours: `near_price_cooldown_ns` / `last_near_price_change_ns` and
-  `mpoo_price_cooldown_ns` / `last_mpoo_price_change_ns`. Early changes fail
-  `NearPriceCooldown` / `MpooPriceCooldown`; changing one never starts the other's
-  clock. The first change of each is allowed immediately; a no-op update still
-  restarts its cooldown. `price_changed` carries `asset` (`near` | `mpoo`),
-  `old_<asset>_per_credit`, `new_<asset>_per_credit` and `changed_at_ns`.
-- Repaint tunables (C1): each tier 1..=8 credits (`RepaintCreditsOutOfRange`),
-  base <= mid <= young (`RepaintCreditsOutOfOrder`), young window <= mid window
-  (`RepaintTiersOutOfOrder`) <= 24 h (`RepaintWindowTooLong`). Changing any repaint
-  credit value in `set_tunables` is a NEAR price change: it fails
-  `RepaintPriceCooldown` inside the NEAR cooldown and restarts it.
-  `max_outstanding_credits` cannot go below current outstanding unless 0
-  (`FloatCapBelowOutstanding`).
-- mPOO daily cap (C8): `mpoo_daily_credit_cap` credits per UTC day
-  (`floor(block_timestamp / 86,400 s)`), bound 1,000,000 (`MpooDailyCapTooHigh`), set
-  through `set_tunables` with immediate effect. 0 (the deploy default) closes mPOO
-  sales. A purchase that is refused refunds the whole transfer and logs
-  `purchase_rejected: MpooSalesClosed` or `purchase_rejected: MpooDailyCapReached`.
-  NEAR purchases do not count against it. `get_mpoo_sales_today()` returns
-  `{day_index, sold_today, cap, remaining, resets_at_ns}` for the current block day.
-- `get_withdrawable_near()` returns the maximum available now, as a decimal string:
-  account balance minus current storage stake, minus outstanding credits ×
-  664,000,000,000,000,000,000 yoctoNEAR, minus the configured reserve floor.
-  Underfunding or arithmetic overflow returns zero.
-- Owner-only `withdraw_near(recipient, amount)` requires 1 yoctoNEAR and a positive
-  amount no greater than that view; excess fails `ReserveBreached`. The returned
-  transfer promise reserves funds immediately, preventing overlapping withdrawals
-  from counting them twice. `treasury_withdrawn` has `status: scheduled`: delivery
-  must be verified from the transfer receipt, not inferred from the event.
+- `set_credit_prices` permits each price to move only between half and double its
+  prior value (odd-number halving rounds up). The first change is allowed immediately;
+  subsequent changes require at least 24 hours. `price_changed` includes both old
+  and new prices. Invalid steps fail `PriceStepTooLarge`; early changes fail
+  `PriceCooldown`. Even a no-op update starts the cooldown. Since state version 2 the
+  tunables hold `near_price_cooldown_ns` / `last_near_price_change_ns` (the v1
+  `price_cooldown_ns` / `last_price_change_ns`, renamed) and `mpoo_price_cooldown_ns` /
+  `last_mpoo_price_change_ns`; this setter checks and restarts both until REV-B splits it.
+- `get_withdrawable_near()` returns the NEAR above the protected reserve, as a decimal
+  string: account balance minus current storage stake, minus empty cells
+  (16,384 − painted) × `STORAGE_PER_PIXEL` (664,000,000,000,000,000,000 yoctoNEAR until
+  REV-E measures it), minus the reserve floor (spec C5). Outstanding credits no longer
+  reserve storage. Underfunding or arithmetic overflow returns zero.
+- `withdraw_near` is **removed** (owner, 1 Nov 2026). Revenue leaves only through the
+  split below.
+
+## Revenue split (spec R1, R2)
+
+- `distribute_near()` — anyone, at most once per `distribution_interval_ns` (default 1 h,
+  else `DistributionTooSoon`). Sends `get_withdrawable_near()` as native transfers: 10% to
+  `team_account`, 90% plus rounding dust to `buyback_account`. `NothingToDistribute` if
+  zero. A failed transfer refunds itself to the board, so the callback
+  `on_near_distributed` only logs `near_distribution_leg_sent` / `_failed`; the next call
+  sends the refund again.
+- `ft_on_transfer` with msg `{"revenue":{}}` from `buyback_account` adds to
+  `mpoo_undistributed` (accepted even while paused); from anyone else it is refunded.
+  Every successful mPOO credit purchase also adds its amount.
+- `distribute_mpoo()` — anyone, same interval on its own clock. Splits
+  `mpoo_undistributed`: 10% `ft_transfer` to `team_account`, 20% `ft_transfer` to the burn
+  address `0000…0000` (64 zeros), 70% plus dust into `mpoo_staker_reserve`. Once
+  `staking_contract` is set, the whole reserve is forwarded with each call. Each leg:
+  1 yocto, 15 Tgas, plus a 10 Tgas `on_mpoo_distributed` callback that restores a failed
+  team/burn leg to `mpoo_undistributed` and a failed staker forward to the reserve.
+  Attach ≥ 100 Tgas. Team, burn address and staking contract must be storage-registered
+  on the mPOO contract.
+- `set_team_account` / `set_buyback_account(account_id)` — owner, 1 yocto, separate 7-day
+  cooldowns (`RevenueAccountCooldown`; first change allowed), not the board itself
+  (`InvalidRevenueAccount`), event `revenue_account_changed`.
+- `set_staking_contract(account_id)` — owner, 1 yocto, once (`StakingContractAlreadySet`).
+- `get_revenue_state()` — withdrawable NEAR, undistributed mPOO, staker reserve, next
+  distribution times (U64 strings, 0 = now), accounts and burn address.
+
 - Reserve floor defaults to **5 NEAR** and cannot be configured below it. Cooldown
   cannot be configured below 24 hours, and `last_price_change_ns` cannot be rewritten
   through `set_tunables`. Its initial value is null, including at timestamp zero.
@@ -195,8 +205,8 @@ a sandbox/testnet; then calculate margin with gas sponsorship (if added), storag
 conversion costs, tax and a reserve. A 0.0025 NEAR price alone cannot guarantee profit.
 
 `ECONOMY NEXT` comments mark the extension points. This board has no staking,
-longevity rewards, buybacks, burns or swaps. TOILET emission uses the claim path below. Native treasury
-withdrawals use the safeguards above; mPOO proceeds remain in the contract.
+longevity rewards or swaps. TOILET emission uses the claim path below. NEAR and mPOO
+revenue leave only through the split above.
 Future distribution must account for tax and pending liabilities, and must never
 distribute staked principal or outstanding refund liabilities.
 
