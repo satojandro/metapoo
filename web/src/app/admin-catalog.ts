@@ -63,6 +63,6 @@ export const ADMIN_GROUPS: AdminGroup[] = [
     { name: "Palette", what: "16 colours, Grime & Gum.", launch: "16", range: "—", how: "fixed", rule: "Upgrade only.", field: "PALETTE" },
     { name: "Board and strokes", what: "128 × 128 cells; at most 64 cells per stroke.", launch: "16,384 cells", range: "—", how: "fixed", rule: "Upgrade only.", field: "WIDTH · HEIGHT · MAX_DRAW_BATCH" },
     { name: "Registration fee", what: "One-off fee to open a credit account. Pays for its storage.", launch: "0.01 NEAR", range: "—", how: "fixed", rule: "Upgrade only. Rehearsal checks it covers storage.", field: "REGISTRATION" },
-    { name: "Storage per cell", what: "Used for the empty-cell reserve. Still the old board's estimate.", launch: "0.00664 NEAR", range: "—", how: "fixed", rule: "Upgrade only. Rehearsal measures the real figure.", field: "STORAGE_PER_PIXEL" },
+    { name: "Storage per cell", what: "Used for the empty-cell reserve. Still the old board's estimate.", launch: "0.000664 NEAR", range: "—", how: "fixed", rule: "Upgrade only. Rehearsal measures the real figure.", field: "STORAGE_PER_PIXEL" },
   ]},
 ];
