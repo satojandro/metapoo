@@ -2,40 +2,42 @@
 
 ## Status, 2 November — read this first
 
-**Delivered, reviewed and waiting for merge.** Each PR was reviewed by Claude, with tests re-run.
+**Merged (2 Nov, by Hermes):** #33 keeper, #34 REV-A, #39 the combined revision, #37 the wall split.
+Closed as superseded: #35, #36, #38.
 
-| id | PR | what | merge |
+**Waiting for merge: a stacked chain. Merge in this order.** Each branch already contains the one
+before it, so each merges cleanly. After merging one, delete its branch (GitHub then retargets the
+next PR to `main`), or retarget the next PR by hand.
+
+| order | PR | what | tests on its branch |
 |---|---|---|---|
-| REV-F | #33 | hourly distribution keeper (off until `KEEPER_ENABLED`) | **now** |
-| FE-0 | #37 | `mount-wall.ts` split into controllers, no behaviour change | **now** |
-| FE-4 | #40 | mPOO checkout, only shown when the board supports it | after #37 |
-| FE-5 | #42 | `/money` "Where the money goes" page | after #37 |
-| REV-A | #34 | contract state v2 and migration | after contract review |
-| REV-B+C+D | **#39** | the combined contract revision (167 tests) | after #34, **with or after FE-1** |
-| FE-1 | #41 | swatch dock follows the board's palette (8 now, 16 after the upgrade) | with #39 |
-| FE-2 | #43 | `max_credits` on every paid paint; one reserved credit balance; stale balance and price fixes | with #39 |
-| REV-B, REV-C, REV-D | #35, #38, #36 | per-task reference for #39 | **close, don't merge** |
+| 0 | #44 | CI workflow (independent; merge first so the rest run through it) | all suites |
+| 1 | #41 | FE-1: swatch dock follows the board's palette. **Fixes `main`, which shows 16 swatches on 8-colour board3** | 338 |
+| 2 | #43 | FE-2: `max_credits`, one reserved credit balance | 353 |
+| 3 | #40 | FE-4: mPOO checkout | 369 |
+| 4 | #42 | FE-5: `/money` page | 398 |
 
-**In progress:** nothing. FE-3 is unblocked (start from `claude/gifted-knuth-bm5wrf-fe-2`).
+**In progress:** nothing.
 
 **Ready to pick up.** Each has a work order in this folder:
 
 | id | work order | who could take it | needs |
 |---|---|---|---|
 | **REV-E** | [`rev-testnet-rehearsal`](rev-testnet-rehearsal.task.json) | **Hermes** (keys, RPC, chain evidence) | #39 merged or its branch; the owner's testnet team and buyback accounts; board3's owner key |
-| **FE-3** | [`fe-free-paints-happy-hour`](fe-free-paints-happy-hour.task.json) | Cursor or Claude | FE-2 (#43); branch from `claude/gifted-knuth-bm5wrf-fe-2` |
+| **FE-3** | [`fe-free-paints-happy-hour`](fe-free-paints-happy-hour.task.json) | Cursor or Claude | start from `main` once #43 is merged |
 | **ADM-1** | [`admin-dashboard`](admin-dashboard.task.json), [spec](2026-11-02-admin-dashboard-spec.md) | Cursor or Claude | can start now from `fe-base` |
 | **REV-G** | [`rev-followups`](rev-followups.task.json) | Codex or Claude | the revision branch; one owner decision (pause) |
 | **FE-29** | [`issue-29-recheck`](issue-29-recheck.task.json) | owner or Hermes | a browser and wallet; best after FE-2 |
 | REV-E0 | superseded: the burn goes by transfer to the 64-zero address, registered on mainnet 2 Nov | — | — |
 
-**Branches to start from:**
-- `claude/gifted-knuth-bm5wrf-fe-base`: the wall split plus the contract revision. Start frontend work
-  here until #37 and #39 are merged.
-- `claude/gifted-knuth-bm5wrf-rev-int`: the combined contract revision. Start contract work here until
-  #39 is merged.
+**Branches to start from:** `main` (the wall split and the revision are merged). Frontend work that
+needs FE-1/2/4/5 starts from `main` once the chain above is merged, or from
+`claude/gifted-knuth-bm5wrf-fe-5`, which holds all four.
 
 **Settings at a glance:** [`../payments/board-settings-reference.html`](../payments/board-settings-reference.html).
+
+**Backwards compatibility (owner, 2 Nov):** a fresh testnet board can be deployed at any time, and
+mainnet is a fresh deploy. New work doesn't need to support today's board3 contract.
 
 **Workload note (owner, 2 Nov):** running five agents at once hit the 5-hour usage limit. Run two or
 three at a time, and spread work across Claude, Hermes, Cursor and Codex.

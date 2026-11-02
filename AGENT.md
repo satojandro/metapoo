@@ -23,10 +23,15 @@ branch and a PR only for meaningful code work (web, contracts, shared).
 
 # Keep `docs/backlog.md` current
 
-You own that file. If your change alters a status in it, update it **in the same PR** — moving
-the row, adding the commit that proves it, or marking it unverified with what is missing.
+**Convention since 2 Nov 2026: pull requests do not edit `docs/backlog.md`.** Parallel PRs that each
+touched it conflicted on every merge. Instead:
 
-The failure it exists to prevent: on 2026-10-27 six rows said "not delivered" for work that had
+1. Put the status change in the **PR description**: which backlog row it moves, the evidence (tests,
+   commits, chain reads), and anything left open.
+2. **Whoever merges the PR** updates `docs/backlog.md` on `main` straight after the merge, with the merge
+   commit id. Docs go straight to `main` (see Branches above).
+
+The failure the backlog exists to prevent: on 2026-10-27 six rows said "not delivered" for work that had
 already shipped in commits from the same document's ancestry. The problem was not that an agent
 held the pen — it was that nobody re-derived the status. So:
 
@@ -53,6 +58,7 @@ All four, or the change is not done:
    a transaction happened.
 4. **A `## Learned` line in the PR description**, and an entry in `docs/learning/` if the
    lesson changes how someone should work.
+5. **CI is green** (`.github/workflows/ci.yml`, once merged). Local runs are not enough on their own.
 
 # Do not touch without an explicit human decision
 

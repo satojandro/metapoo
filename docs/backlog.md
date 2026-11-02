@@ -1,7 +1,8 @@
 # Backlog — verified state
 
 > **Agents own this file. Keep it current.**
-> Any change that alters a status updates this file **in the same PR**. A stale backlog is not
+> **Since 2 Nov: PRs don't edit this file.** The status goes in the PR description; whoever merges
+> updates this file on `main` right after, with the merge commit (see `AGENT.md`). A stale backlog is not
 > a cosmetic problem: on 2026-10-27 it had six rows wrong, and dispatching from it would have
 > had agents rebuild working code.
 >
