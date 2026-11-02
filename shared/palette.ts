@@ -1,8 +1,10 @@
 import type { PaletteColor } from "./types.ts";
 
 /**
- * Eight named colors. Indices are the values a contract would store.
- * Keep this list identical to `shared/board.json` and `contracts/board`.
+ * Sixteen named colors: the original eight, then Grime & Gum at 8–15.
+ * Indices are the values a contract stores. Keep this list identical to
+ * `shared/board.json` and `contracts/paid-board`. The free board
+ * (`contracts/board`, deployed) still accepts only indices 0–7.
  * A shared test fails if they drift.
  */
 export const PALETTE: readonly PaletteColor[] = [
@@ -14,6 +16,14 @@ export const PALETTE: readonly PaletteColor[] = [
   { index: 5, name: "River", hex: "#2f6f8f" },
   { index: 6, name: "Grape", hex: "#6b4c7a" },
   { index: 7, name: "Clay", hex: "#c47b5a" },
+  { index: 8, name: "Grout", hex: "#8a857c" },
+  { index: 9, name: "Rust", hex: "#7a4528" },
+  { index: 10, name: "Nicotine", hex: "#ecd9a0" },
+  { index: 11, name: "Bubblegum", hex: "#ec8fb0" },
+  { index: 12, name: "Bleach", hex: "#9ccbdc" },
+  { index: 13, name: "Bruise", hex: "#263552" },
+  { index: 14, name: "Bile", hex: "#9fb53a" },
+  { index: 15, name: "Cone", hex: "#ef7a2c" },
 ];
 
 export function isPaletteIndex(colorIndex: number): boolean {

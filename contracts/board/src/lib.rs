@@ -388,7 +388,9 @@ mod tests {
         assert_eq!(shared["sponsorship_enabled"], false);
         assert_eq!(shared["schema_version"], SCHEMA_VERSION);
         let palette = shared["palette"].as_array().expect("palette array");
-        assert_eq!(palette.len(), PALETTE.len());
+        // The shared palette grew to 16 for the paid board (spec §P1). This deployed
+        // board keeps its 8: they must stay the shared list's first 8, unchanged.
+        assert!(palette.len() >= PALETTE.len());
         for (entry, (name, hex)) in palette.iter().zip(PALETTE) {
             assert_eq!(entry["name"], *name);
             assert_eq!(entry["hex"], *hex);

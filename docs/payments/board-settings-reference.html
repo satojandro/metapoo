@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Copy of the published reference (https://claude.ai/artifact/VF3W21qZGy1VkVHyKto5kh), 2 Nov 2026.
+     Every owner-changeable setting on the paid board after the revision. Content model for the admin dashboard (ADM-1). -->
+<title>Meta Poo Board Settings</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Archivo:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: the stall wall again; a sticky filter bar, then one section per group of settings, each setting a row card; fixed rules and open decisions at the end. */
+:root {
+  --wall: #141517;
+  --tile: #1b1c1f;
+  --tile-2: #222327;
+  --grout: #2a2b2f;
+  --fg: #f1ede6;
+  --muted: #a3a3a8;
+  --tag: #f1dc5e;
+  --now: #7fd6a8;
+  --wait: #ffb27a;
+  --fixed: #b9a3cc;
+  --later: #8fb8d4;
+  --warn: #ff8f8f;
+  --display: "Permanent Marker", "Marker Felt", "Comic Sans MS", cursive;
+  --body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background-color: var(--wall);
+  background-image: linear-gradient(var(--grout) 1px, transparent 1px), linear-gradient(90deg, var(--grout) 1px, transparent 1px);
+  background-size: 56px 56px;
+  color: var(--fg);
+  font: 15px/1.55 var(--body);
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--wall); }
+.wrap {
+  max-width: 1080px; margin: 0 auto;
+  padding-block: 32px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 36px;
+}
+header { display: grid; gap: 12px; max-width: 70ch; }
+.eyebrow { font: 600 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 400 clamp(32px, 6vw, 54px)/1.05 var(--display); margin: 0; color: var(--tag); transform: rotate(-1.2deg); transform-origin: left; text-wrap: balance; }
+h2 { font: 800 20px/1.2 var(--body); margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: #d8d4cc; }
+.muted { color: var(--muted); }
+code { font: 12.5px var(--mono); background: #ffffff10; padding: 1px 5px; border-radius: 3px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font: 12px var(--mono); color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.pill { font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 3px 7px; border-radius: 2px; white-space: nowrap; border: 1px solid currentColor; }
+.p-now { color: var(--now); }
+.p-wait { color: var(--wait); }
+.p-fixed { color: var(--fixed); }
+.p-later { color: var(--later); }
+.p-read { color: var(--muted); }
+
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 10px; margin: 0 -10px;
+  background: color-mix(in srgb, var(--wall) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--grout);
+}
+.chip { font: 600 13px var(--body); color: var(--fg); background: var(--tile); border: 1px solid #3a3b40; border-radius: 3px; padding: 8px 12px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--fg); color: #17171a; border-color: var(--fg); }
+.chip:focus-visible { outline: 2px solid #56c9ec; outline-offset: 2px; }
+.count { margin-left: auto; font: 12px var(--mono); color: var(--muted); }
+
+.summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 720px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.sum { background: var(--tile); border: 1px solid #ffffff12; border-radius: 3px; padding: 14px; display: grid; gap: 4px; min-width: 0; }
+.sum b { font: 800 26px var(--body); font-variant-numeric: tabular-nums; }
+.sum span { font-size: 13px; color: var(--muted); }
+
+section.group { display: grid; gap: 12px; }
+.group-head { display: grid; gap: 4px; max-width: 72ch; }
+.rows { display: grid; gap: 8px; }
+.row {
+  display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px 20px; align-items: start;
+  background: var(--tile); border: 1px solid #ffffff10; border-radius: 3px; padding: 14px 16px;
+}
+@media (max-width: 760px) { .row { grid-template-columns: 1fr; } }
+.row .name { display: grid; gap: 4px; min-width: 0; }
+.row .name strong { font: 700 15px var(--body); }
+.row .name .what { font-size: 13.5px; color: #cfcbc4; }
+.row .val { display: grid; gap: 4px; min-width: 0; }
+.k { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.v { font: 600 14px var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.how { display: grid; gap: 6px; min-width: 0; }
+.how .pill { justify-self: start; }
+.how .rule { font-size: 13px; color: #cfcbc4; }
+.field { font: 11.5px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.flag { border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; font-size: 13px; color: #ffd0d0; grid-column: 1 / -1; }
+
+.notes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+@media (max-width: 760px) { .notes { grid-template-columns: 1fr; } }
+.box { background: var(--tile); border: 1px solid #ffffff12; border-radius: 3px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
+.box ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+footer { font: 12px var(--mono); color: var(--muted); border-top: 1px solid var(--grout); padding-top: 16px; display: grid; gap: 6px; }
+@media (prefers-reduced-motion: reduce) { h1 { transform: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Meta Poo · paid board · after the revision · 2 Nov 2026</div>
+    <h1>Every knob on the board</h1>
+    <p class="lede">Each setting the owner can change on the paid board, what it does, its launch value, its limits and how fast it can change. Values are the code's defaults and the decided launch values, not live readings: the admin dashboard will read them from the chain.</p>
+    <div class="legend">
+      <span><b class="pill p-now">Any time</b> takes effect in the same transaction</span>
+      <span><b class="pill p-wait">Cooldown</b> limited to one change per period</span>
+      <span><b class="pill p-fixed">Fixed</b> needs a contract upgrade</span>
+      <span><b class="pill p-later">TOILET round</b> stored, not active yet</span>
+      <span><b class="pill p-read">Read only</b> the board tracks it</span>
+    </div>
+  </header>
+
+  <div class="summary" id="summary"></div>
+
+  <nav class="bar" aria-label="Filter settings" id="bar"></nav>
+
+  <div id="groups" style="display:grid;gap:36px"></div>
+
+  <div class="notes">
+    <div class="box">
+      <h2>Open decisions</h2>
+      <ul>
+        <li><b>Distribution interval has no limit.</b> The owner could set it to years and freeze revenue sharing. Proposed: bound it to 10 minutes – 24 hours.</li>
+        <li><b>Pause and distributions.</b> Today pausing stops painting and buying, but distributions keep running. Stop them too?</li>
+        <li><b>mPOO daily cap at launch.</b> Recommended 20,000 credits a day.</li>
+        <li><b>Testnet team and buyback accounts.</b> Needed for the rehearsal.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h2>How a change is made today</h2>
+      <ul>
+        <li>Prices: <code>set_near_price</code>, <code>set_mpoo_price</code>.</li>
+        <li>Emergency stop: <code>set_paused</code>.</li>
+        <li>Revenue accounts: <code>set_team_account</code>, <code>set_buyback_account</code>, <code>set_staking_contract</code>.</li>
+        <li>Everything else: <code>set_tunables</code>, which replaces the <b>whole</b> settings record. Read the latest record, change one field, send it all back. History fields must be sent unchanged or the call fails.</li>
+        <li>All of these are owner-only and need 1 yoctoNEAR attached. The dashboard will build these calls for you.</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    <span>Source: <code>contracts/paid-board</code> on branch <code>claude/gifted-knuth-bm5wrf-rev-int</code> (PR #39), spec <code>docs/payments/2026-11-01-paid-board-revision-spec.md</code>.</span>
+    <span>Times are UTC on chain. One credit paints one cell at the base price.</span>
+  </footer>
+</div>
+
+<script>
+const GROUPS = [
+  { id: "safety", title: "Emergency", blurb: "The stop button. Use it when something is wrong with painting or payments.", items: [
+    { name: "Pause the board", what: "Stops painting and buying. Reading the board keeps working.", launch: "Off", range: "On or off", how: "now", rule: "Owner, immediate, both ways.", field: "set_paused(paused)" ,
+      flag: "Open: distributions keep running while paused." },
+    { name: "Pause TOILET", what: "Forwards a pause to the TOILET token contract.", launch: "Off", range: "On or off", how: "now", rule: "Owner, immediate.", field: "set_toilet_paused(toilet, paused)" },
+  ]},
+  { id: "prices", title: "Prices", blurb: "What a credit costs. One credit paints one cell at the base price.", items: [
+    { name: "NEAR price per credit", what: "Price of one credit when paying in NEAR.", launch: "0.0025 NEAR", range: "Half to double the current price per change", how: "wait", rule: "Owner, once per NEAR cooldown (24 h).", field: "set_near_price(near_per_credit)" },
+    { name: "mPOO price per credit", what: "Price when paying in mPOO. Set weekly by hand from the 7-day pool average, with a 20% holder discount.", launch: "Set before mPOO sales open", range: "Half to double per change", how: "wait", rule: "Owner, once per mPOO cooldown (24 h). Separate from NEAR.", field: "set_mpoo_price(mpoo_per_credit)" },
+    { name: "NEAR price cooldown", what: "Minimum time between NEAR price changes. Repaint credit changes count as NEAR price changes.", launch: "24 hours", range: "At least 24 hours", how: "now", rule: "Owner, any time.", field: "near_price_cooldown_ns" },
+    { name: "mPOO price cooldown", what: "Minimum time between mPOO price changes.", launch: "24 hours", range: "At least 24 hours", how: "now", rule: "Owner, any time.", field: "mpoo_price_cooldown_ns" },
+  ]},
+  { id: "repaint", title: "Repaint pricing", blurb: "Painting over fresh art costs more. This protects new work from being wiped instantly.", items: [
+    { name: "Base price", what: "An empty cell, or one painted more than an hour ago.", launch: "1 credit", range: "1–8, base ≤ mid ≤ young", how: "wait", rule: "Owner. Counts as a NEAR price change: 24 h cooldown, and restarts it.", field: "repaint_base_credits" },
+    { name: "Recent repaint price", what: "A cell painted within the last hour.", launch: "2 credits", range: "1–8", how: "wait", rule: "Same as base price.", field: "repaint_mid_credits" },
+    { name: "Fresh repaint price", what: "A cell painted within the last 10 minutes.", launch: "4 credits", range: "1–8", how: "wait", rule: "Same as base price.", field: "repaint_young_credits" },
+    { name: "Fresh window", what: "How long a cell counts as fresh.", launch: "10 minutes", range: "Up to the recent window", how: "now", rule: "Owner, any time. Windows are not prices.", field: "repaint_young_ns" },
+    { name: "Recent window", what: "How long a cell counts as recent.", launch: "60 minutes", range: "Up to 24 hours", how: "now", rule: "Owner, any time.", field: "repaint_mid_ns" },
+  ]},
+  { id: "mpoo", title: "mPOO sales", blurb: "Limits how much paint can be bought with mPOO per day, in case mPOO moves between weekly price updates.", items: [
+    { name: "Daily mPOO cap", what: "Credits that can be sold for mPOO per UTC day. 0 closes mPOO sales.", launch: "0 at deploy · recommended 20,000", range: "0 – 1,000,000", how: "now", rule: "Owner, immediate both ways, so it can be raised the moment demand shows.", field: "mpoo_daily_credit_cap" },
+    { name: "mPOO credits sold today", what: "Resets at midnight UTC. The page shows what's left.", launch: "—", range: "—", how: "read", rule: "View: get_mpoo_sales_today", field: "get_mpoo_sales_today()" },
+  ]},
+  { id: "supply", title: "Supply and reserves", blurb: "Keeps the board able to pay for storage, and optionally limits unspent paint.", items: [
+    { name: "Unspent credit ceiling", what: "Maximum credits sold and not yet painted. 0 means no limit.", launch: "No limit", range: "0, or at least what's outstanding now", how: "now", rule: "Owner, any time.", field: "max_outstanding_credits" },
+    { name: "Reserve floor", what: "NEAR the board always keeps on top of storage, never distributed.", launch: "5 NEAR", range: "At least 5 NEAR", how: "now", rule: "Owner, any time.", field: "reserve_floor" },
+  ]},
+  { id: "free", title: "Free painting", blurb: "Seeds the wall at launch, then a weekly happy hour once it's full.", items: [
+    { name: "Free first paints per person", what: "Empty cells each registered account can paint for free, until every cell has been painted once.", launch: "25", range: "0–100", how: "now", rule: "Owner, any time. 0 turns it off.", field: "free_first_paints_per_account" },
+    { name: "First board full", what: "Flips on when all 16,384 cells have been painted. Ends free first paints, allows happy hour. Never flips back.", launch: "Not yet", range: "—", how: "read", rule: "Set by the board.", field: "first_fill_complete" },
+    { name: "Happy hour", what: "Weekly window where base-price cells are free. Only after the first board is full.", launch: "Off at deploy, on once the board is full", range: "On or off", how: "wait", rule: "Turning off: immediate. Turning on: 24 h after the last happy-hour change.", field: "happy_hour_enabled" },
+    { name: "Happy hour day", what: "Day of the week.", launch: "Sunday", range: "Monday–Sunday", how: "wait", rule: "Moving it while on: 24 h cooldown.", field: "happy_hour_weekday" },
+    { name: "Happy hour start", what: "Start time in UTC.", launch: "20:00 UTC", range: "Any time of day", how: "wait", rule: "Moving it while on: 24 h cooldown.", field: "happy_hour_start_s" },
+    { name: "Happy hour length", what: "How long it lasts.", launch: "1 hour", range: "15 minutes – 24 hours", how: "wait", rule: "Longer: 24 h cooldown. Shorter: immediate.", field: "happy_hour_length_s" },
+    { name: "Free cells per person per happy hour", what: "Cap on free cells for each account in one window.", launch: "100", range: "1–1,000", how: "wait", rule: "Higher: 24 h cooldown. Lower: immediate.", field: "happy_hour_cap_per_account" },
+    { name: "Only previous buyers", what: "Only accounts that have bought credits at least once get free happy-hour cells.", launch: "On", range: "On or off", how: "now", rule: "Owner, any time.", field: "happy_hour_requires_purchase" },
+  ]},
+  { id: "revenue", title: "Revenue", blurb: "Revenue leaves the board only through the fixed split. Anyone can trigger it; a keeper does it hourly.", items: [
+    { name: "Distribution interval", what: "Minimum time between distributions, for NEAR and mPOO separately.", launch: "1 hour", range: "No limit today", how: "now", rule: "Owner, any time.", field: "distribution_interval_ns",
+      flag: "No upper limit: could be set to years and freeze revenue sharing. Proposed bound: 10 minutes – 24 hours." },
+    { name: "Team account", what: "Receives 10% of NEAR and 10% of mPOO revenue.", launch: "Dedicated account (owner to create)", range: "Any account but the board", how: "wait", rule: "Owner, once per 7 days.", field: "set_team_account(account_id)" },
+    { name: "Buyback account", what: "Receives 90% of NEAR revenue to buy mPOO, and is the only account allowed to send mPOO back as revenue.", launch: "Dedicated account (owner to create)", range: "Any account but the board", how: "wait", rule: "Owner, once per 7 days.", field: "set_buyback_account(account_id)" },
+    { name: "Staking contract", what: "Where the stakers' 70% of mPOO goes. Until it's set, that share builds up locked on the board.", launch: "Not set", range: "Any account", how: "wait", rule: "Owner, exactly once, ever.", field: "set_staking_contract(account_id)" },
+    { name: "Waiting to distribute", what: "NEAR above the reserve, mPOO waiting, the stakers' locked reserve and the next distribution time.", launch: "—", range: "—", how: "read", rule: "View: get_revenue_state", field: "get_revenue_state()" },
+  ]},
+  { id: "toilet", title: "TOILET (next review round)", blurb: "Stored in the settings today but switched off or not enforced. The TOILET round decides them.", items: [
+    { name: "TOILET emission rate", what: "TOILET earned per held cell per second.", launch: "0 (off)", range: "Up to a safety maximum", how: "later", rule: "Owner, any time. Stays 0 until the TOILET round.", field: "toilet_per_cell_second" },
+    { name: "Earning cell cap", what: "Most cells per account that earn TOILET.", launch: "128", range: "—", how: "later", rule: "Stored but not enforced yet (audit C3).", field: "max_earning_cells" },
+    { name: "Daily paint allowance", what: "Free daily paints for holders: base + per-cell, capped.", launch: "32 + 4 per cell, max 512", range: "—", how: "later", rule: "Stored but not enforced yet (audit C3).", field: "quota_base · quota_per_cell · quota_max" },
+  ]},
+  { id: "fixed", title: "Fixed in the contract", blurb: "Deliberately not settings. Changing these needs a contract upgrade and a review.", items: [
+    { name: "NEAR split", what: "10% team, 90% buyback.", launch: "10 / 90", range: "—", how: "fixed", rule: "Upgrade only.", field: "revenue.rs" },
+    { name: "mPOO split", what: "10% team, 20% burn address, 70% stakers.", launch: "10 / 20 / 70", range: "—", how: "fixed", rule: "Upgrade only.", field: "revenue.rs" },
+    { name: "Burn address", what: "Tokens sent here can never move. Registered on mainnet mPOO on 2 Nov.", launch: "0000…0000 (64 zeros)", range: "—", how: "fixed", rule: "Upgrade only.", field: "BURN_ACCOUNT" },
+    { name: "Free cells earn no TOILET", what: "A free-painted cell earns nothing until someone repaints it with credits. Stored now, enforced in the TOILET round.", launch: "—", range: "—", how: "fixed", rule: "Upgrade only.", field: "free_cells" },
+    { name: "Palette", what: "16 colours, Grime & Gum.", launch: "16", range: "—", how: "fixed", rule: "Upgrade only.", field: "PALETTE" },
+    { name: "Board and strokes", what: "128 × 128 cells; at most 64 cells per stroke.", launch: "16,384 cells", range: "—", how: "fixed", rule: "Upgrade only.", field: "WIDTH · HEIGHT · MAX_DRAW_BATCH" },
+    { name: "Registration fee", what: "One-off fee to open a credit account. Pays for its storage.", launch: "0.01 NEAR", range: "—", how: "fixed", rule: "Upgrade only. Rehearsal checks it covers storage.", field: "REGISTRATION" },
+    { name: "Storage per cell", what: "Used for the empty-cell reserve. Still the old board's estimate.", launch: "0.00664 NEAR", range: "—", how: "fixed", rule: "Upgrade only. Rehearsal measures the real figure.", field: "STORAGE_PER_PIXEL" },
+  ]},
+];
+
+const KIND = {
+  now:   { label: "Any time", cls: "p-now" },
+  wait:  { label: "Cooldown", cls: "p-wait" },
+  fixed: { label: "Fixed", cls: "p-fixed" },
+  later: { label: "TOILET round", cls: "p-later" },
+  read:  { label: "Read only", cls: "p-read" },
+};
+const FILTERS = [
+  ["all", "All"], ["now", "Any time"], ["wait", "Cooldown"], ["read", "Read only"], ["later", "TOILET round"], ["fixed", "Fixed"],
+];
+let filter = "all";
+try { filter = localStorage.getItem("knob-filter") || "all"; } catch (e) {}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+function renderSummary() {
+  const all = GROUPS.flatMap(g => g.items);
+  const n = k => all.filter(i => i.how === k).length;
+  const tiles = [
+    [n("now"), "change any time"],
+    [n("wait"), "behind a cooldown"],
+    [n("fixed"), "fixed, upgrade only"],
+    [all.filter(i => i.flag).length, "flagged for a decision"],
+  ];
+  document.getElementById("summary").innerHTML = tiles.map(([b, s]) => `<div class="sum"><b>${b}</b><span>${s}</span></div>`).join("");
+}
+
+function renderBar() {
+  const bar = document.getElementById("bar");
+  bar.innerHTML = "";
+  FILTERS.forEach(([id, label]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = label;
+    b.setAttribute("aria-pressed", String(filter === id));
+    b.addEventListener("click", () => { filter = id; try { localStorage.setItem("knob-filter", id); } catch (e) {} render(); });
+    bar.append(b);
+  });
+  const c = document.createElement("span"); c.className = "count"; c.id = "count"; bar.append(c);
+}
+
+function render() {
+  renderBar();
+  let shown = 0;
+  const html = GROUPS.map(g => {
+    const items = g.items.filter(i => filter === "all" || i.how === filter);
+    if (!items.length) return "";
+    shown += items.length;
+    return `<section class="group" aria-labelledby="g-${g.id}">
+      <div class="group-head"><h2 id="g-${g.id}">${esc(g.title)}</h2><p class="muted">${esc(g.blurb)}</p></div>
+      <div class="rows">${items.map(i => `
+        <article class="row">
+          <div class="name"><strong>${esc(i.name)}</strong><span class="what">${esc(i.what)}</span><span class="field">${esc(i.field)}</span></div>
+          <div class="val"><span class="k">Launch value</span><span class="v">${esc(i.launch)}</span><span class="k">Limits</span><span class="v">${esc(i.range)}</span></div>
+          <div class="how"><span class="pill ${KIND[i.how].cls}">${KIND[i.how].label}</span><span class="rule">${esc(i.rule)}</span></div>
+          ${i.flag ? `<div class="flag">${esc(i.flag)}</div>` : ""}
+        </article>`).join("")}</div>
+    </section>`;
+  }).join("");
+  document.getElementById("groups").innerHTML = html;
+  document.getElementById("count").textContent = `${shown} shown`;
+}
+
+renderSummary();
+render();
+</script>

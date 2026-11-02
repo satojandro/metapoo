@@ -100,6 +100,8 @@ export interface SubmitDrawInput {
   colorIndex: number;
   accountId: string;
   networkId: NetworkId;
+  /** Paid board: the quoted price, sent as `max_credits`. Null/absent on the free board. */
+  maxCredits?: number | null;
   onProgress?: (progress: DrawProgress) => void;
 }
 
@@ -137,6 +139,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
         x: input.x,
         y: input.y,
         color: input.colorIndex,
+        maxCredits: input.maxCredits,
       });
       usedLocalSession = true;
     } catch (error) {
@@ -204,6 +207,7 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
         color: input.colorIndex,
         gas: DRAW_GAS,
         deposit: DRAW_DEPOSIT,
+        maxCredits: input.maxCredits,
       });
     } catch (error) {
       if (isUserRejection(error)) {
@@ -352,7 +356,9 @@ function walletPromptExplanation(
   return [
     "Your wallet will ask you to approve one function call:",
     `method draw on contract ${CONTRACT_ID},`,
-    `with arguments x=${input.x}, y=${input.y}, color=${input.colorIndex}.`,
+    typeof input.maxCredits === "number"
+      ? `with arguments x=${input.x}, y=${input.y}, color=${input.colorIndex}, max_credits=${input.maxCredits} (it never charges more than that).`
+      : `with arguments x=${input.x}, y=${input.y}, color=${input.colorIndex}.`,
     "That paints one square under the Open wall rule.",
     "The game adds no application fee. Your wallet may still pay a small network gas fee.",
     sponsorshipMessage,

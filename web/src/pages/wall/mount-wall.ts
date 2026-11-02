@@ -226,6 +226,7 @@ export function mountWall(
     onBoardUpdated: () => pricing.onBoardUpdated(),
     onSchemaChanged: () => pricing.onSchemaChanged(),
     onManualRefresh: () => pricing.manualRefresh(),
+    onPaletteChanged: (paletteLength) => view.setPaletteLength(paletteLength),
   });
 
   const view = createWallView({

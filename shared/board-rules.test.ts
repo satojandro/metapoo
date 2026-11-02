@@ -55,7 +55,7 @@ test("a bad column is reported before session checks", () => {
 
 test("a bad color is rejected", () => {
   const error = reasonDrawIsBlocked(
-    { x: 1, y: 1, colorIndex: 8 },
+    { x: 1, y: 1, colorIndex: 16 },
     connectedMock,
     "mock",
     "open_wall",

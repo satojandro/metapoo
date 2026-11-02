@@ -73,6 +73,7 @@ function setup() {
     onBoardUpdated: vi.fn(),
     onSchemaChanged: vi.fn(),
     onManualRefresh: vi.fn(),
+    onPaletteChanged: vi.fn(),
   };
   const controller = createBoardController(deps);
   return {
@@ -108,7 +109,35 @@ describe("board controller", () => {
     expect(deps.applyRoutePaintingContext).toHaveBeenCalled();
     expect(deps.boardLoadStatus.textContent).toMatch(/^Board load: 1 painted cell at block 7\./);
     expect(deps.contractLine.textContent).toContain("board.unit.testnet");
+    // board3 reports 8 colours; the dock must not offer 8–15.
+    expect(deps.onPaletteChanged).toHaveBeenCalledWith(8);
     dispose();
+  });
+
+  it("passes a 16-colour board's palette length on, and none when metadata fails", async () => {
+    const sixteen = board(4);
+    sixteen.palette.push(
+      { index: 8, name: "Grout", hex: "#8a857c" },
+      { index: 9, name: "Rust", hex: "#7a4528" },
+      { index: 10, name: "Nicotine", hex: "#ecd9a0" },
+      { index: 11, name: "Bubblegum", hex: "#ec8fb0" },
+      { index: 12, name: "Bleach", hex: "#9ccbdc" },
+      { index: 13, name: "Bruise", hex: "#263552" },
+      { index: 14, name: "Bile", hex: "#9fb53a" },
+      { index: 15, name: "Cone", hex: "#ef7a2c" },
+    );
+    vi.mocked(getBoard).mockResolvedValueOnce(sixteen as never);
+    const first = setup();
+    await first.controller.bootstrap();
+    expect(first.deps.onPaletteChanged).toHaveBeenCalledWith(16);
+    first.dispose();
+
+    vi.mocked(getBoard).mockResolvedValueOnce({ ...board(4), palette: [] } as never);
+    const rejected = setup();
+    await rejected.controller.bootstrap();
+    expect(rejected.controller.contractMetaOk()).toBe(false);
+    expect(rejected.deps.onPaletteChanged).not.toHaveBeenCalled();
+    rejected.dispose();
   });
 
   it("a failed metadata read blocks drawing with a read issue, and Refresh revalidates", async () => {

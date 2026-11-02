@@ -25,6 +25,8 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | what the purchase UI must do and show | [`payments/frontend-handoff.md`](payments/frontend-handoff.md) | current; NEAR checkout built (`55526b9`), mPOO hidden |
 | mainnet cost measurement | [`payments/mainnet-cost-validation.md`](payments/mainnet-cost-validation.md) | **all pending** — reopens on first deploy |
 | first live testnet deployment of board + TOILET, with evidence | [`payments/testnet-deployment-2026-10.md`](payments/testnet-deployment-2026-10.md) | **deployed 2026-10-29** at `board3.metapoo-player1.testnet` (canonical), 50 checks green |
+| every owner-changeable board setting: launch value, limits, timing | [`payments/board-settings-reference.html`](payments/board-settings-reference.html) | reference, 2 Nov |
+| the admin dashboard | [`implementation/2026-11-02-admin-dashboard-spec.md`](implementation/2026-11-02-admin-dashboard-spec.md) | spec, not started |
 | the next paid-board revision (C1, C2, C5, C7, C8, revenue split, 16 colours, free paints, happy hour) | [`payments/2026-11-01-paid-board-revision-spec.md`](payments/2026-11-01-paid-board-revision-spec.md) | **draft for review** |
 | upgrade authority and migration | [`payments/upgrade-policy.md`](payments/upgrade-policy.md) | `upgrade()` exists; migration + pause missing |
 | the contract itself | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | schema 4, testnet only |
