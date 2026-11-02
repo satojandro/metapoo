@@ -44,6 +44,7 @@ grep -rn "devicePixelRatio" web/src     # the T1 check, as an example
 ```
 
 Baseline for the T-rows: `origin/main = 5b40b63`, 263 tests / 39 files, build clean. Payment rows re-checked at `09965fe` (2026-10-29).
+Latest full web run: `987605b` (after #56/#57), Node 22.23.4, `npx vitest run`: **688/688, 80 files** (3 Nov).
 
 ---
 
@@ -93,13 +94,17 @@ waves, each with its own `*.task.json`. Specs: [paid board revision](payments/20
 | **TOILET-REVIEW** | Full TOILET cycle review | **Specced 2 Nov**: owner decisions T1–T10 in [`economy/2026-11-02-toilet-round-spec.md`](economy/2026-11-02-toilet-round-spec.md), merged via PR #47 (`f1e9e7c`). Nothing implemented; work moves to the TR rows | — |
 | **FE-0..5** | Wall split, CI, palette dock, `max_credits`, mPOO checkout, `/money` | Merged 2 Nov: #37, #44, #41, #43, #40, #42. `web/src/app/routes.ts` matches `/money`; `npx vitest run` on `f1e9e7c` with Node 22: **433/433, 55 files** | — |
 | **ADM-1** | `/admin` public board settings with owner edits | Merged via PR #46 (`833a131`). Read-only testnet view calls proven in the PR; **live owner-wallet signing unverified**. Follow-up ADM-2 makes it a private owner console | **M** |
-| **ADM-2** | Private owner console (out of nav, status first, pause without RPC gates) | [`adm-2-owner-console`](implementation/adm-2-owner-console.task.json); **Claude** (owner, 2 Nov); not started | **M** |
+| **ADM-2** | Private owner console (out of nav, status first, pause without RPC gates) | **Merged** in `d8a3e5d` via PR #55 (`0223870`). Live owner-wallet signing still unverified (same gate as ADM-1) | **M** |
 | **REV-G** | Contract follow-ups: interval bound, `tunables_changed` event, `get_owner`, keeper gas, pause test | [`rev-followups`](implementation/rev-followups.task.json); Codex; not started | **S** |
 | **TR-B** | TOILET round, board: earning tiles only, no earning cap, guarded rate setter, stored token, minimum claim | [`toilet-round-board`](implementation/toilet-round-board.task.json); Codex, after REV-G (same files); not started | **M** |
 | **TR-S** | TOILET staking contract: 10%/day pool drip, 10% exit tax burned, no owner | [`toilet-staking`](implementation/toilet-staking.task.json); Codex; not started. External review required before `set_staking_contract` | **L** |
 | **TR-K** | Buyback keeper: NEAR → mPOO in capped chunks, returned to the board | [`buyback-keeper`](implementation/buyback-keeper.task.json); Codex, then Hermes on testnet; not started | **M** |
 | **TR-X** | TOILET exchange-tax configuration and venue evidence (nice-to-have) | [`toilet-exchange-tax`](implementation/toilet-exchange-tax.task.json); Hermes; needs the owner's split and treasury | **S** |
-| **FE-HIW / FE-3 / FE-BUYBACK / FE-TOILET** | `/how-it-works`, free paints and happy hour UI, `/money` buyback ledger, `/toilet` | Work orders in `implementation/`; **Claude**; FE-TOILET waits for TR-B and TR-S on testnet. Designs: [`visual-concepts/`](visual-concepts/README.md) | **M** each |
+| **FE-HIW** | `/how-it-works` with live board values | **Merged** in `d81450d` via PR #53 (`2f42307`); `routes.ts` matches `/how-it-works` | — |
+| **FE-TOILET** | `/toilet` page, live TOILET figures, "Your TOILET" claim card | **Merged** in `16debe8` via PR #57 (`ed327e4`); `routes.ts` matches `/toilet`, `toilet-claim.test.ts`. Uses `VITE_TOILET_ID` until TR-B stores the token id (round spec B4). Staking explorer shows decided rules only: **no staking UI until TR-S is on testnet**. Not exercised against a live claim | **M** |
+| **FE-3 / FE-BUYBACK** | Free paints and happy hour UI, `/money` buyback ledger | Work orders in `implementation/`; **Claude**; not started. FE-BUYBACK needs TR-K. Designs: [`visual-concepts/`](visual-concepts/README.md) | **M** each |
+| **ACQ-0…3** | Privy login, Intents funding, RHEA mPOO swap, shared wallet foundation (readiness, gas reserve, recovery, Web Locks) | **Merged** via PR #56 (`987605b`); [specs](implementation/2026-11-03-wallet-funding-integration-spec.md), [handoff](learning/2026-11-03-wallet-acquisition.md). Implemented and fixture-tested only. **All three flags off** (`VITE_PRIVY_ENABLED`, `VITE_INTENTS_FUNDING_ENABLED`, `VITE_RHEA_MPOO_SWAP_ENABLED`). No contract change | **L** |
+| **ACQ-4** | Live acceptance and enablement of the three flags | **Open.** Privy: public app/client ids, real testnet Google/email login, key + paint read-back, hosting headers; one high-severity Zod advisory through 4 Privy deps, and `@peerfolio/privy-near-connect@0.0.8` (third-party, pre-1.0, signer code vendored) needs review. Intents: deployed-origin CORS, native NEAR delivery for named / implicit / fresh implicit accounts. RHEA: complete route + code hashes, enforceable post-tax minimum, measured gas, separately approved bounded mainnet trial. Do not mark any of these done from fixtures | **M** |
 
 ## Blocked on a human decision
 
