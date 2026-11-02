@@ -201,7 +201,7 @@ mod tests {
 
     fn setup(rate: u128) -> Board {
         context(0, 0);
-        let mut board = Board::new(accounts(5), U128(100));
+        let mut board = Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback());
         assert_eq!(board.get_tunables().toilet_per_cell_second, 0);
         for i in 0..4 {
             board.payments.balances.insert(accounts(i), 1000);

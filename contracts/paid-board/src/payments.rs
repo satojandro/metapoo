@@ -16,18 +16,43 @@ pub(crate) const INITIAL_NEAR_PRICE: u128 = 2_500_000_000_000_000_000_000;
 // ECONOMY NEXT: replace this with measured storage billing and explicit refunds.
 const REGISTRATION: u128 = 10_000_000_000_000_000_000_000; // 0.01 NEAR
 
+/// The first six fields are the version-1 layout, in order (see `migrate.rs`).
+/// Map `c` (`balances`) keeps its prefix and value type forever.
 #[near(serializers = [borsh])]
 pub(crate) struct Payments {
     pub(crate) owner: AccountId,
-    token: AccountId,
-    near_price: u128,
-    mpoo_price: u128,
+    pub(crate) token: AccountId,
+    pub(crate) near_price: u128,
+    pub(crate) mpoo_price: u128,
     pub(crate) balances: LookupMap<AccountId, u128>,
     /// Credits sold but not yet spent. Prepaid service, not free revenue: each
     /// unspent credit still owes one storage-backed pixel. Tracked from the first
     /// deployment so the float cap and any future distribution rule never need a
     /// state migration to discover it.
     pub(crate) outstanding: u128,
+    // ---- Revision 2 (state version 2). Stored by REV-A; behaviour in REV-B/C.
+    /// R1/R2: receives 10% of NEAR and of mPOO revenue.
+    pub(crate) team_account: AccountId,
+    /// R1: receives 90% of NEAR revenue; R2: the only sender of `{"revenue": {}}` mPOO.
+    pub(crate) buyback_account: AccountId,
+    /// R1: 7-day cooldown history for `set_team_account`. None = never changed.
+    pub(crate) last_team_account_change_ns: Option<u64>,
+    /// R1: 7-day cooldown history for `set_buyback_account`. None = never changed.
+    pub(crate) last_buyback_account_change_ns: Option<u64>,
+    /// R2: set once by the owner; until then the staker share accumulates.
+    pub(crate) staking_contract: Option<AccountId>,
+    /// C8: UTC day (`floor(now_s / 86,400)`) that `mpoo_credits_sold_today` counts.
+    pub(crate) mpoo_day_index: u64,
+    /// C8: credits sold for mPOO during `mpoo_day_index`.
+    pub(crate) mpoo_credits_sold_today: u128,
+    /// R2: mPOO (atomic units) accepted and not yet distributed.
+    pub(crate) mpoo_undistributed: u128,
+    /// R2: the 70% staker share held until `staking_contract` is set.
+    pub(crate) mpoo_staker_reserve: u128,
+    /// R1: last `distribute_near`. None = never.
+    pub(crate) last_near_distribution_ns: Option<u64>,
+    /// R2: last `distribute_mpoo`. None = never.
+    pub(crate) last_mpoo_distribution_ns: Option<u64>,
 }
 
 #[near(serializers = [json])]
@@ -48,16 +73,65 @@ pub struct Purchase {
 }
 
 impl Payments {
-    pub(crate) fn new(token: AccountId, near_price: u128, mpoo_price: u128) -> Self {
+    pub(crate) fn new(
+        token: AccountId,
+        near_price: u128,
+        mpoo_price: u128,
+        team_account: AccountId,
+        buyback_account: AccountId,
+    ) -> Self {
         assert!(near_price > 0 && mpoo_price > 0, "ZeroPrice");
         assert_ne!(token, env::current_account_id(), "InvalidToken");
-        Self {
-            owner: env::predecessor_account_id(),
+        Self::from_v1(
+            env::predecessor_account_id(),
             token,
             near_price,
             mpoo_price,
-            balances: LookupMap::new(b"c"),
-            outstanding: 0,
+            LookupMap::new(b"c"),
+            0,
+            team_account,
+            buyback_account,
+        )
+    }
+
+    /// Version-1 fields carried over unchanged, revision-2 fields at their defaults.
+    /// `new` builds through here too, so a fresh board and a migrated one cannot
+    /// disagree about a default.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_v1(
+        owner: AccountId,
+        token: AccountId,
+        near_price: u128,
+        mpoo_price: u128,
+        balances: LookupMap<AccountId, u128>,
+        outstanding: u128,
+        team_account: AccountId,
+        buyback_account: AccountId,
+    ) -> Self {
+        // Revenue sent to the board itself would sit in the withdrawable pool forever.
+        let this = env::current_account_id();
+        assert!(
+            team_account != this && buyback_account != this,
+            "InvalidRevenueAccount"
+        );
+        Self {
+            owner,
+            token,
+            near_price,
+            mpoo_price,
+            balances,
+            outstanding,
+            team_account,
+            buyback_account,
+            last_team_account_change_ns: None,
+            last_buyback_account_change_ns: None,
+            staking_contract: None,
+            mpoo_day_index: 0,
+            mpoo_credits_sold_today: 0,
+            mpoo_undistributed: 0,
+            mpoo_staker_reserve: 0,
+            last_near_distribution_ns: None,
+            last_mpoo_distribution_ns: None,
         }
     }
 
@@ -149,12 +223,26 @@ impl Board {
             );
         }
         let now = env::block_timestamp();
-        if let Some(last) = self.tunables.last_price_change_ns {
-            assert!(
-                now.checked_sub(last)
-                    .is_some_and(|elapsed| elapsed >= self.tunables.price_cooldown_ns),
-                "PriceCooldown"
-            );
+        // This setter moves both prices, so both cooldowns must have passed and
+        // both restart. Version 1 had one shared cooldown; the migration seeds both
+        // histories from it, so behaviour is unchanged. REV-B splits the setter.
+        for (last, cooldown) in [
+            (
+                self.tunables.last_near_price_change_ns,
+                self.tunables.near_price_cooldown_ns,
+            ),
+            (
+                self.tunables.last_mpoo_price_change_ns,
+                self.tunables.mpoo_price_cooldown_ns,
+            ),
+        ] {
+            if let Some(last) = last {
+                assert!(
+                    now.checked_sub(last)
+                        .is_some_and(|elapsed| elapsed >= cooldown),
+                    "PriceCooldown"
+                );
+            }
         }
         Self::safety_event(
             "price_changed",
@@ -168,7 +256,8 @@ impl Board {
         );
         self.payments.near_price = near_per_credit.0;
         self.payments.mpoo_price = mpoo_per_credit.0;
-        self.tunables.last_price_change_ns = Some(now);
+        self.tunables.last_near_price_change_ns = Some(now);
+        self.tunables.last_mpoo_price_change_ns = Some(now);
     }
 
     pub fn get_payment_config(&self) -> PaymentConfig {
@@ -299,7 +388,7 @@ mod tests {
     }
     fn setup() -> Board {
         context(0, 0, 0);
-        let mut board = Board::new(accounts(5), U128(100));
+        let mut board = Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback());
         // Tiny prices keep arithmetic edge-case tests readable; production
         // initialization is exercised separately below.
         board.payments.near_price = 10;
@@ -322,7 +411,7 @@ mod tests {
     #[test]
     fn launch_price_is_exactly_0025_near_per_pixel() {
         context(0, 0, 0);
-        let mut board = Board::new(accounts(5), U128(100));
+        let mut board = Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback());
         let price = 2_500_000_000_000_000_000_000u128;
         assert_eq!(board.get_payment_config().near_per_credit, U128(price));
         context(1, 1, REGISTRATION);

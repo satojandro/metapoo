@@ -86,7 +86,7 @@ waves, each with its own `*.task.json`. Specs: [paid board revision](payments/20
 
 | id | item | evidence / gate | size |
 |---|---|---|---|
-| **REV-1** | Paid board revision (REV-A…REV-F in the queue) | spec reviewed by the owner 1 Nov; open: testnet account ids, mPOO cap value; not started | **L** |
+| **REV-1** | Paid board revision (REV-A…REV-F in the queue) | spec reviewed by the owner 1 Nov; open: testnet account ids, mPOO cap value. **REV-A (state v2 + migration, no behaviour change) done on branch `claude/gifted-knuth-bm5wrf-rev-a`, not merged, not deployed, no rehearsal yet** (`cargo test` 96/96, wasm builds); REV-B…F not started | **L** |
 | **F1-REFACTOR** | `mount-wall.ts` split (FE-0 in the queue) | [spec](implementation/2026-11-01-wall-split-spec.md); not started | **M** |
 | **TOILET-REVIEW** | Full TOILET cycle review: emission, claim, earning cap, staking contract, exit tax, distribution to stakers | next review round (owner, 1 Nov); out of this queue | — |
 

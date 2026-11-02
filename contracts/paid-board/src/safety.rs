@@ -121,7 +121,7 @@ mod tests {
     }
     fn setup() -> Board {
         context(0, 0);
-        Board::new(accounts(5), U128(100))
+        Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback())
     }
     fn rejected(code: &str, f: impl FnOnce()) {
         let err =
@@ -221,7 +221,7 @@ mod tests {
         context(0, MIN_COOLDOWN_NS);
         board.set_credit_prices(U128(original), U128(100));
         assert_eq!(
-            board.get_tunables().last_price_change_ns,
+            board.get_tunables().last_near_price_change_ns,
             Some(MIN_COOLDOWN_NS)
         );
     }
@@ -232,10 +232,10 @@ mod tests {
         let original = board.get_payment_config().near_per_credit;
         board.set_credit_prices(original, U128(100));
         let mut config = board.get_tunables();
-        config.last_price_change_ns = None;
+        config.last_near_price_change_ns = None;
         rejected("PriceHistoryImmutable", || board.set_tunables(config));
         let mut config = board.get_tunables();
-        config.price_cooldown_ns = 0;
+        config.near_price_cooldown_ns = 0;
         rejected("PriceCooldownTooShort", || board.set_tunables(config));
         let mut config = board.get_tunables();
         config.reserve_floor = U128(0);
