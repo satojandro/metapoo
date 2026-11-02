@@ -587,3 +587,25 @@
   color: var(--mp-fg);
   font: var(--mp-text-md) var(--mp-mono);
 }
+
+/* ——— Invite card counts and the free first paints line (Phase 1 step 4) ——— */
+.wall-page .wall-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--mp-space-2);
+  margin: 0;
+}
+.wall-page .wall-stats div { display: grid; gap: 2px; min-width: 0; }
+.wall-page .wall-stats dt { color: var(--mp-muted); font-size: var(--mp-text-sm); }
+.wall-page .wall-stats dd { margin: 0; color: var(--mp-fg); font: 700 var(--mp-text-lead) var(--mp-mono); font-variant-numeric: tabular-nums; }
+.wall-page .wall-invite-free {
+  padding: var(--mp-space-2) var(--mp-space-3);
+  border: 1px solid var(--mp-line);
+  border-left: 3px solid var(--mp-near);
+  border-radius: var(--mp-radius-md);
+  background: var(--mp-card-2);
+  color: var(--mp-fg);
+  font-weight: 700;
+}
+.wall-page .wall-invite-free[hidden] { display: none; }
+.wall-page .tile-loading { color: var(--mp-muted); }

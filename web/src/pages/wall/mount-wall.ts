@@ -18,6 +18,7 @@ import { createWallModes } from "./wall-modes";
 import { mountDockPrimary } from "./dock-primary";
 import { createWallViews, type WallViews } from "./wall-views";
 import { createTileInspector, parseTileHash, type TileInspector } from "./tile-inspector";
+import { createWallInvite, type WallInvite } from "./wall-invite";
 import { PAGE_NETWORK } from "../../config";
 import { viewFunction } from "../../contract";
 import "./wall-page.css";
@@ -148,6 +149,8 @@ export function mountWall(
   const scope = createWallScope();
   let views: WallViews | null = null;
   let inspector: TileInspector | null = null;
+  let invite: WallInvite | null = null;
+  let invitePrimed = false;
 
   // Look / Paint and Move decide what a gesture means; they never change the camera
   // maths or the paint path. Look is the default (owner, 2 Nov).
@@ -257,6 +260,12 @@ export function mountWall(
       pricing.onBoardUpdated();
       views?.refresh();
       inspector?.render();
+      // The invite's wet count and free-paints line need the board's tunables.
+      if (!invitePrimed && views) {
+        invitePrimed = true;
+        views.prime();
+      }
+      invite?.render();
     },
     onSchemaChanged: () => pricing.onSchemaChanged(),
     onManualRefresh: () => pricing.manualRefresh(),
@@ -339,8 +348,23 @@ export function mountWall(
     readTunables: () => pricing.viewTunables(),
     readFreeFirst: (account) => viewFunction("get_free_first_paints", { account_id: account }),
     render: () => camera.render(),
-    onChange: () => inspector?.render(),
+    onChange: () => {
+      inspector?.render();
+      invite?.render();
+    },
   });
+
+  // The Look-mode invite: real counts, and the nearly-empty wall's own pitch.
+  invite = createWallInvite({
+    scope,
+    card: el<HTMLElement>(".wall-invite"),
+    pixels: () => board.paintedPixels(),
+    loaded: () => board.syncState().lastAppliedAtMs !== null,
+    tunables: () => views?.tunables() ?? null,
+    viewerFree: () => views?.free() ?? { kind: "unknown" },
+    connected: () => scope.walletAccount() !== null,
+  });
+  invite.render();
 
   // The Tile card: painter, age, cost to cover, Paint over this, Copy link.
   inspector = createTileInspector({
@@ -354,6 +378,7 @@ export function mountWall(
     free: () => views?.free() ?? { kind: "unknown" },
     knownCost: (cell) => pricing.knownCost(cell),
     network: PAGE_NETWORK,
+    loaded: () => board.syncState().lastAppliedAtMs !== null,
     prime: () => views?.prime(),
     paintOver: (cell) => {
       modes.setMode("paint");
@@ -438,6 +463,7 @@ export function mountWall(
     void pricing.refreshCreditsDock();
     dockPrimary.sync();
     if (previousAccount !== session.accountId) views?.onWalletChanged();
+    invite?.render();
   });
   scope.onDispose(unsubWallet);
   scope.onDispose(() => {

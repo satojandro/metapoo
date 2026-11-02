@@ -58,9 +58,13 @@ export interface InspectorInput {
   knownCost: number | undefined;
   network: string;
   pageUrl: string;
+  /** False until the wall has been read once: a blank tile might just not be loaded yet. */
+  loaded?: boolean;
 }
 
 export interface InspectorModel {
+  /** The wall isn't read yet: show that instead of facts that could be wrong. */
+  loading: boolean;
   colour: { name: string; hex: string } | null;
   painter: { account: string; you: boolean; href: string | null } | null;
   ago: string | null;
@@ -73,6 +77,9 @@ const credits = (n: number) => `${n} credit${n === 1 ? "" : "s"}`;
 
 export function inspectorModel(input: InspectorInput): InspectorModel {
   const { cell, pixel, viewer, now, tunables, free, knownCost, network, pageUrl } = input;
+  if (input.loaded === false && !(pixel && pixel.colorIndex !== null)) {
+    return { loading: true, colour: null, painter: null, ago: null, wetness: null, cost: "", link: tileLink(pageUrl, cell) };
+  }
   const painted = !!pixel && pixel.colorIndex !== null;
   const swatch = painted ? paletteColor(pixel!.colorIndex!) : null;
   const artist = painted ? pixel!.artistAccountId : null;
@@ -90,6 +97,7 @@ export function inspectorModel(input: InspectorInput): InspectorModel {
   }
 
   return {
+    loading: false,
     colour: swatch ? { name: swatch.name, hex: swatch.hex } : null,
     painter: artist ? { account: artist, you: artist === viewer, href: accountExplorerUrl(network, artist) } : null,
     ago: age === null ? null : formatAgo(age),
@@ -113,6 +121,8 @@ export interface TileInspectorDeps {
   free(): FreeFirstState;
   knownCost(cell: Cell): number | undefined;
   network: string;
+  /** Whether the wall has been read once. Omitted means yes. */
+  loaded?(): boolean;
   /** Make sure tunables (and free paints) are read; cheap, cached. */
   prime(): void;
   paintOver(cell: Cell): void;
@@ -176,11 +186,19 @@ export function createTileInspector(deps: TileInspectorDeps): TileInspector {
       knownCost: deps.knownCost(cell),
       network: deps.network,
       pageUrl: pageUrl(),
+      loaded: deps.loaded ? deps.loaded() : true,
     });
 
     const drawn = JSON.stringify(model);
     if (drawn === lastDrawn && !host.hidden) return;
     lastDrawn = drawn;
+
+    if (model.loading) {
+      host.replaceChildren(el("p", "tile-loading", "Reading the wall…"));
+      host.hidden = false;
+      card.dataset.filled = "true";
+      return;
+    }
 
     const list = el("dl", "tile-facts");
     const colour = el("span", "tile-colour");

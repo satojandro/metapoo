@@ -176,7 +176,10 @@ export function createWallView(deps: WallViewDeps): WallView {
 
     const cached = deps.cachedPixel(selected);
     let cellText: string;
-    if (!cached || cached.colorIndex === null) {
+    if (isContractConfigured() && deps.boardSync().lastAppliedAtMs === null && (!cached || cached.colorIndex === null)) {
+      // The wall hasn't been read yet: we don't know who painted this square.
+      cellText = "Square chosen. Reading the wall…";
+    } else if (!cached || cached.colorIndex === null) {
       cellText = isContractConfigured()
         ? "Square chosen. Nobody has painted it yet."
         : "Square chosen. Empty on the preview board.";

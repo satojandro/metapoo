@@ -65,10 +65,16 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
         </section>
 
         <aside class="wall-panel" aria-label="Wall panel">
-          <section class="wall-card wall-invite" data-wall-card="look">
+          <section class="wall-card wall-invite" data-wall-card="look" data-state="loading">
             <p class="mp-eyebrow">The wall</p>
             <h3>Leave your mark. <em>Cover someone else’s.</em></h3>
-            <p>Everything here was painted by someone. Tap a tile to see who. Fresh paint costs more to cover, so new work gets a moment on the wall.</p>
+            <dl class="wall-stats" aria-label="The wall right now" aria-busy="true">
+              <div><dt>Painted</dt><dd>…</dd></div>
+              <div><dt>Never painted</dt><dd>…</dd></div>
+              <div><dt>Wet now</dt><dd>…</dd></div>
+            </dl>
+            <p class="wall-invite-body">Everything here was painted by someone. Tap a tile to see who. Fresh paint costs more to cover, so new work gets a moment on the wall.</p>
+            <p class="wall-invite-free" hidden></p>
             <button id="start-painting" class="mp-btn mp-btn-primary wall-primary" type="button">Start painting</button>
           </section>
 

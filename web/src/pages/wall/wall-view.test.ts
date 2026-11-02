@@ -80,6 +80,14 @@ describe("wall view", () => {
     expect(deps.rules.textContent).toContain("Game contract: board.view.testnet on testnet.");
   });
 
+  it("a chosen square says the wall is loading until the first read", () => {
+    const { view, deps } = setup();
+    view.select({ x: 3, y: 4 });
+    view.showSelection();
+    expect(deps.selectionSummary.textContent).toContain("Reading the wall…");
+    expect(deps.selectionSummary.textContent).not.toContain("Nobody has painted");
+  });
+
   it("setFlow writes the shell strip and the dock line", () => {
     const { view, deps } = setup();
     view.setFlow("wallet_prompt");

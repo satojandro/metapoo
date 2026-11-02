@@ -113,6 +113,29 @@ export function turfColor(account: string): string {
   return hslToHex(turfHue(account), 0.62, lightness);
 }
 
+/**
+ * Turf colours by rank: the top painters (other than you) each get one of the ten
+ * `--mp-turf-*` colours, so the biggest holders are always clearly different.
+ * Painters beyond the tenth fall back to their stable hash colour. Ties rank
+ * alphabetically, so the assignment is stable for the same wall.
+ */
+export function assignTurfColors(
+  pixels: readonly PixelView[],
+  viewer: string | null,
+  colors: readonly string[],
+): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const pixel of pixels) {
+    const artist = pixel.artistAccountId;
+    if (pixel.colorIndex === null || !artist || artist === viewer) continue;
+    counts.set(artist, (counts.get(artist) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  const out = new Map<string, string>();
+  ranked.forEach(([account], i) => out.set(account, colors[i] ?? turfColor(account)));
+  return out;
+}
+
 export interface PainterRow {
   account: string;
   tiles: number;
@@ -150,7 +173,14 @@ export interface ViewPalette {
   free: string;
   old: string;
   you: string;
+  /** `--mp-turf-1` … `--mp-turf-10`, by rank. */
+  turf: string[];
 }
+
+const TURF_FALLBACK = [
+  "#73d7ee", "#ff8fa3", "#7ee081", "#b79ad0", "#ff9f5a",
+  "#5f8dff", "#e86fd8", "#3fc7a5", "#ff5f5f", "#c9c4ba",
+];
 
 const FALLBACK: ViewPalette = {
   wet: "#ff9f8f",
@@ -159,6 +189,7 @@ const FALLBACK: ViewPalette = {
   free: "#73d7ee",
   old: "#c9c4ba",
   you: "#f1dc5e",
+  turf: TURF_FALLBACK,
 };
 
 export function readViewPalette(root: Element | null = typeof document !== "undefined" ? document.documentElement : null): ViewPalette {
@@ -175,6 +206,7 @@ export function readViewPalette(root: Element | null = typeof document !== "unde
     free: read("--mp-near", FALLBACK.free),
     old: read("--mp-team", FALLBACK.old),
     you: read("--mp-tag", FALLBACK.you),
+    turf: TURF_FALLBACK.map((fallback, i) => read(`--mp-turf-${i + 1}`, fallback)),
   };
 }
 
@@ -224,6 +256,8 @@ export interface PainterInput {
   free: FreeFirstState;
   viewer: string | null;
   palette: ViewPalette;
+  /** Turf colour per painter (see `assignTurfColors`). Omitted: each painter's hash colour. */
+  turf?: ReadonlyMap<string, string>;
 }
 
 /** Null means "draw the art as it is". */
@@ -257,7 +291,7 @@ export function tilePainterFor(input: PainterInput): TilePainter | null {
     painted: (pixel) => {
       const artist = pixel.artistAccountId;
       if (!artist) return mixHex(palette.old, "#1c1d20", 0.6);
-      return artist === viewer ? palette.you : turfColor(artist);
+      return artist === viewer ? palette.you : input.turf?.get(artist) ?? turfColor(artist);
     },
     empty: () => null,
   };
@@ -381,8 +415,27 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
   let freeMissing = false;
   let palette = readViewPalette();
 
+  /** Turf colours are ranked once per wall and viewer, not per tile. */
+  let turfCache: { pixels: readonly PixelView[]; viewer: string | null; size: number; map: Map<string, string> } | null = null;
+  function turfColors(): Map<string, string> {
+    const pixels = deps.pixels();
+    const viewer = deps.viewer();
+    if (!turfCache || turfCache.pixels !== pixels || turfCache.viewer !== viewer || turfCache.size !== pixels.length) {
+      turfCache = { pixels, viewer, size: pixels.length, map: assignTurfColors(pixels, viewer, palette.turf) };
+    }
+    return turfCache.map;
+  }
+
   function painterInput(): PainterInput {
-    return { mode, now: nowNs(now()), tunables, free, viewer: deps.viewer(), palette };
+    return {
+      mode,
+      now: nowNs(now()),
+      tunables,
+      free,
+      viewer: deps.viewer(),
+      palette,
+      turf: mode === "turf" ? turfColors() : undefined,
+    };
   }
 
   function renderLegend(): void {
@@ -414,7 +467,7 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
         const li = document.createElement("li");
         if (row.you) li.dataset.you = "true";
         const sw = document.createElement("i");
-        sw.style.background = row.you ? palette.you : turfColor(row.account);
+        sw.style.background = row.you ? palette.you : turfColors().get(row.account) ?? turfColor(row.account);
         sw.setAttribute("aria-hidden", "true");
         const rank = document.createElement("span");
         rank.className = "wall-turf-rank";
@@ -495,6 +548,7 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
     if (next === mode) return;
     mode = next;
     palette = readViewPalette();
+    turfCache = null;
     update();
     if (mode === "price" || mode === "age") void ensureTunables();
     if (mode === "price") void ensureFree();
