@@ -191,7 +191,7 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
     directPaintToggle.disabled = false;
     directPaintToggle.title = tapToPaintEnabled
       ? "Drag to paint is on: click a square to paint it, with no wallet popup."
-      : "Choose a square, then press Place paint.";
+      : "Choose a square, then Paint this tile.";
 
     paintUnlock.hidden = !(
       connected &&
@@ -220,7 +220,7 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
       ? ""
       : tapToPaintEnabled
         ? "Drag to paint is on. Drag or click to paint. To move the board, hold space, use two fingers, or the middle mouse button."
-        : "Choose a square, then press Place paint.";
+        : "Choose a square, then Paint this tile.";
   }
 
   /**

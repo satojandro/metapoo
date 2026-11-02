@@ -209,7 +209,11 @@ class FakeResizeObserver {
   unobserve(): void {}
 }
 
-function mount(services: AppServices, size = { width: 512, height: 512 }): Mounted {
+function mount(
+  services: AppServices,
+  size = { width: 512, height: 512 },
+  mode: "look" | "paint" = "paint",
+): Mounted {
   let api: WallMountTestApi | null = null;
   const root = document.querySelector<HTMLElement>("#root")!;
   const dispose = mountWall(root, services, {
@@ -217,6 +221,9 @@ function mount(services: AppServices, size = { width: 512, height: 512 }): Mount
       api = testApi;
     },
   });
+  // These behaviours are about painting, so they run in Paint mode. Look, the
+  // page's default, is covered in wall-modes.test.ts.
+  if (mode === "paint") root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
   const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
   Object.assign(viewport, { setPointerCapture: vi.fn() });
   vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -384,7 +391,7 @@ describe("wall behaviour: free board", () => {
     focus.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     expect(text(root, "#selection-summary")).toContain("Selected square x=1, y=1");
     expect(text(document.body, "#flow-state")).toBe(
-      "Choose a colour, then Place paint.",
+      "Choose a colour, then Paint this tile.",
     );
     focus.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await vi.waitFor(() => expect(text(root, "#result")).toContain("Paint confirmed"));
@@ -785,5 +792,133 @@ describe("wall behaviour: dispose", () => {
     } finally {
       for (const restore of restores) restore();
     }
+  });
+});
+
+describe("wall modes and the dock's primary action (Phase 1 step 1)", () => {
+  const SIGNED_OUT = { accountId: null, networkId: null } as unknown as Session;
+
+  function stageTransform(root: HTMLElement): string {
+    return root.querySelector<HTMLElement>("#board-stage")!.style.transform;
+  }
+
+  it("opens in Look: a tap shows the tile and never paints, even with painting armed", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const services = createAppServices();
+    controllableWallet(services, ALICE);
+    const { root, dispose, viewport } = mount(services, undefined, "look");
+    await booted(root);
+    expect(root.querySelector<HTMLElement>(".wall-page")!.dataset.mode).toBe("look");
+    root.querySelectorAll<HTMLButtonElement>(".swatch")[2]!.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked).toBe(true),
+    );
+
+    touch(viewport, "pointerdown", 1, 260, 260);
+    touch(viewport, "pointerup", 1, 260, 260);
+
+    expect(text(root, "#selection-summary")).toContain("Selected square");
+    await Promise.resolve();
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    expect(vi.mocked(signAndSendStrokeLocally)).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it("in Look a one-finger drag moves the wall and paints nothing", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const services = createAppServices();
+    controllableWallet(services, ALICE);
+    const { root, dispose, viewport } = mount(services, undefined, "look");
+    await booted(root);
+    root.querySelectorAll<HTMLButtonElement>(".swatch")[4]!.click();
+    root.querySelector<HTMLButtonElement>("#zoom-in")!.click();
+    root.querySelector<HTMLButtonElement>("#zoom-in")!.click();
+    const before = stageTransform(root);
+
+    touch(viewport, "pointerdown", 1, 200, 200);
+    touch(viewport, "pointermove", 1, 260, 230);
+    touch(viewport, "pointermove", 1, 300, 260);
+    touch(viewport, "pointerup", 1, 300, 260);
+
+    expect(stageTransform(root)).not.toBe(before);
+    expect(vi.mocked(signAndSendStrokeLocally)).not.toHaveBeenCalled();
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it("Move turns a Paint drag into a pan, and a tap with Move on never paints", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+    const services = createAppServices();
+    controllableWallet(services, ALICE);
+    const { root, dispose, viewport } = mount(services);
+    await booted(root);
+    const move = root.querySelector<HTMLButtonElement>("#wall-move")!;
+    expect(move.hidden).toBe(false);
+    root.querySelectorAll<HTMLButtonElement>(".swatch")[4]!.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked).toBe(true),
+    );
+    root.querySelector<HTMLButtonElement>("#zoom-in")!.click();
+    root.querySelector<HTMLButtonElement>("#zoom-in")!.click();
+
+    move.click();
+    expect(move.getAttribute("aria-pressed")).toBe("true");
+    const before = stageTransform(root);
+    touch(viewport, "pointerdown", 1, 200, 200);
+    touch(viewport, "pointermove", 1, 260, 230);
+    touch(viewport, "pointermove", 1, 300, 260);
+    touch(viewport, "pointerup", 1, 300, 260);
+    expect(stageTransform(root)).not.toBe(before);
+
+    touch(viewport, "pointerdown", 2, 250, 250);
+    touch(viewport, "pointerup", 2, 250, 250);
+    await Promise.resolve();
+    expect(vi.mocked(signAndSendStrokeLocally)).not.toHaveBeenCalled();
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+
+    // Back to Look: Move switches off and hides.
+    root.querySelector<HTMLButtonElement>("#wall-mode-look")!.click();
+    expect(move.hidden).toBe(true);
+    expect(root.querySelector<HTMLElement>(".wall-page")!.dataset.moving).toBe("false");
+    dispose();
+  });
+
+  it("Enter in Look opens Paint instead of sending anything", async () => {
+    const services = createAppServices();
+    controllableWallet(services, ALICE);
+    const { root, dispose } = mount(services, undefined, "look");
+    await booted(root);
+    root.querySelectorAll<HTMLButtonElement>(".swatch")[1]!.click();
+    const focus = root.querySelector<HTMLElement>("#board-focus")!;
+    focus.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    focus.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(root.querySelector<HTMLElement>(".wall-page")!.dataset.mode).toBe("paint");
+    await Promise.resolve();
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it("the dock shows one primary action, labelled by state", async () => {
+    const services = createAppServices();
+    const wallet = controllableWallet(services, SIGNED_OUT);
+    const { root, dispose } = mount(services);
+    await booted(root);
+    const primary = root.querySelector<HTMLButtonElement>("#dock-primary")!;
+    const action = root.querySelector<HTMLElement>(".wall-action")!;
+    const drawButton = root.querySelector<HTMLButtonElement>("#draw-button")!;
+
+    await vi.waitFor(() => expect(primary.textContent).toBe("Connect wallet to paint"));
+    expect(primary.hidden).toBe(false);
+    expect(action.dataset.primary).toBe("connect");
+
+    wallet.emit(ALICE);
+    await vi.waitFor(() => expect(primary.textContent).toBe("Pick a colour"));
+    expect(primary.disabled).toBe(true);
+
+    root.querySelectorAll<HTMLButtonElement>(".swatch")[3]!.click();
+    await vi.waitFor(() => expect(action.dataset.primary).toBe("place"));
+    expect(primary.hidden).toBe(true);
+    expect(drawButton.textContent).toBe("Paint this tile");
+    dispose();
   });
 });

@@ -14,6 +14,9 @@ import type { RepaintChrome } from "./repaint-price";
 import { wallPageHtml } from "./wall-template";
 import { createWallView, fillBlock } from "./wall-view";
 import { createWallScope } from "./wall-scope";
+import { createWallModes } from "./wall-modes";
+import { mountDockPrimary } from "./dock-primary";
+import "./wall-page.css";
 
 /**
  * Lifecycle-safe wall mount.
@@ -140,6 +143,19 @@ export function mountWall(
 
   const scope = createWallScope();
 
+  // Look / Paint and Move decide what a gesture means; they never change the camera
+  // maths or the paint path. Look is the default (owner, 2 Nov).
+  const wallPage = el<HTMLElement>(".wall-page");
+  const modes = createWallModes({
+    scope,
+    page: wallPage,
+    lookButton: el<HTMLButtonElement>("#wall-mode-look"),
+    paintButton: el<HTMLButtonElement>("#wall-mode-paint"),
+    moveButton: el<HTMLButtonElement>("#wall-move"),
+    startPainting: el<HTMLButtonElement>("#start-painting"),
+    backToLook: el<HTMLButtonElement>("#wall-back-to-look"),
+  });
+
   // Controllers reach each other only through these closures, so creation
   // order is free except where the DOM cares: the buy-credits sheet subscribes
   // to the wallet before the wall does, and the camera's pointer preview sits
@@ -189,10 +205,19 @@ export function mountWall(
     },
     updateCompactStatus: () => view.updateCompactStatus(),
     attemptDraw: () => {
+      // Enter in Look mode opens Paint instead of sending anything.
+      if (modes.mode() === "look") {
+        modes.setMode("paint");
+        return;
+      }
       void paint.attemptDraw();
     },
-    tapSelected: (cell, tapOptions) => paint.maybeEnqueueDirectPaint(cell, tapOptions),
+    // A tap in Look mode (or with Move on) only shows the tile; it never paints.
+    tapSelected: (cell, tapOptions) => {
+      if (modes.tapMayPaint()) paint.maybeEnqueueDirectPaint(cell, tapOptions);
+    },
     hoverCell: (cell) => pricing.requestCellPrice(cell),
+    panOnly: () => modes.panOnly(),
   });
 
   const wallHint = mountWallHint(el<HTMLElement>("#wall-hint-host"));
@@ -293,6 +318,27 @@ export function mountWall(
 
   paintCreated = true;
   paint.syncSubmitEnabled();
+
+  const dockPrimary = mountDockPrimary({
+    scope,
+    dock: el<HTMLElement>(".wall-dock"),
+    actionRow: el<HTMLElement>(".wall-action"),
+    primary: el<HTMLButtonElement>("#dock-primary"),
+    drawButton,
+    creditsDock,
+    creditsBalance,
+    buyCreditsButton,
+    drawState,
+    connected: () => scope.walletAccount() !== null,
+    colourChosen: () => view.selectedColor() !== null,
+    connect: () => {
+      // The shell's Connect wallet button carries the drawing-key opt-in.
+      const shellConnect = shellEl<HTMLButtonElement>("#connect-button");
+      if (shellConnect) shellConnect.click();
+      else void services.wallet.connect();
+    },
+  });
+  scope.onDispose(() => dockPrimary.dispose());
   view.fillRules();
   view.buildPalette();
   view.setFlow("disconnected");
@@ -331,6 +377,7 @@ export function mountWall(
     }
     paint.showDrawingSession();
     void pricing.refreshCreditsDock();
+    dockPrimary.sync();
   });
   scope.onDispose(unsubWallet);
   scope.onDispose(() => {

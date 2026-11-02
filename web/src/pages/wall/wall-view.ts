@@ -119,7 +119,10 @@ export function createWallView(deps: WallViewDeps): WallView {
 
   // Enlarge the real canvas without altering its pixels or wallet state.
   scope.listen(focusCanvas, "click", () => {
-    const focused = pageRoot.querySelector(".wall-layout")!.classList.toggle("is-focused");
+    // Step 1 folds Focus canvas into Fit; the button stays mounted but hidden until step 4.
+    const page = pageRoot.querySelector(".wall-layout, [data-page='wall']");
+    if (!page) return;
+    const focused = page.classList.toggle("is-focused");
     focusCanvas.setAttribute("aria-pressed", String(focused));
     focusCanvas.textContent = focused ? "Back to the stall ↙" : "Focus canvas ↗";
   });
@@ -259,7 +262,7 @@ export function createWallView(deps: WallViewDeps): WallView {
       "An unpainted square is not a color. It has no stored artist. Palette index 0 is Ink, a real paint color.",
       "Overwrite rule: Open wall. Any connected account may paint any pixel, including one someone else painted. Vandalism is possible.",
       "The current artist is credit for the latest successful write. That is not a legal claim on the artwork.",
-      "Explore with pan and zoom. Place paint (or Enter) submits a draw. With Direct paint enabled at paint zoom, drag to paint a stroke. Pan and pinch never paint.",
+      "Look mode: drag to move the wall, tap to see a tile. Paint mode: tap a square, then Paint this tile (or Enter). With a drawing key, drag paints a stroke. Moving and pinching never paint.",
       isContractConfigured()
         ? `Game contract: ${CONTRACT_ID} on ${PAGE_NETWORK}. On open (and Refresh), the page loads every painted cell via paginated get_pixels. Transaction execution is reported separately from the latest cell owner; a successful paint may already be overwritten under Open wall.`
         : "No game contract id is configured yet (VITE_CONTRACT_ID empty), so this page will not open a draw signature or claim a chain success.",
@@ -421,7 +424,7 @@ export function createWallView(deps: WallViewDeps): WallView {
     const labels: Record<UiPhase, string> = {
       disconnected: "Look around freely. Connect a wallet to paint.",
       connected: "Choose a square, then a colour.",
-      editing: "Choose a colour, then Place paint.",
+      editing: "Choose a colour, then Paint this tile.",
       wallet_prompt: "Approve or reject in your wallet.",
       submitted: "Sent. Waiting for the wall to confirm.",
       confirmed: "Painted. Your square is on the wall.",

@@ -41,7 +41,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   lede.id = "shell-lede";
   lede.className = "lede";
   lede.textContent =
-    "PUBLIC WALL. PRIVATE MOMENT.";
+    "THE ONLY PUBLIC STALL ON THE INTERNET";
   brand.append(homeLink, lede);
 
   const nav = document.createElement("nav");

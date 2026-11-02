@@ -205,6 +205,8 @@ describe("mountWall dispose", () => {
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
+    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
+    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -664,7 +666,7 @@ describe("mountWall dispose", () => {
     toggle.dispatchEvent(new Event("change", { bubbles: true }));
     emit!({ accountId: "alice.testnet", networkId: "testnet" });
     expect(toggle.checked).toBe(false);
-    expect(status.textContent).toMatch(/place paint/i);
+    expect(status.textContent).toMatch(/paint this tile/i);
 
     expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
     dispose();
@@ -688,6 +690,8 @@ describe("mountWall dispose", () => {
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
+    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
+    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     // 200 / 128 = ~1.56 px per cell: far below PAINT_MIN_CELL_PX (16). Drag used
@@ -806,6 +810,8 @@ describe("mountWall dispose", () => {
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
+    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
+    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -872,6 +878,8 @@ describe("mountWall dispose", () => {
         api = testApi;
       },
     });
+    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
+    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -942,6 +950,8 @@ describe("mountWall dispose", () => {
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
+    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
+    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -952,9 +962,9 @@ describe("mountWall dispose", () => {
 
     touchPointer(viewport, "pointerdown", 1, 200, 200);
 
-    expect(root.querySelector("#draw-state")!.textContent).toMatch(
-      /Drag to paint strokes/,
-    );
+    // Connected with no colour and no drawing key: the first missing thing is the
+    // colour. The hidden "Drag to paint strokes" toggle is named last, if at all.
+    expect(root.querySelector("#draw-state")!.textContent).toMatch(/pick a colour/i);
     expect(vi.mocked(signAndSendStrokeLocally)).not.toHaveBeenCalled();
     dispose();
   });
@@ -1219,6 +1229,8 @@ describe("mounted paint strokes", () => {
     };
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
+    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
+    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
     await vi.waitFor(() => expect(root.querySelector("#board-load-status")?.textContent).toContain("painted cell"));
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });

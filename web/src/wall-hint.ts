@@ -1,7 +1,7 @@
 export const WALL_HINT_STORAGE_KEY = "metapoo.wallHint.dismissed.v1";
 
 export const HINT_TEXT =
-  "New here? Tap a square, pick a colour, then Place paint. Pinch or scroll to zoom. Anyone can paint over anyone.";
+  "New here? Pick a colour, tap a square, then Paint this tile. Pinch or scroll to zoom; turn on Move to drag the wall. Anyone can paint over anyone.";
 
 type HintStorage = Pick<Storage, "getItem" | "setItem">;
 

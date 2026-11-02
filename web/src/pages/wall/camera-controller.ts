@@ -68,6 +68,11 @@ export interface CameraControllerDeps {
   tapSelected(cell: Cell, options: { paintZoom: boolean }): void;
   /** Hovering a cell with a fine pointer; the price badge may follow. */
   hoverCell(cell: Cell): void;
+  /**
+   * Every one-pointer drag moves the wall (Look mode, or Paint with Move on).
+   * Same meaning as holding space; omitted means "only the usual pan gestures".
+   */
+  panOnly?(): boolean;
 }
 
 export interface CameraController {
@@ -362,6 +367,11 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
     let lastY = 0;
     let pinchStartDistance = 0;
     let pinchStartCamera: Camera | null = null;
+    // Two fingers both zoom (distance) and move the wall (midpoint). The frame is
+    // the existing zoomAt about the starting midpoint, then panBy the midpoint's
+    // travel: the same camera functions, composed; no new camera maths.
+    let pinchStartMidX = 0;
+    let pinchStartMidY = 0;
     // The reducer decides whether a sequence is a tap. Keep its originating
     // cell alongside that state so a sub-threshold move across tiny fitted
     // cells cannot turn a touch scroll/pan into a placement on another cell.
@@ -411,7 +421,8 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
           pointerEvent.button === 1 ||
           pointerEvent.button === 2 ||
           spaceHeld ||
-          beganOnPanSurface;
+          beganOnPanSurface ||
+          (deps.panOnly?.() ?? false);
         strokes.begin(cell, wantsPan);
         lastX = pointerEvent.clientX;
         lastY = pointerEvent.clientY;
@@ -425,6 +436,9 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
         // Every pinch frame derives from the same camera. Mixing a prior frame's
         // pan with the initial cell size makes the board jump under two fingers.
         pinchStartCamera = { ...camera };
+        const startRect = boardViewport.getBoundingClientRect();
+        pinchStartMidX = (pts[0].clientX + pts[1].clientX) / 2 - startRect.left;
+        pinchStartMidY = (pts[0].clientY + pts[1].clientY) / 2 - startRect.top;
         boardViewport.classList.add("is-panning");
       }
     });
@@ -449,13 +463,13 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
           const midX = (pts[0].clientX + pts[1].clientX) / 2 - rect.left;
           const midY = (pts[0].clientY + pts[1].clientY) / 2 - rect.top;
           const factor = distance / pinchStartDistance;
+          const size = readViewportSize();
           applyCamera(
-            zoomAt(
-              pinchStartCamera,
-              readViewportSize(),
-              factor,
-              midX,
-              midY,
+            panBy(
+              zoomAt(pinchStartCamera, size, factor, pinchStartMidX, pinchStartMidY),
+              size,
+              midX - pinchStartMidX,
+              midY - pinchStartMidY,
             ),
           );
           positionSelection();

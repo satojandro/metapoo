@@ -1,5 +1,6 @@
 /**
- * Wall page markup (stall + board + paint dock + collapsed details).
+ * Wall page markup: the wall first (view bar, framed board, foot line), one side panel
+ * (a bottom sheet on phone) for Look and Paint, and the collapsed About / details.
  * Wallet chrome lives on the app shell so it survives navigation.
  */
 
@@ -43,107 +44,124 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
   };
 
   return `
-    <div class="layout wall-layout" data-page="wall">
-      <main>
-        <div class="wall-intro">
-          <div><p class="eyebrow">AN OPEN WALL FOR THE INTERNET</p>
-          <h2 data-route-heading>Leave your <em>mark.</em></h2></div>
-          <div class="wall-intro-meta">
-            <p class="wall-invitation">A shared canvas. An unlikely gallery.</p>
-            <p class="wall-runtime-status" aria-label="Network">
-              <span>${NETWORK_BADGE[network]}</span>
-            </p>
-            <p id="board-freshness" class="board-freshness wall-runtime-status" role="status" aria-live="polite">Reading the wall…</p>
-          </div>
-        </div>
-
-        <section class="stall" aria-label="Toilet stall with pixel wall">
-          <div class="stall-scene">
-            <button id="focus-canvas" class="action scene-focus" type="button" aria-pressed="false">Focus canvas ↗</button>
-            <div class="stall-room">
-              ${scenery.entranceHtml}
-
-              <div class="stall-back">
-                <div class="back-wall-skin">
-                  ${scenery.backWallArtHtml}
-                  <div class="board-mount">
-                    <div class="board-bezel">
-                      <div
-                        id="board-focus"
-                        class="board-focus"
-                        tabindex="0"
-                        role="application"
-                        aria-label="Pixel board"
-                        aria-describedby="board-help selection-summary"
-                      >
-                        <div id="board-viewport" class="board-viewport">
-                          <div id="board-stage" class="board-stage">
-                            <canvas id="board" width="512" height="512">
-                              A 128 by 128 pixel board. Use the selection text if
-                              the picture does not load.
-                            </canvas>
-                          </div>
-                          <div id="selection-ring" hidden></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  ${scenery.toiletHtml}
-                </div>
-              </div>
-
-              ${scenery.floorHtml}
+    <div class="wall-page" data-page="wall" data-mode="look" data-moving="false">
+      <h2 class="visually-hidden" data-route-heading>The wall</h2>
+      <main class="wall-main">
+        <section class="wall-stage" aria-label="The wall">
+          <div class="board-toolbar wall-bar" role="toolbar" aria-label="Wall controls">
+            <div class="mp-seg wall-mode" role="group" aria-label="Mode">
+              <button id="wall-mode-look" type="button" data-wall-mode="look" aria-pressed="true">Look</button>
+              <button id="wall-mode-paint" type="button" data-wall-mode="paint" aria-pressed="false">Paint</button>
             </div>
+            <button id="wall-move" class="wall-move" type="button" aria-pressed="false" hidden
+              title="Drag moves the wall instead of painting">Move</button>
+            <div class="mp-seg mp-seg-small wall-views" role="group" aria-label="Wall view">
+              <button type="button" data-wall-view="art" aria-pressed="true">Art</button>
+              <button type="button" data-wall-view="price" aria-pressed="false" disabled title="Coming next">Price</button>
+              <button type="button" data-wall-view="age" aria-pressed="false" disabled title="Coming next">Age</button>
+              <button type="button" data-wall-view="turf" aria-pressed="false" disabled title="Coming next">Turf</button>
+            </div>
+          </div>
+
+          <div class="wall-frame">
+            <div
+              id="board-focus"
+              class="board-focus"
+              tabindex="0"
+              role="application"
+              aria-label="Pixel board"
+              aria-describedby="board-help selection-summary"
+            >
+              <div id="board-viewport" class="board-viewport">
+                <div id="board-stage" class="board-stage">
+                  <canvas id="board" width="512" height="512">
+                    A 128 by 128 pixel board. Use the selection text if
+                    the picture does not load.
+                  </canvas>
+                </div>
+                <div id="selection-ring" hidden></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wall-foot">
+            <p id="board-freshness" class="board-freshness" role="status" aria-live="polite">Reading the wall…</p>
+            <p id="hover-summary" class="hover-summary" aria-live="polite"></p>
+            <p class="wall-runtime-status" aria-label="Network"><span>${NETWORK_BADGE[network]}</span></p>
           </div>
         </section>
 
-        <div class="paint-dock">
-          <div id="wall-hint-host" class="wall-hint-host"></div>
-          <p id="repaint-legend" class="repaint-legend" hidden></p>
-          <p id="cell-price" class="cell-price" role="status" aria-live="polite"></p>
-          <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
-          <div id="credits-dock" class="credits-dock" hidden>
-            <p id="credits-balance" class="credits-balance" role="status" aria-live="polite">Credits: …</p>
-            <button id="buy-credits-button" class="action secondary" type="button">Buy credits</button>
-          </div>
-          <div id="buy-credits-host" class="buy-credits-host"></div>
-          <div id="paint-unlock" class="paint-unlock" hidden>
-            <p class="paint-unlock-title">Painting is read-only until you approve one drawing key.</p>
-            <p class="paint-unlock-body">
-              Approve once and this browser can place pixels without a wallet
-              popup for every square. The key can only paint on this wall, and
-              on a paid wall painting will spend your paint credits.
-              It cannot send NEAR or tokens from your wallet. You can revoke it
-              any time under About / details.
-            </p>
-            <button id="unlock-paint-button" class="action unlock" type="button">
-              Unlock painting — one approval
-            </button>
-          </div>
-          <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
-          <div class="dock-selection">
-            <p id="selection-summary" class="summary" aria-live="polite" aria-atomic="true"></p>
+        <aside class="wall-panel" aria-label="Wall panel">
+          <section class="wall-card wall-invite" data-wall-card="look">
+            <p class="mp-eyebrow">The wall</p>
+            <h3>Leave your mark. <em>Cover someone else’s.</em></h3>
+            <p>Everything here was painted by someone. Tap a tile to see who. Fresh paint costs more to cover, so new work gets a moment on the wall.</p>
+            <button id="start-painting" class="mp-btn mp-btn-primary wall-primary" type="button">Start painting</button>
+          </section>
+
+          <div class="paint-dock wall-card wall-dock" data-wall-card="paint">
+            <div id="wall-hint-host" class="wall-hint-host"></div>
+            <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
             <div id="selection-preview" class="selection-preview" aria-live="polite"></div>
+            <div class="wall-cost">
+              <p id="repaint-legend" class="repaint-legend" hidden></p>
+              <p id="cell-price" class="cell-price" role="status" aria-live="polite"></p>
+              <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
+            </div>
+            <div id="credits-dock" class="credits-dock" hidden>
+              <p id="credits-balance" class="credits-balance" role="status" aria-live="polite">Credits: …</p>
+              <button id="buy-credits-button" class="mp-btn" type="button">Buy credits</button>
+            </div>
+            <div id="buy-credits-host" class="buy-credits-host"></div>
+            <div id="paint-unlock" class="paint-unlock" hidden>
+              <p class="paint-unlock-title">Painting is read-only until you approve one drawing key.</p>
+              <p class="paint-unlock-body">
+                Approve once and this browser can place pixels without a wallet
+                popup for every square. The key can only paint on this wall, and
+                on a paid wall painting will spend your paint credits.
+                It cannot send NEAR or tokens from your wallet. You can revoke it
+                any time under About / details.
+              </p>
+              <button id="unlock-paint-button" class="mp-btn action unlock" type="button">
+                Unlock painting — one approval
+              </button>
+            </div>
+            <label class="direct-paint-toggle" for="direct-paint-toggle">
+              <input id="direct-paint-toggle" type="checkbox" />
+              Drag to paint strokes
+            </label>
+            <p id="tap-to-paint-status" class="tap-to-paint-status" role="status" aria-live="polite" hidden></p>
+            <p id="paint-unlocked" class="paint-unlocked" role="status" aria-live="polite" hidden></p>
+            <div class="wall-action">
+              <button id="dock-primary" class="mp-btn mp-btn-primary wall-primary" type="button" hidden></button>
+              <button id="draw-button" class="mp-btn mp-btn-primary wall-primary action place" type="button">Paint this tile</button>
+              <p id="place-reason" class="place-reason" aria-live="polite"></p>
+            </div>
+            <p id="draw-state" class="draw-state" role="status" aria-live="polite"></p>
+            <section id="result" class="result" role="status" aria-live="polite" aria-atomic="true"></section>
+            <button id="wall-back-to-look" class="wall-link" type="button">Done painting</button>
           </div>
-          <label class="direct-paint-toggle" for="direct-paint-toggle">
-            <input id="direct-paint-toggle" type="checkbox" />
-            Drag to paint strokes
-          </label>
-          <p id="tap-to-paint-status" class="tap-to-paint-status" role="status" aria-live="polite" hidden></p>
-          <p id="paint-unlocked" class="paint-unlocked" role="status" aria-live="polite" hidden></p>
-          <button id="draw-button" class="action place" type="button">Place paint</button>
-          <p id="place-reason" class="place-reason" aria-live="polite"></p>
-          <p id="draw-state" class="draw-state" role="status" aria-live="polite"></p>
-          <section id="result" class="result" role="status" aria-live="polite" aria-atomic="true"></section>
+
+          <section class="wall-card wall-inspect" aria-labelledby="wall-tile-heading">
+            <p id="wall-tile-heading" class="mp-eyebrow">Tile</p>
+            <p id="selection-summary" class="summary" aria-live="polite" aria-atomic="true"></p>
+          </section>
+
+          <p class="wall-refresh"><button id="refresh-board" class="wall-link" type="button">Refresh the wall now</button></p>
+        </aside>
+      </main>
+
+      <!-- Step 1 keeps these mounted but out of the composition; step 4 deletes them. -->
+      <div class="wall-legacy" hidden>
+        <button id="focus-canvas" type="button" aria-pressed="false" tabindex="-1">Focus canvas ↗</button>
+        <button id="zoom-paint" type="button" tabindex="-1">Paint zoom</button>
+        <div class="stall-room">
+          ${scenery.entranceHtml}
+          ${scenery.backWallArtHtml}
+          ${scenery.toiletHtml}
+          ${scenery.floorHtml}
         </div>
-
-        <div class="board-toolbar" role="toolbar" aria-label="Board view">
-          <button id="zoom-paint" class="action secondary" type="button">Paint zoom</button>
-          <button id="refresh-board" class="action secondary" type="button">Refresh board</button>
-        </div>
-
-        <p id="hover-summary" class="summary hover-summary" aria-live="polite"></p>
-
+      </div>
         <details class="wall-advanced about wall-about">
           <summary>About / details <span aria-hidden="true">＋</span></summary>
           <aside class="side wall-details-content">
@@ -155,11 +173,12 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                 ring marks the square you have selected.
               </p>
               <p id="board-help" class="help">
-                Drag to paint once a drawing key is approved; click selects a
-                square. To move the board, hold space and drag, use the middle
-                mouse button, or use two fingers on a touchscreen. Scroll or
-                pinch to zoom. Arrow keys move the selection; Enter places when
-                ready.
+                Look mode: drag moves the wall and a tap shows a tile. Paint
+                mode: drag paints a stroke once a drawing key is approved, and a
+                tap chooses a square. To move the wall while painting, turn on
+                Move, hold space, use the middle or right mouse button, or use
+                two fingers. Scroll or pinch to zoom. Arrow keys move the
+                selection; Enter paints when ready.
               </p>
             </section>
             <section data-wall-detail="bootstrap">
@@ -201,7 +220,6 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             </section>
           </aside>
         </details>
-      </main>
     </div>
   `;
 }
