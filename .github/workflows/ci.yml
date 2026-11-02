@@ -1,0 +1,98 @@
+# Runs every test suite in the repo on each pull request and on every push to main.
+# Before this, "tests pass" meant someone ran them locally. See AGENT.md, definition of done.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: web (vitest + tsc + vite build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # The build runs tsc --noEmit first: vitest does not typecheck.
+      - run: npm run build
+
+  shared:
+    name: shared board rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test shared/board-rules.test.ts
+
+  contracts:
+    name: contract ${{ matrix.crate }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [board, paid-board, toilet]
+        include:
+          # The retired free board stays live on testnet; its code is ask-first (AGENT.md),
+          # so its lints are reported, not enforced. The launch contracts are held to -D warnings.
+          - crate: board
+            clippy_deny: ''
+          - crate: paid-board
+            clippy_deny: '-D warnings'
+          - crate: toilet
+            clippy_deny: '-D warnings'
+    defaults:
+      run:
+        working-directory: contracts/${{ matrix.crate }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts/${{ matrix.crate }}
+      - run: cargo test --locked
+      - run: cargo clippy --locked --all-targets -- ${{ matrix.clippy_deny }}
+      # The deployed artifact must build, not just the host tests.
+      - run: cargo build --locked --release --target wasm32-unknown-unknown
+
+  keeper:
+    name: revenue keeper
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: ops/keeper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ops/keeper/package-lock.json
+      - run: npm ci
+      - run: npm test
