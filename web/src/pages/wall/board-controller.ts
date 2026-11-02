@@ -151,17 +151,14 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
   function showBoardFreshness(): void {
     if (boardSync.lastAppliedAtMs === null) {
       boardFreshness.textContent = boardSync.consecutiveFailures > 0
-        ? "Board update failed; not read successfully yet."
-        : "Board not read yet.";
+        ? "Couldn't read the wall yet. Retrying."
+        : "Reading the wall…";
       return;
     }
-    const freshness = formatFreshness(boardSync, Date.now()).replace(
-      /^Board freshness: /,
-      "",
-    );
+    const age = plainAge(Date.now() - boardSync.lastAppliedAtMs);
     boardFreshness.textContent = boardSync.consecutiveFailures > 0
-      ? `Board update failed; last ${freshness}`
-      : `Board last updated ${freshness}`;
+      ? `Wall updated ${age}. The latest refresh failed; retrying.`
+      : `Wall updated ${age}`;
   }
 
   function rememberBoardSchema(schema: number | null): void {
@@ -411,4 +408,14 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
       loadAbort.abort();
     },
   };
+}
+
+/** "just now", "12 s ago", "3 min ago": no block heights in the main UI. */
+export function plainAge(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 2) return "just now";
+  if (seconds < 60) return `${seconds} s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  return `${Math.round(minutes / 60)} h ago`;
 }

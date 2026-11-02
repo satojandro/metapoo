@@ -257,6 +257,7 @@ describe("paint controller", () => {
 
   it("Place paint is disabled by a latched price failure on a paid board", () => {
     const t = setup();
+    t.select({ x: 1, y: 1 });
     t.pricing.paidBoard.mockReturnValue(true);
     t.pricing.priceUnavailable.mockReturnValue(true);
     t.paint.syncSubmitEnabled();

@@ -953,7 +953,7 @@ describe("mountWall dispose", () => {
     touchPointer(viewport, "pointerdown", 1, 200, 200);
 
     expect(root.querySelector("#draw-state")!.textContent).toMatch(
-      /direct paint is off/i,
+      /Drag to paint strokes/,
     );
     expect(vi.mocked(signAndSendStrokeLocally)).not.toHaveBeenCalled();
     dispose();
@@ -1024,7 +1024,7 @@ describe("mountWall board polling", () => {
 
     expect(vi.mocked(fetchAllPaintedPixels)).toHaveBeenCalledTimes(1);
     expect(root.querySelector("#board-freshness")?.textContent).toMatch(
-      /last updated/i,
+      /^Wall updated /,
     );
     dispose();
   });

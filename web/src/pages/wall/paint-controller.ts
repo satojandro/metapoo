@@ -32,6 +32,8 @@ export interface PaintControllerDeps extends PaintSessionDom {
   /** Hosts the placement-outcome layer. */
   boardViewport: HTMLElement;
   drawState: HTMLElement;
+  /** Why Place paint is disabled, shown beside the button. Optional for older test mounts. */
+  placeReason?: HTMLElement;
   /** Shell-owned status strip. */
   flowState: HTMLElement;
   board: Pick<BoardController, "contractMetaOk" | "contractMetaIssue" | "rememberPixel" | "refreshBoardFromContract">;
@@ -176,7 +178,19 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
   };
 
   function syncSubmitEnabled(): void {
-    drawButton.disabled = drawInFlight || (pricing.paidBoard() && pricing.priceUnavailable());
+    const noSquare = view.selected() === null;
+    const noPrice = pricing.paidBoard() && pricing.priceUnavailable();
+    drawButton.disabled = drawInFlight || noPrice || noSquare;
+    if (deps.placeReason) {
+      // Say why the button is off, next to it. In flight, the status line already says.
+      deps.placeReason.textContent = drawInFlight
+        ? ""
+        : noSquare
+          ? "Choose a square on the wall first."
+          : noPrice
+            ? "Price unavailable. Refresh the board to try again."
+            : "";
+    }
   }
 
   /** After any paint settles: buttons, session note, balance and price. */

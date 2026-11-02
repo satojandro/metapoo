@@ -17,7 +17,6 @@ export interface ShellHandles {
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: string }> = [
   { href: "/wall", label: "Wall", match: "wall" },
   { href: "/money", label: "Where the money goes", match: "money" },
-  { href: "/admin", label: "Board settings", match: "admin" },
 ];
 
 /**
@@ -62,7 +61,9 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   nav.append(navList);
 
   const statusStrip = document.createElement("div");
-  statusStrip.className = "status-strip shell-status";
+  // The dock shows the same status next to Place paint. Keep this copy for
+  // screen readers and other routes, but don't show it twice on screen.
+  statusStrip.className = "status-strip shell-status visually-hidden";
   statusStrip.setAttribute("aria-live", "polite");
   const flowState = document.createElement("p");
   flowState.id = "flow-state";
@@ -81,17 +82,16 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   walletPanel.className = "wallet-chrome";
   walletPanel.setAttribute("aria-label", "Wallet");
   walletPanel.innerHTML = `
-    <button id="connect-button" class="action" type="button">Connect NEAR wallet</button>
-    <details class="wallet-details"><summary>Paint &amp; wallet</summary>
+    <button id="connect-button" class="action" type="button">Connect wallet</button>
+    <details class="wallet-details"><summary>Wallet</summary>
     <section id="paint-wallet-panel" aria-label="Paint and wallet balances"></section>
     <h2>Connection details</h2>
     <p id="wallet-summary"></p>
     <p id="network-summary"></p>
     <p class="wallet-money-link"><a href="/money">Where the money goes →</a></p>
-    <p class="wallet-admin-link"><a href="/admin">Board settings →</a></p>
     <label class="drawing-session-opt-in" for="authorize-drawing-session">
       <input id="authorize-drawing-session" type="checkbox" disabled />
-      Authorize drawing session on connect
+      Also allow painting without a popup each time
     </label>
     </details>
     <p id="wallet-error" class="result" role="status"></p>
@@ -121,9 +121,6 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   const detailsClose = wireWalletDetailsClose(walletDetails);
   // The primary nav is hidden on phones; this link is the phone route to /money.
   walletPanel.querySelector(".wallet-money-link a")?.addEventListener("click", () => {
-    walletDetails.open = false;
-  });
-  walletPanel.querySelector(".wallet-admin-link a")?.addEventListener("click", () => {
     walletDetails.open = false;
   });
 

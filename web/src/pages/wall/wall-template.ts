@@ -16,8 +16,6 @@ const NETWORK_BADGE: Record<NetworkId, string> = {
 
 export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
   const scenery = {
-    demoLabelHtml:
-      '<div class="scene-label" data-stall-scenery="scene-label" aria-hidden="true">DEMO STALL ART <span>LIVE BOARD</span></div>',
     entranceHtml: `
       <div class="stall-ceiling" data-stall-scenery="ceiling" aria-hidden="true"></div>
       <div class="stall-wall stall-wall-left" data-stall-scenery="left-wall" aria-hidden="true">
@@ -55,13 +53,12 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             <p class="wall-runtime-status" aria-label="Network">
               <span>${NETWORK_BADGE[network]}</span>
             </p>
-            <p id="board-freshness" class="board-freshness wall-runtime-status" role="status" aria-live="polite">Board not read yet.</p>
+            <p id="board-freshness" class="board-freshness wall-runtime-status" role="status" aria-live="polite">Reading the wall…</p>
           </div>
         </div>
 
         <section class="stall" aria-label="Toilet stall with pixel wall">
           <div class="stall-scene">
-            ${scenery.demoLabelHtml}
             <button id="focus-canvas" class="action scene-focus" type="button" aria-pressed="false">Focus canvas ↗</button>
             <div class="stall-room">
               ${scenery.entranceHtml}
@@ -90,13 +87,6 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                         </div>
                       </div>
                     </div>
-                    <p class="board-caption" aria-hidden="true">128 × 128 · INTERACTIVE CANVAS</p>
-                    <p class="board-legend">
-                      A filled square is painted on chain. A magenta corner dot
-                      means the paint was sent but not confirmed yet. The white
-                      ring marks the square you have selected.
-                    </p>
-                    <p id="wall-contract-line" class="wall-contract-line"></p>
                   </div>
                   ${scenery.toiletHtml}
                 </div>
@@ -108,6 +98,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
         </section>
 
         <div class="paint-dock">
+          <div id="wall-hint-host" class="wall-hint-host"></div>
           <p id="repaint-legend" class="repaint-legend" hidden></p>
           <p id="cell-price" class="cell-price" role="status" aria-live="polite"></p>
           <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
@@ -130,14 +121,20 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             </button>
           </div>
           <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
+          <div class="dock-selection">
+            <p id="selection-summary" class="summary" aria-live="polite" aria-atomic="true"></p>
+            <div id="selection-preview" class="selection-preview" aria-live="polite"></div>
+          </div>
           <label class="direct-paint-toggle" for="direct-paint-toggle">
             <input id="direct-paint-toggle" type="checkbox" />
-            Direct paint
+            Drag to paint strokes
           </label>
           <p id="tap-to-paint-status" class="tap-to-paint-status" role="status" aria-live="polite" hidden></p>
           <p id="paint-unlocked" class="paint-unlocked" role="status" aria-live="polite" hidden></p>
           <button id="draw-button" class="action place" type="button">Place paint</button>
+          <p id="place-reason" class="place-reason" aria-live="polite"></p>
           <p id="draw-state" class="draw-state" role="status" aria-live="polite"></p>
+          <section id="result" class="result" role="status" aria-live="polite" aria-atomic="true"></section>
         </div>
 
         <div class="board-toolbar" role="toolbar" aria-label="Board view">
@@ -145,17 +142,18 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
           <button id="refresh-board" class="action secondary" type="button">Refresh board</button>
         </div>
 
-        <p id="selection-summary" class="summary" aria-live="polite" aria-atomic="true"></p>
         <p id="hover-summary" class="summary hover-summary" aria-live="polite"></p>
-        <div id="selection-preview" class="selection-preview" aria-live="polite"></div>
-
-        <section id="result" class="result" role="status" aria-live="polite" aria-atomic="true"></section>
 
         <details class="wall-advanced about wall-about">
           <summary>About / details <span aria-hidden="true">＋</span></summary>
           <aside class="side wall-details-content">
             <section data-wall-detail="instructions">
               <h2>How to paint</h2>
+              <p class="board-legend">
+                A filled square is painted on chain. A magenta corner dot
+                means the paint was sent but not confirmed yet. The white
+                ring marks the square you have selected.
+              </p>
               <p id="board-help" class="help">
                 Drag to paint once a drawing key is approved; click selects a
                 square. To move the board, hold space and drag, use the middle
@@ -167,6 +165,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             <section data-wall-detail="bootstrap">
               <h2>About this wall</h2>
               <p id="lede" class="lede wall-lede"></p>
+              <p id="wall-contract-line" class="wall-contract-line"></p>
             </section>
             <section data-wall-detail="board-state">
               <h2>Raw board state</h2>

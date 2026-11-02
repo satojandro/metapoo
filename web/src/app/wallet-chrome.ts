@@ -32,6 +32,34 @@ export function mountWalletChrome(
   );
 
   const cleanups: Array<() => void> = [];
+  const walletDetails = root.querySelector<HTMLDetailsElement>("details.wallet-details");
+  const walletSummaryToggle = walletDetails?.querySelector("summary") ?? null;
+  const optInLabel = authorizeDrawingSession?.closest("label") ?? null;
+  let recoverableOps = 0;
+
+  /**
+   * One wallet control in the header. Disconnected: a Connect button (with the
+   * drawing-key opt-in beside it). Connected: the account name opens the wallet
+   * panel, and Disconnect lives inside it. The panel also shows while a
+   * broadcast operation is still recoverable, connected or not.
+   */
+  function placeWalletControls(connectedAccount: string | null): void {
+    if (!walletDetails) return;
+    const showPanel = connectedAccount !== null || recoverableOps > 0;
+    walletDetails.hidden = !showPanel;
+    if (!showPanel) walletDetails.open = false;
+    if (walletSummaryToggle) {
+      walletSummaryToggle.textContent = connectedAccount ?? "Wallet";
+      walletSummaryToggle.title = connectedAccount ?? "";
+    }
+    if (connectedAccount) {
+      walletDetails.append(connectButton);
+      if (optInLabel) walletDetails.append(optInLabel);
+    } else {
+      walletDetails.before(connectButton);
+      if (optInLabel) connectButton.after(optInLabel);
+    }
+  }
 
   function showWallet(): void {
     const session = services.wallet.getSession();
@@ -44,8 +72,9 @@ export function mountWalletChrome(
       walletSummary.textContent = `Not connected. You can still browse. Contract: ${
         CONTRACT_ID || "not configured"
       }.`;
-      connectButton.textContent = "Connect NEAR wallet";
+      connectButton.textContent = "Connect wallet";
     }
+    placeWalletControls(session.accountId);
     const notice = describeNetwork(session.accountId ? session.networkId : null);
     networkSummary.textContent = notice.message;
     if (authorizeDrawingSession) {
@@ -67,6 +96,8 @@ export function mountWalletChrome(
         op.phase === "submitted" ||
         op.phase === "confirmation_delayed",
     );
+    recoverableOps = recoverable.length;
+    placeWalletControls(services.wallet.getSession().accountId);
     opsRecovery.replaceChildren();
     const heading = document.createElement("h2");
     heading.textContent = "Operations";

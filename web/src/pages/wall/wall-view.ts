@@ -59,6 +59,8 @@ export interface WallViewDeps {
   refreshSelectedPixel(): void;
   pendingCount(): number;
   boardSync(): Readonly<BoardSyncState>;
+  /** Called after the selection text changes, so Place paint can follow it. */
+  onSelectionShown?(): void;
 }
 
 export interface WallView {
@@ -170,14 +172,12 @@ export function createWallView(deps: WallViewDeps): WallView {
   }
 
   function showSelection(): void {
-    const colorLabel =
-      selectedColor === null ? "none yet" : `${colorName(selectedColor)} (index ${selectedColor})`;
-
     updatePreview();
     deps.positionSelection();
 
     if (!selected) {
-      selectionSummary.textContent = `No square selected. Chosen paint: ${colorLabel}. Unpainted squares have no artist.`;
+      setSummary("No square selected. ", "Tap a square on the wall to choose it.");
+      deps.onSelectionShown?.();
       return;
     }
     // Touch has no hover. Selecting a square is how a finger reads the price.
@@ -187,15 +187,27 @@ export function createWallView(deps: WallViewDeps): WallView {
     let cellText: string;
     if (!cached || cached.colorIndex === null) {
       cellText = isContractConfigured()
-        ? "This square has no confirmed paint in our cache (unpainted or not read yet)."
-        : "This square is unpainted on the local mock board.";
+        ? "Square chosen. Nobody has painted it yet."
+        : "Square chosen. Empty on the preview board.";
     } else {
       const paintedName = colorName(cached.colorIndex);
       const artist = cached.artistAccountId ?? "unknown account";
-      cellText = `On-chain credit: ${paintedName} (index ${cached.colorIndex}) by ${artist}. Credit is the latest writer, not legal ownership.`;
+      cellText = `Square chosen. Painted ${paintedName} by ${artist}.`;
     }
 
-    selectionSummary.textContent = `Selected square x=${selected.x}, y=${selected.y}. Chosen paint: ${colorLabel}. Counting starts at the top-left. ${cellText}`;
+    setSummary(`Selected square x=${selected.x}, y=${selected.y}. `, cellText);
+    deps.onSelectionShown?.();
+  }
+
+  /**
+   * Visible text stays plain. Coordinates go to screen readers only: arrow-key
+   * users need them, and the toolbar readout shows them to everyone who looks.
+   */
+  function setSummary(spoken: string, shown: string): void {
+    const hidden = document.createElement("span");
+    hidden.className = "visually-hidden";
+    hidden.textContent = spoken;
+    selectionSummary.replaceChildren(hidden, document.createTextNode(shown));
   }
 
   function updatePreview(): void {
@@ -204,14 +216,14 @@ export function createWallView(deps: WallViewDeps): WallView {
     label.className = "preview-label";
 
     if (selectedColor === null) {
-      label.textContent = "Paint preview: pick a named color.";
+      label.textContent = "Pick a colour.";
       preview.append(label);
       return;
     }
 
     const swatch = PALETTE.find((item) => item.index === selectedColor);
     if (!swatch) {
-      label.textContent = "Paint preview: invalid color.";
+      label.textContent = "That colour isn't on this wall. Pick another.";
       preview.append(label);
       return;
     }
@@ -220,7 +232,7 @@ export function createWallView(deps: WallViewDeps): WallView {
     chip.className = "chip";
     chip.style.background = swatch.hex;
     chip.setAttribute("aria-hidden", "true");
-    label.textContent = `Paint preview: ${swatch.name} (palette index ${swatch.index})`;
+    label.textContent = `Your colour: ${swatch.name}`;
     preview.append(chip, label);
   }
 
@@ -407,21 +419,21 @@ export function createWallView(deps: WallViewDeps): WallView {
   function setFlow(phase: UiPhase): void {
     uiPhase = phase;
     const labels: Record<UiPhase, string> = {
-      disconnected: "State: disconnected — look freely; draw needs a wallet.",
-      connected: "State: connected — pick a square and a named color.",
-      editing: "State: editing — review the pixel rule, then Place paint.",
-      wallet_prompt: "State: wallet prompt — approve or reject in your wallet.",
-      submitted: "State: submitted — transaction is in flight; awaiting confirmation.",
-      confirmed: "State: confirmed — the transaction executed and the confirming read matched.",
-      confirmation_delayed: "State: confirmation delayed — outcome is unresolved and will not be resubmitted automatically.",
-      overwritten: "State: overwritten — the transaction executed, then another artist became the current cell owner.",
-      failed: "State: failed — the transaction did not execute; you can review and try again.",
+      disconnected: "Look around freely. Connect a wallet to paint.",
+      connected: "Choose a square, then a colour.",
+      editing: "Choose a colour, then Place paint.",
+      wallet_prompt: "Approve or reject in your wallet.",
+      submitted: "Sent. Waiting for the wall to confirm.",
+      confirmed: "Painted. Your square is on the wall.",
+      confirmation_delayed: "Still waiting for confirmation. It won't be sent again automatically.",
+      overwritten: "Painted, then someone painted over it.",
+      failed: "That didn't go through. You can try again.",
     };
     flowState.textContent = labels[phase];
     flowState.dataset.phase = phase;
     // Keep the current transaction outcome adjacent to the action that caused it;
     // shell chrome remains a compact duplicate for navigation-wide visibility.
-    drawState.textContent = labels[phase].replace(/^State: /, "");
+    drawState.textContent = labels[phase];
     drawState.dataset.phase = phase;
   }
 

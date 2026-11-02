@@ -80,7 +80,6 @@ export function mountWall(
   const el = <T extends Element = HTMLElement>(selector: string) => mustFindIn<T>(pageRoot, selector);
 
   const canvas = el<HTMLCanvasElement>("#board");
-  const stallScene = el(".stall-scene");
   const selectionRing = el("#selection-ring");
   const boardFocus = el("#board-focus");
   const boardViewport = el("#board-viewport");
@@ -137,7 +136,7 @@ export function mountWall(
   const buyCreditsHost = el("#buy-credits-host");
   const focusCanvas = el<HTMLButtonElement>("#focus-canvas");
   // Keep the current cell coordinates available when keyboard users reach Place.
-  drawButton.setAttribute("aria-describedby", "selection-summary cell-price stroke-total");
+  drawButton.setAttribute("aria-describedby", "selection-summary place-reason cell-price stroke-total");
 
   const scope = createWallScope();
 
@@ -196,7 +195,7 @@ export function mountWall(
     hoverCell: (cell) => pricing.requestCellPrice(cell),
   });
 
-  const wallHint = mountWallHint(stallScene);
+  const wallHint = mountWallHint(el<HTMLElement>("#wall-hint-host"));
 
   // Shell-owned status strip (survives wall dispose; safe if missing in tests).
   const flowState = shellEl<HTMLElement>("#flow-state") ?? document.createElement("p");
@@ -229,6 +228,8 @@ export function mountWall(
     onPaletteChanged: (paletteLength) => view.setPaletteLength(paletteLength),
   });
 
+  // The view reports selection changes; Place paint follows once painting is wired.
+  let paintCreated = false;
   const view = createWallView({
     scope,
     pageRoot,
@@ -258,6 +259,9 @@ export function mountWall(
     },
     pendingCount: () => paint.pendingCount(),
     boardSync: () => board.syncState(),
+    onSelectionShown: () => {
+      if (paintCreated) paint.syncSubmitEnabled();
+    },
   });
 
   const paint = createPaintController({
@@ -266,6 +270,7 @@ export function mountWall(
     sponsorship,
     boardViewport,
     drawState,
+    placeReason: el<HTMLElement>("#place-reason"),
     flowState,
     drawButton,
     result,
@@ -286,6 +291,8 @@ export function mountWall(
     render: () => camera.render(),
   });
 
+  paintCreated = true;
+  paint.syncSubmitEnabled();
   view.fillRules();
   view.buildPalette();
   view.setFlow("disconnected");

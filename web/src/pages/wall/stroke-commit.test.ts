@@ -35,7 +35,7 @@ describe("strokeBlockedReason", () => {
 
   it("names the missing precondition instead of one opaque message", () => {
     const cases: Array<[StrokeGate, RegExp]> = [
-      [{ ...ready, directPaint: false }, /direct paint is off/i],
+      [{ ...ready, directPaint: false }, /Drag to paint strokes/],
       [{ ...ready, accountId: null }, /connect a wallet/i],
       [{ ...ready, colorIndex: null }, /pick a colour/i],
       [{ ...ready, contractOk: false }, /metadata does not match/i],

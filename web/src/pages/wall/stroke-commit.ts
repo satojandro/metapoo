@@ -33,7 +33,7 @@ export interface StrokeGate {
  */
 export function strokeBlockedReason(gate: StrokeGate): string | null {
   if (!gate.directPaint) {
-    return "Direct paint is off, so dragging moves the board. Turn it on in the dock to paint with a drag.";
+    return "Dragging moves the board. Tick \"Drag to paint strokes\" in the dock to paint with a drag.";
   }
   if (!gate.accountId) {
     return "Connect a wallet to paint.";
