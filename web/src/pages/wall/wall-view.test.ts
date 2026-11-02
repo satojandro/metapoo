@@ -93,18 +93,90 @@ describe("wall view", () => {
   it("palette clicks pick a colour, press one swatch and update the preview", () => {
     const { view, deps } = setup();
     view.buildPalette();
+    view.setPaletteLength(8);
     const swatches = deps.palette.querySelectorAll<HTMLButtonElement>(".swatch");
-    // The dock still builds the whole shared palette; FE-1 makes it follow the board's palette.
-    expect(swatches).toHaveLength(PALETTE.length);
+    // An 8-colour board (board3, the free board) gets exactly its 8 swatches.
+    expect(swatches).toHaveLength(8);
     swatches[2]!.click();
     expect(view.selectedColor()).toBe(2);
     expect([...swatches].map((s) => s.getAttribute("aria-pressed"))).toEqual([
-      ...PALETTE.map((_, i) => (i === 2 ? "true" : "false")),
+      ...PALETTE.slice(0, 8).map((_, i) => (i === 2 ? "true" : "false")),
     ]);
     expect(deps.preview.textContent).toBe("Paint preview: Brick (palette index 2)");
     expect(deps.render).toHaveBeenCalled();
     // No square yet, so the flow does not move to editing.
     expect(view.uiPhase()).toBe("disconnected");
+  });
+
+  it("shows the safe first 8 before the board's palette is known", () => {
+    const { view, deps } = setup();
+    view.buildPalette();
+    expect(deps.palette.querySelectorAll(".swatch")).toHaveLength(8);
+  });
+
+  it("a 16-colour board gets 16 named swatches, an 8-colour board 8", () => {
+    const { view, deps } = setup();
+    view.buildPalette();
+    const first = deps.palette.querySelector(".swatch");
+    view.setPaletteLength(16);
+    const swatches = [...deps.palette.querySelectorAll<HTMLButtonElement>(".swatch")];
+    expect(swatches).toHaveLength(16);
+    expect(swatches[0]).toBe(first);
+    expect(swatches.map((s) => s.getAttribute("aria-label"))).toEqual(
+      PALETTE.map((c) => `${c.name}, palette index ${c.index}, color ${c.hex}`),
+    );
+    expect(swatches[12]!.getAttribute("aria-label")).toBe("Bleach, palette index 12, color #9ccbdc");
+    expect(deps.palette.dataset.count).toBe("16");
+    view.setPaletteLength(8);
+    expect(deps.palette.querySelectorAll(".swatch")).toHaveLength(8);
+    expect(deps.palette.dataset.count).toBe("8");
+  });
+
+  it("resets a chosen colour the new board would reject to 0", () => {
+    const { view, deps } = setup();
+    view.buildPalette();
+    view.setPaletteLength(16);
+    deps.palette.querySelectorAll<HTMLButtonElement>(".swatch")[12]!.click();
+    expect(view.selectedColor()).toBe(12);
+    view.setPaletteLength(8);
+    expect(view.selectedColor()).toBe(0);
+    const swatches = [...deps.palette.querySelectorAll<HTMLButtonElement>(".swatch")];
+    expect(swatches[0]!.getAttribute("aria-pressed")).toBe("true");
+    expect(deps.preview.textContent).toBe("Paint preview: Ink (palette index 0)");
+    // A colour inside the palette survives a change.
+    swatches[5]!.click();
+    view.setPaletteLength(16);
+    expect(view.selectedColor()).toBe(5);
+  });
+
+  it("arrow keys cross the row break; up and down move by a row of 8", () => {
+    const { view, deps } = setup();
+    view.buildPalette();
+    view.setPaletteLength(16);
+    const swatches = [...deps.palette.querySelectorAll<HTMLButtonElement>(".swatch")];
+    const press = (key: string) => {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      document.activeElement!.dispatchEvent(event);
+      return event;
+    };
+    // One tab stop for the group.
+    expect(swatches.filter((s) => s.tabIndex === 0)).toEqual([swatches[0]]);
+    swatches[7]!.focus();
+    expect(press("ArrowRight").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(swatches[8]);
+    press("ArrowLeft");
+    expect(document.activeElement).toBe(swatches[7]);
+    press("ArrowDown");
+    expect(document.activeElement).toBe(swatches[15]);
+    press("ArrowRight");
+    expect(document.activeElement).toBe(swatches[0]);
+    press("ArrowLeft");
+    expect(document.activeElement).toBe(swatches[15]);
+    press("ArrowUp");
+    expect(document.activeElement).toBe(swatches[7]);
+    press("ArrowUp");
+    expect(document.activeElement).toBe(swatches[7]);
+    expect(swatches.filter((s) => s.tabIndex === 0)).toEqual([swatches[7]]);
   });
 
   it("select() dismisses the hint and moves to editing only with a wallet", () => {
