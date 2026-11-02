@@ -157,4 +157,25 @@ describe("router dispose", () => {
     expect(spy).toHaveBeenCalledWith("popstate", expect.any(Function));
     spy.mockRestore();
   });
+
+  it("keeps the URL hash on start and on navigate, so #tile links survive", () => {
+    registerPageMount("home", (root) => {
+      root.textContent = window.location.hash;
+      return () => root.replaceChildren();
+    });
+    registerPageMount("wall", (root) => {
+      root.textContent = window.location.hash;
+      return () => root.replaceChildren();
+    });
+    window.history.replaceState(null, "", "/#tile-1-0");
+    const outlet = document.querySelector<HTMLElement>("#outlet")!;
+    const router = createRouter({ outlet, services: fakeServices() });
+    router.start();
+    expect(window.location.hash).toBe("#tile-1-0");
+    expect(outlet.textContent).toBe("#tile-1-0");
+    router.navigate("/wall#tile-5-6");
+    expect(window.location.hash).toBe("#tile-5-6");
+    expect(outlet.textContent).toBe("#tile-5-6");
+    router.stop();
+  });
 });
