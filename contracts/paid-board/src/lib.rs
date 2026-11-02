@@ -14,6 +14,7 @@
 mod emission;
 mod payments;
 mod safety;
+mod v1_fixture;
 use emission::Holder;
 use near_sdk::store::{IterableMap, LookupMap};
 use near_sdk::{env, near, AccountId, PanicOnDefault};
