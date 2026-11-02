@@ -112,10 +112,29 @@ including liquidity, slippage and tax, not nominal market capitalization.
   `receiver_id`, an exact price multiple as `amount`, and a JSON-encoded `msg`
   such as `{"min_credits":"2","expected_price":"100"}`. Follow the token's
   required 1 yoctoNEAR attachment and allow enough gas for receiver and resolver.
-- `draw(x,y,color)` / `draw_many(cells)`: no deposit; debit the caller's balance atomically. **Cost is
-  per cell and depends on how recently that cell was painted**: 1 credit for an empty cell or one last
-  painted more than 60 minutes ago, 2 credits at 10–60 minutes, 4 credits under 10 minutes. A stroke is
-  priced entry by entry and charged in one debit, so a rejected stroke costs and stores nothing.
+- `draw(x,y,color,max_credits)` / `draw_many(cells,max_credits)`: no deposit; debit the caller's balance
+  atomically. **Cost is per cell and depends on how recently that cell was painted**: 1 credit for an
+  empty cell or one last painted more than 60 minutes ago, 2 credits at 10–60 minutes, 4 credits under
+  10 minutes. A stroke is priced entry by entry (a repeated cell pays the young rate) and charged in one
+  debit, so a rejected stroke costs and stores nothing. If the total after free paints is above
+  `max_credits` the call rejects with `PriceRoseAboveMax` (spec §C2). Colours are 0–15 (§P1).
+- Free paints (`src/free_paint.rs`). **F1:** until every cell has been painted once
+  (`first_fill_complete`, never unset), a registered account's first `free_first_paints_per_account`
+  (25, bound 0–100) paints of *empty* cells cost 0. **F2:** after that latch, while
+  `happy_hour_enabled` and inside the weekly window (`happy_hour_weekday` 0 = Monday, `happy_hour_start_s`
+  after 00:00 UTC, `happy_hour_length_s`; start inclusive, end exclusive), base-tier cells cost 0 up to
+  `happy_hour_cap_per_account` per window, for registered accounts that have bought credits when
+  `happy_hour_requires_purchase`. Free cells join `free_cells`; a paid paint removes them. Switching happy
+  hour off, lowering the cap or shortening the window is immediate; turning it on, raising the cap,
+  lengthening the window or moving it while on needs 24 h since the last such change
+  (`HappyHourCooldown`) and restarts it. Each draw event cell carries `"free": true|false`.
+- `get_stroke_cost(account_id|null, cells)` → `{costs, free, total}`: exactly what `draw_many` would charge
+  that account now, free paints and repeated cells included; pass `total` as `max_credits`.
+  `get_cell_costs` is unchanged (tier price per cell, no free paints, no duplicate handling).
+- `get_free_first_paints(account_id)` → `{used, remaining, active, allowance, registered}`.
+- `get_happy_hour(account_id|null)` → `{open, enabled, first_fill_complete, window_start_ns, window_end_ns,
+  used, cap, remaining, eligible, requires_purchase}`; the window is the open one, or the next one when
+  closed; times are nanosecond strings.
 
 ## Game rules on chain (2026-10-28)
 

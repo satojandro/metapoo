@@ -121,7 +121,10 @@ mod tests {
     }
     fn setup() -> Board {
         context(0, 0);
-        Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback())
+        let mut board = Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback());
+        // Paid-path tests: F1 free first paints are covered in `free_paint.rs`.
+        board.tunables.free_first_paints_per_account = 0;
+        board
     }
     fn rejected(code: &str, f: impl FnOnce()) {
         let err =
@@ -141,13 +144,13 @@ mod tests {
         board.payments.outstanding = 10;
         board.set_paused(true);
         context(1, 0);
-        rejected("Paused", || board.draw(0, 0, 1));
+        rejected("Paused", || board.draw(0, 0, 1, u32::MAX));
         rejected("Paused", || {
             board.draw_many(vec![DrawCell {
                 x: 0,
                 y: 0,
                 color: 1,
-            }])
+            }], u32::MAX)
         });
         rejected("Paused", || {
             board.buy_credits_near(U128(1), U128(1));
@@ -164,7 +167,7 @@ mod tests {
         context(0, 0);
         board.set_paused(false);
         context(1, 0);
-        board.draw(0, 0, 1);
+        board.draw(0, 0, 1, u32::MAX);
         assert_eq!(board.get_credits(accounts(1)), Some(U128(9)));
     }
 
