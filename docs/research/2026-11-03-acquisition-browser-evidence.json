@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-03",
+  "kind": "browser_readonly_and_layout_evidence",
+  "origin": "http://127.0.0.1:5174",
+  "intents_probe": {
+    "captured_at_utc": "2026-11-02T20:10:23.502Z",
+    "tokens": {
+      "status": 200,
+      "cors_readable": true
+    },
+    "dry_quote": {
+      "status": 201,
+      "cors_readable": true,
+      "payable_address_created": false,
+      "fixture": "web/src/integrations/intents/fixtures/live-dryquote-2026-11-03.json"
+    },
+    "nonpayable_status_validation": {
+      "status": 404,
+      "cors_readable": true
+    },
+    "deployed_origin_verified": false,
+    "native_delivery_verified": false
+  },
+  "layout_fixture": {
+    "url_path": "/scripts/acquisition-browser-fixture.html",
+    "label": "No wallet, signatures, or payments; funding review is a visual fixture, RHEA unavailable",
+    "viewports": [
+      {
+        "width": 390,
+        "height": 844,
+        "document_scroll_width": 390,
+        "screenshot": "artifacts/acquisition/phone-fixture.jpg"
+      },
+      {
+        "width": 1280,
+        "height": 900,
+        "document_scroll_width": 1280,
+        "screenshot": "artifacts/acquisition/desktop-fixture.jpg"
+      }
+    ],
+    "privy_browser_module_import": "PASS",
+    "authentication_initialized": false
+  },
+  "out_of_scope": [
+    "provider login/provisioning with real credentials",
+    "wallet authorization or signing",
+    "funding transfer",
+    "swap",
+    "contract or site deployment"
+  ]
+}

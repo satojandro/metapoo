@@ -1,0 +1,12 @@
+.mp-intents-panel { border-top: 1px solid var(--mp-border, #777); margin-top: 1rem; padding-top: 1rem; max-width: 100%; overflow-wrap: anywhere; }
+.mp-intents-panel h3 { margin: 0 0 .75rem; }
+.mp-intents-panel form { display: grid; gap: .75rem; }
+.mp-intents-panel label { display: grid; gap: .3rem; }
+.mp-intents-panel input, .mp-intents-panel select, .mp-intents-panel button { box-sizing: border-box; max-width: 100%; min-height: 44px; font: inherit; }
+.mp-intents-panel input:not([type=checkbox]), .mp-intents-panel select { width: 100%; padding: .5rem; }
+.mp-intents-panel input[type=checkbox] { width: 1.3rem; }
+.mp-intents-panel button { padding: .6rem .8rem; cursor: pointer; }
+.mp-intents-panel button:disabled { cursor: default; opacity: .65; }
+.mp-intents-panel button[hidden] { display: none; }
+.mp-intents-panel :focus-visible { outline: 3px solid var(--mp-accent, #8262ff); outline-offset: 3px; }
+.mp-intents-panel img { display: block; max-width: 100%; height: auto; margin-top: .5rem; }

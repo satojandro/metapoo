@@ -1,0 +1,476 @@
+{
+  "version": 1,
+  "captured_at": "2026-11-02T18:52:04.836084+00:00",
+  "rpc_url": "https://rpc.mainnet.near.org",
+  "scope": "read-only public RPC; no signatures, swaps or storage deposits",
+  "observations": [
+    {
+      "account": "wrap.near",
+      "method": "ft_metadata",
+      "args": {},
+      "block_height": 222758502,
+      "block_hash": "DqbMfKSNQvgJn9rTptTqgfj792su9m9KwaJapqShV27K",
+      "value": {
+        "spec": "ft-1.0.0",
+        "name": "Wrapped NEAR fungible token",
+        "symbol": "wNEAR",
+        "icon": null,
+        "reference": null,
+        "reference_hash": null,
+        "decimals": 24
+      }
+    },
+    {
+      "account": "wrap.near",
+      "method": "view_account",
+      "args": {},
+      "block_height": 222758507,
+      "block_hash": "62i3YSJichU9Uj1tUWzk2Y8vYYnhNnXeomEmNUAfVPQX",
+      "value": {
+        "code_hash": "DL2f5xmZ44cQRP6vBMt94rvseH5d5KKnAGis2WkTAsh1"
+      }
+    },
+    {
+      "account": "token.v2.ref-finance.near",
+      "method": "ft_metadata",
+      "args": {},
+      "block_height": 222758513,
+      "block_hash": "DS8z6azRXXP32kbe3t4PTGkipBjuEF8GeDTfELoABDhY",
+      "value": {
+        "spec": "ft-1.0.0",
+        "name": "Ref Finance Token",
+        "symbol": "REF",
+        "icon": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='16 24 248 248' style='background: %23000'%3E%3Cpath d='M164,164v52h52Zm-45-45,20.4,20.4,20.6-20.6V81H119Zm0,18.39V216h41V137.19l-20.6,20.6ZM166.5,81H164v33.81l26.16-26.17A40.29,40.29,0,0,0,166.5,81ZM72,153.19V216h43V133.4l-11.6-11.61Zm0-18.38,31.4-31.4L115,115V81H72ZM207,121.5h0a40.29,40.29,0,0,0-7.64-23.66L164,133.19V162h2.5A40.5,40.5,0,0,0,207,121.5Z' fill='%23fff'/%3E%3Cpath d='M189 72l27 27V72h-27z' fill='%2300c08b'/%3E%3C/svg%3E%0A",
+        "reference": null,
+        "reference_hash": null,
+        "decimals": 18
+      }
+    },
+    {
+      "account": "token.v2.ref-finance.near",
+      "method": "view_account",
+      "args": {},
+      "block_height": 222758519,
+      "block_hash": "GQ9zEmqi6DKY7TYD4nzV4MGrkto7W8AVEPVRQSsUEsHi",
+      "value": {
+        "code_hash": "HagtKcVnSk6eJrg9e4X4Rpvw4ACCrpJjkrdWavLNtggZ"
+      }
+    },
+    {
+      "account": "diarhea.nearlytrade.near",
+      "method": "ft_metadata",
+      "args": {},
+      "block_height": 222758524,
+      "block_hash": "FSN9TA5iMdWRsV6r5wD2xgEjqrq6QZauw2X75j8NBUHh",
+      "value": {
+        "spec": "ft-1.0.0",
+        "name": "DIARHEA",
+        "symbol": "DIARHEA",
+        "icon": "data:image/webp;base64,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",
+        "reference": null,
+        "reference_hash": null,
+        "decimals": 18
+      }
+    },
+    {
+      "account": "diarhea.nearlytrade.near",
+      "method": "view_account",
+      "args": {},
+      "block_height": 222758530,
+      "block_hash": "Adt5uvJYWeEKE7nRexfACsa34B34LASzNSoaF3oSc6H2",
+      "value": {
+        "code_hash": "11111111111111111111111111111111"
+      }
+    },
+    {
+      "account": "mpoo.nearlytrade.near",
+      "method": "ft_metadata",
+      "args": {},
+      "block_height": 222758536,
+      "block_hash": "GDNnVWUdmxzi2Tt5d1bfQxXbzBiYnG9UZRtxG9TCqAwY",
+      "value": {
+        "spec": "ft-1.0.0",
+        "name": "Meta Poo",
+        "symbol": "MPOO",
+        "icon": "data:image/webp;base64,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",
+        "reference": null,
+        "reference_hash": null,
+        "decimals": 18
+      }
+    },
+    {
+      "account": "mpoo.nearlytrade.near",
+      "method": "view_account",
+      "args": {},
+      "block_height": 222758541,
+      "block_hash": "21Jo3k3nfRjfvDMfhNeMXzRS66UqNgGsAGrWuwroUh7t",
+      "value": {
+        "code_hash": "11111111111111111111111111111111"
+      }
+    },
+    {
+      "account": "mpoo.nearlytrade.near",
+      "method": "get_tax",
+      "args": {},
+      "block_height": 222758546,
+      "block_hash": "GtqhWP6adR9A9gGGacYy4GFazggZNVGxcfuPDPS26AU",
+      "value": {
+        "tax": {
+          "buy_bps": 200,
+          "sell_bps": 300,
+          "pairs": [
+            "dclv2.ref-labs.near"
+          ],
+          "admin": "nearlytrade.near",
+          "exempt": [
+            "lock_6.nearlytrade.near",
+            "feeswap.near"
+          ]
+        },
+        "pending": "0"
+      }
+    },
+    {
+      "account": "nearlytrade.near",
+      "method": "get_launch_by_token",
+      "args": {
+        "token": "mpoo.nearlytrade.near"
+      },
+      "block_height": 222758552,
+      "block_hash": "6CQi7m7cqc9N4xiZmnaRJdfsXGAgrTLuh5DxrBMJ8Lmf",
+      "value": {
+        "id": 2311,
+        "token": "mpoo.nearlytrade.near",
+        "creator": "meta-poo-shitcoin.near",
+        "name": "Meta Poo",
+        "symbol": "MPOO",
+        "icon": null,
+        "description": "Liquid (Staking) Diarrhea. Solid results\ud83d\udca9",
+        "links": {
+          "website": null,
+          "twitter": null,
+          "telegram": null
+        },
+        "created_at_ms": 1790946760071,
+        "total_supply": "1000000000000000000000000000",
+        "pool_id": "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000",
+        "token_is_x": false,
+        "init_point": 50000,
+        "left_point": -400000,
+        "right_point": 49800,
+        "lpt_id": "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000#17973",
+        "step": "Done",
+        "inflight": false,
+        "dev_buy_near": "0",
+        "dev_buy_exact": false,
+        "dev_buy_tokens": "0",
+        "dev_buy_held": "0",
+        "claims": 135,
+        "fees_near_total": "0",
+        "fees_token_total": "17445490597378882916288789",
+        "creator_token_fees": "6455863462214692892007",
+        "protocol_token_fees": "74394702504478132097871",
+        "quote": "diarhea.nearlytrade.near",
+        "fees_quote_total": "897367122124384930972187",
+        "creator_quote_fees": "2594221068710228393141",
+        "protocol_quote_fees": "1111809029447240739918"
+      }
+    },
+    {
+      "account": "nearlytrade.near",
+      "method": "get_tax",
+      "args": {
+        "launch_id": "2311"
+      },
+      "block_height": 222758559,
+      "block_hash": "DtModDXf8sESkptcc1RDQS4iXrtxv7ojQh1xvExs9AaY",
+      "value": {
+        "buy_bps": 200,
+        "sell_bps": 300,
+        "creator_bps": 3300,
+        "burn_bps": 3300,
+        "holders_bps": 3400,
+        "platform_bps": 3000,
+        "pending": "110559893043285086273447",
+        "holders_bucket": "37535242185842199561050",
+        "burned": "28960842606263218034024785",
+        "paid_creator": "1142483754190952128735083",
+        "paid_holders": "1139569231829078175499708",
+        "paid_platform": "1483745135312924842513129",
+        "selling": "0",
+        "floor": "0"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "view_account",
+      "args": {},
+      "block_height": 222758565,
+      "block_hash": "419xTQLeX1aEbpbJzxKo7hEhcKfnUkLkt3FmwTx6foGG",
+      "value": {
+        "code_hash": "BzhtCCGJibs9ykCZUuMZ9Diq3gFAi4ZGeMHgEuVqvoiA"
+      }
+    },
+    {
+      "account": "v2.ref-finance.near",
+      "method": "view_account",
+      "args": {},
+      "block_height": 222758571,
+      "block_hash": "2BfHUj95yC5PeSCg4rCRB5Az13xbTPTS1f63YbYXdgho",
+      "value": {
+        "code_hash": "GZmkbfVLcN7ErxU9RDxP24YTaKmoVixhM6XyycP15Qvi"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000"
+      },
+      "block_height": 222758577,
+      "block_hash": "5krgCth4tHb5TMyLqKGvW5jEFQNkvNvcxvmaDsKscpts",
+      "value": {
+        "pool_id": "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000",
+        "token_x": "diarhea.nearlytrade.near",
+        "token_y": "mpoo.nearlytrade.near",
+        "fee": 10000,
+        "point_delta": 200,
+        "current_point": 21409,
+        "liquidity": "4145910796551150066448",
+        "liquidity_x": "2720664615564603412806",
+        "max_liquidity_per_point": "42529979617665099795447395004595452",
+        "total_fee_x_charged": "226607859122319427012860",
+        "total_fee_y_charged": "4361372649344720729071908",
+        "volume_x_in": "113303929561159713506529007",
+        "volume_y_in": "2180686324672360364536051198",
+        "volume_x_out": "90614984790757124134194946",
+        "volume_y_out": "2917035328648662951680376095",
+        "total_liquidity": "4145910796551150066448",
+        "total_order_x": "0",
+        "total_order_y": "478858722380356639338526",
+        "total_x": "21782513333913311664281417",
+        "total_y": "246684364148698886578538908",
+        "state": "Running",
+        "whitelist": null,
+        "tax": null
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "quote",
+      "args": {
+        "pool_ids": [
+          "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000"
+        ],
+        "input_token": "diarhea.nearlytrade.near",
+        "output_token": "mpoo.nearlytrade.near",
+        "input_amount": "1000000000000000000"
+      },
+      "block_height": 222758582,
+      "block_hash": "ASYKhn98nWFqjidKwrmpSsd7eiPyHsGqzg7vNDz1eYEX",
+      "value": {
+        "amount": "8421118233644244640",
+        "tag": null
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "token.v2.ref-finance.near|wrap.near|100"
+      },
+      "block_height": 222758588,
+      "block_hash": "HF37MvZBzMw6ie6YFkdusKNLjNDBDDyQJsybMHesJtkG",
+      "value": {
+        "pool_id": "token.v2.ref-finance.near|wrap.near|100",
+        "token_x": "token.v2.ref-finance.near",
+        "token_y": "wrap.near",
+        "fee": 100,
+        "point_delta": 1,
+        "current_point": 107279,
+        "liquidity": "0",
+        "liquidity_x": "0",
+        "max_liquidity_per_point": "212676346402870037870835460372692",
+        "total_fee_x_charged": "2922934972078690",
+        "total_fee_y_charged": "234179243078760230285",
+        "volume_x_in": "146146748603934815862",
+        "volume_y_in": "11708962153938011514929140",
+        "volume_x_out": "264942008731166840876",
+        "volume_y_out": "6321106911483218328005701",
+        "total_liquidity": "0",
+        "total_order_x": "0",
+        "total_order_y": "0",
+        "total_x": "2922934972078808",
+        "total_y": "234179243078760230837",
+        "state": "Running",
+        "whitelist": null,
+        "tax": null
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "token.v2.ref-finance.near|wrap.near|400"
+      },
+      "block_height": 222758594,
+      "block_hash": "4fcdeekDcw4toekVMsCJEeZN4xXPdBYEfNCXvzZ354cL",
+      "value": {
+        "pool_id": "token.v2.ref-finance.near|wrap.near|400",
+        "token_x": "token.v2.ref-finance.near",
+        "token_y": "wrap.near",
+        "fee": 400,
+        "point_delta": 8,
+        "current_point": 102020,
+        "liquidity": "228191100420880",
+        "liquidity_x": "95704032325673",
+        "max_liquidity_per_point": "1701403327588054377044987812219779",
+        "total_fee_x_charged": "25684764330435566431",
+        "total_fee_y_charged": "2146586384477959919006553",
+        "volume_x_in": "66651527057720082169321",
+        "volume_y_in": "5491035876110221940947933325",
+        "volume_x_out": "106652782080460708504169",
+        "volume_y_out": "3709092265581925462066440083",
+        "total_liquidity": "1274185204377269",
+        "total_order_x": "621576586492582464335",
+        "total_order_y": "0",
+        "total_x": "2943713079523001807879",
+        "total_y": "759327728693615238299609317",
+        "state": "Running",
+        "whitelist": null,
+        "tax": null
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "token.v2.ref-finance.near|wrap.near|2000"
+      },
+      "block_height": 222758600,
+      "block_hash": "GMxtiKpnkzaopNFCKKuFefmTdjmufZaWdLNAzTH2B8Hk",
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "token.v2.ref-finance.near|wrap.near|10000"
+      },
+      "block_height": 222758606,
+      "block_hash": "HnaWr6QCx6Pjj9soJX64MQE9oBPWoRu3ky3XTe8ucwAp",
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|token.v2.ref-finance.near|100"
+      },
+      "block_height": 222758612,
+      "block_hash": "DMtVbWi9oZEbXvb61ByqzPJijWmFYXReybFW6nanJTHk",
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|token.v2.ref-finance.near|400"
+      },
+      "block_height": 222758618,
+      "block_hash": "54BGM2V4pCULsPYk1otNmwgPZFsSEN8y2dLGL9AcmeSi",
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|token.v2.ref-finance.near|2000"
+      },
+      "block_height": 222758624,
+      "block_hash": "BGfSTngbcU2ni7nzUnB6SkYSHRQvJLFd1CFmc7122cTD",
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|token.v2.ref-finance.near|10000"
+      },
+      "block_height": 222758630,
+      "block_hash": "5f59NkdnQDedHbF7jpHb1RxCheGsyrPYEuqA4HzFzM8J",
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|wrap.near|100"
+      },
+      "block_height": 222758635,
+      "block_hash": "618Nmp3pbsUzWjLfDP6vsy9RpVhWTHraBANSV6gBusik",
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|wrap.near|400"
+      },
+      "block_height": 222758641,
+      "block_hash": "F2y3rwEkmuggJ2TUxfoRrTx3muJF2xHHEJ9AM4cDbHwg",
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|wrap.near|2000"
+      },
+      "block_height": 222758647,
+      "block_hash": "ES2LPbqqBBBt6dHh7ZCFED4PBkyJ3v1NkkXAfaVT66ky",
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|wrap.near|10000"
+      },
+      "block_height": 222758652,
+      "block_hash": "6W151VtvsJiS3uYgiv8TLCPCd2iDx2wFHRP5jpaHF8KN",
+      "value": {
+        "pool_id": "diarhea.nearlytrade.near|wrap.near|10000",
+        "token_x": "diarhea.nearlytrade.near",
+        "token_y": "wrap.near",
+        "fee": 10000,
+        "point_delta": 200,
+        "current_point": 40030,
+        "liquidity": "0",
+        "liquidity_x": "0",
+        "max_liquidity_per_point": "42529979617665099795447395004595452",
+        "total_fee_x_charged": "194129880569288556671",
+        "total_fee_y_charged": "6167215531063091862026",
+        "volume_x_in": "97064940284644278336806",
+        "volume_y_in": "3689861063052206213203245",
+        "volume_x_out": "51130760388832482528641",
+        "volume_y_out": "6821985233908876272101956",
+        "total_liquidity": "0",
+        "total_order_x": "0",
+        "total_order_y": "0",
+        "total_x": "194129880569288556690",
+        "total_y": "7379722126104412426432",
+        "state": "Running",
+        "whitelist": null,
+        "tax": null
+      }
+    }
+  ],
+  "execution_enabled": false,
+  "unverified": [
+    "complete executable input route",
+    "deployed multi-pool all-or-refund semantics",
+    "post-tax net minimum enforcement and stability during execution",
+    "live swap/refund behaviour"
+  ]
+}

@@ -232,3 +232,26 @@ board's configured test token. No real mainnet mPOO is represented as testnet fu
 This is read-only: no checkout, automatic swap, signatures or changed session-key
 permissions. See [the handoff](../docs/payments/frontend-handoff.md) for evidence
 and remaining paid integration work.
+
+## Optional wallet onboarding and acquisition
+
+Implementation and handoff: [shared specification](../docs/implementation/2026-11-03-wallet-funding-integration-spec.md),
+[verification and open gates](../docs/learning/2026-11-03-wallet-acquisition.md).
+
+`VITE_PRIVY_ENABLED`, `VITE_INTENTS_FUNDING_ENABLED` and `VITE_RHEA_MPOO_SWAP_ENABLED` default false.
+Copy the public configuration names from `.env.example`; never put provider secrets in `VITE_*`.
+Privy uses a separately emitted `/privy-sign.html` asset. Configure its exact same-origin public URL
+with the provider, including a deployment subpath where relevant. Existing NEAR wallets remain in
+the selector. Social login does not fund an account or silently authorize a drawing key.
+
+Intents source transfers happen in an external source-chain wallet using the quoted address/amount
+and memo. NEAR Connect signs NEAR transactions only. Capability evidence is committed separately in
+`src/integrations/release-evidence.ts`; toggling a feature flag cannot bypass missing native-delivery
+or route/tax proof. Existing operation status remains accessible when new funding/swaps are disabled.
+Capital approvals require Web Locks; they are unavailable in browsers without that coordination API.
+
+For a reproducible **layout-only** review, run Vite and open
+`/scripts/acquisition-browser-fixture.html`. It uses the actual panels with explicitly labelled
+fixture state, imports the browser Privy module, and has no wallet/signing/payment implementation.
+The fixture HTML is not a production build entry. Real login, funding and swap proof requires the
+separate configuration and chain evidence in the verification record.

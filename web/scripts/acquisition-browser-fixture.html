@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acquisition layout fixture</title>
+<style>body{margin:0;padding:20px;background:#faf7ef;font:16px system-ui;color:#241c17}main{max-width:650px;margin:auto}input,select,button{font:inherit;max-width:100%;box-sizing:border-box}button{min-height:44px;margin:8px 0}section{padding:16px;margin-bottom:20px;border:1px solid #b8ada0;border-radius:12px}label{display:block}label input{width:100%}pre{white-space:pre-wrap}</style>
+<main><h1>Acquisition layout fixture</h1><p><strong>No wallet, signatures, or payments.</strong> Funding review is a labelled visual fixture; RHEA is deliberately unavailable.</p><div id="funding"></div><div id="rhea"></div><pre id="sdk">Loading browser SDK modules…</pre></main>
+<script type="module">
+import '/src/polyfills.ts';
+import {mountIntentsFundingPanel} from '/src/integrations/intents/panel.ts';
+import {mountRheaPanel} from '/src/integrations/rhea/panel.ts';
+const context={operationId:'layout-only',accountId:'fixture.near',networkId:'mainnet',sessionEpoch:1};
+const token={assetId:'nep141:usdc-fixture',symbol:'USDC',blockchain:'eth',decimals:6};
+const quote={quoteRequest:{originAsset:token.assetId,refundTo:'0x0000000000000000000000000000000000000001',deadline:new Date(Date.now()+600000).toISOString()},quote:{amountIn:'10000000',amountOut:'2500000000000000000000000',minAmountOut:'2475000000000000000000000',timeEstimate:45}};
+const snapshot={phase:'review',message:'Layout fixture: review only; no payment address will be generated.',assets:[token],preview:quote,canSend:false};
+const controller={getState:()=>snapshot,subscribe(fn){fn(snapshot);return ()=>{};},dispose(){},async loadAssets(){return snapshot;},async preview(){return snapshot;},async commit(){throw new Error('Fixture: payments are disabled');},async resume(){return snapshot;},async refresh(){return snapshot;},invalidatePreview(){},reset(){return snapshot;}};
+mountIntentsFundingPanel(document.querySelector('#funding'),controller,{getContext:()=>context});
+mountRheaPanel(document.querySelector('#rhea'),{getContext:()=>context,availabilityReason:'In-game mPOO swaps are not available yet. Use the market link below.',async prepareQuote(){throw new Error('Fixture only');},async approve(){throw new Error('Fixture only');},async resume(){throw new Error('Fixture only');}});
+try{const sdk=await import('/src/integrations/privy/runtime.ts');document.querySelector('#sdk').textContent='Privy browser module import: '+(typeof sdk.createPrivyRuntime==='function'?'PASS':'FAIL')+'; no authentication initialized.';}catch(e){document.querySelector('#sdk').textContent='Privy browser module import failed: '+e.message;}
+</script></html>
