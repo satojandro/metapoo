@@ -103,6 +103,11 @@ export interface PricingController {
   knownCost(cell: Cell): number | undefined;
   /** After a paint settles, re-read the price for `cell`. */
   repriceCell(cell: Cell): void;
+  /**
+   * The board's tunables for the wall views (Price / Age), from the same session
+   * cache the quotes use. Null on a board without paid pricing or when the read fails.
+   */
+  viewTunables(): Promise<unknown>;
   /** The board schema changed. */
   onSchemaChanged(): void;
   /** A snapshot was applied: the last quoted cell, and costs of rewritten cells, are stale. */
@@ -586,6 +591,7 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
 
   return {
     paidBoard,
+    viewTunables: async () => (paidBoard() ? repaintReaders.tunables() : null),
     priceUnavailable: () => priceUnavailable,
     allowGestureRetry() {
       // One failed price read must not dead-end painting. `priceUnavailable`

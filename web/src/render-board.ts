@@ -43,6 +43,16 @@ export function renderScale(dpr?: number): number {
 export const PENDING_MARK = "#ff2fd0";
 
 /**
+ * Optional view layer (Art / Price / Age / Turf). It only chooses colours: the
+ * cells, their positions and the pending markers are drawn exactly as in Art.
+ * `empty` returning null keeps the checker.
+ */
+export interface TilePainter {
+  painted(pixel: PixelView): string;
+  empty(x: number, y: number): string | null;
+}
+
+/**
  * Draw the board background, confirmed paints, then pending previews on top.
  *
  * The checker is only a background so empty squares are visible. It is not
@@ -59,6 +69,7 @@ export function renderBoard(
   pixels: readonly PixelView[] = [],
   pending: readonly PendingPaint[] = [],
   dpr?: number,
+  painter?: TilePainter | null,
 ): void {
   const context = canvas.getContext("2d");
   if (!context) {
@@ -79,7 +90,7 @@ export function renderBoard(
 
   for (let y = 0; y < BOARD_HEIGHT; y += 1) {
     for (let x = 0; x < BOARD_WIDTH; x += 1) {
-      context.fillStyle = (x + y) % 2 === 0 ? EMPTY_A : EMPTY_B;
+      context.fillStyle = painter?.empty(x, y) ?? ((x + y) % 2 === 0 ? EMPTY_A : EMPTY_B);
       context.fillRect(x * cell, y * cell, cell, cell);
     }
   }
@@ -92,7 +103,7 @@ export function renderBoard(
     if (!swatch) {
       continue;
     }
-    context.fillStyle = swatch.hex;
+    context.fillStyle = painter ? painter.painted(pixel) : swatch.hex;
     context.fillRect(pixel.x * cell, pixel.y * cell, cell, cell);
   }
 

@@ -1,7 +1,7 @@
 import { BOARD_HEIGHT, BOARD_WIDTH, type PixelView } from "@shared/types.ts";
 import { createGestureState, updateGesture, type GestureKind } from "../../gesture";
 import type { PendingPaint } from "../../pending-paint";
-import { renderBoard } from "../../render-board";
+import { renderBoard, type TilePainter } from "../../render-board";
 import { moveSelection, type Cell } from "../../selection";
 import {
   createCameraTransform,
@@ -73,6 +73,8 @@ export interface CameraControllerDeps {
    * Same meaning as holding space; omitted means "only the usual pan gestures".
    */
   panOnly?(): boolean;
+  /** Art / Price / Age / Turf colouring. Null or omitted draws the art. */
+  tilePainter?(): TilePainter | null;
 }
 
 export interface CameraController {
@@ -231,7 +233,7 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
   });
 
   function render(): void {
-    renderBoard(canvas, deps.paintedPixels(), deps.overlayPixels());
+    renderBoard(canvas, deps.paintedPixels(), deps.overlayPixels(), undefined, deps.tilePainter?.() ?? null);
     positionSelection();
     updatePositionReadout();
     deps.updateCompactStatus();

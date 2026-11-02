@@ -16,6 +16,8 @@ import { createWallView, fillBlock } from "./wall-view";
 import { createWallScope } from "./wall-scope";
 import { createWallModes } from "./wall-modes";
 import { mountDockPrimary } from "./dock-primary";
+import { createWallViews, type WallViews } from "./wall-views";
+import { viewFunction } from "../../contract";
 import "./wall-page.css";
 
 /**
@@ -142,6 +144,7 @@ export function mountWall(
   drawButton.setAttribute("aria-describedby", "selection-summary place-reason cell-price stroke-total");
 
   const scope = createWallScope();
+  let views: WallViews | null = null;
 
   // Look / Paint and Move decide what a gesture means; they never change the camera
   // maths or the paint path. Look is the default (owner, 2 Nov).
@@ -218,6 +221,7 @@ export function mountWall(
     },
     hoverCell: (cell) => pricing.requestCellPrice(cell),
     panOnly: () => modes.panOnly(),
+    tilePainter: () => views?.painter() ?? null,
   });
 
   const wallHint = mountWallHint(el<HTMLElement>("#wall-hint-host"));
@@ -247,7 +251,10 @@ export function mountWall(
     updateDirectPaintAvailability: () => paint.updateDirectPaintAvailability(),
     applyRoutePaintingContext: () => view.applyRoutePaintingContext(),
     reconcilePending: (pixels) => paint.reconcilePending(pixels),
-    onBoardUpdated: () => pricing.onBoardUpdated(),
+    onBoardUpdated: () => {
+      pricing.onBoardUpdated();
+      views?.refresh();
+    },
     onSchemaChanged: () => pricing.onSchemaChanged(),
     onManualRefresh: () => pricing.manualRefresh(),
     onPaletteChanged: (paletteLength) => view.setPaletteLength(paletteLength),
@@ -319,6 +326,18 @@ export function mountWall(
   paintCreated = true;
   paint.syncSubmitEnabled();
 
+  // Art / Price / Age / Turf: colouring only, read from data the page already has.
+  views = createWallViews({
+    scope,
+    chips: Array.from(pageRoot.querySelectorAll<HTMLButtonElement>("[data-wall-view]")),
+    legend: el<HTMLElement>("#wall-view-legend"),
+    pixels: () => board.paintedPixels(),
+    viewer: () => scope.walletAccount(),
+    readTunables: () => pricing.viewTunables(),
+    readFreeFirst: (account) => viewFunction("get_free_first_paints", { account_id: account }),
+    render: () => camera.render(),
+  });
+
   const dockPrimary = mountDockPrimary({
     scope,
     dock: el<HTMLElement>(".wall-dock"),
@@ -378,6 +397,7 @@ export function mountWall(
     paint.showDrawingSession();
     void pricing.refreshCreditsDock();
     dockPrimary.sync();
+    if (previousAccount !== session.accountId) views?.onWalletChanged();
   });
   scope.onDispose(unsubWallet);
   scope.onDispose(() => {

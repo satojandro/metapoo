@@ -459,8 +459,62 @@
 }
 
 @media (max-width: 430px) {
-  .wall-page .wall-views button[disabled] { display: none; }
+  /* Four views fit in their own scroller; the page never scrolls sideways. */
+  .wall-page .wall-views {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .wall-page .wall-views::-webkit-scrollbar { display: none; }
+  .wall-page .wall-views button { flex: 0 0 auto; padding: 6px 8px; }
 }
+
+/* ——— View legend (Price / Age / Turf) ——— */
+.wall-page .wall-legend { display: grid; gap: var(--mp-space-2); }
+.wall-page .wall-legend[hidden] { display: none; }
+.wall-page .wall-legend .mp-eyebrow { margin: 0; }
+.wall-page .wall-legend-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--mp-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--mp-soft);
+  font-size: var(--mp-text-md);
+}
+.wall-page .wall-legend-items li,
+.wall-page .wall-turf-list li { display: flex; align-items: center; gap: var(--mp-space-2); }
+.wall-page .wall-legend i,
+.wall-page .wall-turf-list i {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: var(--mp-radius-sm);
+  box-shadow: inset 0 0 0 1px var(--mp-line);
+}
+.wall-page .wall-turf-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--mp-line);
+}
+.wall-page .wall-turf-list li {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--mp-line);
+  color: var(--mp-soft);
+  font-size: var(--mp-text-md);
+}
+.wall-page .wall-turf-list li[data-you="true"] { color: var(--mp-tag); font-weight: 700; }
+.wall-page .wall-turf-rank { width: 1.6ch; color: var(--mp-muted); font: 700 var(--mp-text-sm) var(--mp-mono); }
+.wall-page .wall-turf-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wall-page .wall-turf-tiles { color: var(--mp-muted); font: 600 var(--mp-text-sm) var(--mp-mono); white-space: nowrap; }
+.wall-page .wall-legend-note { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-md); }
 
 /* Disconnected, the primary action already says "Connect wallet to paint". */
 .wall-page .wall-dock:has(.wall-action[data-primary="connect"]) .credits-dock,
