@@ -32,9 +32,11 @@ function matchesTransaction(
   outcome: Record<string, unknown>,
   expected: RheaTransaction,
   signerId: string,
+  expectedHash: string,
 ): boolean {
   const transaction = object(outcome.transaction);
   if (
+    transaction.hash !== expectedHash ||
     transaction.signer_id !== signerId ||
     transaction.receiver_id !== expected.receiverId ||
     !Array.isArray(transaction.actions) ||
@@ -133,6 +135,7 @@ export async function reconcileRheaCheckpoint(
           outcome,
           checkpoint.transactions[index],
           operation.context.accountId,
+          hashes[index],
         )
       )
         return unknown(

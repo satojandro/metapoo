@@ -23,6 +23,9 @@ export function createAcquisitionStore(storage: DurableStorage) {
         PREFIX + record.context.operationId,
         JSON.stringify(record),
       );
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new window.Event("metapoo:acquisition-change"));
+      }
     },
     load(id: string): AcquisitionRecord | null {
       const raw = storage.getItem(PREFIX + id);
@@ -78,4 +81,27 @@ export async function withCapitalLock<T>(
   throw new Error(
     "This browser cannot coordinate safe payment approvals. Use a browser with Web Locks support.",
   );
+}
+
+/** Enumerate public recovery pointers without importing any provider SDK. */
+export function listRecoverableAcquisitions(
+  storage: DurableStorage & Pick<Storage, "length" | "key">,
+): AcquisitionRecord[] {
+  const store = createAcquisitionStore(storage),
+    records: AcquisitionRecord[] = [];
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (!key?.startsWith(PREFIX)) continue;
+    try {
+      const record = store.load(key.slice(PREFIX.length));
+      if (
+        record &&
+        !["complete", "funded", "refunded", "failed"].includes(record.phase)
+      )
+        records.push(record);
+    } catch {
+      /* One corrupt record must not hide other original payment references. */
+    }
+  }
+  return records.sort((a, b) => b.updatedAtMs - a.updatedAtMs);
 }

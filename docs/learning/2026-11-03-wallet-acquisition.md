@@ -14,12 +14,13 @@ players pay their own gas. Acquiring funds/tokens does not buy credits or paint 
 
 ## Verification and limits
 
-- Initial implementation base: merged specs `57ca197`. Before handoff, reconcile subsequent main
-  changes and name the final base/head in the PR. PR #55 changes the admin JSON helper import;
-  preserve its `chain-json.ts` extraction rather than reintroducing the old admin coupling.
-- Node 22.23.4, matching CI's Node 22 major: 617 tests across 75 files passed before the PR #55
-  reconciliation. TypeScript and production Vite build passed. Final-head CI remains the release
-  reference; the PR records the post-reconciliation result separately.
+- Implementation started from merged specs `57ca197` and was rebased onto main `0223870`
+  (PR #55). Its `chain-json.ts` extraction is preserved. The PR records the exact final head.
+- Node 22.23.4, matching CI's Node 22 major: the final post-reconciliation suite and TypeScript/
+  production Vite build passed; the PR records the final test count and remote CI result.
+- Review regressions cover immediate disconnect invalidation before a slow provider lookup,
+  same-account session changes, sequential registration fallback, corrupt-record isolation,
+  original-network recovery after logout, and exact returned transaction-hash binding.
 - `wallet-acquisition.test.ts` rejects an existing FullAccess key and wrong receiver/method scope.
   Those two assertions were run against the merged-spec baseline's wallet implementation and
   failed with `expected true to be false`; they pass with the strengthened on-chain permission check.

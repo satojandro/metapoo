@@ -531,7 +531,11 @@ export function createIntentsFundingController(
       previewToken = null;
       return emit({
         preview: undefined,
-        phase: state.operation ? state.phase : "editing",
+        phase: state.operation
+          ? state.phase
+          : deps.policy.enabled
+            ? "editing"
+            : "disabled",
       });
     },
     reset(context: OperationContext) {

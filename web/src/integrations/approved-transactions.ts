@@ -25,9 +25,7 @@ export interface GatewayDependencies {
     tx: ApprovedNearTransaction,
     request: ApprovedTransactionRequest,
   ): void;
-  readBudget(
-    context: OperationContext,
-  ): Promise<{
+  readBudget(context: OperationContext): Promise<{
     spendableBeforeGasYocto: string;
     gasPriceYocto: string;
     playReserveYocto: string;
@@ -270,9 +268,20 @@ export function createApprovedTransactionGateway(deps: GatewayDependencies) {
         steps: [],
         completedSteps: 0,
       };
-      if (request.transactions.length > 1) {
+      if (
+        request.transactions.length > 1 &&
+        request.transactions.some(
+          (tx) =>
+            tx.actions.length !== 1 ||
+            tx.actions[0].params.methodName !== "storage_deposit",
+        )
+      ) {
+        throw new Error(
+          "Only independent registrations may share a checkpoint",
+        );
+      }
+      if (request.transactions.length > 1 && deps.sendBatch) {
         if (
-          !deps.sendBatch ||
           request.transactions.some(
             (tx) =>
               tx.actions.length !== 1 ||

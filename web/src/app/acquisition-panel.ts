@@ -16,7 +16,7 @@ import {
 } from "../wallet";
 import { createAcquisitionRpc } from "../integrations/rpc";
 import { resolveAccountReadiness } from "../integrations/account-readiness";
-import { createAcquisitionStore } from "../integrations/operation-store";
+import { listRecoverableAcquisitions } from "../integrations/operation-store";
 import { createIntentsClient } from "../integrations/intents/client";
 import { createIntentsStorage } from "../integrations/intents/storage";
 import { createIntentsFundingController } from "../integrations/intents/funding";
@@ -59,10 +59,15 @@ export function mountAcquisitionPanel(
   const context = () => getAcquisitionContext(intentsId);
   const rheaContext = () => getAcquisitionContext(rheaId);
   const rpc = createAcquisitionRpc(RPC_URL);
+  const fundingRpc = createAcquisitionRpc(
+    PAGE_NETWORK === "mainnet" ? RPC_URL : "https://rpc.mainnet.near.org",
+  );
+  const identityListeners: Array<() => void> = [];
   const refreshIdentity = () => {
     const session = services.wallet.getSession();
-    const identity = `${session.accountId}:${session.networkId}`;
-    if (identity !== previousIdentity) {
+    const identity = `${session.accountId}:${session.networkId}:${context()?.sessionEpoch ?? ""}`;
+    const changed = identity !== previousIdentity;
+    if (changed) {
       intentsId = crypto.randomUUID();
       rheaId = crypto.randomUUID();
       previousIdentity = identity;
@@ -71,7 +76,10 @@ export function mountAcquisitionPanel(
       ? `Receive native NEAR at ${session.accountId} on ${session.networkId}. Keep some NEAR for network fees.`
       : "Connect a wallet to see its NEAR receive address.";
     copy.disabled = !session.accountId || session.networkId !== PAGE_NETWORK;
+    if (changed) identityListeners.forEach((listener) => listener());
   };
+  // Capture the initial identity before asynchronous panels load their assets.
+  refreshIdentity();
   const onCopy = () => {
     const s = services.wallet.getSession();
     if (s.accountId && s.networkId === PAGE_NETWORK)
@@ -91,8 +99,22 @@ export function mountAcquisitionPanel(
     services.wallet.subscribe(refreshIdentity),
     () => copy.removeEventListener("click", onCopy),
   ];
-  const recovery = findRecoverableAcquisition();
-  if (INTENTS_FUNDING_ENABLED || recovery?.feature === "intents") {
+  const recoveries = listRecoverableAcquisitions(window.localStorage);
+  const intentsRecovery = recoveries.find((op) => op.feature === "intents");
+  const rheaRecovery = recoveries.find((op) => op.feature === "rhea");
+  if (recoveries.length) {
+    const saved = document.createElement("p");
+    saved.textContent =
+      "Saved acquisition recovery IDs: " +
+      recoveries
+        .map(
+          (op) =>
+            `${op.feature}: ${op.context.operationId} (${op.context.networkId})`,
+        )
+        .join("; ");
+    root.append(saved);
+  }
+  if (INTENTS_FUNDING_ENABLED || !!intentsRecovery) {
     const target = document.createElement("div");
     root.append(target);
     const reserve = /^[1-9]\d*$/.test(ACQUISITION_PLAY_RESERVE_YOCTO)
@@ -123,7 +145,7 @@ export function mountAcquisitionPanel(
       },
       reconcileDestination: createDestinationReconciler({
         readTransaction: (hash, recipient) =>
-          rpc("EXPERIMENTAL_tx_status", {
+          fundingRpc("EXPERIMENTAL_tx_status", {
             tx_hash: hash,
             sender_account_id: recipient,
             wait_until: "FINAL",
@@ -142,7 +164,7 @@ export function mountAcquisitionPanel(
           return resolveAccountReadiness(
             account,
             operation.context.networkId,
-            rpc,
+            fundingRpc,
             expected,
           );
         },
@@ -156,13 +178,11 @@ export function mountAcquisitionPanel(
           onBalancesChanged();
       },
     });
+    identityListeners.push(() => controller.invalidatePreview());
     cleanups.push(
       mountIntentsFundingPanel(target, controller, {
         getContext: context,
-        initialOperationId:
-          recovery?.feature === "intents"
-            ? recovery.context.operationId
-            : undefined,
+        initialOperationId: intentsRecovery?.context.operationId,
         newContext: () => {
           intentsId = crypto.randomUUID();
           return context();
@@ -170,13 +190,16 @@ export function mountAcquisitionPanel(
       }),
     );
   }
-  if (RHEA_MPOO_SWAP_ENABLED || recovery?.feature === "rhea") {
+  if (RHEA_MPOO_SWAP_ENABLED || !!rheaRecovery) {
     const target = document.createElement("div");
     root.append(target);
+    const activeNetwork = PAGE_NETWORK === "mainnet" ? "mainnet" : "testnet";
     const config = createRheaConfig(
       import.meta.env,
-      PAGE_NETWORK === "mainnet" ? "mainnet" : "testnet",
-      RHEA_REVIEWED_ROUTE,
+      activeNetwork,
+      RHEA_REVIEWED_ROUTE?.networkId === activeNetwork
+        ? RHEA_REVIEWED_ROUTE
+        : null,
     );
     const runtimeDeps: import("../integrations/rhea/runtime").RheaRuntimeDependencies =
       {
@@ -222,18 +245,60 @@ export function mountAcquisitionPanel(
         },
         onBalancesChanged: () => onBalancesChanged(),
         gas: RHEA_REVIEWED_GAS ?? undefined,
-        onReconciled: (ctx) =>
-          reconcilePendingAcquisition(ctx).then(() => undefined),
+        async onReconciled(ctx) {
+          if (!(await reconcilePendingAcquisition(ctx)))
+            throw new Error(
+              "The original wallet attempt still needs matching transaction proof.",
+            );
+        },
+        subscribeContext: (listener) =>
+          services.wallet.subscribe(() => listener()),
         expectedPublicKey: async () => {
           const ctx = rheaContext();
           return ctx ? getConnectedAcquisitionPublicKey(ctx) : undefined;
         },
       };
     const runtime = createRheaRuntime(runtimeDeps);
+    const originalLast = runtime.lastOperationId;
+    const savedSwaps = recoveries.filter((op) => op.feature === "rhea");
+    const selection = document.createElement("select");
+    selection.setAttribute("aria-label", "Saved mPOO acquisitions");
+    for (const op of savedSwaps) {
+      const option = document.createElement("option");
+      option.value = op.context.operationId;
+      option.textContent = `${op.context.accountId} (${op.context.networkId}) — ${op.context.operationId}`;
+      selection.append(option);
+    }
+    if (savedSwaps.length) target.append(selection);
+    runtime.lastOperationId = () => selection.value || originalLast?.() || null;
+    runtime.resume = async (id) => {
+      const { createRheaOperationStore } = await import(
+        "../integrations/rhea/controller"
+      );
+      const saved = createRheaOperationStore(window.localStorage).load(id);
+      if (!saved) throw new Error("The original swap record was not found.");
+      const originalNetwork = saved.context.networkId;
+      const readOnly = createRheaRuntime({
+        ...runtimeDeps,
+        config: createRheaConfig(
+          { ...import.meta.env, VITE_RHEA_MPOO_SWAP_ENABLED: "false" },
+          originalNetwork,
+          null,
+        ),
+        rpcUrl:
+          originalNetwork === PAGE_NETWORK
+            ? RPC_URL
+            : originalNetwork === "mainnet"
+              ? "https://rpc.mainnet.near.org"
+              : "https://rpc.testnet.near.org",
+      });
+      return readOnly.resume(id);
+    };
     const prepare = runtime.prepareQuote;
     runtime.prepareQuote = async (input, slippage, signal) => {
       // Every explicit new swap review gets its own ledger ID, independent of funding.
       rheaId = crypto.randomUUID();
+      selection.selectedIndex = -1;
       runtimeDeps.batchRegistrations =
         await supportsAcquisitionBatchRegistrations();
       return prepare(input, slippage, signal);
@@ -255,19 +320,8 @@ export function mountAcquisitionPanel(
 }
 export function findRecoverableAcquisition() {
   try {
-    const store = createAcquisitionStore(window.localStorage);
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const key = window.localStorage.key(i);
-      if (!key?.startsWith("metapoo:acquisition:v1:")) continue;
-      const op = store.load(key.slice("metapoo:acquisition:v1:".length));
-      if (
-        op &&
-        !["complete", "funded", "refunded", "failed"].includes(op.phase)
-      )
-        return op;
-    }
+    return listRecoverableAcquisitions(window.localStorage)[0] ?? null;
   } catch {
-    /* Invalid recovery stays in storage for diagnosis, never an automatic new payment. */
+    return null;
   }
-  return null;
 }

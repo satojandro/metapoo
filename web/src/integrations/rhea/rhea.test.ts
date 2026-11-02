@@ -22,7 +22,7 @@ import {
 import { mountRheaPanel } from "./panel";
 import { reconcileRheaCheckpoint } from "./receipt";
 import { createRheaRuntime } from "./runtime";
-import type { ApprovedTransactionRequest } from "../types";
+import type { ApprovedTransactionRequest, OperationContext } from "../types";
 import type {
   RheaBudget,
   RheaConfig,
@@ -425,6 +425,55 @@ describe("RHEA approval, receipts and recovery", () => {
 });
 
 describe("RHEA accessible panel", () => {
+  it("checks newly selected saved swap B after previously displaying swap A", async () => {
+    const { deps } = controllerDeps();
+    const savedA = await executeMpooBuy(await plan(false), deps);
+    const savedB = structuredClone(savedA);
+    savedB.operationId = "saved-swap-B";
+    savedB.context = {
+      ...savedB.context,
+      operationId: savedB.operationId,
+      accountId: "bob.testnet",
+    };
+    savedB.message = "Swap B is still waiting for its original transaction.";
+    let selectedId = savedA.operationId;
+    const resume = vi.fn(async (id: string) =>
+      id === savedB.operationId ? savedB : savedA,
+    );
+    const host = document.createElement("div");
+    document.body.append(host);
+    const dispose = mountRheaPanel(host, {
+      getContext: () => null,
+      prepareQuote: vi.fn(),
+      approve: vi.fn(),
+      resume,
+      lastOperationId: () => selectedId,
+    });
+    try {
+      const recovery = Array.from(host.querySelectorAll("button")).find(
+        (button) => button.textContent === "Check previous swap",
+      )!;
+      recovery.click();
+      await vi.waitFor(() =>
+        expect(host.textContent).toContain(
+          "Swap for alice.testnet on testnet:",
+        ),
+      );
+      selectedId = savedB.operationId;
+      recovery.click();
+      await vi.waitFor(() =>
+        expect(host.textContent).toContain("Swap for bob.testnet on testnet:"),
+      );
+      expect(resume.mock.calls.map(([id]) => id)).toEqual([
+        savedA.operationId,
+        savedB.operationId,
+      ]);
+      expect(host.textContent).toContain(savedB.message);
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
   it("unverified production routing leaves an honest fallback and cannot open approval", () => {
     const host = document.createElement("div");
     document.body.append(host);
@@ -450,6 +499,63 @@ describe("RHEA accessible panel", () => {
       dispose();
       host.remove();
     }
+  });
+  it("shows explicitly requested recovery while disconnected, and continues only on the original connected account", async () => {
+    const { deps } = controllerDeps();
+    const saved = await executeMpooBuy(await plan(false), deps);
+    expect(saved.phase).toBe("next_checkpoint_review");
+    let current: OperationContext | null = null;
+    let notify = () => {};
+    const unsubscribe = vi.fn();
+    const prepareContinuation = vi.fn();
+    const approve = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const dispose = mountRheaPanel(host, {
+      getContext: () => current,
+      subscribeContext: (listener) => {
+        notify = listener;
+        return unsubscribe;
+      },
+      prepareQuote: vi.fn(),
+      approve,
+      resume: vi.fn(async () => saved),
+      lastOperationId: () => saved.operationId,
+      prepareContinuation,
+    });
+    try {
+      const recovery = Array.from(host.querySelectorAll("button")).find(
+        (button) => button.textContent === "Check previous swap",
+      )!;
+      const next = Array.from(host.querySelectorAll("button")).find(
+        (button) => button.textContent === "Review next checkpoint",
+      )!;
+      recovery.click();
+      await vi.waitFor(() =>
+        expect(host.textContent).toContain(
+          "Swap for alice.testnet on testnet:",
+        ),
+      );
+      expect(next.hidden).toBe(true);
+      current = { ...context, accountId: "bob.testnet" };
+      notify();
+      expect(next.hidden).toBe(true);
+      recovery.click();
+      await vi.waitFor(() => expect(host.textContent).toContain(saved.message));
+      expect(approve).not.toHaveBeenCalled();
+      current = { ...context, sessionEpoch: context.sessionEpoch + 10 };
+      notify();
+      expect(next.hidden).toBe(false);
+      current = null;
+      notify();
+      expect(next.hidden).toBe(true);
+      next.click();
+      expect(prepareContinuation).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+      host.remove();
+    }
+    expect(unsubscribe).toHaveBeenCalledOnce();
   });
 });
 
@@ -502,7 +608,7 @@ function finalOutcome(
 }
 
 describe("RHEA actual transaction-trace adapter", () => {
-  it("requires matching approved actions, transfer resolver and attributable token events", async () => {
+  it("requires the requested hash as well as matching actions, resolver and attributable token events", async () => {
     const p = await plan();
     const { deps } = controllerDeps();
     deps.approve = vi.fn(async () => ({
@@ -532,6 +638,16 @@ describe("RHEA actual transaction-trace adapter", () => {
         })
       ).state,
     ).toBe("received");
+    trace.transaction.hash = "earlier-identical-trade";
+    expect(
+      (
+        await reconcileRheaCheckpoint(op, {
+          rpc: async () => trace,
+          client: readClient,
+        })
+      ).state,
+    ).toBe("unknown");
+    trace.transaction.hash = "trace-hash";
     trace.receipts_outcome[0].outcome.logs = [];
     expect(
       (

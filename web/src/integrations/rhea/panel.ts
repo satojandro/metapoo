@@ -6,6 +6,7 @@ import type { RheaExecutionPlan, RheaOperation } from "./types";
 
 export interface RheaPanelDependencies {
   getContext(): OperationContext | null;
+  subscribeContext?(listener: () => void): () => void;
   prepareQuote(
     inputYocto: string,
     slippageBps: number,
@@ -94,6 +95,29 @@ export function mountRheaPanel(
   let read: AbortController | null = null;
   let plan: RheaExecutionPlan | null = null;
   let operation: RheaOperation | null = null;
+  const canContinue = () => {
+    const current = deps.getContext();
+    return (
+      !!operation &&
+      current?.accountId === operation.context.accountId &&
+      current.networkId === operation.context.networkId &&
+      !deps.availabilityReason
+    );
+  };
+  const refreshContinuation = () => {
+    next.hidden =
+      operation?.phase !== "next_checkpoint_review" ||
+      !deps.prepareContinuation ||
+      !canContinue();
+    // Identity changes must also remove any earlier signing review.
+    if (plan && !sameIdentity(plan.quote.context, deps.getContext())) {
+      generation++;
+      read?.abort();
+      plan = null;
+      review.hidden = true;
+      approval.disabled = true;
+    }
+  };
   const setBusy = (value: boolean) => {
     busy = value;
     amount.disabled = value || !!deps.availabilityReason;
@@ -106,10 +130,9 @@ export function mountRheaPanel(
   };
   const present = (op: RheaOperation) => {
     operation = op;
-    status.textContent = `${op.message}${op.hashes.length ? ` Transaction references: ${op.hashes.join(", ")}` : ""}`;
+    status.textContent = `Swap for ${op.context.accountId} on ${op.context.networkId}: ${op.message}${op.hashes.length ? ` Transaction references: ${op.hashes.join(", ")}` : ""}`;
     recovery.hidden = false;
-    next.hidden =
-      op.phase !== "next_checkpoint_review" || !deps.prepareContinuation;
+    refreshContinuation();
   };
   const describePlan = (candidate: RheaExecutionPlan) => {
     plan = candidate;
@@ -198,19 +221,16 @@ export function mountRheaPanel(
     }
   });
   recovery.addEventListener("click", async () => {
-    const id = operation?.operationId ?? deps.lastOperationId?.();
+    const id = deps.lastOperationId?.() ?? operation?.operationId;
     if (busy || !id) return;
+    plan = null;
+    review.hidden = true;
     setBusy(true);
     try {
       const result = await deps.resume(id);
-      const current = deps.getContext();
-      // Read-only recovery survives a new browser session epoch; it grants no signing authority.
-      if (
-        !disposed &&
-        current?.accountId === result.context.accountId &&
-        current.networkId === result.context.networkId
-      )
-        present(result);
+      // Explicit status recovery is allowed while disconnected or on another account.
+      // The original identity is labelled; presentation never grants signing authority.
+      if (!disposed) present(result);
     } catch (error) {
       if (!disposed)
         status.textContent =
@@ -221,6 +241,10 @@ export function mountRheaPanel(
   });
   next.addEventListener("click", async () => {
     if (busy || !operation || !deps.prepareContinuation) return;
+    if (!canContinue()) {
+      refreshContinuation();
+      return;
+    }
     read?.abort();
     read = new AbortController();
     setBusy(true);
@@ -236,11 +260,13 @@ export function mountRheaPanel(
       if (!disposed) setBusy(false);
     }
   });
+  const unsubscribeContext = deps.subscribeContext?.(refreshContinuation);
   setBusy(false);
   return () => {
     disposed = true;
     generation++;
     read?.abort();
+    unsubscribeContext?.();
     section.remove();
   };
 }

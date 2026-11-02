@@ -5,7 +5,11 @@ import {
   resolveAccountReadiness,
 } from "./account-readiness";
 import { computeSpendableNative } from "./gas-budget";
-import { createAcquisitionStore } from "./operation-store";
+import {
+  createAcquisitionStore,
+  listRecoverableAcquisitions,
+} from "./operation-store";
+import type { AcquisitionRecord } from "./operation-store";
 import {
   reconcilePendingCapitalAttempt,
   completeReceiptStatus,
@@ -26,6 +30,10 @@ const context: OperationContext = {
 function memory() {
   const m = new Map<string, string>();
   return {
+    get length() {
+      return m.size;
+    },
+    key: (index: number) => Array.from(m.keys())[index] ?? null,
     getItem: (k: string) => m.get(k) ?? null,
     setItem: (k: string, v: string) => {
       m.set(k, v);
@@ -123,6 +131,47 @@ describe("acquisition account and budget boundaries", () => {
     const s = memory();
     s.setItem("metapoo:acquisition:v1:op-1", "{");
     expect(() => createAcquisitionStore(s).load("op-1")).toThrow(/corrupt/);
+  });
+  it("lists every valid recoverable operation despite corrupt neighbours and excludes terminal records", () => {
+    const storage = memory();
+    const store = createAcquisitionStore(storage);
+    const record = (
+      id: string,
+      feature: AcquisitionRecord["feature"],
+      phase: string,
+      updatedAtMs: number,
+    ): AcquisitionRecord => ({
+      version: 1,
+      context: { ...context, operationId: id },
+      feature,
+      phase,
+      createdAtMs: 1,
+      updatedAtMs,
+      providerRecordId: id,
+      transactionHashes: [],
+    });
+    // A malformed first record used to prevent discovery of all subsequent pointers.
+    storage.setItem("metapoo:acquisition:v1:broken-first", "{");
+    store.save(record("older-intents", "intents", "processing", 10));
+    storage.setItem(
+      "metapoo:acquisition:v1:invalid-shape",
+      JSON.stringify({ version: 1 }),
+    );
+    store.save(record("newer-rhea", "rhea", "unresolved", 20));
+    store.save(
+      record("refund-not-confirmed", "intents", "failed_needs_review", 15),
+    );
+    for (const phase of ["complete", "funded", "refunded", "failed"])
+      store.save(record(`terminal-${phase}`, "intents", phase, 100));
+    storage.setItem("unrelated-app-setting", "not JSON");
+    expect(
+      listRecoverableAcquisitions(storage).map(
+        (value) => value.context.operationId,
+      ),
+    ).toEqual(["newer-rhea", "refund-not-confirmed", "older-intents"]);
+    // Enumeration neither erases corrupted evidence nor creates a replacement operation.
+    expect(storage.getItem("metapoo:acquisition:v1:broken-first")).toBe("{");
+    expect(listRecoverableAcquisitions(storage)).toHaveLength(3);
   });
 });
 describe("ordinary-wallet acquisition gateway", () => {
@@ -332,6 +381,111 @@ describe("ordinary-wallet acquisition gateway", () => {
     ).toBe(2);
     expect(sendBatch).toHaveBeenCalledTimes(1);
     expect(s.deps.send).not.toHaveBeenCalled();
+  });
+  it("submits independent registrations sequentially when the wallet has no batch method", async () => {
+    const s = setup();
+    const accounts = ["token-a.near", "token-b.near"];
+    s.deps.validateTransaction = (transaction, request) =>
+      validateAcquisitionTransaction(transaction, request, {
+        ...policy,
+        tokenAccounts: accounts,
+        storageMaximums: { "token-a.near": "1", "token-b.near": "1" },
+      });
+    const registrations: ApprovedNearTransaction[] = accounts.map(
+      (receiverId) => ({
+        receiverId,
+        actions: [
+          {
+            type: "FunctionCall",
+            params: {
+              methodName: "storage_deposit",
+              args: { account_id: context.accountId, registration_only: true },
+              gas: "1",
+              deposit: "1",
+            },
+          },
+        ],
+      }),
+    );
+    let finishFirst!: (outcome: unknown) => void;
+    s.deps.send.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishFirst = resolve;
+        }),
+    );
+    s.deps.send.mockResolvedValueOnce({
+      ...success,
+      transaction: { hash: "registration-2" },
+    });
+    const pending = s.gateway({
+      ...req(),
+      purpose: "mpoo-acquisition",
+      transactions: registrations,
+    });
+    await vi.waitFor(() => expect(s.deps.send).toHaveBeenCalledTimes(1));
+    expect(s.deps.send).toHaveBeenNthCalledWith(1, registrations[0], context);
+    expect(s.deps.readBudget).toHaveBeenCalledTimes(1);
+    finishFirst({ ...success, transaction: { hash: "registration-1" } });
+    const result = await pending;
+    expect(result.completedSteps).toBe(2);
+    expect(
+      result.steps.map((step) => [
+        step.index,
+        step.status,
+        step.transactionHash,
+      ]),
+    ).toEqual([
+      [0, "confirmed", "registration-1"],
+      [1, "confirmed", "registration-2"],
+    ]);
+    expect(s.deps.send).toHaveBeenNthCalledWith(2, registrations[1], context);
+    expect(s.deps.readBudget).toHaveBeenCalledTimes(2);
+    expect(
+      s.storage.getItem("metapoo:capital:spent:mainnet:alice.near:op-1"),
+    ).toBe("6");
+    expect(
+      s.storage.getItem("metapoo:capital:pending:mainnet:alice.near"),
+    ).toBeNull();
+  });
+  it("does not continue sequential registrations after an unknown first broadcast", async () => {
+    const s = setup();
+    s.deps.validateTransaction = () => undefined;
+    const registration: ApprovedNearTransaction = {
+      receiverId: "token.near",
+      actions: [
+        {
+          type: "FunctionCall",
+          params: {
+            methodName: "storage_deposit",
+            args: { account_id: context.accountId, registration_only: true },
+            gas: "1",
+            deposit: "1",
+          },
+        },
+      ],
+    };
+    s.deps.send.mockResolvedValue({
+      transaction: { hash: "unresolved-registration" },
+      status: { SuccessReceiptId: "pending-receipt" },
+    });
+    const result = await s.gateway({
+      ...req(),
+      purpose: "mpoo-acquisition",
+      transactions: [registration, registration],
+    });
+    expect(result.completedSteps).toBe(0);
+    expect(result.steps).toEqual([
+      {
+        index: 0,
+        status: "unknown",
+        transactionHash: "unresolved-registration",
+      },
+    ]);
+    expect(s.deps.send).toHaveBeenCalledTimes(1);
+    expect(
+      s.storage.getItem("metapoo:capital:pending:mainnet:alice.near"),
+    ).not.toBeNull();
   });
   it("protects the gas reserve", async () => {
     const s = setup();

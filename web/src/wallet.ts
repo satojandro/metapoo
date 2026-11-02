@@ -401,10 +401,12 @@ export async function disconnectWallet(): Promise<void> {
     emit();
     return;
   }
-  const selected = await connector.getConnectedWallet().catch(() => null);
+  const current = connector;
+  // Invalidate authority synchronously: even a slow provider lookup must not keep a popup authorized.
   session = { accountId: null, networkId: null };
   emit();
-  await connector.disconnect();
+  const selected = await current.getConnectedWallet().catch(() => null);
+  await current.disconnect();
   if (
     selected?.wallet?.manifest?.id === PRIVY_WALLET_ID &&
     typeof window !== "undefined"

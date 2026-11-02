@@ -37,6 +37,7 @@ export interface RheaRuntimeDependencies {
   config: RheaConfig;
   rpcUrl: string;
   context(): OperationContext | null;
+  subscribeContext?(listener: () => void): () => void;
   storage: DurableStorage;
   approve(
     request: ApprovedTransactionRequest,
@@ -267,6 +268,7 @@ export function createRheaRuntime(
   }
   return {
     getContext: deps.context,
+    subscribeContext: deps.subscribeContext,
     availabilityReason,
     lastOperationId: () => deps.storage.getItem(lastKey),
     prepareQuote: (inputYocto, slippageBps, signal) =>
