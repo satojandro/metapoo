@@ -204,7 +204,7 @@ describe("camera controller", () => {
   it("render draws the pixels and overlay, then refreshes the status", () => {
     const { camera, deps, dispose } = setup();
     camera.render();
-    expect(renderBoard).toHaveBeenCalledWith(deps.canvas, [], []);
+    expect(renderBoard).toHaveBeenCalledWith(deps.canvas, [], [], undefined, null);
     expect(deps.updateCompactStatus).toHaveBeenCalled();
     dispose();
   });

@@ -57,9 +57,9 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
               title="Drag moves the wall instead of painting">Move</button>
             <div class="mp-seg mp-seg-small wall-views" role="group" aria-label="Wall view">
               <button type="button" data-wall-view="art" aria-pressed="true">Art</button>
-              <button type="button" data-wall-view="price" aria-pressed="false" disabled title="Coming next">Price</button>
-              <button type="button" data-wall-view="age" aria-pressed="false" disabled title="Coming next">Age</button>
-              <button type="button" data-wall-view="turf" aria-pressed="false" disabled title="Coming next">Turf</button>
+              <button type="button" data-wall-view="price" aria-pressed="false">Price</button>
+              <button type="button" data-wall-view="age" aria-pressed="false">Age</button>
+              <button type="button" data-wall-view="turf" aria-pressed="false">Turf</button>
             </div>
           </div>
 
@@ -142,9 +142,12 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             <button id="wall-back-to-look" class="wall-link" type="button">Done painting</button>
           </div>
 
+          <section id="wall-view-legend" class="wall-card wall-legend" aria-label="View legend" hidden></section>
+
           <section class="wall-card wall-inspect" aria-labelledby="wall-tile-heading">
             <p id="wall-tile-heading" class="mp-eyebrow">Tile</p>
             <p id="selection-summary" class="summary" aria-live="polite" aria-atomic="true"></p>
+            <div id="tile-inspector" class="tile-inspector" hidden></div>
           </section>
 
           <p class="wall-refresh"><button id="refresh-board" class="wall-link" type="button">Refresh the wall now</button></p>

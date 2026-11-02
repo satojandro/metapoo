@@ -459,9 +459,131 @@
 }
 
 @media (max-width: 430px) {
-  .wall-page .wall-views button[disabled] { display: none; }
+  /* Four views fit in their own scroller; the page never scrolls sideways. */
+  .wall-page .wall-views {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .wall-page .wall-views::-webkit-scrollbar { display: none; }
+  .wall-page .wall-views button { flex: 0 0 auto; padding: 6px 8px; }
 }
+
+/* ——— View legend (Price / Age / Turf) ——— */
+.wall-page .wall-legend { display: grid; gap: var(--mp-space-2); }
+.wall-page .wall-legend[hidden] { display: none; }
+.wall-page .wall-legend .mp-eyebrow { margin: 0; }
+.wall-page .wall-legend-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px var(--mp-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--mp-soft);
+  font-size: var(--mp-text-md);
+}
+.wall-page .wall-legend-items li,
+.wall-page .wall-turf-list li { display: flex; align-items: center; gap: var(--mp-space-2); }
+.wall-page .wall-legend i,
+.wall-page .wall-turf-list i {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: var(--mp-radius-sm);
+  box-shadow: inset 0 0 0 1px var(--mp-line);
+}
+.wall-page .wall-turf-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--mp-line);
+}
+.wall-page .wall-turf-list li {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--mp-line);
+  color: var(--mp-soft);
+  font-size: var(--mp-text-md);
+}
+.wall-page .wall-turf-list li[data-you="true"] { color: var(--mp-tag); font-weight: 700; }
+.wall-page .wall-turf-rank { width: 1.6ch; color: var(--mp-muted); font: 700 var(--mp-text-sm) var(--mp-mono); }
+.wall-page .wall-turf-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wall-page .wall-turf-tiles { color: var(--mp-muted); font: 600 var(--mp-text-sm) var(--mp-mono); white-space: nowrap; }
+.wall-page .wall-legend-note { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-md); }
 
 /* Disconnected, the primary action already says "Connect wallet to paint". */
 .wall-page .wall-dock:has(.wall-action[data-primary="connect"]) .credits-dock,
 .wall-page .wall-dock:has(.wall-action[data-primary="connect"]) .draw-state { display: none; }
+
+/* ——— Tile card (Phase 1 step 3) ——— */
+/* With the card filled, the plain summary steps back for sighted users; screen readers keep it. */
+.wall-page .wall-inspect[data-filled="true"] .summary {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.wall-page .tile-inspector { display: grid; gap: var(--mp-space-3); }
+.wall-page .tile-inspector[hidden] { display: none; }
+.wall-page .tile-facts { display: grid; margin: 0; border-top: 1px solid var(--mp-line); }
+.wall-page .tile-row {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: var(--mp-space-2);
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mp-line);
+  font-size: var(--mp-text-body);
+}
+.wall-page .tile-row dt { color: var(--mp-muted); font-size: var(--mp-text-md); }
+.wall-page .tile-row dd { margin: 0; min-width: 0; color: var(--mp-fg); overflow-wrap: anywhere; }
+.wall-page .tile-colour,
+.wall-page .tile-painter,
+.wall-page .tile-when { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--mp-space-2); }
+.wall-page .tile-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--mp-radius-sm);
+  box-shadow: inset 0 0 0 1px var(--mp-line);
+}
+.wall-page .tile-painter a { color: var(--mp-near); }
+.wall-page .tile-you,
+.wall-page .tile-pill {
+  padding: 2px 7px;
+  border-radius: var(--mp-radius-pill);
+  font: 700 var(--mp-text-xs) var(--mp-mono);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--mp-on-tag);
+  background: var(--mp-tag);
+}
+.wall-page .tile-pill[data-wetness="wet"] { background: var(--mp-burn); }
+.wall-page .tile-pill[data-wetness="drying"] { background: var(--mp-tag); }
+.wall-page .tile-pill[data-wetness="dry"] { background: var(--mp-stake); }
+.wall-page .tile-cost { font: 700 var(--mp-text-body) var(--mp-mono); }
+.wall-page .tile-actions { display: flex; flex-wrap: wrap; gap: var(--mp-space-2); }
+.wall-page .tile-actions .mp-btn { flex: 1 1 auto; min-height: var(--mp-hit); }
+.wall-page .tile-copied { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-md); min-height: 1em; }
+/* On phone, a chosen tile's card comes first in the sheet, within thumb reach. */
+@media (max-width: 760px) {
+  .wall-page[data-mode="look"] .wall-inspect[data-filled="true"] { order: -1; }
+  .wall-page .wall-panel::before { order: -2; }
+  .wall-page[data-mode="look"] .wall-legend:not([hidden]) { order: -1; }
+}
+.wall-page .tile-link-field {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-md);
+  background: var(--mp-card-2);
+  color: var(--mp-fg);
+  font: var(--mp-text-md) var(--mp-mono);
+}

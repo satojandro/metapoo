@@ -36,7 +36,7 @@ export function createRouter(options: CreateRouterOptions): Router {
 
   const navigate = (path: string, navOptions?: { replace?: boolean }): void => {
     const url = new URL(path, window.location.origin);
-    const nextPath = normalizePath(url.pathname) + url.search;
+    const nextPath = normalizePath(url.pathname) + url.search + url.hash;
     if (navOptions?.replace) {
       window.history.replaceState(null, "", nextPath);
     } else {
@@ -119,7 +119,8 @@ export function createRouter(options: CreateRouterOptions): Router {
       window.addEventListener("popstate", onPopState);
       document.addEventListener("click", onDocumentClick);
       // Normalize the initial URL without adding a history entry.
-      const initial = normalizePath(window.location.pathname) + window.location.search;
+      // Keep the hash: `/#tile-x-y` links open the wall on that tile.
+      const initial = normalizePath(window.location.pathname) + window.location.search + window.location.hash;
       window.history.replaceState(null, "", initial || "/");
       renderFromLocation();
     },
