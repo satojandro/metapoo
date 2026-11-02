@@ -75,9 +75,7 @@
       "depends_on": ["ACQ-0"],
       "spec": "docs/implementation/2026-11-03-intents-funding-spec.md",
       "owned_paths": [
-        "web/src/acquisition/intents-*.ts",
-        "web/src/app/intents-funding-panel.ts",
-        "web/src/app/intents-funding-panel.css"
+        "web/src/integrations/intents/**"
       ],
       "deliverables": [
         "Validated token discovery, exact-input preview/commit, signed quote validation.",
@@ -86,8 +84,8 @@
         "Tests and disabled wiring independent of Privy; no source-wallet SDK or implicit credits purchase."
       ],
       "release_gates": [
-        "INT-NATIVE proof for native versus wrapped delivery and supported receiver type.",
-        "Initialized account and native-gas prerequisite when needed; absent-account bootstrap is not presumed.",
+        "INT-NATIVE proof for native versus wrapped delivery, per receiver case including an uninitialized implicit account (the new-player case).",
+        "Uninitialized implicit address payable only in proven native mode and matched to the connected key; nonexistent named accounts always blocked.",
         "Separately approved bounded mainnet route and recovery trial; Intents has no testnet."
       ]
     },
@@ -104,8 +102,8 @@
         "Tests and disabled UI integration without widening drawing permissions or changing contracts."
       ],
       "release_gates": [
-        "Verified executable route, no assumed direct NEAR/mPOO pair.",
-        "On-chain minimum protects the disclosed post-tax wallet output.",
+        "Verified executable route, no assumed direct NEAR/mPOO pair; one approval per exchange checkpoint, plus first-time registration.",
+        "On-chain minimum protects the disclosed post-tax wallet output under the tax rule in the RHEA spec (owner to confirm).",
         "Separately approved bounded mainnet swap and partial/unknown recovery evidence."
       ]
     },

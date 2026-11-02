@@ -62,13 +62,24 @@ Checked against primary sources on 3 November 2026:
 **Release gate INT-NATIVE:** Before enabling a real payable quote, establish whether a selected
 `nep141:wrap.near` destination delivers native NEAR or wNEAR to the player's external account.
 Record the exact API/SDK revision, request/response, initialized receiver type, withdrawal transaction
-and final native/FT reads. The gate applies separately to initialized named and implicit accounts.
+and final native/FT reads. The gate applies separately to three receiver cases: an initialized
+named account, an initialized implicit account, and an **uninitialized implicit account** (a
+64-hex ed25519 address with no on-chain state, which is exactly what a new Privy player has).
 Do not treat the symbol `NEAR` or `wNEAR` as evidence of the delivered form.
+
+The uninitialized implicit case is the onboarding target, not an edge case. On NEAR, a native
+transfer to an implicit address creates that account with the address's key as a full-access key;
+the NativeWithdraw warning about nonexistent receivers concerns named accounts, which cannot be
+created by a transfer. Prove it rather than assume it: record the destination receipt showing
+account creation, the access key list matching the expected public key, and the final native balance.
 
 Supported resolution:
 
-1. If direct native delivery is proven, configure `deliveryMode=native`; account initialization must
-   still be verified before producing a payable quote.
+1. If direct native delivery is proven, configure `deliveryMode=native`. A payable quote may then
+   target an initialized account, or an uninitialized implicit account whose address the shared
+   readiness layer has matched to the connected wallet's expected public key and whose native-to-
+   uninitialized-implicit case has passed INT-NATIVE. A nonexistent **named** account always blocks.
+   Show that the first deposit creates the account and must cover the play-gas reserve.
 2. If delivery is wNEAR, use `deliveryMode=wrapped_then_unwrap` **only for an initialized account
    already holding sufficient native NEAR** for storage/unwrap gas. Read `storage_balance_bounds`
    and registration status; do not assume provider-paid token registration. Make prerequisite
@@ -89,13 +100,13 @@ Agent-owned new files:
 
 | File | Responsibility |
 |---|---|
-| `web/src/acquisition/intents-types.ts` | Validated provider DTOs and funding state union |
-| `web/src/acquisition/intents-client.ts` | Fetch wrapper, runtime validation, aborts and error classification |
-| `web/src/acquisition/intents-quote.ts` | Exact decimal parsing, immutable request construction, quote checks |
-| `web/src/acquisition/intents-funding.ts` | Controller and state transitions |
-| `web/src/acquisition/intents-storage.ts` | Versioned provider details keyed by operation id |
-| `web/src/acquisition/intents-receipt.ts` | Destination evidence reconciliation |
-| `web/src/app/intents-funding-panel.ts` and `.css` | Accessible panel with mount/dispose boundary |
+| `web/src/integrations/intents/types.ts` | Validated provider DTOs and funding state union |
+| `web/src/integrations/intents/client.ts` | Fetch wrapper, runtime validation, aborts and error classification |
+| `web/src/integrations/intents/quote.ts` | Exact decimal parsing, immutable request construction, quote checks |
+| `web/src/integrations/intents/funding.ts` | Controller and state transitions |
+| `web/src/integrations/intents/storage.ts` | Versioned provider details keyed by operation id |
+| `web/src/integrations/intents/receipt.ts` | Destination evidence reconciliation |
+| `web/src/integrations/intents/panel.ts` and `panel.css` | Accessible panel with mount/dispose boundary |
 | Matching `.test.ts` files | Cases below |
 
 Coordinator owns shell entry points, `config.ts`, environment typings/example, wallet gateway,
@@ -131,6 +142,12 @@ same-origin proxy with server-only `INTENTS_PARTNER_JWT`, fixed upstream/path al
 and schema validation, timeouts, per-client rate limits and restricted CORS. It neither signs nor
 holds funds. Proxy token/quote/status and optional deposit-submit endpoints only; no arbitrary URL
 fetch or arbitrary authorization forwarding. A static Vite build alone cannot hide a key.
+
+**First checkpoint:** before building on `direct` mode, prove from a real browser on the deployed
+origin (and on localhost for development) that `/v0/tokens`, `/v0/quote` and `/v0/status` answer
+cross-origin requests with usable CORS headers. Record the request, response headers and date. If
+the browser is refused, `direct` mode is unavailable and `proxy` becomes a prerequisite; report it
+as a blocker rather than adding a wildcard proxy.
 
 Choose plain fetch with a narrow typed adapter unless a pinned official SDK has an evidenced
 advantage. Save sanitized schema fixtures and dependency revision. Current authentication docs
@@ -239,7 +256,9 @@ Meaningful failing-before/passing-after tests must cover:
 7. Status coverage including API 404/429/5xx, transient RPC failure, unknown status, incomplete
    deposit, expired-but-processing, late deposit, refund pending and refund confirmation.
 8. `SUCCESS` plus wNEAR-only delivery cannot become native `funded`; zero native balance cannot
-   approve unwrap or claim gas sponsorship. Named nonexistent accounts block commit.
+   approve unwrap or claim gas sponsorship. Named nonexistent accounts block commit. An
+   uninitialized implicit address is payable only in proven `native` mode and only when it matches
+   the connected wallet's expected key; a mismatched or non-hex implicit address blocks commit.
 9. Concurrent deposit/spend does not turn a balance delta into false settlement attribution.
 10. Refresh, tab duplication and double-click do not generate a second payable operation or resend.
 11. Disposal removes polling/timers/listeners; read-only resume never requests a signature.

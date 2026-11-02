@@ -53,12 +53,13 @@ Shared types, `wallet.ts`, configuration wiring, environment example, wallet-pan
 | Setting | Required behaviour |
 |---|---|
 | `VITE_RHEA_MPOO_SWAP_ENABLED` | Defaults false; true only with valid route evidence and network config |
-| `VITE_RHEA_SWAP_NETWORK` | Must equal the active page and wallet network; production route is mainnet only |
+| (network) | No separate setting: derive from `VITE_NEAR_NETWORK` / `WALLET_NETWORK`; production route is mainnet only |
 | `VITE_RHEA_MAX_INPUT_YOCTO` | Positive integer-string spending cap chosen at release; unset disables submit |
 | `VITE_RHEA_GAS_RESERVE_YOCTO` | Positive integer-string reserve; shared gas policy may impose a larger value |
 | `VITE_RHEA_MAX_PRICE_IMPACT_BPS` | Explicit release limit, 1–1000; unset disables submit |
+| `VITE_RHEA_MAX_BUY_TAX_BPS` | Highest mPOO buy tax the swap accepts (see the tax gate); unset disables submit |
 
-No endpoint, token, receiver or route may come from an unvalidated query parameter. Slippage defaults to 100 bps (1%), with user choices 50/100/200 bps and a hard maximum of 300 bps; v1 does not offer an unlimited setting. These are conservative implementation defaults, not claims about market prices. Cap quote lifetime at 30 seconds from the oldest price-dependent view and re-quote every remaining leg before its approval. If the route changes, present a new review. Mainnet token IDs must never appear as enabled choices on testnet, localnet or mock. Testnet acceptance uses deliberately configured fixture tokens and pools, clearly labelled.
+No endpoint, token, receiver or route may come from an unvalidated query parameter. Slippage defaults to 100 bps (1%), with user choices 50/100/200 bps and a hard maximum of 300 bps; v1 does not offer an unlimited setting. These are conservative implementation defaults, not claims about market prices. Cap quote lifetime at 30 seconds from the oldest price-dependent view and re-quote every remaining checkpoint before its approval. If the route changes, present a new review. Mainnet token IDs must never appear as enabled choices on testnet, localnet or mock. Testnet acceptance uses deliberately configured fixture tokens and pools, clearly labelled.
 
 ## Shared interfaces
 
@@ -75,12 +76,38 @@ Domain API contract:
 
 `RheaBuyQuote` must include context, quote ID, quoted/final expiry time, route manifest hash, per-leg atomic inputs and gross outputs, all pool fees, tax evidence hash, aggregate expected net output, `minNetMpooAtomic`, maximum native spend, storage estimates, gas budget, price-impact estimate and evidence blocks. Unknown tax or unavailable price-impact evidence is a blocker, not zero. `RheaExecutionPlan` records preconditions and the exact approved receiver/method/arguments/deposit/gas for every step.
 
-Submit exactly one checkpoint/transaction per gateway request; after reconciliation, a re-quoted
-next leg gets a new quote ID and explicit review/approval. Do not send a stale whole-route array
+Submit exactly one checkpoint per gateway request (a checkpoint is defined under **Approval
+batching** below); after reconciliation, a re-quoted next checkpoint gets a new quote ID and
+explicit review/approval. Do not send a stale whole-route array
 or modify transactions inside the gateway. Shared `approval.maxNativeSpendYocto` is a cumulative
 all-in native outlay ceiling including wrap input, payable deposits and conservative gas, excluding
 untouched reserve. Track consumed/headroom amounts across legs; `VITE_RHEA_MAX_INPUT_YOCTO` limits
 trade input only. Neither re-quoting nor a new per-leg prompt resets the operation ceiling.
+
+## Approval batching
+
+Players should approve no more often than on RHEA's own site. Target: a returning player on a
+route served by one exchange approves **once**; a first-time player approves **at most twice**.
+The review screen states the number of approvals, and evidence records the actual count.
+
+A checkpoint is one of:
+
+- **Registration (first time only):** `storage_deposit` calls for every missing token
+  registration, as independent transactions in one gateway request. None depends on another's
+  output, so the sequential-submission rule is satisfied. Recheck all registrations after it.
+- **Swap:** one transaction to `wrap.near` with two actions in order: `near_deposit({})` attaching
+  the approved input, then `ft_transfer_call` to the allowlisted DCL exchange carrying
+  `Swap: {pool_ids, output_token, min_output_amount}` across **every consecutive hop on that
+  exchange**. Actions in one transaction run in one receipt, so a failed action reverts both. The
+  swap itself runs in later receipts: if it fails, `ft_resolve_transfer` returns wNEAR to the
+  wallet while the wrap stays done; recovery offers **Unwrap remaining wNEAR**.
+- **Next exchange:** only when the route changes exchange (for example a classic
+  `v2.ref-finance.near` hop), the next exchange's hops form a new checkpoint with a fresh quote and
+  approval, as described in the partial-completion rules.
+
+RHEA-A must verify from the deployed DCL code or a fixture-backed read that a multi-pool `Swap`
+either completes every hop or refunds the input, and that `min_output_amount` applies to the final
+output. If either is not established, fall back to one checkpoint per hop and record why.
 
 ## Quote and tax correctness
 
@@ -88,21 +115,29 @@ v1 uses exact input: the player chooses a maximum native NEAR spend. Do not use 
 
 The implementation must establish whether DCL `quote.amount` and `Swap.min_output_amount` measure gross exchange output or net wallet output for the actual mPOO contract. Refresh tax settings at quote time and immediately before signing the final leg; record tax-code/config changes as quote invalidation. A post-swap balance check detects an underfill but does not protect the player from one.
 
-**Production gate:** demonstrate that the transaction's on-chain minimum actually protects the displayed net floor, including the token's exact rounding and configured venue tax. A gross-up conversion is acceptable only when the tax calculation and stability over execution are proven from the deployed contract semantics; checking a mutable tax before signing is not enough to guarantee it will remain unchanged. If net protection cannot be enforced, keep embedded execution disabled and document the narrow external fallback. Do not fix this by weakening the minimum, hiding the tax or shipping a new adapter contract without a separate owner decision.
+**Production gate (proposed rule, owner to confirm before RHEA-D):** the mPOO buy tax is set by an external admin (`nearlytrade.near` in the 12 October readout), so its stability over execution cannot be proven and a strict proof would block release permanently. Instead:
 
-The entire multi-venue sequence is not atomic. Earlier legs can succeed while the last leg fails. Every leg needs its own positive executable minimum, and the review must disclose intermediate assets and possible partial completion. The final aggregate estimate is conditional, not a guaranteed return of the original NEAR if a later leg fails. Never insert a zero minimum merely because an upstream generic router helper does so.
+1. RHEA-A establishes, from the deployed token code, where the tax is taken (on the pool's transfer to the buyer, or elsewhere) and its exact rounding. If it is not taken on the output transfer, this rule does not apply; stop and report.
+2. Read `get_tax({})` immediately before signing. Set `min_output_amount = ceil(minNetMpooAtomic × 10000 / (10000 − buy_bps))` with the token's exact rounding, so the on-chain minimum protects the net floor at that tax rate.
+3. Block the swap if `buy_bps` exceeds a release limit (`VITE_RHEA_MAX_BUY_TAX_BPS`, unset disables submit), if the tax config, `pairs` or `exempt` lists changed since the quote, or if the token code hash differs from the evidence.
+4. After settlement, verify delivered net mPOO against the floor; a shortfall is an underfill failure with evidence, never success.
+5. The review discloses that the tax admin could raise the tax between signing and execution, and that the floor holds only at the tax rate shown.
+
+If the owner rejects this rule, keep embedded execution disabled and the external link as fallback. Do not weaken the minimum, hide the tax or ship a new adapter contract without a separate owner decision.
+
+A route spanning more than one exchange is not atomic. Earlier checkpoints can succeed while the last fails. Every checkpoint needs its own positive executable minimum on its final output, and the review must disclose intermediate assets and possible partial completion. The final aggregate estimate is conditional, not a guaranteed return of the original NEAR if a later leg fails. Never insert a zero minimum merely because an upstream generic router helper does so.
 
 ## Transaction construction and execution
 
 Use the existing normal wallet approval path, with the player as signer and recipient. The limited drawing key stays restricted to its existing board and `draw`/`draw_many`; do not add `near_deposit`, `near_withdraw`, token transfers, storage methods or exchange calls to it.
 
-Preparation and each leg are sequential:
+Preparation and each checkpoint are sequential:
 
 1. Acquire the shared capital-operation lock. Refuse another trade/funding conversion/credit purchase that could spend the same balance while approval is pending. Pause local paint submission if the shared policy requires a stable gas budget; do not cancel or lose the drawing.
 2. Read account availability and balances at finality. Compute spendable native balance with the shared storage-aware account calculation. Require `availableNative >= inputToWrap + missingStorageDeposits + maximumGasBudget + reserveAfterCompletion`. A “Max” button subtracts all these amounts; it cannot drain the account. Existing wNEAR is displayed separately and never silently spent.
 3. Query `storage_balance_of` and `storage_balance_bounds` for required input/refund/output tokens. Register only missing accounts, using the measured minimum and the player's own account ID. Recheck after confirmation. No hardcoded 0.5 NEAR storage deposit. Unknown bounds disable execution. Pre-register recovery tokens before any trade so failed transfers can return funds.
-4. Wrap only the approved native amount with `wrap.near::near_deposit({})`, attaching that amount. Confirm its receipts and re-read the wallet's wNEAR balance before trading. This is distinct from a swap, and may remain completed if a later step fails.
-5. Before each swap, re-read context, available balance, previous checkpoint, current route/tax settings and quote expiry. Re-quote the remaining route against the actual amount received. If the original overall input cap or agreed net floor cannot be met, stop and request a new review; no silent acceptance of a worse rate.
+4. Wrap only the approved native amount with `wrap.near::near_deposit({})`, attaching that amount, as the first action of the swap transaction (see **Approval batching**). Confirm its receipts and re-read the wallet's wNEAR balance afterwards. The wrap may remain completed if the swap is refunded.
+5. Before each swap checkpoint, re-read context, available balance, previous checkpoint, current route/tax settings and quote expiry. Re-quote the remaining route against the actual amount received. If the original overall input cap or agreed net floor cannot be met, stop and request a new review; no silent acceptance of a worse rate.
 6. For a validated DCL leg, use the reviewed wire shape: call input token `ft_transfer_call` with `receiver_id` equal to the allowlisted DCL exchange, integer `amount`, and `msg` containing `Swap: {pool_ids, output_token, min_output_amount}`. Attach exactly 1 yoctoNEAR. For a classic leg, use its own reviewed `actions` message with numeric `pool_id`, exact token IDs, input and positive minimum. Validate emitted actions after any helper runs; SDK objects are not trusted instructions.
 7. Reconcile *all* receipt outcomes and FT resolver results. A top-level successful hash can still represent a refunded swap. Read relevant wallet FT balances and, where applicable, exchange `list_user_assets`/classic deposits. Use the received amount supported by operation receipts/events and reconciled balances; unrelated incoming transfers must not manufacture a successful fill.
 8. Save the completed checkpoint before generating the next approval. Every remaining input is bounded by the approved plan and the reconciled wallet balance, never merely by the original quote. On the final leg, success requires verified net mPOO delivery meeting the agreed floor. Refresh native NEAR/mPOO wallet state; do not alter credits or paint state.

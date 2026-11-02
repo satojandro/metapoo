@@ -164,8 +164,10 @@ distinct from an attempted broadcast with an unknown result. Failure after an ea
 step is partial completion, not rollback. No automatic resubmission or provider fallback after a
 possible broadcast. Read-only polling and transaction lookup may retry with bounded backoff.
 
-For RHEA, the controller submits exactly one checkpoint/transaction in each gateway request. It then
-reconciles the received assets and shows a fresh next-leg review before requesting the next approval.
+For RHEA, the controller submits exactly one checkpoint in each gateway request: a set of independent
+storage registrations, or one multi-action transaction to a single receiver (see the RHEA spec's
+**Approval batching**). It then reconciles the received assets and shows a fresh review before
+requesting the next approval.
 Do not submit an original whole-route transaction array and later mutate it inside the gateway.
 Each leg's minimum protects that leg only; a later failure leaves intermediate assets and cannot
 promise a rollback or full refund of the original native NEAR.
@@ -203,7 +205,7 @@ Abort reads/timers on disposal; preserve resumable records. Background throttlin
 |---|---|---|
 | ACQ-0 foundation/integrator | `integrations/types.ts`, `account-readiness.ts`, `gas-budget.ts`, `operation-store.ts`; `wallet.ts`; shared config/env/type declarations; app shell/chrome/balance panel wiring; package/lock/Vite changes | current main review |
 | ACQ-1 Privy agent | `integrations/privy/**`, `privy-sign.html` and feature tests | ACQ-0 interface commit; asks integrator to wire build/config/manifest |
-| ACQ-2 Intents agent | `acquisition/intents-*.ts`, dedicated panel/styles/tests and fixtures | ACQ-0; can test with fake identity without ACQ-1 |
+| ACQ-2 Intents agent | `integrations/intents/**`, dedicated panel/styles/tests and fixtures | ACQ-0; can test with fake identity without ACQ-1 |
 | ACQ-3 RHEA agent | `integrations/rhea/**`, dedicated panel/styles/tests and route evidence | ACQ-0; existing wallet path works without ACQ-1/2 |
 | ACQ-4 integration/review | shared wiring, journey tests, docs evidence | ACQ-1/2/3 reviewed commits |
 
@@ -252,8 +254,10 @@ demonstrate the missing behaviour through its integration seam.
 
 ## 8. Hard release gates and stopping conditions
 
-1. **Native NEAR bootstrap:** Intents must prove native delivery to the exact Privy account type.
-   wNEAR alone cannot fund an account that has no native NEAR to pay for unwrapping. Until proven,
+1. **Native NEAR bootstrap:** Intents must prove native delivery to the exact Privy account type,
+   including a fresh implicit address that is not yet on chain (the new-player case; a native
+   transfer creates it). wNEAR alone cannot fund an account that has no native NEAR to pay for
+   unwrapping. Until proven,
    offer direct native NEAR receive instructions; do not advertise zero-balance Intents onboarding.
 2. **mPOO net minimum:** RHEA's ordinary gross pool minimum is not proof of a post-tax wallet minimum.
    If the selected route cannot enforce the disclosed net minimum under the token's actual tax
