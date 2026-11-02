@@ -171,10 +171,12 @@ Owner decision (1 Nov): 10% team, 70% TOILET stakers, 20% burned.
     spent by anyone, the owner included.
 - Each outgoing transfer has a callback that restores its amount on failure.
 - `team_account`, the staking contract **and the burn address** must be registered for storage on the
-  mPOO contract before the first distribution. The callback catches it if they aren't. Checked
-  2 Nov: the burn address is **not registered** on `mpoo.nearlytrade.near` (`storage_balance_of` →
-  `null`). One-off setup step, open to anyone: `storage_deposit({"account_id": "000…000"})` with
-  0.00125 NEAR attached (`storage_balance_bounds`). Do the same on the testnet token before the rehearsal.
+  mPOO contract before the first distribution. The callback catches it if they aren't. **Mainnet
+  done 2 Nov** by the owner from `meta-poo-shitcoin.near`: `storage_deposit` in
+  `7ssTPn2aDhZghcZKS6eJh2chmd54E3CYQNzvgGjTFKdv`, then 1 mPOO sent in
+  `CCGfZyptTtyDviaXYfQjFFJgr9U2fMouL35LqjmskoR7`. `storage_balance_of` now returns 0.00125 NEAR and
+  `ft_balance_of` 1 mPOO. It takes two transactions: registering, then transferring; a transfer alone
+  fails with "The receiver is not registered". Do the same on the testnet token before the rehearsal.
 - **board3's test token is not an mPOO copy** (found 2 Nov): `metapoo-mpoo.testnet` is a TOILET-style
   contract (mint, emitter, 0% tax, 2,000 supply). The rehearsal deploys the real mPOO wasm on testnet
   instead (work order `rev-testnet-rehearsal`), so the storage-registration and tax behaviour match
