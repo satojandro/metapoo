@@ -14,6 +14,7 @@
 mod emission;
 mod migrate;
 mod payments;
+mod revenue;
 mod safety;
 use emission::Holder;
 use near_sdk::store::{IterableMap, LookupMap, LookupSet};
