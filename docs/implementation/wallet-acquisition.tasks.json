@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "kind": "agent_handoff_manifest",
+  "executable_orchestrator_config": false,
+  "date": "2026-11-03",
+  "status": "specified_not_implemented",
+  "source_revision": "7e123621c31206ab1c8f5f502ccf2ef3ed3aeb46",
+  "entrypoint": "docs/implementation/2026-11-03-wallet-funding-integration-spec.md",
+  "constraints": [
+    "Reconcile current main and AGENT.md before code changes.",
+    "Players pay their own gas; no relayer, sponsorship or team-funded bootstrap.",
+    "Preserve current draw/draw_many key scope and allowance.",
+    "mPOO acquisition uses RHEA, never Intents.",
+    "No contract changes, deployment, live spending, merge or release is authorized by this manifest.",
+    "Foundation owner alone edits shared runtime files and package/lock files.",
+    "Acquisition does not automatically buy credits, authorize keys or paint."
+  ],
+  "tasks": [
+    {
+      "id": "ACQ-0",
+      "role": "foundation_and_integration_owner",
+      "depends_on": [],
+      "spec": "docs/implementation/2026-11-03-wallet-funding-integration-spec.md",
+      "owned_paths": [
+        "web/src/integrations/types.ts",
+        "web/src/integrations/account-readiness.ts",
+        "web/src/integrations/gas-budget.ts",
+        "web/src/integrations/operation-store.ts",
+        "web/src/wallet.ts",
+        "web/src/config.ts",
+        "web/src/vite-env.d.ts",
+        "web/.env.example",
+        "web/vite.config.ts",
+        "web/package.json",
+        "web/package-lock.json",
+        "web/src/app/shell.ts",
+        "web/src/app/wallet-chrome.ts",
+        "web/src/app/paint-wallet-panel.ts"
+      ],
+      "deliverables": [
+        "Typed operation context, epoch validation, readiness and exact storage-aware gas budget.",
+        "Ordinary-wallet acquisition gateway with allowlisted plans, sequential receipts and unknown-broadcast handling.",
+        "Versioned operation ledger, cross-tab capital-action coordination, independent disabled feature flags.",
+        "Reviewed foundation commit consumed by all feature tasks; shared tests and build pass."
+      ],
+      "acceptance": [
+        "No acquisition transaction uses the drawing key.",
+        "Account/network/provider changes invalidate approvals and stale renders.",
+        "RPC failure is not an absent account or a zero balance.",
+        "Max preserves storage, gas and post-action play reserve without subtracting key allowance.",
+        "Unknown broadcasts stop dependent sends and never trigger automatic retry."
+      ]
+    },
+    {
+      "id": "ACQ-1",
+      "role": "privy_feature_agent",
+      "depends_on": ["ACQ-0"],
+      "spec": "docs/implementation/2026-11-03-privy-near-connect-spec.md",
+      "owned_paths": ["web/src/integrations/privy/**", "web/privy-sign.html"],
+      "deliverables": [
+        "Pinned package/core/executor compatibility evidence and standalone browser signing entry.",
+        "Google/email login and same-account restoration through the existing connector.",
+        "Fund-before-AddKey readiness, explicit existing drawing authorization and correct logout semantics.",
+        "Fixture tests, shared wiring patch request, configuration guide and testnet proof checklist."
+      ],
+      "release_gates": [
+        "Configured provider application and callback origins.",
+        "Actual deployed-host popup/redirect/security-header verification.",
+        "Confirmed testnet access-key and paint/readback evidence."
+      ]
+    },
+    {
+      "id": "ACQ-2",
+      "role": "intents_funding_agent",
+      "depends_on": ["ACQ-0"],
+      "spec": "docs/implementation/2026-11-03-intents-funding-spec.md",
+      "owned_paths": [
+        "web/src/acquisition/intents-*.ts",
+        "web/src/app/intents-funding-panel.ts",
+        "web/src/app/intents-funding-panel.css"
+      ],
+      "deliverables": [
+        "Validated token discovery, exact-input preview/commit, signed quote validation.",
+        "External source-wallet deposit instructions with correct network, amount, address and memo/QR.",
+        "Persisted status/refund recovery, receipt-attributed destination confirmation, optional explicit user-funded unwrap.",
+        "Tests and disabled wiring independent of Privy; no source-wallet SDK or implicit credits purchase."
+      ],
+      "release_gates": [
+        "INT-NATIVE proof for native versus wrapped delivery and supported receiver type.",
+        "Initialized account and native-gas prerequisite when needed; absent-account bootstrap is not presumed.",
+        "Separately approved bounded mainnet route and recovery trial; Intents has no testnet."
+      ]
+    },
+    {
+      "id": "ACQ-3",
+      "role": "rhea_acquisition_agent",
+      "depends_on": ["ACQ-0"],
+      "spec": "docs/implementation/2026-11-03-rhea-mpoo-swap-spec.md",
+      "owned_paths": ["web/src/integrations/rhea/**", "docs/research/*-rhea-route-evidence.json"],
+      "deliverables": [
+        "Current route/pool/token/tax discovery evidence and bounded allowlisted manifest.",
+        "Vanilla TypeScript quotes/plans with exact net minimum and native-gas/storage reserve.",
+        "Wallet-owned sequential stages, receipt/resolver reconciliation and intermediate-asset recovery.",
+        "Tests and disabled UI integration without widening drawing permissions or changing contracts."
+      ],
+      "release_gates": [
+        "Verified executable route, no assumed direct NEAR/mPOO pair.",
+        "On-chain minimum protects the disclosed post-tax wallet output.",
+        "Separately approved bounded mainnet swap and partial/unknown recovery evidence."
+      ]
+    },
+    {
+      "id": "ACQ-4",
+      "role": "integration_and_independent_review",
+      "depends_on": ["ACQ-1", "ACQ-2", "ACQ-3"],
+      "spec": "docs/implementation/2026-11-03-wallet-funding-integration-spec.md",
+      "owned_paths": ["shared integration wiring and journey tests assigned by ACQ-0"],
+      "deliverables": [
+        "Reconcile exact feature revisions, dependency pins, flags and shared ownership.",
+        "Existing-wallet regression plus Privy/funding/RHEA/credit/local-paint journey tests.",
+        "Desktop/mobile screenshots and evidence table separating fixtures, browser and chain proof.",
+        "Independent review bound to final head; reviewable PR, rollback instructions and unresolved gate list."
+      ],
+      "acceptance": [
+        "Focused/full web tests, build and CI pass at the final head.",
+        "No false success on receipt failure, tax underfill, wrong account or unknown broadcast.",
+        "Drawing remains popup-free and user-funded with original key permissions.",
+        "No feature is enabled while its required provider/live gate remains unverified."
+      ]
+    }
+  ],
+  "handoff_fields": [
+    "exact_base_and_head",
+    "changed_paths",
+    "dependency_commits",
+    "test_commands_and_results",
+    "browser_evidence",
+    "chain_evidence_or_explicitly_unverified",
+    "configuration_without_secrets",
+    "remaining_gates",
+    "rollback_flag",
+    "Learned"
+  ]
+}
