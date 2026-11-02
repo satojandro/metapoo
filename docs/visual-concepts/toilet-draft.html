@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meta Poo TOILET</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: the public TOILET pitch, top to bottom, with a switchable review layer that pins
+   "what the code does today" to every claim. Same dark wall-scene tokens as /money. */
+:root {
+  --bg: #111214;
+  --card: #1b1c1f;
+  --card-2: #232427;
+  --line: #343537;
+  --fg: #f4f1e9;
+  --soft: #d8d4cc;
+  --muted: #a9aaad;
+  --tag: #f1dc5e;
+  --near: #73d7ee;
+  --stake: #65d5ae;
+  --burn: #ff9f8f;
+  --team: #c9c4ba;
+  --grape: #b79ad0;
+  --focus: #56c9ec;
+  --font: Arial, Helvetica, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1080px; margin: 0 auto; padding-block: 28px 64px; display: grid; gap: 64px; }
+p { margin: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+a { color: var(--near); }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.eyebrow { font: 600 11px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Review switch */
+.topbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.draft { font: 600 12px/1.5 var(--mono); color: #17171a; background: var(--tag); padding: 6px 10px; border-radius: 3px; }
+.switch { display: inline-flex; align-items: center; gap: 10px; font: 700 13px var(--font); color: var(--soft); cursor: pointer; min-height: 40px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px 6px 8px; }
+.switch .knob { width: 34px; height: 20px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); position: relative; transition: background .2s; }
+.switch .knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .2s, background .2s; }
+.switch[aria-pressed="true"] .knob { background: var(--grape); border-color: var(--grape); }
+.switch[aria-pressed="true"] .knob::after { transform: translateX(14px); background: var(--bg); }
+
+/* Review notes */
+.note { border: 1px dashed var(--grape); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; background: rgba(183,154,208,.07); font-size: 13px; color: var(--soft); max-width: 82ch; }
+.note b { color: var(--fg); }
+.note code { font: 12px var(--mono); color: var(--grape); }
+.note-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font: 700 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--grape); }
+body:not(.review) .note, body:not(.review) .review-only { display: none; }
+.st { display: inline-block; font: 700 10px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 3px; color: #17171a; white-space: nowrap; }
+.st.built { background: var(--stake); }
+.st.off { background: var(--near); }
+.st.stored { background: var(--tag); }
+.st.missing { background: var(--burn); }
+.st.open { background: var(--grape); }
+.st.spec { background: var(--team); }
+.st.dropped { background: var(--card-2); color: var(--muted); border: 1px solid var(--line); }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: 36px; align-items: center; }
+.hero-copy { display: grid; gap: 16px; }
+.hero h1 { font-size: clamp(36px, 6.4vw, 64px); line-height: .98; font-weight: 900; letter-spacing: -2px; }
+.hero h1 em { font-style: normal; color: var(--tag); }
+.lede { color: var(--soft); font-size: 17px; max-width: 50ch; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; }
+.fact { display: inline-flex; gap: 8px; align-items: baseline; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: 13px; color: var(--soft); }
+.fact b { font: 800 14px var(--mono); color: var(--fg); }
+.demo { display: grid; gap: 10px; min-width: 0; }
+.demo-wall { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 2px; background: var(--line); border: 2px solid var(--line); border-radius: 8px; overflow: hidden; }
+.dt { aspect-ratio: 1; background: #202124; position: relative; transition: background .35s; }
+.dt.you { box-shadow: inset 0 0 0 2px var(--tag); }
+.dt.flash { animation: flash .6s ease-out; }
+@keyframes flash { from { filter: brightness(2); transform: scale(.85); } to { filter: none; transform: none; } }
+.meter-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: end; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.meter-card .label { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.meter-card strong { font: 900 clamp(26px, 4.6vw, 36px)/1 var(--mono); color: var(--tag); font-variant-numeric: tabular-nums; }
+.meter-card .tiles { text-align: right; font: 700 13px var(--mono); color: var(--soft); }
+.demo-log { font: 12px/1.5 var(--mono); color: var(--muted); min-height: 3em; }
+
+/* Sections */
+.sec { display: grid; gap: 20px; scroll-margin-top: 16px; }
+.sec-head { display: grid; gap: 10px; max-width: 70ch; }
+.sec-head h2 { font-size: clamp(26px, 4.4vw, 40px); line-height: 1.05; font-weight: 900; letter-spacing: -1px; }
+.sec-head p { color: var(--soft); font-size: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 20px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.card h3 { font-size: 17px; font-weight: 800; }
+.card p { color: var(--soft); font-size: 14px; }
+.small { font-size: 13px; color: var(--muted) !important; }
+
+/* Loop */
+.loop { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.step { background: var(--card); padding: 18px; display: grid; gap: 8px; align-content: start; border-right: 1px solid var(--line); position: relative; min-width: 0; }
+.step:last-child { border-right: 0; }
+.step:not(:last-child)::after { content: "→"; position: absolute; right: -10px; top: 18px; width: 20px; height: 20px; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 50%; font-size: 11px; color: var(--muted); z-index: 1; }
+.step .k { font: 700 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+.step h3 { font-size: 18px; font-weight: 900; }
+.step p { color: var(--soft); font-size: 14px; }
+.loop-back { font: 600 13px var(--mono); color: var(--muted); text-align: center; }
+
+/* Explorer */
+.explorer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.ctrl { display: grid; gap: 6px; }
+.ctrl-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.ctrl label, .ctrl .lbl { font-weight: 700; font-size: 14px; }
+.ctrl output { font: 800 14px var(--mono); color: var(--tag); text-align: right; }
+.ctrl input[type=range] { width: 100%; accent-color: var(--tag); min-height: 30px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 600 13px var(--font); color: var(--soft); background: var(--card-2); border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; min-height: 38px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--tag); color: #17171a; border-color: var(--tag); }
+.big { display: grid; gap: 2px; }
+.big strong { font: 900 clamp(30px, 5.4vw, 44px)/1 var(--font); letter-spacing: -1px; font-variant-numeric: tabular-nums; color: var(--tag); }
+.big span { font-size: 13px; color: var(--muted); }
+.rows { margin: 0; display: grid; border-top: 1px solid var(--line); }
+.rows div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--soft); }
+.rows dd { margin: 0; font: 600 14px var(--mono); color: var(--fg); text-align: right; }
+.verdict { font-size: 14px; padding: 12px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card-2); color: var(--soft); }
+.verdict[data-tone="good"] { border-color: var(--stake); }
+.verdict[data-tone="warn"] { border-color: var(--tag); }
+.verdict[data-tone="bad"] { border-color: var(--burn); }
+.verdict b { color: var(--fg); }
+
+/* Whale */
+.whale { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.share { display: grid; gap: 6px; }
+.share-top { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--soft); }
+.share-top b { font: 800 15px var(--mono); color: var(--fg); }
+.track { height: 26px; border-radius: 6px; background: var(--card-2); border: 1px solid var(--line); overflow: hidden; }
+.track i { display: block; height: 100%; width: 0; transition: width .4s ease; }
+.track.nocap i { background: var(--burn); }
+.track.cap i { background: var(--stake); }
+
+/* Staking */
+.stake-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.out { display: grid; gap: 4px; border-top: 3px solid var(--stake); padding-top: 10px; }
+.out strong { font: 900 clamp(24px, 4vw, 32px)/1.05 var(--font); font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+.out span { font-size: 13px; color: var(--muted); }
+
+/* Supply */
+.supply { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.card .cap-num { color: var(--fg); font: 900 clamp(34px, 6.4vw, 58px)/1 var(--font); letter-spacing: -2px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.sinks { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--line); }
+.sinks li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--soft); align-items: start; }
+.sinks li b { color: var(--fg); display: block; }
+
+/* Review table */
+.review-table { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.review-table table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13px; }
+.review-table th, .review-table td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.review-table th { font: 700 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); background: var(--card); position: sticky; top: 0; }
+.review-table td { color: var(--soft); }
+.review-table td:first-child { color: var(--fg); font-weight: 700; width: 22%; }
+.review-table tr:last-child td { border-bottom: 0; }
+.review-table code { font: 12px var(--mono); color: var(--grape); }
+.foot { font-size: 13px; color: var(--muted); max-width: 78ch; }
+
+@media (max-width: 860px) {
+  .hero, .explorer, .whale, .supply { grid-template-columns: 1fr; }
+  .demo { max-width: 520px; }
+  .loop { grid-template-columns: 1fr 1fr; }
+  .step:nth-child(2) { border-right: 0; }
+  .step:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .step:nth-child(2)::after { display: none; }
+  .stake-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .page { gap: 48px; padding-block: 20px 48px; }
+  .card { padding: 16px; }
+  .loop { grid-template-columns: 1fr; }
+  .step { border-right: 0; border-bottom: 1px solid var(--line); }
+  .step:last-child { border-bottom: 0; }
+  .step::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dt, .track i, .switch .knob, .switch .knob::after { transition: none; }
+  .dt.flash { animation: none; }
+}
+</style>
+
+<main class="page">
+  <div class="topbar">
+    <p class="draft">Draft TOILET page, for review. Nothing here is live yet.</p>
+    <button class="switch" type="button" id="review-switch" aria-pressed="true"><span class="knob" aria-hidden="true"></span>Review notes</button>
+  </div>
+
+  <header class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">TOILET</p>
+      <h1>Hold the wall. <em>Get paid in TOILET.</em></h1>
+      <p class="lede">Every tile you paint with credits earns TOILET for as long as it survives. Paint over someone else’s tile and it starts earning for you instead. Stake your TOILET and you get 70% of the mPOO the stall takes in.</p>
+      <div class="facts">
+        <span class="fact"><b>1,000,000,000</b> TOILET, ever</span>
+        <span class="fact"><b>0</b> owner keys over the token</span>
+        <span class="fact"><b>70%</b> of mPOO to stakers</span>
+        <span class="fact"><b>10%</b> burned when you unstake</span>
+      </div>
+      <div class="note">
+        <p class="note-head"><span class="st off">Built, off</span> Earning per tile</p>
+        <p>The accumulator in <code>emission.rs</code> is built and the cap is enforced, but <code>toilet_per_cell_second</code> is <b>0</b>, so nothing earns yet. Staking doesn’t exist: see the staking note below.</p>
+      </div>
+    </div>
+    <figure class="demo" style="margin:0">
+      <div class="demo-wall" id="demo-wall" aria-hidden="true"></div>
+      <div class="meter-card" role="status" aria-live="off">
+        <span class="label">Your TOILET</span><span class="tiles" id="demo-tiles">12 tiles</span>
+        <strong id="demo-count">0.000</strong><span class="tiles">sample</span>
+      </div>
+      <p class="demo-log" id="demo-log">Your tiles are outlined. Each one drips TOILET while it’s on the wall.</p>
+    </figure>
+  </header>
+
+  <section class="sec" aria-labelledby="loop-h">
+    <div class="sec-head">
+      <p class="eyebrow">The loop</p>
+      <h2 id="loop-h">Painters pay. Holders earn. Stakers collect.</h2>
+      <p>The more people fight over the wall, the more the stall earns, and the more there is for stakers. Being off the wall means watching other people earn.</p>
+    </div>
+    <div class="loop">
+      <div class="step"><p class="k" style="color:var(--near)">1 · Paint</p><h3>Take tiles</h3><p>Buy credits and paint. Every credit sale is revenue for the stall.</p></div>
+      <div class="step"><p class="k" style="color:var(--tag)">2 · Hold</p><h3>Earn TOILET</h3><p>Your painted tiles earn TOILET every second they survive. Claim it whenever you like.</p></div>
+      <div class="step"><p class="k" style="color:var(--stake)">3 · Stake</p><h3>Collect mPOO</h3><p>Stake TOILET to take a share of 70% of the stall’s mPOO.</p></div>
+      <div class="step"><p class="k" style="color:var(--burn)">4 · Defend</p><h3>Keep your tiles</h3><p>Someone paints over you, you stop earning. Paint back. Wet paint costs them 4 credits to cover.</p></div>
+    </div>
+    <p class="loop-back">↺ Fights over tiles are revenue. Revenue is staker income.</p>
+  </section>
+
+  <section class="sec" id="earn" aria-labelledby="earn-h">
+    <div class="sec-head">
+      <p class="eyebrow">Earnings explorer</p>
+      <h2 id="earn-h">What does a tile earn?</h2>
+      <p>Every earning tile gets the same rate. Pick how fast the billion should run out, then see what your tiles make.</p>
+    </div>
+    <div class="explorer">
+      <div class="card">
+        <div class="ctrl">
+          <span class="lbl" id="pace-l">Pace: years to mint the billion on a full wall</span>
+          <div class="chips" role="group" aria-labelledby="pace-l">
+            <button class="chip" type="button" data-years="1" aria-pressed="false">1 year</button>
+            <button class="chip" type="button" data-years="2" aria-pressed="false">2 years</button>
+            <button class="chip" type="button" data-years="4" aria-pressed="true">4 years</button>
+            <button class="chip" type="button" data-years="10" aria-pressed="false">10 years</button>
+          </div>
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label for="tiles">Tiles you hold</label><output id="tiles-out" for="tiles">24</output></div>
+          <input id="tiles" type="range" min="1" max="1024" value="24">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label for="survive">Hours a day your tiles survive</label><output id="survive-out" for="survive">12 h</output></div>
+          <input id="survive" type="range" min="1" max="24" value="12">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label for="painted">Tiles painted on the wall</label><output id="painted-out" for="painted">16,384</output></div>
+          <input id="painted" type="range" min="1024" max="16384" step="256" value="16384">
+        </div>
+      </div>
+      <div class="card">
+        <div class="big"><strong id="you-day" class="num">0</strong><span>TOILET a day for you</span></div>
+        <dl class="rows">
+          <div><dt>Per tile, per day</dt><dd id="per-tile">0</dd></div>
+          <div><dt>Whole wall, per day</dt><dd id="wall-day">0</dd></div>
+          <div><dt>Supply minted per year</dt><dd id="e-pct">0%</dd></div>
+          <div><dt>Billion runs out in</dt><dd id="runout">0</dd></div>
+        </dl>
+        <p class="verdict" id="verdict"></p>
+      </div>
+    </div>
+    <div class="note">
+      <p class="note-head"><span class="st spec">Decided 2 Nov · specced</span> A fixed rate per tile, with price-style guards</p>
+      <p>Emission stays a <b>fixed rate per earning tile per second</b>, as the code does it. It is not keyed to revenue. A tile earns the same on an empty wall as on a full one, and the billion lasts longer while the wall fills.</p>
+      <p>Today <code>toilet_per_cell_second</code> can move any amount at any time through <code>set_tunables</code>. The TOILET-round spec moves it to its own setter with the same guards as prices: at most ×2 or ÷2 per change, a 24-hour cooldown and a public event. Dropping it to 0 stays instant, as an emergency stop.</p>
+    </div>
+  </section>
+
+  <section class="sec" id="whale" aria-labelledby="whale-h">
+    <div class="sec-head">
+      <p class="eyebrow">Whales welcome</p>
+      <h2 id="whale-h">Buy the wall if you like. The internet will make you pay to keep it.</h2>
+      <p>There’s no earning cap. Paint a thousand tiles and all of them earn. But every tile is up for grabs, and holding one means answering every poke while the poker’s paint is still wet. Every fight sells credits, and every credit sold feeds the stakers.</p>
+    </div>
+    <div class="card">
+      <div class="explorer" style="gap:20px">
+        <div class="ctrl">
+          <div class="ctrl-top"><label for="whale-tiles">A whale paints this many tiles</label><output id="whale-out" for="whale-tiles">4,096 tiles · 10.24 NEAR</output></div>
+          <input id="whale-tiles" type="range" min="128" max="16384" step="128" value="4096">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label for="pokers">Players poking the whale, 32 tiles each a day</label><output id="pokers-out" for="pokers">100 players</output></div>
+          <input id="pokers" type="range" min="0" max="500" step="10" value="100">
+        </div>
+      </div>
+      <div class="share">
+        <div class="share-top"><span>Whale’s share of TOILET minted</span><b id="share-nocap">25%</b></div>
+        <div class="track nocap"><i id="bar-nocap"></i></div>
+      </div>
+      <div class="stake-grid">
+        <div class="out" style="border-color:var(--burn)"><strong id="w-cost" class="num">32</strong><span>NEAR a day the whale spends answering, at 4 credits a tile</span></div>
+        <div class="out" style="border-color:var(--near)"><strong id="w-pokes" class="num">8</strong><span>NEAR a day the pokers spend, at 1 credit a tile</span></div>
+        <div class="out"><strong id="w-stakers" class="num">25</strong><span>NEAR a day of that fight that reaches stakers as mPOO</span></div>
+      </div>
+      <p class="small">Poking a dry whale tile costs 1 credit. Taking it back within 10 minutes costs the whale 4. Assumes the whale answers every poke while it’s wet.</p>
+    </div>
+    <div class="note">
+      <p class="note-head"><span class="st spec">Decided 2 Nov · specced</span> No earning cap · free tiles earn nothing</p>
+      <p>The earning cap is dropped and <code>max_earning_cells</code> will be deleted, so <code>get_tunables</code> stops advertising a limit nobody enforces (audit C3). The whale risk is accepted on purpose: the defence is the community, and the fight is revenue.</p>
+      <p>Free tiles (first paints, happy hour) earn nothing until someone repaints them with credits. Nothing has to be burned for them. TOILET is only set aside against the cap when an <b>earning</b> tile accrues it, so a free tile’s share is simply never minted and stays in the unissued part of the billion.</p>
+    </div>
+  </section>
+
+  <section class="sec" id="stake" aria-labelledby="stake-h">
+    <div class="sec-head">
+      <p class="eyebrow">Staking</p>
+      <h2 id="stake-h">Stake TOILET. Collect the stall’s mPOO.</h2>
+      <p>Painters pay NEAR and mPOO. The stall buys mPOO with the NEAR and sends 70% of all its mPOO to the stakers’ pool. The pool pays out at most 10% of itself a day, pro rata to stake, so payouts arrive as a steady drip and the pool swells when the wall is busy.</p>
+    </div>
+    <div class="card">
+      <div class="explorer" style="gap:20px">
+        <div class="ctrl">
+          <div class="ctrl-top"><label for="spend">Painters spend this much NEAR a week</label><output id="spend-out" for="spend">100 NEAR</output></div>
+          <input id="spend" type="range" min="10" max="2000" step="10" value="100">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label for="mine">Your share of all staked TOILET</label><output id="mine-out" for="mine">1%</output></div>
+          <input id="mine" type="range" min="0.1" max="25" step="0.1" value="1">
+        </div>
+      </div>
+      <div class="stake-grid">
+        <div class="out"><strong id="s-pool" class="num">90</strong><span>NEAR of mPOO the pool settles around</span></div>
+        <div class="out"><strong id="s-you" class="num">0.63</strong><span>NEAR of mPOO to you a week, once the pool settles</span></div>
+        <div class="out" style="border-color:var(--burn)"><strong id="s-burn" class="num">18</strong><span>NEAR of mPOO flushed a week</span></div>
+      </div>
+      <p class="small"><b style="color:var(--fg)">Paper hands pay.</b> Unstaking burns 10% of the TOILET you take out, every time, on that amount only.</p>
+      <p class="small">Before swap costs. mPOO paid directly for credits joins the same split. <a href="/money">Live flows on Where the money goes →</a></p>
+    </div>
+    <div class="note">
+      <p class="note-head"><span class="st spec">Specced 2 Nov · not built</span> Staking contract</p>
+      <p>The spec covers staking TOILET, a <b>pool that releases at most 10% of itself per day</b>, pro rata mPOO rewards, and a <b>10% exit tax, burned</b>, on each unstaked amount. The board stays as it is.</p>
+      <p>The drip smooths payouts. It doesn’t grow them: at steady state the pool holds about ten days of inflow and pays out what comes in. Two things the contract has to get right because the board won’t change. The board pays the pool with a plain <code>ft_transfer</code>, so the contract has to count new mPOO from its own balance. And <code>set_staking_contract</code> works once, ever, so the contract gets a review gate before that call.</p>
+    </div>
+  </section>
+
+  <section class="sec" id="supply" aria-labelledby="supply-h">
+    <div class="sec-head">
+      <p class="eyebrow">Supply</p>
+      <h2 id="supply-h">One billion. Then the tap’s off.</h2>
+      <p>TOILET is only minted when a holder claims what their tiles earned. There’s no owner, no admin mint and no upgrade path. When the billion is reserved, earning stops for good.</p>
+    </div>
+    <div class="supply">
+      <div class="card">
+        <p class="eyebrow">Hard cap</p>
+        <p class="cap-num">1,000,000,000</p>
+        <p>TOILET earned is set aside against the cap the moment it accrues, so a late claimer never finds the cupboard bare.</p>
+      </div>
+      <div class="card">
+        <h3>Where TOILET goes</h3>
+        <ul class="sinks">
+          <li><span><b>Staked</b>Earns a share of the stall’s mPOO.</span><span class="st built review-only">Token built</span></li>
+          <li><span><b>Traded</b>An ordinary NEAR token. A buy or sell on the listed exchange can carry a small tax, like mPOO’s.</span><span class="st built review-only">Built</span></li>
+          <li><span><b>Burned on unstake</b>10% of every unstaked amount goes up in smoke.</span><span class="st spec review-only">Specced</span></li>
+          <li><span><b>Burned</b>Anyone can burn their own TOILET. Burns never reopen the cap.</span><span class="st built review-only">Built</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="note">
+      <p class="note-head"><span class="st spec">Decided 2 Nov</span> TOILET is for staking, not for paint</p>
+      <p>TOILET won’t be spendable on paint. The decisions doc still says it is “spent/burned as paint”, and the TOILET-round PR corrects that. Its uses are staking, trading and burning.</p>
+      <p>The exchange tax is a nice-to-have: match mPOO’s 2% buy and 3% sell. The rates and the burn/treasury split are fixed forever at deploy (D4), so they’re chosen before deploy, with a test on a real pool first.</p>
+    </div>
+  </section>
+
+  <section class="sec review-only" aria-labelledby="review-h">
+    <div class="sec-head">
+      <p class="eyebrow">Review · priors vs code</p>
+      <h2 id="review-h">What this page promises, and what exists.</h2>
+      <p>Checked against <code style="font:13px var(--mono);color:var(--grape)">contracts/paid-board</code>, <code style="font:13px var(--mono);color:var(--grape)">contracts/toilet</code>, the TOILET economy doc and the 29 Oct audit.</p>
+    </div>
+    <div class="review-table">
+      <table>
+        <thead><tr><th>Claim</th><th>Code today</th><th>Status</th><th>Decide</th></tr></thead>
+        <tbody>
+          <tr><td>Tiles earn TOILET while they survive</td><td>Per-tile accumulator in <code>emission.rs</code>, cap reserved at accrual</td><td><span class="st off">Built, off</span></td><td>Launch rate, and when to turn it on</td></tr>
+          <tr><td>A fixed rate per tile</td><td>Owner-set in <code>set_tunables</code>; no cooldown or step limit</td><td><span class="st spec">Specced</span></td><td>Own setter: ×2/÷2, 24 h cooldown, event; 0 any time</td></tr>
+          <tr><td>No earning cap</td><td><code>max_earning_cells</code> stored, unread</td><td><span class="st spec">Specced</span></td><td>Delete the field</td></tr>
+          <tr><td>Free tiles earn nothing</td><td><code>free_cells</code> stored; accrual counts every tile</td><td><span class="st spec">Specced</span></td><td>Count only credit-painted tiles</td></tr>
+          <tr><td>Daily paint allowance</td><td><code>quota_*</code> stored, unread</td><td><span class="st open">Open</span></td><td>Still wanted now repaint pricing exists?</td></tr>
+          <tr><td>Claim whenever you like</td><td><code>claim_toilet</code> mints; caller picks the token; first claim registered from the token’s balance</td><td><span class="st spec">Specced</span></td><td>Store the token id (C4); minimum claim (C6)</td></tr>
+          <tr><td>Stakers’ pool, 10% a day</td><td>Board reserve and set-once forward built; no staking contract</td><td><span class="st spec">Specced</span></td><td>Build, then review before the one-time set</td></tr>
+          <tr><td>10% exit tax, burned</td><td>Nothing</td><td><span class="st spec">Specced</span></td><td>Part of the staking contract</td></tr>
+          <tr><td>TOILET spent as paint</td><td>Board accepts NEAR and mPOO only</td><td><span class="st dropped">Dropped</span></td><td>Correct the decisions doc</td></tr>
+          <tr><td>No owner over the token</td><td>Emitter-only mint, no upgrade; pause via board passthrough</td><td><span class="st built">Built</span></td><td>None</td></tr>
+          <tr><td>Exchange tax like mPOO</td><td>Venue tax fixed at <code>new()</code></td><td><span class="st spec">Nice to have</span></td><td>2% / 3% and the split before deploy; real-pool test</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="foot">Sample numbers throughout. Pace, holdings and spending are inputs for thinking with, not forecasts, and nothing here promises a return.</p>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const CAP = 1e9, WALL = 16384, NEAR_PER_CREDIT = 0.0025;
+  const fmt = (n, d = 0) => n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+  const smart = n => n >= 100 ? fmt(n) : n >= 10 ? fmt(n, 1) : fmt(n, 2);
+
+  /* Review switch */
+  const sw = $("review-switch");
+  sw.addEventListener("click", () => {
+    const on = sw.getAttribute("aria-pressed") !== "true";
+    sw.setAttribute("aria-pressed", String(on)); document.body.classList.toggle("review", on);
+  });
+  document.body.classList.add("review");
+
+  /* Hero demo: tiles change hands, your counter drips */
+  const COLORS = ["#b23a2f","#e0a100","#3d7a4a","#2f6f8f","#6b4c7a","#c47b5a","#8a857c","#7a4528","#ecd9a0","#9ccbdc","#263552","#9fb53a","#ef7a2c","#f4efe4"];
+  const YOU = "#ec8fb0", N = 12 * 7;
+  const wall = $("demo-wall"), tiles = [];
+  let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < N; i++) {
+    const el = document.createElement("div"); el.className = "dt";
+    const mine = [14,15,16,26,27,28,38,39,40,51,52,63].includes(i);
+    const t = { el, mine, color: mine ? YOU : COLORS[Math.floor(rnd() * COLORS.length)] };
+    el.style.background = t.color; el.classList.toggle("you", mine);
+    tiles.push(t); wall.append(el);
+  }
+  const PER_TILE_SEC = CAP / (4 * 365 * 86400 * WALL); // 4-year pace, sample
+  let earned = 0, last = performance.now();
+  const mineCount = () => tiles.filter(t => t.mine).length;
+  function setTile(t, mine, color) {
+    t.mine = mine; t.color = color; t.el.style.background = color; t.el.classList.toggle("you", mine);
+    if (!reduced) { t.el.classList.remove("flash"); void t.el.offsetWidth; t.el.classList.add("flash"); }
+    $("demo-tiles").textContent = `${mineCount()} tiles`;
+  }
+  // Sample time runs 600× fast so the counter visibly moves.
+  function tick(now) {
+    const dt = Math.min(1, (now - last) / 1000); last = now;
+    if (!document.hidden) { earned += mineCount() * PER_TILE_SEC * dt * 600; $("demo-count").textContent = fmt(earned, 3); }
+    requestAnimationFrame(tick);
+  }
+  if (!reduced) requestAnimationFrame(tick); else $("demo-count").textContent = "15.840";
+  const events = [
+    () => { const t = tiles.filter(t => t.mine)[0]; if (!t) return; setTile(t, false, "#9fb53a"); return "Someone painted over one of yours. That tile earns for them now."; },
+    () => { const t = tiles.find(t => !t.mine && t.color === "#9fb53a") || tiles.find(t => !t.mine); setTile(t, true, YOU); return "You painted it back. 4 credits: their paint was still wet."; },
+    () => { const free = tiles.filter(t => !t.mine); const t = free[Math.floor(rnd() * free.length)]; setTile(t, true, YOU); return "You took a dry tile for 1 credit. One more tile earning."; },
+    () => { const mine = tiles.filter(t => t.mine); const t = mine[Math.floor(rnd() * mine.length)]; setTile(t, false, COLORS[Math.floor(rnd() * COLORS.length)]); return "Lost another one. The wall never sleeps."; },
+    () => { const free = tiles.filter(t => !t.mine); const t = free[Math.floor(rnd() * free.length)]; setTile(t, true, YOU); return "Back on top."; },
+  ];
+  let ev = 0;
+  if (!reduced) setInterval(() => { if (document.hidden) return; const msg = events[ev++ % events.length](); if (msg) $("demo-log").textContent = msg; }, 3200);
+
+  /* Earnings explorer */
+  let years = 4;
+  function earn() {
+    const held = Number($("tiles").value), hours = Number($("survive").value), painted = Number($("painted").value);
+    $("tiles-out").textContent = fmt(held); $("survive-out").textContent = `${hours} h`; $("painted-out").textContent = fmt(painted);
+    const perTileDay = CAP / (years * 365 * WALL);
+    const earning = held;
+    const you = earning * perTileDay * hours / 24;
+    const wallDay = perTileDay * painted;
+    const ePct = wallDay * 365 / CAP * 100;
+    $("you-day").textContent = smart(you);
+    $("per-tile").textContent = `${smart(perTileDay)} TOILET`;
+    $("wall-day").textContent = `${fmt(wallDay)} TOILET`;
+    $("e-pct").textContent = `${ePct.toFixed(1)}%`;
+    const runYears = CAP / (wallDay * 365);
+    $("runout").textContent = runYears >= 2 ? `${runYears.toFixed(1)} years` : `${Math.round(runYears * 12)} months`;
+    const v = $("verdict");
+    const capped = "";
+    if (ePct > 50) { v.dataset.tone = "bad"; v.innerHTML = `<b>Fast and dilutive.</b> The wall mints ${ePct.toFixed(0)}% of supply a year. Stakers would need revenue worth ${ePct.toFixed(0)}% of TOILET’s value each year just to keep up, so most of what holders earn is new tokens, not money.${capped}`; }
+    else if (ePct > 15) { v.dataset.tone = "warn"; v.innerHTML = `<b>Generous now, thinner later.</b> ${ePct.toFixed(0)}% of supply a year. Revenue has to match that share of TOILET’s value for staking to be paid by painters rather than by minting.${capped}`; }
+    else { v.dataset.tone = "good"; v.innerHTML = `<b>Revenue can keep up.</b> ${ePct.toFixed(1)}% of supply a year is a pace painter revenue can plausibly back. Smaller drips per tile, longer life.${capped}`; }
+  }
+  document.querySelectorAll("[data-years]").forEach(b => b.addEventListener("click", () => {
+    years = Number(b.dataset.years);
+    document.querySelectorAll("[data-years]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); earn();
+  }));
+  ["tiles", "survive", "painted"].forEach(id => $(id).addEventListener("input", earn)); earn();
+
+  /* Whale */
+  function whale() {
+    const w = Number($("whale-tiles").value), players = Number($("pokers").value);
+    $("whale-out").textContent = `${fmt(w)} tiles · ${fmt(w * NEAR_PER_CREDIT, 2)} NEAR`;
+    $("pokers-out").textContent = `${fmt(players)} players`;
+    const share = w / WALL;
+    $("share-nocap").textContent = `${(share * 100).toFixed(0)}%`; $("bar-nocap").style.width = `${share * 100}%`;
+    const pokes = Math.min(players * 32, w * 24);
+    const pokeNear = pokes * NEAR_PER_CREDIT, answerNear = pokes * 4 * NEAR_PER_CREDIT;
+    $("w-cost").textContent = smart(answerNear); $("w-pokes").textContent = smart(pokeNear);
+    $("w-stakers").textContent = smart((pokeNear + answerNear) * .9 * .7);
+  }
+  ["whale-tiles", "pokers"].forEach(id => $(id).addEventListener("input", whale)); whale();
+
+  /* Staking */
+  function stake() {
+    const n = Number($("spend").value), mine = Number($("mine").value) / 100;
+    $("spend-out").textContent = `${fmt(n)} NEAR`; $("mine-out").textContent = `${Number($("mine").value).toFixed(1)}%`;
+    const weekly = n * .9 * .7, settled = weekly / 7 * 10;
+    $("s-pool").textContent = smart(settled); $("s-you").textContent = smart(weekly * mine); $("s-burn").textContent = smart(n * .9 * .2);
+  }
+  ["spend", "mine"].forEach(id => $(id).addEventListener("input", stake)); stake();
+})();
+</script>
+
+</html>

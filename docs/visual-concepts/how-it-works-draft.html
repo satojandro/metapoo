@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meta Poo How It Works</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: a stall-wall hero that tells its own story, one hands-on painting section,
+   then short punchy bands. Tokens are the app's dark wall scene, same as /money. */
+:root {
+  --bg: #111214;
+  --card: #1b1c1f;
+  --card-2: #232427;
+  --line: #343537;
+  --fg: #f4f1e9;
+  --soft: #d8d4cc;
+  --muted: #a9aaad;
+  --tag: #f1dc5e;
+  --near: #73d7ee;
+  --stake: #65d5ae;
+  --burn: #ff9f8f;
+  --team: #c9c4ba;
+  --focus: #56c9ec;
+  --font: Arial, Helvetica, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1080px; margin: 0 auto; padding-block: 28px 64px; display: grid; gap: 64px; }
+p { margin: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+a { color: var(--near); }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.eyebrow { font: 600 11px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.draft { font: 600 12px/1.5 var(--mono); color: #17171a; background: var(--tag); padding: 6px 10px; border-radius: 3px; justify-self: start; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px; align-items: start; }
+.hero-copy { display: grid; gap: 16px; }
+.hero h1 { font-size: clamp(34px, 6.2vw, 60px); line-height: 1; font-weight: 900; letter-spacing: -1.8px; color: var(--tag); }
+.lede { color: var(--soft); font-size: 17px; max-width: 52ch; }
+.stall-rules { margin: 6px 0 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); display: grid; gap: 10px; max-width: 52ch; }
+.stall-rules h2 { font: 800 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.stall-rules ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; counter-reset: r; }
+.stall-rules li { display: grid; grid-template-columns: 1.6rem 1fr; gap: 8px; font-size: 14px; color: var(--soft); counter-increment: r; }
+.stall-rules li::before { content: counter(r) "."; font: 800 13px var(--mono); color: var(--tag); padding-top: 1px; }
+.stall-rules a { color: inherit; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.stall-rules a:hover { text-decoration-color: var(--tag); }
+.stall-rules li:last-child { color: var(--muted); font-style: italic; }
+.hero-wall { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.canvas-box { position: relative; aspect-ratio: 1; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #1c1d20; }
+.canvas-box canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.canvas-tag { position: absolute; left: 10px; top: 10px; font: 600 11px var(--mono); background: rgba(17,18,20,.85); color: var(--soft); padding: 4px 8px; border-radius: 3px; }
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; border-top: 1px solid var(--line); min-height: calc(3 * 2.6em); }
+.log li { display: grid; grid-template-columns: 6.5rem 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--soft); }
+.log li:first-child { color: var(--fg); }
+.log time { font: 600 12px var(--mono); color: var(--muted); padding-top: 1px; }
+.log .new { animation: slide .4s ease-out; }
+@keyframes slide { from { opacity: .2; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* Section heads */
+.sec { display: grid; gap: 20px; scroll-margin-top: 16px; }
+.sec-head { display: grid; gap: 10px; max-width: 70ch; }
+.sec-head h2 { font-size: clamp(26px, 4.4vw, 40px); line-height: 1.05; font-weight: 900; letter-spacing: -1px; }
+.sec-head p { color: var(--soft); font-size: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 20px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.card h3 { font-size: 17px; font-weight: 800; }
+.card p { color: var(--soft); font-size: 14px; }
+.small { font-size: 13px; color: var(--muted) !important; }
+
+/* Painting */
+.prices { display: flex; flex-wrap: wrap; gap: 8px; }
+.price { display: inline-flex; gap: 8px; align-items: baseline; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: 13px; color: var(--soft); }
+.price b { font: 800 14px var(--mono); color: var(--fg); }
+.ladder { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.rung { padding: 14px 16px; display: grid; gap: 4px; background: var(--card); border-right: 1px solid var(--line); }
+.rung:last-child { border-right: 0; }
+.rung strong { font-size: 24px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.rung span { font-size: 13px; color: var(--muted); }
+.rung[data-t="4"] { box-shadow: inset 0 3px 0 var(--burn); }
+.rung[data-t="2"] { box-shadow: inset 0 3px 0 var(--tag); }
+.rung[data-t="1"] { box-shadow: inset 0 3px 0 var(--stake); }
+.play { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+.controls { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; justify-content: space-between; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.seg-label { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+.chip { font: 600 13px var(--font); color: var(--soft); background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; min-height: 40px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--tag); color: #17171a; border-color: var(--tag); }
+.phase-note { grid-column: 1 / -1; font-size: 14px; color: var(--soft); min-height: 1.55em; max-width: 80ch; }
+.wall-box { display: grid; gap: 10px; min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 2px; background: var(--line); border: 2px solid var(--line); border-radius: 6px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.cell { aspect-ratio: 1; position: relative; background: #202124; border: 0; padding: 0; cursor: crosshair; display: grid; place-items: center; font: 700 11px var(--mono); color: transparent; }
+.cell.empty { background: repeating-linear-gradient(45deg, #1d1e21 0 3px, #222326 3px 6px); }
+.grid[data-view="price"] .cell, .grid[data-view="age"] .cell { color: rgba(255,255,255,.95); text-shadow: 0 0 3px #000, 0 0 2px #000; }
+.grid[data-view="age"] .cell.dark-text { color: #17171a; text-shadow: none; }
+.cell.sel { outline: 2px solid var(--tag); outline-offset: -2px; z-index: 1; }
+.cell.sel::after { content: ""; position: absolute; inset: 22%; border-radius: 2px; background: var(--pick); box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
+.cell.just { animation: land .5s ease-out; }
+@keyframes land { from { transform: scale(.6); filter: brightness(1.8); } to { transform: none; filter: none; } }
+.wall-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.clock { font: 700 14px var(--mono); color: var(--fg); }
+.clock span { color: var(--muted); font-weight: 600; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.btn { font: 700 13px var(--font); color: var(--fg); background: var(--card-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; min-height: 40px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--tag); color: #17171a; border-color: var(--tag); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); min-height: 18px; }
+.legend i { display: inline-grid; place-items: center; min-width: 22px; height: 18px; padding: 0 3px; margin-right: 6px; border-radius: 3px; font: 700 11px var(--mono); font-style: normal; color: #17171a; vertical-align: -3px; }
+.side { display: grid; gap: 16px; }
+.palette { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.sw { aspect-ratio: 1; border-radius: 4px; border: 2px solid transparent; cursor: pointer; padding: 0; min-height: 28px; }
+.sw[aria-pressed="true"] { border-color: var(--fg); box-shadow: 0 0 0 2px var(--bg) inset; }
+.pick-name { font: 600 12px var(--mono); color: var(--muted); }
+.receipt { margin: 0; display: grid; border-top: 1px solid var(--line); }
+.receipt div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--soft); }
+.receipt dd { margin: 0; font: 600 13px var(--mono); color: var(--fg); text-align: right; }
+.receipt .total { font-weight: 800; color: var(--fg); font-size: 14px; }
+.receipt .total dd { color: var(--tag); font-size: 15px; }
+.hover-info { font: 12px/1.45 var(--mono); color: var(--muted); min-height: 2.9em; }
+.side .btns .btn { flex: 1 1 auto; }
+
+/* Free paint: the loud band */
+.hype { border: 1px solid var(--line); border-radius: 10px; background:
+  radial-gradient(120% 140% at 100% 0%, rgba(241,220,94,.16), transparent 55%),
+  radial-gradient(90% 120% at 0% 100%, rgba(101,213,174,.12), transparent 60%), var(--card);
+  padding: clamp(20px, 4vw, 40px); display: grid; gap: 28px; }
+.hype-top { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 28px; align-items: end; }
+.hype h2 { font-size: clamp(34px, 6.5vw, 64px); line-height: .98; font-weight: 900; letter-spacing: -2px; color: var(--fg); }
+.hype h2 em { font-style: normal; color: var(--tag); }
+.hype-copy { display: grid; gap: 12px; }
+.hype-copy p { color: var(--soft); font-size: 16px; max-width: 52ch; }
+.big-count { display: grid; gap: 6px; justify-items: start; }
+.big-count strong { font: 900 clamp(40px, 8vw, 72px)/.95 var(--font); letter-spacing: -2px; color: var(--tag); font-variant-numeric: tabular-nums; }
+.big-count span { font: 600 13px var(--mono); color: var(--soft); }
+.meter { height: 14px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--stake), var(--tag)); transition: width 1.2s ease; }
+.meter-row { display: flex; justify-content: space-between; gap: 12px; font: 600 12px var(--mono); color: var(--muted); }
+.hype-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.hype-cols .card { background: rgba(17,18,20,.55); }
+.hh-clock { font: 900 clamp(26px, 5vw, 34px)/1.05 var(--mono); letter-spacing: -.5px; font-variant-numeric: tabular-nums; color: var(--fg); }
+.hh-when { font: 600 13px var(--mono); color: var(--soft); }
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.week span { text-align: center; font: 700 11px var(--mono); padding: 6px 0; border-radius: 4px; background: var(--card-2); color: var(--muted); }
+.week span.on { background: var(--tag); color: #17171a; }
+.cta { justify-self: start; font: 800 15px var(--font); color: #17171a; background: var(--tag); border-radius: 6px; padding: 12px 18px; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+
+/* Autonomous stall */
+.flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.step { background: var(--card); padding: 18px; display: grid; gap: 8px; align-content: start; border-right: 1px solid var(--line); position: relative; min-width: 0; }
+.step:last-child { border-right: 0; }
+.step:not(:last-child)::after { content: "→"; position: absolute; right: -10px; top: 18px; width: 20px; height: 20px; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 50%; font-size: 11px; color: var(--muted); z-index: 1; }
+.step .k { font: 700 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+.step h3 { font-size: 18px; font-weight: 900; }
+.step p { color: var(--soft); font-size: 14px; }
+.step[data-c="near"] .k { color: var(--near); }
+.step[data-c="mpoo"] .k { color: var(--tag); }
+.step[data-c="stake"] .k { color: var(--stake); }
+.step[data-c="burn"] .k { color: var(--burn); }
+.sim { display: grid; gap: 16px; }
+.sim-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; align-items: center; }
+.sim-top label { font-weight: 700; font-size: 14px; }
+.sim-top output { font: 800 16px var(--mono); color: var(--tag); }
+.sim-top input { grid-column: 1 / -1; width: 100%; accent-color: var(--tag); min-height: 32px; }
+.outs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.out { display: grid; gap: 4px; border-top: 3px solid var(--line); padding-top: 10px; }
+.out strong { font: 900 clamp(24px, 4vw, 32px)/1.05 var(--font); font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+.out span { font-size: 13px; color: var(--muted); }
+.out[data-c="stake"] { border-color: var(--stake); }
+.out[data-c="burn"] { border-color: var(--burn); }
+.out[data-c="team"] { border-color: var(--team); }
+.bar { display: flex; height: 30px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+.bar span { display: grid; place-items: center; font: 700 12px var(--mono); color: #17171a; min-width: 0; overflow: hidden; white-space: nowrap; }
+
+/* Rules */
+.rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 16px; }
+.rule { border-top: 2px solid var(--line); padding-top: 12px; display: grid; gap: 6px; }
+.rule h3 { font-size: 15px; font-weight: 800; }
+.rule p { color: var(--soft); font-size: 14px; }
+.next { border: 1px dashed var(--line); border-radius: 8px; padding: 20px; display: grid; gap: 8px; max-width: 78ch; }
+.next h3 { font-size: 19px; font-weight: 900; }
+.next p { color: var(--soft); font-size: 14px; }
+.foot { font-size: 13px; color: var(--muted); max-width: 78ch; }
+
+@media (max-width: 860px) {
+  .hero, .hype-top { grid-template-columns: 1fr; }
+  .hero-wall { max-width: 520px; }
+  .play { grid-template-columns: 1fr; }
+  .rules { grid-template-columns: 1fr 1fr; }
+  .hype-cols { grid-template-columns: 1fr; }
+  .flow { grid-template-columns: 1fr 1fr; }
+  .step:nth-child(2) { border-right: 0; }
+  .step:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .step:nth-child(2)::after { display: none; }
+}
+@media (max-width: 560px) {
+  .page { gap: 48px; padding-block: 20px 48px; }
+  .card { padding: 16px; }
+  .ladder, .flow, .rules, .outs { grid-template-columns: 1fr; }
+  .rung, .step { border-right: 0; border-bottom: 1px solid var(--line); }
+  .rung:last-child, .step:last-child { border-bottom: 0; }
+  .step::after { display: none; }
+  .grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .grid .cell.wide-only { display: none; }
+  .cell { font-size: 9px; }
+  .log li { grid-template-columns: 5.5rem 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell.just, .log .new { animation: none; }
+  .meter i { transition: none; }
+}
+</style>
+
+<main class="page">
+  <p class="draft">Draft for the app’s /how-it-works page. Numbers are launch settings; the app reads them live from the board.</p>
+
+  <header class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">How it works</p>
+      <h1>The only public stall on the whole internet.</h1>
+      <p class="lede">One wall, 128 × 128 tiles, open to everyone on earth. Write your name, draw something rude, leave a love note, cross out somebody else’s. Come back tomorrow and see what survived.</p>
+      <section class="stall-rules" aria-labelledby="rules-h">
+        <h2 id="rules-h">Rules of the stall</h2>
+        <ol>
+          <li><span><a href="#paint">Leave your mark.</a> Every tile you paint stays until someone paints over it.</span></li>
+          <li><span><a href="#paint">Wet paint costs more to cover.</a> Fresh work is protected for its first hour.</span></li>
+          <li><span><a href="#free">Your first 25 tiles are free</a> while the wall fills up.</span></li>
+          <li><span><a href="#stall">The stall runs itself.</a> Nobody pockets what it earns.</span></li>
+          <li><span>Wash your hands.</span></li>
+        </ol>
+      </section>
+    </div>
+    <figure class="hero-wall">
+      <div class="canvas-box">
+        <canvas id="hero-canvas" width="128" height="128" aria-label="A sample wall: art gets painted, vandalised and painted back"></canvas>
+        <span class="canvas-tag" id="canvas-tag">Sample wall · day 1</span>
+      </div>
+      <ol class="log" id="log" aria-live="polite" aria-label="What just happened on the sample wall"></ol>
+    </figure>
+  </header>
+
+  <section class="sec" id="paint" aria-labelledby="paint-h">
+    <div class="sec-head">
+      <p class="eyebrow">Painting · try it</p>
+      <h2 id="paint-h">Wet paint costs more to cover.</h2>
+      <p>You paint with credits. A dry or empty tile costs 1. Paint from the last hour costs 2 to cover, and paint from the last 10 minutes costs 4. New work gets a moment on the wall before someone wipes it.</p>
+    </div>
+    <div class="prices" aria-label="What credits cost">
+      <span class="price"><b>0.0025 NEAR</b> per credit</span>
+      <span class="price"><b>−20%</b> paying in mPOO</span>
+      <span class="price"><b>0.01 NEAR</b> once, to open your account</span>
+      <span class="price"><b>64</b> tiles per stroke</span>
+    </div>
+    <div class="ladder" aria-label="Repaint prices">
+      <div class="rung" data-t="4"><strong>4 credits</strong><span>wet: painted under 10 minutes ago</span></div>
+      <div class="rung" data-t="2"><strong>2 credits</strong><span>drying: painted 10–60 minutes ago</span></div>
+      <div class="rung" data-t="1"><strong>1 credit</strong><span>dry, or never painted</span></div>
+    </div>
+
+    <div class="play">
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Wall phase">
+          <span class="seg-label">Phase</span>
+          <button class="chip" type="button" data-phase="filling" aria-pressed="false">Still filling</button>
+          <button class="chip" type="button" data-phase="normal" aria-pressed="true">Normal day</button>
+          <button class="chip" type="button" data-phase="happy" aria-pressed="false">Happy hour</button>
+        </div>
+        <div class="seg" role="group" aria-label="Wall view">
+          <span class="seg-label">View</span>
+          <button class="chip" type="button" data-view="art" aria-pressed="false">Art</button>
+          <button class="chip" type="button" data-view="price" aria-pressed="true">Price</button>
+          <button class="chip" type="button" data-view="age" aria-pressed="false">Age</button>
+        </div>
+      </div>
+      <p class="phase-note" id="phase-note" role="status"></p>
+
+      <div class="wall-box">
+        <div class="wall-bar">
+          <p class="clock" id="clock">Sample clock <span>· 0 min</span></p>
+          <div class="btns">
+            <button class="btn" type="button" data-skip="5">Wait 5 min</button>
+            <button class="btn" type="button" data-skip="30">Wait 30 min</button>
+          </div>
+        </div>
+        <div class="grid" data-view="price" id="grid" aria-label="Practice wall. Click or drag across tiles to add them to your stroke."></div>
+        <div class="legend" id="legend" aria-hidden="true"></div>
+      </div>
+
+      <aside class="side card" aria-label="Your stroke">
+        <h3>Your stroke</h3>
+        <div class="palette" id="palette" role="group" aria-label="Colour"></div>
+        <p class="pick-name" id="pick-name"></p>
+        <dl class="receipt">
+          <div><dt>Tiles selected</dt><dd id="r-cells" class="num">0 / 64</dd></div>
+          <div><dt>Free tiles</dt><dd id="r-free" class="num">0</dd></div>
+          <div><dt>Credits</dt><dd id="r-credits" class="num">0</dd></div>
+          <div class="total"><dt>Costs about</dt><dd id="r-near" class="num">0 NEAR</dd></div>
+        </dl>
+        <p class="hover-info" id="hover-info">Drag across the wall to pick tiles. Hover a tile to see how wet it is.</p>
+        <div class="btns">
+          <button class="btn primary" type="button" id="paint-btn" disabled>Paint stroke</button>
+          <button class="btn" type="button" id="clear-btn" disabled>Clear</button>
+        </div>
+        <p class="small">Practice only. Nothing here touches the real wall or your wallet.</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="sec hype" id="free" aria-labelledby="free-h">
+    <div class="hype-top">
+      <div class="hype-copy">
+        <p class="eyebrow">Free paint</p>
+        <h2 id="free-h">Get on the wall <em>before it fills.</em></h2>
+        <p>Every new account gets 25 tiles on the house. No credits needed. Open your account and start painting today.</p>
+        <p>When the last of the 16,384 tiles gets its first coat, free paint ends for good. The wall gets made by whoever shows up first. Be one of them.</p>
+        <a class="cta" href="/wall">Grab your 25 tiles →</a>
+      </div>
+      <div class="big-count">
+        <strong id="unclaimed" class="num">9,472</strong>
+        <span>tiles still blank</span>
+        <div class="meter" role="img" aria-label="Sample: 6,912 of 16,384 tiles painted" style="width:100%"><i id="fill-meter"></i></div>
+        <p class="meter-row" style="width:100%"><span>6,912 / 16,384 painted</span><span>sample</span></p>
+      </div>
+    </div>
+    <div class="hype-cols">
+      <div class="card">
+        <h3>Then every Sunday, happy hour.</h3>
+        <p>Once the wall is full, the stall opens a free hour each week. Every dry tile costs nothing, up to 100 tiles each, for anyone who has bought credits before.</p>
+        <div class="week" aria-hidden="true">
+          <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span class="on">Sun</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Next happy hour</h3>
+        <p class="hh-clock" id="hh-clock">…</p>
+        <p class="hh-when" id="hh-when">Sundays 20:00 UTC</p>
+        <p class="small">Free tiles earn no TOILET until someone repaints them with credits.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="stall" aria-labelledby="stall-h">
+    <div class="sec-head">
+      <p class="eyebrow">The autonomous stall</p>
+      <h2 id="stall-h">The stall runs itself.</h2>
+      <p>Once you buy credits, that money belongs to the game. It doesn’t sit in anyone’s wallet. The contract holds it and sends it out on a schedule, along lines nobody can redraw. Here’s what the stall does with what it earns.</p>
+    </div>
+    <div class="flow">
+      <div class="step" data-c="near"><p class="k">1 · It earns</p><h3>Painters buy credits</h3><p>NEAR and mPOO land on the board. 10% of the NEAR goes to the team.</p></div>
+      <div class="step" data-c="mpoo"><p class="k">2 · It buys mPOO</p><h3>90% of NEAR buys back</h3><p>The buyback swaps NEAR for mPOO on the market and hands it back to the stall.</p></div>
+      <div class="step" data-c="stake"><p class="k">3 · It pays stakers</p><h3>70% of mPOO</h3><p>Goes to people staking TOILET. 10% goes to the team.</p></div>
+      <div class="step" data-c="burn"><p class="k">4 · It flushes</p><h3>20% of mPOO</h3><p>Sent to an address with no key. It never comes back.</p></div>
+    </div>
+    <div class="card sim">
+      <div class="sim-top">
+        <label for="spend">If painters spend this much NEAR in a week</label>
+        <output id="spend-out" for="spend" class="num">100 NEAR</output>
+        <input id="spend" type="range" min="10" max="2000" step="10" value="100">
+      </div>
+      <div class="outs">
+        <div class="out" data-c="stake"><strong id="o-stake" class="num">63</strong><span>NEAR of mPOO to TOILET stakers</span></div>
+        <div class="out" data-c="burn"><strong id="o-burn" class="num">18</strong><span>NEAR of mPOO flushed forever</span></div>
+        <div class="out" data-c="team"><strong id="o-team" class="num">19</strong><span>NEAR to the team, part in mPOO</span></div>
+      </div>
+      <div class="bar" aria-label="Of every NEAR: 63% stakers, 18% flushed, 19% team">
+        <span style="flex:63;background:var(--stake)">63% stakers</span>
+        <span style="flex:18;background:var(--burn)">18% flush</span>
+        <span style="flex:19;background:var(--team)">19% team</span>
+      </div>
+      <p class="small">Before swap costs. mPOO paid directly for credits skips the buyback and splits 10 / 70 / 20 straight away. <a href="/money">Watch it happen live on Where the money goes →</a></p>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="fair-h">
+    <div class="sec-head">
+      <p class="eyebrow">House rules, enforced by code</p>
+      <h2 id="fair-h">Not even the owner can rig the stall.</h2>
+      <p>The owner can tune a few knobs. The contract decides how far and how fast, and every change is a public transaction.</p>
+    </div>
+    <div class="rules">
+      <div class="rule"><h3>No price shocks</h3><p>Prices can at most double or halve per change, once every 24 hours. Repaint prices count too.</p></div>
+      <div class="rule"><h3>Wet paint stays protected</h3><p>Covering a tile tops out at 8 credits, and fresher paint always costs at least as much as dry.</p></div>
+      <div class="rule"><h3>No surprise happy hours</h3><p>Ending one is instant. Starting, moving or growing one waits 24 hours.</p></div>
+      <div class="rule"><h3>The split is welded on</h3><p>10 / 90 for NEAR, 10 / 70 / 20 for mPOO. Changing it takes a new contract and a review.</p></div>
+      <div class="rule"><h3>Payout accounts move slowly</h3><p>Team and buyback accounts can change once a week, in public. The staking contract is set once, ever.</p></div>
+      <div class="rule"><h3>One emergency stop</h3><p>The owner can pause painting and buying. The wall stays readable and payouts keep flowing.</p></div>
+    </div>
+  </section>
+
+  <section class="next" aria-labelledby="next-h">
+    <p class="eyebrow">Coming next</p>
+    <h3 id="next-h">Tiles that earn TOILET</h3>
+    <p>Tiles you paint with credits will earn TOILET for as long as they survive on the wall. Stake TOILET and you take a share of everything the stall earns. Earning switches on in a later round.</p>
+  </section>
+
+  <p class="foot">Launch settings shown. In the app, every number here is read live from the board contract, and anything the board can’t confirm is shown as unavailable, never as zero.</p>
+</main>
+
+<script>
+(() => {
+  const PALETTE = [
+    ["Ink","#1c1917"],["Paper","#f4efe4"],["Brick","#b23a2f"],["Marigold","#e0a100"],
+    ["Moss","#3d7a4a"],["River","#2f6f8f"],["Grape","#6b4c7a"],["Clay","#c47b5a"],
+    ["Grout","#8a857c"],["Rust","#7a4528"],["Nicotine","#ecd9a0"],["Bubblegum","#ec8fb0"],
+    ["Bleach","#9ccbdc"],["Bruise","#263552"],["Bile","#9fb53a"],["Cone","#ef7a2c"],
+  ];
+  const C = Object.fromEntries(PALETTE.map(([n], i) => [n, i]));
+  const NEAR_PER_CREDIT = 0.0025, MAX_STROKE = 64, FREE_FIRST = 25, HH_CAP = 100;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fmtNear = n => `${(Math.round(n * 1e4) / 1e4).toLocaleString(undefined, { maximumFractionDigits: 4 })} NEAR`;
+  const $ = id => document.getElementById(id);
+
+  /* ================= Hero: a stall wall with a story ================= */
+  const FONT = {
+    A:[".#.","#.#","###","#.#","#.#"], C:["###","#..","#..","#..","###"], D:["##.","#.#","#.#","#.#","##."],
+    E:["###","#..","##.","#..","###"], G:["###","#..","#.#","#.#","###"], H:["#.#","#.#","###","#.#","#.#"],
+    I:["###",".#.",".#.",".#.","###"], L:["#..","#..","#..","#..","###"], M:["#...#","##.##","#.#.#","#...#","#...#"],
+    N:["#..#","##.#","#.##","#..#","#..#"], O:["###","#.#","#.#","#.#","###"], P:["###","#.#","###","#..","#.."],
+    R:["##.","#.#","##.","#.#","#.#"], S:["###","#..","###","..#","###"], T:["###",".#.",".#.",".#.",".#."],
+    U:["#.#","#.#","#.#","#.#","###"], W:["#...#","#...#","#.#.#","##.##","#...#"], Y:["#.#","#.#",".#.",".#.",".#."],
+    "!":["#","#","#",".","#"], " ":["..","..","..","..",".."],
+  };
+  function text(str, x0, y0, color, s = 1) {
+    const px = []; let x = x0;
+    for (const ch of str) {
+      const g = FONT[ch]; if (!g) continue;
+      for (let r = 0; r < 5; r++) for (let c = 0; c < g[r].length; c++) if (g[r][c] === "#")
+        for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) px.push([x + c * s + b, y0 + r * s + a, color]);
+      x += (g[0].length + 1) * s;
+    }
+    return px;
+  }
+  function sprite(rows, map, x0, y0, s = 1) {
+    const px = [];
+    rows.forEach((row, r) => [...row].forEach((ch, c) => {
+      if (map[ch] === undefined) return;
+      for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) px.push([x0 + c * s + b, y0 + r * s + a, map[ch]]);
+    }));
+    return px;
+  }
+  const POO = [
+    ".......RR.......", "......RCCR......", ".....RCCCR......", "....RRCCCCRR....", "...RCCCCCCCCR...",
+    "...RCWKCCWKCR...", "..RRCCCCCCCCRR..", ".RCCCKCCCCKCCCR.", ".RCCCCKKKKCCCCR.", "RRRRRRRRRRRRRRRR",
+  ];
+  const HEART = [
+    ".BBB...BBB.", "BBPBB.BBBBB", "BPPBBBBBBBB", "BBBBBBBBBBB", ".BBBBBBBBB.", "..BBBBBBB..", "...BBBBB...", "....BBB....", ".....B.....",
+  ];
+  const SMILE = [
+    "....MMMMM....", "..MMMMMMMMM..", ".MMMMMMMMMMM.", ".MMMKMMMKMMM.", "MMMMKMMMKMMMM", "MMMMMMMMMMMMM",
+    "MMKMMMMMMMKMM", ".MMKMMMMMKMM.", ".MMMKKKKKMMM.", "..MMMMMMMMM..", "....MMMMM....",
+  ];
+  function sunset(x0, y0, w, h) {
+    const px = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const hill = h * .72 + Math.sin(x / 4) * 2.2 + Math.sin(x / 9 + 1) * 1.6;
+      const dx = x - w * .62, dy = y - h * .62, sun = dx * dx + dy * dy < (w * .2) ** 2;
+      let c = y < h * .3 ? C.Bruise : y < h * .5 ? C.Grape : y < h * .62 ? C.Cone : C.Marigold;
+      if (sun) c = C.Nicotine;
+      if (y > hill) c = y > hill + 4 ? C.Moss : C.Bile;
+      px.push([x0 + x, y0 + y, c]);
+    }
+    return px;
+  }
+  function scribble(x0, y0, w, h, color, seed) {
+    let s = seed; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const seen = new Set(), px = [];
+    let x = x0, y = y0 + h * .5, dir = 1;
+    for (let i = 0; i < 900 && px.length < 340; i++) {
+      x += dir * (1 + r() * 1.5); y += (r() - .5) * 5;
+      if (x > x0 + w || x < x0) { dir = -dir; y += 3 + r() * 4; }
+      if (y < y0) y = y0; if (y > y0 + h) y = y0 + r() * h;
+      for (const [a, b] of [[0,0],[1,0],[0,1],[1,1]]) {
+        const X = Math.round(x) + a, Y = Math.round(y) + b, k = X * 999 + Y;
+        if (!seen.has(k) && X >= 0 && X < 128 && Y >= 0 && Y < 128) { seen.add(k); px.push([X, Y, color]); }
+      }
+    }
+    return px;
+  }
+  function cross(x0, y0, w, h, color) {
+    const px = [];
+    for (let i = 0; i <= w; i++) {
+      const a = Math.round(y0 + (i / w) * h), b = Math.round(y0 + h - (i / w) * h);
+      for (const t of [0, 1]) { px.push([x0 + i, a + t, color]); px.push([x0 + i, b + t, color]); }
+    }
+    return px;
+  }
+
+  // The script: a day on the wall. Minutes are sample time.
+  const STORY = [
+    { at: 9*60+2,  say: "Someone wrote GM.", px: () => text("GM", 6, 8, C.Marigold, 4) },
+    { at: 9*60+14, say: "Someone drew a poo. Obviously.", px: () => sprite(POO, { R: C.Rust, C: C.Clay, W: C.Paper, K: C.Ink }, 40, 34, 3) },
+    { at: 9*60+31, say: "A heart appeared in the corner.", px: () => sprite(HEART, { B: C.Brick, P: C.Bubblegum }, 96, 8, 2) },
+    { at: 10*60+5, say: "A sunset went up in the bottom left.", px: () => sunset(4, 78, 32, 30) },
+    { at: 10*60+9, say: "A vandal scribbled over the poo. It was 55 minutes old: 2 credits a tile.", px: () => scribble(38, 32, 52, 34, C.Bile, 11) },
+    { at: 10*60+12, say: "The poo came back. Its fans paid 4 credits a tile to cover wet paint.", px: () => sprite(POO, { R: C.Rust, C: C.Clay, W: C.Paper, K: C.Ink }, 40, 34, 3) },
+    { at: 10*60+40, say: "META POO WAS HERE.", px: () => text("META POO WAS HERE", 42, 70, C.Paper, 1) },
+    { at: 11*60+18, say: "Someone crossed out the heart.", px: () => cross(95, 7, 24, 19, C.Ink) },
+    { at: 11*60+55, say: "The heart came back pinker.", px: () => sprite(HEART, { B: C.Bubblegum, P: C.Paper }, 96, 8, 2) },
+    { at: 13*60+3,  say: "GM was four hours old. A smiley took it for 1 credit a tile.", px: () => sprite(SMILE, { M: C.Marigold, K: C.Ink }, 6, 4, 2) },
+    { at: 13*60+20, say: "Someone signed it: WASH YOUR HANDS.", px: () => text("WASH YOUR HANDS", 46, 116, C.Bleach, 1) },
+    { at: 14*60+2,  say: "Someone wrote GN in the empty corner.", px: () => text("GN", 96, 34, C.Bleach, 3) },
+  ];
+
+  const hc = $("hero-canvas"), hx = hc.getContext("2d");
+  function blank() {
+    for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
+      hx.fillStyle = (x % 8 === 0 || y % 8 === 0) ? "#26272b" : "#1c1d20"; hx.fillRect(x, y, 1, 1);
+    }
+  }
+  const put = (x, y, c) => { if (x >= 0 && x < 128 && y >= 0 && y < 128) { hx.fillStyle = PALETTE[c][1]; hx.fillRect(x, y, 1, 1); } };
+  const logEl = $("log");
+  const hhmm = m => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  function log(ev, day, animate) {
+    const li = document.createElement("li"); if (animate) li.className = "new";
+    const t = document.createElement("time"); t.textContent = `Day ${day} · ${hhmm(ev.at)}`;
+    const s = document.createElement("span"); s.textContent = ev.say;
+    li.append(t, s); logEl.prepend(li);
+    while (logEl.children.length > 3) logEl.lastChild.remove();
+    $("canvas-tag").textContent = `Sample wall · day ${day}`;
+  }
+
+  let day = 1;
+  if (reduced) {
+    blank(); STORY.forEach(ev => ev.px().forEach(p => put(...p)));
+    STORY.slice(-3).forEach(ev => log(ev, 1, false));
+  } else {
+    blank();
+    let step = 0, queue = [], wait = 6;
+    setInterval(() => {
+      if (document.hidden) return;
+      if (wait > 0) { wait--; return; }
+      if (!queue.length) {
+        if (step >= STORY.length) {
+          step = 0; day++; blank(); logEl.replaceChildren();
+          log({ at: 0, say: "The demo starts over. The real wall never resets." }, day, true);
+          wait = 18; return;
+        }
+        const ev = STORY[step++]; queue = ev.px(); log(ev, day, true);
+      }
+      // One stroke is at most 64 tiles, like the real wall.
+      queue.splice(0, 64).forEach(p => put(...p));
+      if (!queue.length) wait = 14;
+    }, 90);
+  }
+
+  /* ================= Practice wall ================= */
+  const COLS = 16, ROWS = 10;
+  const gridEl = $("grid");
+  let clock = 0, phase = "normal", view = "price", pick = C.Bubblegum;
+  let freeLeft = FREE_FIRST, hhLeft = HH_CAP;
+  const cells = Array.from({ length: COLS * ROWS }, () => ({ color: null, at: null, el: null }));
+  const seedPut = (x, y, color, at) => { if (x >= 0 && x < COLS && y >= 0 && y < ROWS) Object.assign(cells[y * COLS + x], { color, at }); };
+  ["......RR......", ".....RCCR.....", "....RCCCCR....", "...RRCCCCRR...", "..RCCCCCCCCR..", ".RRRRRRRRRRRR."]
+    .forEach((row, y) => [...row].forEach((ch, x) => { if (ch === "R") seedPut(x + 1, y + 3, C.Rust, -90); if (ch === "C") seedPut(x + 1, y + 3, C.Clay, -90); }));
+  [[10,0],[11,1],[12,1],[13,0],[14,1],[15,2],[9,1],[8,2]].forEach(([x, y]) => seedPut(x, y, C.River, -25));
+  [[1,0],[2,0],[3,0],[2,1],[2,2],[5,0],[5,1],[5,2],[6,1]].forEach(([x, y]) => seedPut(x, y, C.Bubblegum, -3));
+
+  const age = c => c.at === null ? null : clock - c.at;
+  const tier = c => { const a = age(c); return a === null || a >= 60 ? 1 : a >= 10 ? 2 : 4; };
+  function priceOf(i, budget) {
+    const c = cells[i], t = tier(c);
+    if (phase === "filling" && c.color === null && budget.first > 0) { budget.first--; return 0; }
+    if (phase === "happy" && t === 1 && budget.hh > 0) { budget.hh--; return 0; }
+    return t;
+  }
+  function shownPrice(i) {
+    const c = cells[i], t = tier(c);
+    if (phase === "filling" && c.color === null && freeLeft > 0) return 0;
+    if (phase === "happy" && t === 1 && hhLeft > 0) return 0;
+    return t;
+  }
+  const tierColor = { 4: "var(--burn)", 2: "var(--tag)", 1: "var(--stake)", 0: "var(--near)" };
+  const LEGENDS = {
+    art: "",
+    price: '<span><i style="background:var(--burn)">4</i>wet</span><span><i style="background:var(--tag)">2</i>drying</span><span><i style="background:var(--stake)">1</i>dry</span><span><i style="background:var(--near)">0</i>free</span>',
+    age: '<span><i style="background:var(--burn)">min</i>under 10</span><span><i style="background:var(--tag)">min</i>10–60</span><span><i style="background:var(--team)">h</i>older</span>',
+  };
+
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    const i = y * COLS + x, b = document.createElement("button");
+    b.type = "button"; b.className = "cell"; b.dataset.i = i; b.tabIndex = -1;
+    if (x >= 12) b.classList.add("wide-only");
+    cells[i].el = b; gridEl.append(b);
+  }
+  gridEl.firstChild.tabIndex = 0;
+
+  function renderCell(i) {
+    const c = cells[i], el = c.el, p = shownPrice(i), a = age(c);
+    el.classList.toggle("empty", c.color === null);
+    el.classList.remove("dark-text");
+    el.style.boxShadow = "";
+    el.style.setProperty("--pick", PALETTE[pick][1]);
+    if (view === "age") {
+      if (c.color === null) { el.style.background = ""; el.textContent = ""; }
+      else {
+        el.style.background = a < 10 ? "var(--burn)" : a < 60 ? "var(--tag)" : "var(--team)";
+        el.classList.add("dark-text");
+        el.textContent = a < 60 ? `${a}` : `${Math.floor(a / 60)}h`;
+      }
+    } else {
+      el.style.background = c.color === null ? "" : PALETTE[c.color][1];
+      el.textContent = view === "price" ? p : "";
+      if (view === "price") el.style.boxShadow = `inset 0 -3px 0 ${tierColor[p]}`;
+    }
+    el.classList.toggle("sel", selected.has(i));
+    el.setAttribute("aria-label", `${c.color === null ? "Blank tile" : PALETTE[c.color][0] + " tile"}, costs ${p} credit${p === 1 ? "" : "s"}${selected.has(i) ? ", selected" : ""}`);
+  }
+  const selected = new Set();
+  function renderAll() { cells.forEach((_, i) => renderCell(i)); renderReceipt(); renderClock(); $("legend").innerHTML = LEGENDS[view]; }
+  function renderReceipt() {
+    const budget = { first: freeLeft, hh: hhLeft }; let credits = 0, free = 0;
+    for (const i of selected) { const p = priceOf(i, budget); credits += p; if (p === 0) free++; }
+    $("r-cells").textContent = `${selected.size} / ${MAX_STROKE}`;
+    $("r-free").textContent = free; $("r-credits").textContent = credits;
+    $("r-near").textContent = fmtNear(credits * NEAR_PER_CREDIT);
+    $("paint-btn").disabled = $("clear-btn").disabled = selected.size === 0;
+  }
+  function renderClock() {
+    const h = Math.floor(clock / 60), m = clock % 60;
+    $("clock").innerHTML = `Sample clock <span>· ${h ? `${h} h ` : ""}${m} min</span>`;
+  }
+  const notes = {
+    filling: () => `The wall isn’t full yet, so blank tiles are free until you’ve used your 25. ${freeLeft} left in this practice.`,
+    normal: () => "Every tile costs credits. See the wet pink tag? Wait a bit and it gets cheaper to cover.",
+    happy: () => `Happy hour: every dry tile is free, up to 100 each. Wet and drying paint still costs. ${hhLeft} free left in this practice.`,
+  };
+  function setPhase(p) {
+    phase = p;
+    document.querySelectorAll("[data-phase]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.phase === p)));
+    $("phase-note").textContent = notes[p](); renderAll();
+  }
+  function setView(v) {
+    view = v; gridEl.dataset.view = v;
+    document.querySelectorAll("[data-view]").forEach(b => { if (b.tagName === "BUTTON") b.setAttribute("aria-pressed", String(b.dataset.view === v)); });
+    renderAll();
+  }
+  document.querySelectorAll("button[data-phase]").forEach(b => b.addEventListener("click", () => setPhase(b.dataset.phase)));
+  document.querySelectorAll("button[data-view]").forEach(b => b.addEventListener("click", () => setView(b.dataset.view)));
+
+  let dragging = false, dragMode = true;
+  function toggle(i, mode) {
+    if (mode && !selected.has(i)) {
+      if (selected.size >= MAX_STROKE) { info("A stroke holds at most 64 tiles. Paint this one, then start another."); return; }
+      selected.add(i);
+    } else if (!mode) selected.delete(i);
+    renderCell(i); renderReceipt();
+  }
+  const cellAt = e => { const el = document.elementFromPoint(e.clientX, e.clientY); return el && el.classList.contains("cell") ? Number(el.dataset.i) : null; };
+  gridEl.addEventListener("pointerdown", e => { const i = cellAt(e); if (i === null) return; e.preventDefault(); dragging = true; dragMode = !selected.has(i); toggle(i, dragMode); describe(i); });
+  gridEl.addEventListener("pointermove", e => { const i = cellAt(e); if (i === null) return; if (dragging) toggle(i, dragMode); describe(i); });
+  addEventListener("pointerup", () => { dragging = false; });
+  addEventListener("pointercancel", () => { dragging = false; });
+  gridEl.addEventListener("keydown", e => {
+    const i = Number(document.activeElement?.dataset?.i ?? -1); if (i < 0) return;
+    const cols = getComputedStyle(gridEl).gridTemplateColumns.split(" ").length;
+    const x = i % COLS, y = Math.floor(i / COLS);
+    const mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (mv) {
+      e.preventDefault();
+      const n = Math.min(ROWS - 1, Math.max(0, y + mv[1])) * COLS + Math.min(cols - 1, Math.max(0, x + mv[0]));
+      cells[i].el.tabIndex = -1; cells[n].el.tabIndex = 0; cells[n].el.focus(); describe(n);
+    } else if (e.key === " " || e.key === "Enter") { e.preventDefault(); toggle(i, !selected.has(i)); describe(i); }
+  });
+  const info = t => { $("hover-info").textContent = t; };
+  function describe(i) {
+    const c = cells[i], a = age(c), p = shownPrice(i);
+    const what = c.color === null ? "Blank tile" : `${PALETTE[c.color][0]}, painted ${a < 60 ? a + " min" : Math.floor(a / 60) + " h " + (a % 60) + " min"} ago`;
+    const why = p === 0 ? (phase === "happy" ? "free in happy hour" : "free first paint")
+      : c.color === null ? "never painted" : p === 4 ? "still wet" : p === 2 ? "drying" : "dry";
+    info(`${what} · ${p} credit${p === 1 ? "" : "s"} (${why})`);
+  }
+  $("paint-btn").addEventListener("click", () => {
+    const budget = { first: freeLeft, hh: hhLeft }; let credits = 0;
+    for (const i of selected) {
+      credits += priceOf(i, budget);
+      Object.assign(cells[i], { color: pick, at: clock });
+      if (!reduced) { cells[i].el.classList.remove("just"); void cells[i].el.offsetWidth; cells[i].el.classList.add("just"); }
+    }
+    freeLeft = budget.first; hhLeft = budget.hh;
+    const n = selected.size; selected.clear(); renderAll();
+    $("phase-note").textContent = notes[phase]();
+    info(`Painted ${n} tile${n === 1 ? "" : "s"} for ${credits} credit${credits === 1 ? "" : "s"}. The paint is wet: covering it costs 4 a tile for the next 10 minutes.`);
+  });
+  $("clear-btn").addEventListener("click", () => { selected.clear(); renderAll(); info("Selection cleared."); });
+  document.querySelectorAll("[data-skip]").forEach(b => b.addEventListener("click", () => {
+    clock += Number(b.dataset.skip); renderAll(); info(`${b.dataset.skip} minutes later. The paint is drying and getting cheaper to cover.`);
+  }));
+  const pal = $("palette");
+  PALETTE.forEach(([name, hex], i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "sw"; b.style.background = hex; b.title = name;
+    b.setAttribute("aria-label", name); b.setAttribute("aria-pressed", String(i === pick));
+    b.addEventListener("click", () => {
+      pick = i; pal.querySelectorAll(".sw").forEach((s, j) => s.setAttribute("aria-pressed", String(j === i)));
+      $("pick-name").textContent = `Colour ${i} · ${name}`; renderAll();
+    });
+    pal.append(b);
+  });
+  $("pick-name").textContent = `Colour ${pick} · ${PALETTE[pick][0]}`;
+  setPhase("normal");
+
+  /* ================= Free paint ================= */
+  requestAnimationFrame(() => { $("fill-meter").style.width = `${(6912 / 16384) * 100}%`; });
+  const HH_WEEKDAY = 6, HH_START_S = 72000, HH_LEN_S = 3600; // Sunday 20:00 UTC, 1 h (Monday = 0)
+  function nextWindow(nowMs) {
+    const now = new Date(nowMs), mon = (now.getUTCDay() + 6) % 7;
+    const start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) + ((HH_WEEKDAY - mon) * 86400 + HH_START_S) * 1000;
+    for (const s of [start - 7 * 864e5, start, start + 7 * 864e5]) if (s + HH_LEN_S * 1000 > nowMs) return s;
+  }
+  function hh() {
+    const now = Date.now(), s = nextWindow(now), open = now >= s;
+    const ms = open ? s + HH_LEN_S * 1000 - now : s - now;
+    const d = Math.floor(ms / 864e5), h = Math.floor(ms / 36e5) % 24, m = Math.floor(ms / 6e4) % 60, sec = Math.floor(ms / 1e3) % 60;
+    const pad = n => String(n).padStart(2, "0");
+    $("hh-clock").textContent = open ? `Open now · ${pad(m)}:${pad(sec)} left` : `${d ? d + "d " : ""}${pad(h)}h ${pad(m)}m ${pad(sec)}s`;
+    const local = new Date(s).toLocaleString(undefined, { weekday: "long", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+    $("hh-when").textContent = `Sundays 20:00 UTC · ${local} for you`;
+  }
+  hh(); setInterval(() => { if (!document.hidden) hh(); }, 1000);
+
+  /* ================= Autonomous stall ================= */
+  const spend = $("spend");
+  function sim() {
+    const n = Number(spend.value);
+    $("spend-out").textContent = `${n.toLocaleString()} NEAR`;
+    const fmt = v => (Math.round(v * 10) / 10).toLocaleString(undefined, { maximumFractionDigits: 1 });
+    $("o-stake").textContent = fmt(n * .9 * .7);
+    $("o-burn").textContent = fmt(n * .9 * .2);
+    $("o-team").textContent = fmt(n * .1 + n * .9 * .1);
+  }
+  spend.addEventListener("input", sim); sim();
+})();
+</script>
+
+</html>

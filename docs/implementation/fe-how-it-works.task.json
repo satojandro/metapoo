@@ -1,0 +1,6 @@
+{
+  "task_id": "fe-how-it-works",
+  "assignee": "claude",
+  "source_revision": "d282ff8",
+  "goal": "The /how-it-works page. Design reference: docs/visual-concepts/how-it-works-draft.html (approved by the owner, 2 Nov).\n\nSCOPE\n- New route and nav entry. Same structure, voice and visual tokens as the draft and /money.\n- Live values instead of launch settings: credit price, registration fee, repaint tiers and windows, free first paints, painted-cell count, happy hour schedule and cap, revenue split. Reuse the ADM-1 read layer when it lands, otherwise the revenue-panel view. A failed read shows as unavailable, never zero.\n- The practice wall and the sample-wall story stay client-side and never touch the wallet or the real wall.\n\nACCEPTANCE\n- Route test, unit tests for the price and happy-hour arithmetic, no horizontal overflow at 390 px, npm test and npm run build green.\n\nDO NOT\n- No contract changes. No new palette."
+}

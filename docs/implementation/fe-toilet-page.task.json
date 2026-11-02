@@ -1,0 +1,6 @@
+{
+  "task_id": "fe-toilet-page",
+  "assignee": "claude",
+  "source_revision": "d282ff8",
+  "goal": "The /toilet page, plus claim and staking UI. Design reference: docs/visual-concepts/toilet-draft.html with its review layer removed.\n\nBLOCKED ON\n- toilet-round-board and toilet-staking delivered and rehearsed on a testnet board.\n\nSCOPE\n- /toilet: live emission rate, pending TOILET, pool size, total staked, release rate, burned totals. Explorers keep their sample inputs and say so.\n- Wallet panel: claim TOILET (respecting the minimum claim), stake, unstake with the 10% exit tax shown before signing, claim mPOO rewards.\n\nDO NOT\n- No contract changes. Never describe staking rewards as a promised return."
+}

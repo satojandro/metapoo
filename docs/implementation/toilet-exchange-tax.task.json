@@ -1,0 +1,6 @@
+{
+  "task_id": "toilet-exchange-tax",
+  "assignee": "hermes",
+  "source_revision": "d282ff8",
+  "goal": "TOILET exchange tax configuration. Spec: docs/economy/2026-11-02-toilet-round-spec.md §X. Owner decision T8: nice-to-have, matching mPOO's 2% buy / 3% sell.\n\nWHY\nThe TOILET token's venue tax is fixed at new() and can never change (D4). An unproven setting is permanent, so the configuration needs evidence before any deploy that matters.\n\nSCOPE\n- X1: prepare the owner's choice. Present buy_bps 200 / sell_bps 300, and options for the burn/treasury split and the treasury account, each with one line on its effect.\n- X2: find a testnet venue where a fee-on-transfer token can be pooled and traded. Show a taxed buy and sell with chain evidence (tx hashes, balances before and after, tax burned and sent to treasury). If no venue exists, report that, and recommend deploying with the tax at 0.\n- X3: confirm the staking contract does not need an exemption.\n\nACCEPTANCE\n- A short evidence note in docs/payments/ with tx hashes and the recommended new() arguments.\n\nDO NOT\n- No mainnet deploy. No code changes to contracts/toilet. Do not edit docs/backlog.md."
+}

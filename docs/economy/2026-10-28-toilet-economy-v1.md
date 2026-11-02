@@ -1,5 +1,9 @@
 # TOILET economy v1 — issuance, staking, burns, and what the flywheel actually needs
 
+> **2 Nov 2026:** the owner settled this document's open decisions. Emission is a fixed rate per tile, not
+> revenue-keyed; there is no earning cap; TOILET is staked, not spent. See the
+> [TOILET round spec](2026-11-02-toilet-round-spec.md), which wins wherever the two differ.
+
 **Date:** 2026-10-28 · Status: **proposed design, not ratified** — three decisions at the end block
 implementation. Supersedes the TOILET mechanics in the 12 October economy plan for everything that
 concerns issuance, staking and burning; the paint-credit payment model is unchanged

@@ -1,0 +1,6 @@
+{
+  "task_id": "fe-buyback-ledger",
+  "assignee": "claude",
+  "source_revision": "d282ff8",
+  "goal": "The /money buyback ledger. Spec: docs/economy/2026-11-02-toilet-round-spec.md §K4 and §F4.\n\nSCOPE\n- On /money, show the total NEAR sent to the buyback (near_distributed events), the total mPOO returned (mpoo_revenue_received events), and the NEAR currently waiting on buyback_account. Link to the buyback account on the explorer.\n- Same visual system and failure rules as the rest of /money: a read that fails shows as unavailable, never as zero.\n\nACCEPTANCE\n- Unit tests for the event aggregation; no horizontal overflow at 390 px; npm test and npm run build green.\n\nDO NOT\n- No contract or keeper changes."
+}
