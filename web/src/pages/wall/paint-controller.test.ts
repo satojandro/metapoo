@@ -6,6 +6,7 @@ import { createAppServices } from "../../app/services";
 import { createDrawRequest } from "../../draw-request";
 import type { Cell } from "../../selection";
 import { createPaintController } from "./paint-controller";
+import type { CreditReservation, PaidQuote } from "./pricing-controller";
 import type { UiPhase } from "./wall-view";
 import { createWallScope } from "./wall-scope";
 
@@ -68,8 +69,13 @@ function setup(options: { metaOk?: boolean } = {}) {
     paidBoard: vi.fn(() => false),
     priceUnavailable: vi.fn(() => false),
     allowGestureRetry: vi.fn(),
-    ensurePaidQuote: vi.fn(async () => true),
-    admitTap: vi.fn(() => true),
+    ensurePaidQuote: vi.fn(async (): Promise<PaidQuote | null> => ({
+      maxCredits: null, chunkMaxCredits: null, reservation: null,
+    })),
+    admitTap: vi.fn((): CreditReservation | null => ({ id: 0 })),
+    settle: vi.fn(),
+    release: vi.fn(),
+    confirmRequote: vi.fn(async (): Promise<number | null> => null),
     refreshCreditsDock: vi.fn(async () => undefined),
     repriceCell: vi.fn(),
   };
@@ -167,7 +173,7 @@ describe("paint controller", () => {
 
   it("a refused price leaves no pending mark and no wallet prompt", async () => {
     const t = setup();
-    t.pricing.ensurePaidQuote.mockResolvedValueOnce(false);
+    t.pricing.ensurePaidQuote.mockResolvedValueOnce(null);
     t.select({ x: 4, y: 5 });
     await t.paint.attemptDraw();
     expect(submitDraw).not.toHaveBeenCalled();
@@ -198,7 +204,7 @@ describe("paint controller", () => {
   it("a tap pricing refuses is not queued", () => {
     const t = setup();
     t.paint.showDrawingSession();
-    t.pricing.admitTap.mockReturnValueOnce(false);
+    t.pricing.admitTap.mockReturnValueOnce(null);
     t.paint.maybeEnqueueDirectPaint({ x: 1, y: 1 });
     expect(t.paint.queueLength()).toBe(0);
     expect(t.paint.pendingCount()).toBe(0);

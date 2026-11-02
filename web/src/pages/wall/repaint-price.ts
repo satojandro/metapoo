@@ -35,6 +35,8 @@ export interface RepaintTunables {
 export interface QuotedCell {
   cell: CellRef;
   credits: number;
+  /** A free paint (F1/F2) for this account; `credits` is 0. Only `get_stroke_cost` knows. */
+  free: boolean;
   writtenAtNs: string | null;
   line: string;
 }
@@ -46,6 +48,11 @@ export type RepaintQuote =
       cells: QuotedCell[];
       strokeText: string;
       totalCredits: number;
+      /**
+       * Credits per `draw_many` chunk (MAX_COST_BATCH cells, in order). Each
+       * is that call's `max_credits`.
+       */
+      chunkTotals: number[];
     }
   | { ok: false; message: typeof PRICE_UNAVAILABLE };
 
@@ -64,6 +71,31 @@ export interface RepaintReaders {
   tunables(): Promise<RepaintTunables>;
   pixel(cell: CellRef): Promise<{ writtenAtNs: string | null }>;
   credits(accountId: string): Promise<bigint | null>;
+  /**
+   * `get_stroke_cost` (revised contract only): exactly what draw_many would
+   * charge this account now, free paints included. Throws when the board does
+   * not have the view; `quoteRepaint` then falls back to `get_cell_costs`.
+   */
+  strokeCost?(accountId: string | null, cells: CellRef[]): Promise<StrokeCost>;
+}
+
+export interface StrokeCost {
+  costs: number[];
+  free: boolean[];
+  total: number;
+}
+
+/** The revised contract's rejection when the stroke now costs more than `max_credits`. */
+export const PRICE_ROSE_ABOVE_MAX = "PriceRoseAboveMax";
+
+export function isPriceRoseAboveMax(message: string | null | undefined): boolean {
+  return typeof message === "string" && message.includes(PRICE_ROSE_ABOVE_MAX);
+}
+
+/** Plain words for the re-quote prompt. */
+export function priceRoseCopy(credits: number): string {
+  const unit = credits === 1 ? "credit" : "credits";
+  return `Someone painted here first — this now costs ${credits} ${unit}.`;
 }
 
 const MINUTE_NS = 60_000_000_000n;
@@ -184,6 +216,8 @@ export async function quoteRepaint(input: {
   readers: RepaintReaders;
   cells: CellRef[];
   nowNs: bigint;
+  /** Whose free paints count. Omitted: nobody's (same as `get_cell_costs`). */
+  accountId?: string | null;
 }): Promise<RepaintQuote> {
   let tunables: RepaintTunables;
   try {
@@ -198,9 +232,34 @@ export async function quoteRepaint(input: {
   }
 
   const cells = uniqueCells(input.cells);
-  let rows: QuotedCell[];
+  let rows: QuotedCell[] | null = null;
+  if (input.readers.strokeCost && cells.length > 0) {
+    // Revised contract: the same per-entry pricing draw_many will charge.
+    // Any failure (old contract without the view, or a flaky read) falls back
+    // to get_cell_cost(s) for this quote; that path fails the quote on its own.
+    try {
+      rows = [];
+      for (let index = 0; index < cells.length; index += MAX_COST_BATCH) {
+        const chunk = cells.slice(index, index + MAX_COST_BATCH);
+        const view = await input.readers.strokeCost(input.accountId ?? null, chunk);
+        if (!Array.isArray(view.costs) || view.costs.length !== chunk.length) {
+          throw new Error(PRICE_UNAVAILABLE);
+        }
+        const pixels = await Promise.all(chunk.map((cell) => input.readers.pixel(cell)));
+        for (let i = 0; i < chunk.length; i++) {
+          const row = quotedRow(chunk[i]!, Number(view.costs[i]), pixels[i]!.writtenAtNs, input.nowNs);
+          row.free = Array.isArray(view.free) && view.free[i] === true;
+          rows.push(row);
+        }
+      }
+    } catch {
+      rows = null;
+    }
+  }
   try {
-    if (cells.length <= 1) {
+    if (rows) {
+      // Priced by get_stroke_cost above.
+    } else if (cells.length <= 1) {
       // Hover, selection, and a one-cell place. One `get_cell_cost`.
       rows = await mapInBatches(cells, 8, async (cell) => {
         const [credits, pixel] = await Promise.all([
@@ -231,13 +290,21 @@ export async function quoteRepaint(input: {
     return { ok: false, message: PRICE_UNAVAILABLE };
   }
 
-  const totalCredits = rows.reduce((sum, row) => sum + row.credits, 0);
+  const priced = rows ?? [];
+  const totalCredits = priced.reduce((sum, row) => sum + row.credits, 0);
+  const chunkTotals: number[] = [];
+  for (let index = 0; index < priced.length; index += MAX_COST_BATCH) {
+    chunkTotals.push(
+      priced.slice(index, index + MAX_COST_BATCH).reduce((sum, row) => sum + row.credits, 0),
+    );
+  }
   return {
     ok: true,
     legend: repaintLegend(tunables),
-    cells: rows,
-    strokeText: rows.length > 0 ? formatStrokeTotal(rows.length, totalCredits) : "",
+    cells: priced,
+    strokeText: priced.length > 0 ? formatStrokeTotal(priced.length, totalCredits) : "",
     totalCredits,
+    chunkTotals,
   };
 }
 
@@ -256,6 +323,7 @@ function quotedRow(
   return {
     cell,
     credits,
+    free: false,
     writtenAtNs,
     line: formatCellPrice({ credits, writtenAtNs, nowNs }),
   };
@@ -322,7 +390,31 @@ export function chainRepaintReaders(
   options: ChainRepaintReaderOptions = {},
 ): ChainRepaintReaders {
   let cachedTunables: RepaintTunables | null = null;
+  /** False once the board answered "no such method" (old contract). */
+  let strokeCostAvailable = true;
   return {
+    async strokeCost(accountId, cells) {
+      if (!strokeCostAvailable) {
+        throw new Error("get_stroke_cost not on this board");
+      }
+      let view: StrokeCost;
+      try {
+        view = await viewFunction<StrokeCost>("get_stroke_cost", {
+          ...(accountId ? { account_id: accountId } : {}),
+          cells,
+        });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        if (/MethodNotFound|MethodResolveError/i.test(detail)) {
+          strokeCostAvailable = false;
+        }
+        throw error;
+      }
+      if (!view || !Array.isArray(view.costs) || !wholeCredit(Number(view.total))) {
+        throw new Error(PRICE_UNAVAILABLE);
+      }
+      return view;
+    },
     async cellCost(cell) {
       const cost = await viewFunction<number | string>("get_cell_cost", {
         x: cell.x,
@@ -368,6 +460,8 @@ export function chainRepaintReaders(
     },
     clearTunablesCache() {
       cachedTunables = null;
+      // A manual Refresh may follow an upgrade; look for the view again.
+      strokeCostAvailable = true;
     },
   };
 }

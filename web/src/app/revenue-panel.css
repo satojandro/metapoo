@@ -1,0 +1,101 @@
+/* "Where the money goes" (/money). Uses the wall's dark scene tokens; no new palette. */
+.rev {
+  --rev-bg: #111214;
+  --rev-card: #1b1c1f;
+  --rev-line: #343537;
+  --rev-fg: #f4f1e9;
+  --rev-muted: #a9aaad;
+  --rev-tag: #f1dc5e;
+  --rev-near: #73d7ee;
+  --rev-stake: #65d5ae;
+  --rev-burn: #ff9f8f;
+  --rev-team: #c9c4ba;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 0 56px;
+  display: grid;
+  gap: 32px;
+  color: var(--rev-fg);
+  font: 15px/1.55 Arial, Helvetica, sans-serif;
+}
+.rev p { margin: 0; }
+.rev h2, .rev h3 { margin: 0; text-wrap: balance; }
+.rev-head { display: grid; gap: 10px; max-width: 68ch; }
+.rev-eyebrow { font: 600 11px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--rev-muted); }
+.rev-head h2 { font-size: clamp(28px, 5vw, 44px); line-height: 1.08; font-weight: 900; letter-spacing: -1px; color: var(--rev-tag); }
+.rev-head h2:focus { outline: none; }
+.rev-lede { color: #d8d4cc; font-size: 16px; }
+.rev-source { font: 12px/1.5 ui-monospace, Menlo, monospace; color: var(--rev-muted); overflow-wrap: anywhere; }
+.rev-source[data-tone="example"] { color: #17171a; background: var(--rev-tag); padding: 6px 10px; border-radius: 3px; justify-self: start; font-weight: 600; }
+
+.rev-notice { border: 1px solid var(--rev-line); border-left: 3px solid var(--rev-near); background: var(--rev-card); border-radius: 6px; padding: 16px 18px; display: grid; gap: 8px; max-width: 72ch; }
+.rev-notice[hidden] { display: none; }
+.rev-notice[data-tone="bad"] { border-left-color: var(--rev-burn); }
+.rev-notice h3 { font-size: 18px; }
+.rev-notice .action { justify-self: start; min-height: 44px; }
+
+.rev-flow { margin: 0; display: grid; gap: 10px; }
+.rf { width: 100%; height: auto; display: block; }
+.rf-tall { display: none; max-width: 420px; }
+@media (max-width: 640px) { .rf-wide { display: none; } .rf-tall { display: block; } }
+.rev-flow figcaption { font-size: 13px; color: var(--rev-muted); max-width: 78ch; }
+.rev-flow figcaption b { color: var(--rev-fg); }
+.rf-node rect { fill: var(--rev-card); stroke-width: 1.5; }
+.rf-title { fill: var(--rev-fg); font: 700 14px Arial, Helvetica, sans-serif; text-anchor: middle; }
+.rf-sub { fill: var(--rev-muted); font: 12px Arial, Helvetica, sans-serif; text-anchor: middle; }
+.rf-near rect { stroke: var(--rev-near); }
+.rf-mpoo rect { stroke: var(--rev-tag); }
+.rf-team rect { stroke: var(--rev-team); }
+.rf-stake rect { stroke: var(--rev-stake); }
+.rf-burn rect { stroke: var(--rev-burn); }
+.rf-edge { fill: none; stroke-linecap: round; opacity: .85; }
+.rf-e-near { stroke: var(--rev-near); } .rf-m-near { fill: var(--rev-near); }
+.rf-e-mpoo { stroke: var(--rev-tag); } .rf-m-mpoo { fill: var(--rev-tag); }
+.rf-e-team { stroke: var(--rev-team); } .rf-m-team { fill: var(--rev-team); }
+.rf-e-stake { stroke: var(--rev-stake); } .rf-m-stake { fill: var(--rev-stake); }
+.rf-e-burn { stroke: var(--rev-burn); } .rf-m-burn { fill: var(--rev-burn); }
+
+.rev-live { display: grid; gap: 24px; }
+.rev-live[hidden] { display: none; }
+.rev-flows, .rev-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 760px) { .rev-flows, .rev-stats { grid-template-columns: 1fr; } }
+.rev-card, .rev-stat, .rev-accounts, .rev-who {
+  background: var(--rev-card); border: 1px solid var(--rev-line); border-radius: 8px; padding: 20px; display: grid; gap: 12px; align-content: start; min-width: 0;
+}
+.rev-card-near { border-top: 3px solid var(--rev-near); }
+.rev-card-mpoo { border-top: 3px solid var(--rev-tag); }
+.rev h3 { font-size: 17px; font-weight: 800; }
+.rev-figure { font-size: clamp(30px, 6vw, 40px); font-weight: 900; letter-spacing: -1px; line-height: 1.05; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.rev-unit { font-size: 15px; font-weight: 700; letter-spacing: 0; color: var(--rev-muted); }
+.rev-explain { color: #cfcbc3; font-size: 14px; }
+.rev-small { font-size: 13px; color: var(--rev-muted); }
+.rev-split { margin: 0; display: grid; gap: 0; border-top: 1px solid var(--rev-line); }
+.rev-split > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--rev-line); }
+.rev-split dt { color: #d8d4cc; font-size: 14px; }
+.rev-split dd { margin: 0; font: 600 14px ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.rev-pct { display: inline-block; min-width: 3.4ch; font-weight: 800; color: var(--rev-fg); }
+.rev-next { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; color: var(--rev-muted); }
+.rev-next strong { color: var(--rev-fg); font: 700 15px ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.rev-next strong[data-due="true"] { color: var(--rev-stake); }
+.rev-send { min-height: 44px; font-size: 14px; }
+.rev-send:disabled { cursor: not-allowed; }
+.rev-hint { font-size: 13px; color: var(--rev-muted); }
+.rev-result:empty { display: none; }
+.rev-result { font-size: 13px; color: var(--rev-fg); }
+
+.rev-accounts ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.rev-accounts li { display: grid; grid-template-columns: 9rem minmax(0, 19rem) minmax(0, 1fr); gap: 4px 16px; padding: 11px 0; border-top: 1px solid var(--rev-line); align-items: baseline; }
+.rev-acc-role { font-weight: 700; font-size: 14px; }
+.rev-acc-id { font: 13px ui-monospace, Menlo, monospace; overflow-wrap: anywhere; color: var(--rev-near); }
+span.rev-acc-id { color: var(--rev-muted); }
+.rev-acc-note { font-size: 13px; color: var(--rev-muted); }
+@media (max-width: 760px) {
+  .rev-accounts li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+.rev-who { max-width: 78ch; }
+.rev-who p { color: #cfcbc3; font-size: 14px; }
+.rev a:focus-visible, .rev button:focus-visible { outline: 2px solid #56c9ec; outline-offset: 2px; }
+@media (max-width: 600px) {
+  .rev { padding-top: 20px; gap: 24px; }
+  .rev-card, .rev-stat, .rev-accounts, .rev-who { padding: 16px; }
+}

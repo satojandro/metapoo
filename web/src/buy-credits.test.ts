@@ -3,9 +3,13 @@ import {
   buildBuyCreditsNearArgs,
   buildFtTransferCallArgs,
   creditsUnchangedAfterFailure,
+  findTokenRefund,
+  mpooCheckoutOpen,
   multiplyUnits,
+  parseMpooSalesToday,
   parsePaymentConfig,
   quoteBuyCredits,
+  splitTokenQuantity,
   REGISTRATION_YOCTO,
   type PaymentConfigView,
 } from "./buy-credits";
@@ -142,5 +146,65 @@ describe("creditsUnchangedAfterFailure", () => {
     expect(creditsUnchangedAfterFailure(12n, 12n)).toBe(true);
     expect(creditsUnchangedAfterFailure(null, null)).toBe(true);
     expect(creditsUnchangedAfterFailure(12n, 22n)).toBe(false);
+  });
+});
+
+describe("mPOO sales gate (FE-4)", () => {
+  const view = {
+    day_index: "20760",
+    sold_today: "19990",
+    cap: "20000",
+    remaining: "10",
+    resets_at_ns: "1793750400000000000",
+  };
+
+  it("parses U128/U64 strings exactly", () => {
+    const sales = parseMpooSalesToday(view);
+    expect(sales.remaining).toBe(10n);
+    expect(sales.resetsAtNs).toBe(1793750400000000000n);
+    expect(() => parseMpooSalesToday({ ...view, cap: "-1" })).toThrow();
+    expect(() => parseMpooSalesToday(null)).toThrow();
+  });
+
+  it("opens only with a non-zero cap and credits remaining", () => {
+    expect(mpooCheckoutOpen(parseMpooSalesToday(view))).toBe(true);
+    expect(mpooCheckoutOpen(null)).toBe(false);
+    expect(mpooCheckoutOpen(parseMpooSalesToday({ ...view, cap: "0", remaining: "0" }))).toBe(false);
+    expect(mpooCheckoutOpen(parseMpooSalesToday({ ...view, remaining: "0" }))).toBe(false);
+  });
+
+  it("splits a quantity above remaining between token and NEAR", () => {
+    expect(splitTokenQuantity(8, 5n)).toEqual({ token: 5, near: 3 });
+    expect(splitTokenQuantity(5, 5n)).toEqual({ token: 5, near: 0 });
+    expect(splitTokenQuantity(3, 0n)).toEqual({ token: 0, near: 3 });
+  });
+
+  it("quotes an exact token amount for N credits, labelled by symbol", () => {
+    const quote = quoteBuyCredits({
+      config: { ...config, mpooPerCredit: "1234567890123456789" },
+      quantity: 7,
+      asset: "token",
+      creditsBalance: 0n,
+      network: "testnet",
+      tokenDecimals: 18,
+      tokenSymbol: "tPOO",
+    });
+    expect(quote.purchaseAmount).toBe("8641975230864197523");
+    expect(quote.tokenLabel).toBe("tPOO");
+  });
+
+  it("reads a purchase_rejected log from the receipts", () => {
+    expect(
+      findTokenRefund({
+        status: { SuccessValue: btoa('"0"') },
+        receipts_outcome: [
+          { outcome: { logs: [] } },
+          { outcome: { logs: ["purchase_rejected: MpooDailyCapReached"] } },
+        ],
+      }),
+    ).toEqual({ refunded: true, code: "MpooDailyCapReached" });
+    expect(
+      findTokenRefund({ status: { SuccessValue: btoa('"700"') }, receipts_outcome: [] }),
+    ).toEqual({ refunded: false, code: null });
   });
 });

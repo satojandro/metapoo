@@ -285,6 +285,8 @@ export interface DrawCallArgs {
   color: number;
   gas: string;
   deposit: string;
+  /** Paid board: the quoted price, sent as `max_credits`. */
+  maxCredits?: number | null;
 }
 
 /**
@@ -299,11 +301,14 @@ export interface DrawCallArgs {
 export async function signAndSendDraw(args: DrawCallArgs): Promise<unknown> {
   const current = ensureConnector();
   const wallet = await current.wallet();
-  const callArgs = {
+  const callArgs: Record<string, unknown> = {
     x: args.x,
     y: args.y,
     color: args.color,
-  } as Record<string, unknown>;
+  };
+  if (typeof args.maxCredits === "number") {
+    callArgs.max_credits = args.maxCredits;
+  }
   return wallet.signAndSendTransaction({
     receiverId: args.contractId,
     actions: [
@@ -454,6 +459,29 @@ export async function revokeDrawingSessionKeyOnChain(publicKey: string): Promise
       {
         type: "DeleteKey",
         params: { publicKey },
+      },
+    ],
+  });
+}
+
+/**
+ * Wallet path for the public revenue split (`distribute_near` / `distribute_mpoo`).
+ * No arguments, no deposit: anyone may call it, and the caller pays only gas.
+ * Never sent with a drawing-session key — the wallet signs.
+ */
+export async function signAndSendDistribution(args: {
+  contractId: string;
+  methodName: "distribute_near" | "distribute_mpoo";
+  gas: string;
+}): Promise<unknown> {
+  const current = ensureConnector();
+  const wallet = await current.wallet();
+  return wallet.signAndSendTransaction({
+    receiverId: args.contractId,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: { methodName: args.methodName, args: {}, gas: args.gas, deposit: "0" },
       },
     ],
   });
