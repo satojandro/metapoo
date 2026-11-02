@@ -1,13 +1,11 @@
 import { strokeBegin, strokeExtend, MAX_BATCH, type StrokeState } from "./stroke-paint";
 import { planStrokeCommit, strokeBlockedReason, strokeResultCopy, TRUNCATED_STROKE_COPY, WALLET_STROKE_COPY } from "./stroke-commit";
-import { PALETTE } from "@shared/palette.ts";
-import { BOARD_HEIGHT, BOARD_WIDTH, type NetworkId } from "@shared/types.ts";
+import type { NetworkId } from "@shared/types.ts";
 import {
   createDrawRequest,
   drawRequestMatchesSession,
   type DrawRequest,
 } from "../../draw-request";
-import { formatFreshness } from "../../board-sync";
 import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
 import { isContractConfigured } from "../../contract";
 import { contractMetaBlockCopy, PAID_BOARD_SCHEMA_VERSION } from "../../contract-meta";
@@ -49,8 +47,9 @@ import {
 import type { Cell } from "../../selection";
 import { describeSponsorship } from "../../sponsorship";
 import { submitDraw } from "../../submit-draw";
-import { fitCamera, paintZoomCamera, PAINT_CELL_PX } from "../../viewport";
+import { fitCamera } from "../../viewport";
 import { createBoardController } from "./board-controller";
+import { clearBlock, colorName, createWallView, fillBlock, fillResultWithLink } from "./wall-view";
 import { createCameraController, type CameraStrokeHooks } from "./camera-controller";
 import type { WallScope } from "./wall-scope";
 import { revokeDrawingSessionKeyOnChain } from "../../wallet";
@@ -59,7 +58,6 @@ import type { ParsedRoute } from "../../app/routes";
 import type { AppServices } from "../../app/services";
 import { paintOperationId } from "../../app/operations";
 import { mountBuyCreditsSheet } from "../../app/buy-credits-sheet";
-import { parseWallLinkSearch } from "./wall-link";
 import { wallPageHtml } from "./wall-template";
 import { mountWallHint } from "../../wall-hint";
 import {
@@ -238,6 +236,7 @@ export function mountWall(
   const strokeHooks: CameraStrokeHooks = {
     active: () => activeStroke !== null,
     begin(cell, wantsPan) {
+      const selectedColor = view.selectedColor();
       // One failed price read must not dead-end painting. `priceUnavailable`
       // is a display state, but it also gated gesture start, so a single 4xx or
       // 429 left the board refusing every tap and drag until a full reload --
@@ -315,22 +314,16 @@ export function mountWall(
       })) ?? []),
     ],
     selection: {
-      selected: () => selected,
-      selectedColor: () => selectedColor,
-      select(cell) {
-        selected = cell;
-        wallHint.selectionSucceeded();
-        if (walletAccount) {
-          setFlow("editing");
-        }
-      },
-      showSelection: () => showSelection(),
+      selected: () => view.selected(),
+      selectedColor: () => view.selectedColor(),
+      select: (cell) => view.select(cell),
+      showSelection: () => view.showSelection(),
       refreshSelectedPixel: () => {
         void board.refreshSelectedPixel();
       },
     },
     strokes: strokeHooks,
-    updateCompactStatus: () => updateCompactStatus(),
+    updateCompactStatus: () => view.updateCompactStatus(),
     attemptDraw: () => {
       void attemptDraw();
     },
@@ -365,13 +358,13 @@ export function mountWall(
     sponsorNote,
     sponsorship,
     routeFocusesCell: Boolean(options.route?.query.x),
-    selected: () => selected,
+    selected: () => view.selected(),
     fillResult: (title, message) => fillBlock(result, title, message),
     render: () => camera.render(),
-    showSelection: () => showSelection(),
-    updateCompactStatus: () => updateCompactStatus(),
+    showSelection: () => view.showSelection(),
+    updateCompactStatus: () => view.updateCompactStatus(),
     updateDirectPaintAvailability: () => updateDirectPaintAvailability(),
-    applyRoutePaintingContext: () => applyRoutePaintingContext(),
+    applyRoutePaintingContext: () => view.applyRoutePaintingContext(),
     reconcilePending: (pixels) => reconcilePendingWithConfirmed(pendingPaints, pixels),
     onBoardUpdated: () => {
       pricedCellKey = null;
@@ -387,8 +380,6 @@ export function mountWall(
     },
   });
 
-  let selected: Cell | null = null;
-  let selectedColor: number | null = null;
   let tapToPaintEnabled = directPaintToggle.checked;
   // Direct paint is a pre-approval, not a second permission: once a drawing
   // session exists, clicking a square should just paint (Berry Club flow).
@@ -420,40 +411,45 @@ export function mountWall(
       return cached ? cached.lastWriteTimestampNs : null;
     },
   });
-  /** High-level UI phase for the status strip. */
-  let uiPhase:
-    | "disconnected"
-    | "connected"
-    | "editing"
-    | "wallet_prompt"
-    | "submitted"
-    | "confirmed"
-    | "confirmation_delayed"
-    | "overwritten"
-    | "failed" = "disconnected";
-
-  // Enlarge the real canvas without altering its pixels or wallet state.
-  const focusCanvas = mustFindIn<HTMLButtonElement>(pageRoot, "#focus-canvas");
-  listen(focusCanvas, "click", () => {
-    const focused = pageRoot.querySelector(".wall-layout")!.classList.toggle("is-focused");
-    focusCanvas.setAttribute("aria-pressed", String(focused));
-    focusCanvas.textContent = focused ? "Back to the stall ↙" : "Focus canvas ↗";
+  const view = createWallView({
+    scope,
+    pageRoot,
+    selectionSummary,
+    preview,
+    palette,
+    rules,
+    lede,
+    sponsorNote,
+    drawState,
+    boardLoadStatus,
+    focusCanvas: mustFindIn<HTMLButtonElement>(pageRoot, "#focus-canvas"),
+    flowState,
+    compactStatus,
+    sponsorship,
+    route: options.route,
+    wallHint,
+    render: () => camera.render(),
+    positionSelection: () => camera.positionSelection(),
+    applyCamera: (next) => camera.applyCamera(next),
+    readViewportSize: () => camera.readViewportSize(),
+    cellSize: () => camera.camera().cellSize,
+    requestCellPrice: (cell) => requestCellPrice(cell),
+    cachedPixel: (cell) => board.cachedPixel(cell),
+    refreshSelectedPixel: () => {
+      void board.refreshSelectedPixel();
+    },
+    pendingCount: () => listPendingPaints(pendingPaints).length,
+    boardSync: () => board.syncState(),
   });
 
-  sponsorNote.textContent = sponsorship.message;
-
-  lede.textContent = isContractConfigured()
-    ? "A live communal pixel wall on NEAR. Explore freely. Drawing asks your wallet to approve one on-chain paint."
-    : "Preview mode · Explore the wall. Blockchain painting is not connected yet.";
-
-  fillRules();
-  buildPalette();
-  setFlow("disconnected");
+  view.fillRules();
+  view.buildPalette();
+  view.setFlow("disconnected");
   camera.applyCamera(fitCamera(camera.readViewportSize()));
   camera.render();
-  showSelection();
+  view.showSelection();
   showDrawingSession();
-  applyRoutePaintingContext();
+  view.applyRoutePaintingContext();
   void board.bootstrap();
   board.scheduleBoardPoll();
 
@@ -518,9 +514,9 @@ export function mountWall(
       cancelUnsentPaintQueue("Wallet account or network changed.");
     }
     if (!walletAccount) {
-      setFlow("disconnected");
-    } else if (uiPhase === "disconnected" || uiPhase === "failed") {
-      setFlow(selected ? "editing" : "connected");
+      view.setFlow("disconnected");
+    } else if (view.uiPhase() === "disconnected" || view.uiPhase() === "failed") {
+      view.setFlow(view.selected() ? "editing" : "connected");
     }
     showDrawingSession();
     void refreshCreditsDock();
@@ -533,47 +529,6 @@ export function mountWall(
     buyCreditsSheet.dispose();
   });
 
-/**
- * Apply a `/wall?x=…&y=…&zoom=…` location link after the wall mounts.
- * Coordinates and zoom are clamped; a URL never supplies a trusted price.
- */
-function applyRoutePaintingContext(): void {
-  if (disposed || !options.route) {
-    return;
-  }
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(options.route.query)) {
-    if (value !== undefined && value !== "") {
-      params.set(key, value);
-    }
-  }
-  const parsed = parseWallLinkSearch(`?${params.toString()}`);
-  if (parsed.x === null || parsed.y === null) {
-    return;
-  }
-
-  selected = { x: parsed.x, y: parsed.y };
-  wallHint.selectionSucceeded();
-  const cellPx = parsed.zoom ?? PAINT_CELL_PX;
-  camera.applyCamera(paintZoomCamera(camera.readViewportSize(), selected, cellPx));
-
-  const contextBits: string[] = [
-    `Focused square x=${parsed.x}, y=${parsed.y} from the link.`,
-  ];
-  if (parsed.board && CONTRACT_ID && parsed.board !== CONTRACT_ID) {
-    contextBits.push(
-      `Link board "${parsed.board}" differs from configured contract ${CONTRACT_ID}; coordinates were still applied.`,
-    );
-  }
-  boardLoadStatus.textContent = contextBits.join(" ");
-  if (walletAccount) {
-    setFlow("editing");
-  }
-  showSelection();
-  camera.render();
-  void board.refreshSelectedPixel();
-}
-
 async function attemptDraw(
   request?: DrawRequest,
   queuedPlacementOutcomeId?: string,
@@ -582,6 +537,8 @@ async function attemptDraw(
     return;
   }
 
+  const selected = view.selected();
+  const selectedColor = view.selectedColor();
   const frozen =
     request ??
     (selected && selectedColor !== null && walletAccount
@@ -601,7 +558,7 @@ async function attemptDraw(
     !drawRequestMatchesSession(frozen, walletAccount, walletNetworkId())
   ) {
     clearPendingPaint(pendingPaints, frozen.x, frozen.y);
-    setFlow(walletAccount ? "editing" : "disconnected");
+    view.setFlow(walletAccount ? "editing" : "disconnected");
     fillBlock(
       result,
       "Paint cancelled",
@@ -623,13 +580,13 @@ async function attemptDraw(
   });
 
   if (decision.outcome === "blocked") {
-    setFlow(walletAccount ? "editing" : "disconnected");
+    view.setFlow(walletAccount ? "editing" : "disconnected");
     fillBlock(result, decision.title, decision.message);
     return;
   }
 
   if (!board.contractMetaOk()) {
-    setFlow("failed");
+    view.setFlow("failed");
     const copy = contractMetaBlockCopy(board.contractMetaIssue());
     fillBlock(result, copy.title, copy.message);
     return;
@@ -664,8 +621,8 @@ async function attemptDraw(
 
   // Keep UI selection in sync with the request, but never re-read color/account
   // from live UI state while this request is in flight.
-  selected = { x: frozen.x, y: frozen.y };
-  setFlow("wallet_prompt");
+  view.setSelected({ x: frozen.x, y: frozen.y });
+  view.setFlow("wallet_prompt");
   const opId = paintOperationId({
     accountId: frozen.accountId,
     x: frozen.x,
@@ -736,10 +693,10 @@ async function attemptDraw(
           return;
         }
         if (progress.phase === "wallet_prompt") {
-          setFlow("wallet_prompt");
+          view.setFlow("wallet_prompt");
           fillBlock(result, "Waiting for your wallet", progress.detail);
         } else if (progress.phase === "pending" || progress.phase === "confirming") {
-          setFlow("submitted");
+          view.setFlow("submitted");
           setPendingPaint(pendingPaints, {
             x: frozen.x,
             y: frozen.y,
@@ -750,6 +707,7 @@ async function attemptDraw(
           });
           camera.render();
           fillResultWithLink(
+            result,
             "Transaction pending",
             progress.phase === "pending"
               ? "The wallet returned a transaction id. Confirming against a fresh board read…"
@@ -822,14 +780,15 @@ async function attemptDraw(
       );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       camera.render();
-      setFlow("confirmed");
+      view.setFlow("confirmed");
       fillResultWithLink(
+        result,
         submitResult.title,
         submitResult.message,
         submitResult.transactionId,
         submitResult.explorerUrl,
       );
-      showSelection();
+      view.showSelection();
       void board.refreshBoardFromContract({ reason: "after_draw" });
       return;
     }
@@ -855,14 +814,15 @@ async function attemptDraw(
         phase: "confirmation_delayed",
       });
       camera.render();
-      setFlow("confirmation_delayed");
+      view.setFlow("confirmation_delayed");
       fillResultWithLink(
+        result,
         submitResult.title,
         submitResult.message,
         submitResult.transactionId,
         submitResult.explorerUrl,
       );
-      showSelection();
+      view.showSelection();
       // Do not auto-resubmit. Polling / refresh will reconcile.
       return;
     }
@@ -884,14 +844,15 @@ async function attemptDraw(
       );
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       camera.render();
-      setFlow("overwritten");
+      view.setFlow("overwritten");
       fillResultWithLink(
+        result,
         submitResult.title,
         submitResult.message,
         submitResult.transactionId,
         submitResult.explorerUrl,
       );
-      showSelection();
+      view.showSelection();
       void board.refreshBoardFromContract({ reason: "after_draw" });
       return;
     }
@@ -909,8 +870,9 @@ async function attemptDraw(
     });
     clearPendingPaint(pendingPaints, frozen.x, frozen.y);
     camera.render();
-    setFlow("failed");
+    view.setFlow("failed");
     fillResultWithLink(
+      result,
       submitResult.title,
       submitResult.message,
       submitResult.transactionId,
@@ -924,6 +886,7 @@ async function attemptDraw(
       // Dock credits previously refreshed only on wallet change / shortfall —
       // after a confirmed (or delayed) spend the balance must re-read the chain.
       void refreshCreditsDock();
+      const selected = view.selected();
       if (selected && paidBoard()) {
         pricedCellKey = null;
         requestCellPrice(selected);
@@ -955,10 +918,10 @@ async function onAuthorizeSessionClick(): Promise<void> {
   unlockPaintButton.disabled = true;
   try {
     await services.wallet.connect({ authorizeDrawingSession: true });
-    setFlow(selected ? "editing" : "connected");
+    view.setFlow(view.selected() ? "editing" : "connected");
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown wallet error";
-    setFlow("failed");
+    view.setFlow("failed");
     if (walletError) {
       fillBlock(
         walletError,
@@ -997,7 +960,7 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     transactionId: null, phase: "submitted",
   });
   camera.render();
-  setFlow("submitted");
+  view.setFlow("submitted");
   try {
     const outcome = await signAndSendStrokeLocally({
       accountId: stroke.accountId, networkId: stroke.networkId,
@@ -1037,7 +1000,7 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
       } else clearPendingPaint(pendingPaints, cell.x, cell.y);
     }
     fillBlock(result, outcome.status === "confirmed" ? "Stroke confirmed" : "Stroke stopped", strokeResultCopy(stroke.state, outcome));
-    setFlow(outcome.status === "confirmed" ? "confirmed" : "confirmation_delayed");
+    view.setFlow(outcome.status === "confirmed" ? "confirmed" : "confirmation_delayed");
     // Stroke execution and latest ownership are distinct; do not reuse the
     // single-cell label that promises a matching confirming read.
     const statusText = outcome.status === "confirmed"
@@ -1062,6 +1025,7 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
       syncSubmitEnabled();
       camera.render();
       void refreshCreditsDock();
+      const selected = view.selected();
       if (selected && paidBoard()) {
         pricedCellKey = null;
         requestCellPrice(selected);
@@ -1074,7 +1038,7 @@ function directPaintReady(): boolean {
   return (
     tapToPaintEnabled &&
     canUseLocalDrawingSession(walletAccount, walletNetwork) &&
-    selectedColor !== null &&
+    view.selectedColor() !== null &&
     walletAccount !== null &&
     board.contractMetaOk() &&
     !disposed
@@ -1100,6 +1064,7 @@ async function enqueuePricedDirectPaint(
   cell: Cell,
   _options: { paintZoom: boolean },
 ): Promise<void> {
+  const selectedColor = view.selectedColor();
   if (!directPaintReady() || !walletAccount || selectedColor === null) {
     return;
   }
@@ -1515,61 +1480,6 @@ async function ensurePaidQuote(cells: Cell[], accountId: string | null): Promise
   }
 }
 
-function showSelection(): void {
-  const colorLabel =
-    selectedColor === null ? "none yet" : `${colorName(selectedColor)} (index ${selectedColor})`;
-
-  updatePreview();
-  camera.positionSelection();
-
-  if (!selected) {
-    selectionSummary.textContent = `No square selected. Chosen paint: ${colorLabel}. Unpainted squares have no artist.`;
-    return;
-  }
-  // Touch has no hover. Selecting a square is how a finger reads the price.
-  requestCellPrice(selected);
-
-  const cached = board.cachedPixel(selected);
-  let cellText: string;
-  if (!cached || cached.colorIndex === null) {
-    cellText = isContractConfigured()
-      ? "This square has no confirmed paint in our cache (unpainted or not read yet)."
-      : "This square is unpainted on the local mock board.";
-  } else {
-    const paintedName = colorName(cached.colorIndex);
-    const artist = cached.artistAccountId ?? "unknown account";
-    cellText = `On-chain credit: ${paintedName} (index ${cached.colorIndex}) by ${artist}. Credit is the latest writer, not legal ownership.`;
-  }
-
-  selectionSummary.textContent = `Selected square x=${selected.x}, y=${selected.y}. Chosen paint: ${colorLabel}. Counting starts at the top-left. ${cellText}`;
-}
-
-function updatePreview(): void {
-  preview.replaceChildren();
-  const label = document.createElement("span");
-  label.className = "preview-label";
-
-  if (selectedColor === null) {
-    label.textContent = "Paint preview: pick a named color.";
-    preview.append(label);
-    return;
-  }
-
-  const swatch = PALETTE.find((item) => item.index === selectedColor);
-  if (!swatch) {
-    label.textContent = "Paint preview: invalid color.";
-    preview.append(label);
-    return;
-  }
-
-  const chip = document.createElement("span");
-  chip.className = "chip";
-  chip.style.background = swatch.hex;
-  chip.setAttribute("aria-hidden", "true");
-  label.textContent = `Paint preview: ${swatch.name} (palette index ${swatch.index})`;
-  preview.append(chip, label);
-}
-
 /**
  * Experimental drawing-session panel. Uses textContent only.
  */
@@ -1622,143 +1532,6 @@ async function refreshAllowanceNote(
   } catch {
     // Keep the static note if the live query fails.
   }
-}
-
-function updateCompactStatus(): void {
-  const network = isContractConfigured() ? PAGE_NETWORK : "mock";
-  const account = walletAccount ? walletAccount : "not connected";
-  const zoom = `~${camera.camera().cellSize.toFixed(1)} px/cell`;
-  const pendingCount = listPendingPaints(pendingPaints).length;
-  const pendingLabel =
-    pendingCount > 0 ? ` · ${pendingCount} pending` : "";
-  const fresh =
-    board.syncState().lastAppliedAtMs === null
-      ? ""
-      : ` · ${formatFreshness(board.syncState(), Date.now()).replace(/^Board freshness: /, "")}`;
-  compactStatus.textContent = `${network} · ${account} · ${zoom}${pendingLabel}${fresh} · no app fee`;
-}
-
-function fillRules(): void {
-  const lines = [
-    `The board is ${BOARD_WIDTH} by ${BOARD_HEIGHT} squares.`,
-    "Square (0, 0) is the top-left. x counts to the right. y counts downward.",
-    "An unpainted square is not a color. It has no stored artist. Palette index 0 is Ink, a real paint color.",
-    "Overwrite rule: Open wall. Any connected account may paint any pixel, including one someone else painted. Vandalism is possible.",
-    "The current artist is credit for the latest successful write. That is not a legal claim on the artwork.",
-    "Explore with pan and zoom. Place paint (or Enter) submits a draw. With Direct paint enabled at paint zoom, drag to paint a stroke. Pan and pinch never paint.",
-    isContractConfigured()
-      ? `Game contract: ${CONTRACT_ID} on ${PAGE_NETWORK}. On open (and Refresh), the page loads every painted cell via paginated get_pixels. Transaction execution is reported separately from the latest cell owner; a successful paint may already be overwritten under Open wall.`
-      : "No game contract id is configured yet (VITE_CONTRACT_ID empty), so this page will not open a draw signature or claim a chain success.",
-    sponsorship.flagEnabled
-      ? "Sponsorship flag is on, but the submit path stays ordinary wallet until a sponsor service exists."
-      : "Sponsorship is off. No cross-chain or paid checkout is offered on this page.",
-  ];
-  const list = document.createElement("ul");
-  for (const line of lines) {
-    const item = document.createElement("li");
-    item.textContent = line;
-    list.append(item);
-  }
-  rules.replaceChildren(list);
-}
-
-function buildPalette(): void {
-  for (const swatch of PALETTE) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "swatch";
-    button.setAttribute("aria-pressed", "false");
-    button.setAttribute(
-      "aria-label",
-      `${swatch.name}, palette index ${swatch.index}, color ${swatch.hex}`,
-    );
-    button.setAttribute("aria-describedby", "selection-summary");
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    chip.style.background = swatch.hex;
-    chip.setAttribute("aria-hidden", "true");
-    const label = document.createElement("span");
-    label.textContent = `${swatch.name} (${swatch.index})`;
-    button.append(chip, label);
-    button.addEventListener("click", () => {
-      selectedColor = swatch.index;
-      for (const other of palette.querySelectorAll("button")) {
-        other.setAttribute("aria-pressed", other === button ? "true" : "false");
-      }
-      if (walletAccount && selected) {
-        setFlow("editing");
-      }
-      camera.render();
-      showSelection();
-    });
-    palette.append(button);
-  }
-}
-
-function setFlow(phase: typeof uiPhase): void {
-  uiPhase = phase;
-  const labels: Record<typeof uiPhase, string> = {
-    disconnected: "State: disconnected — look freely; draw needs a wallet.",
-    connected: "State: connected — pick a square and a named color.",
-    editing: "State: editing — review the pixel rule, then Place paint.",
-    wallet_prompt: "State: wallet prompt — approve or reject in your wallet.",
-    submitted: "State: submitted — transaction is in flight; awaiting confirmation.",
-    confirmed: "State: confirmed — the transaction executed and the confirming read matched.",
-    confirmation_delayed: "State: confirmation delayed — outcome is unresolved and will not be resubmitted automatically.",
-    overwritten: "State: overwritten — the transaction executed, then another artist became the current cell owner.",
-    failed: "State: failed — the transaction did not execute; you can review and try again.",
-  };
-  flowState.textContent = labels[phase];
-  flowState.dataset.phase = phase;
-  // Keep the current transaction outcome adjacent to the action that caused it;
-  // shell chrome remains a compact duplicate for navigation-wide visibility.
-  drawState.textContent = labels[phase].replace(/^State: /, "");
-  drawState.dataset.phase = phase;
-}
-
-/** textContent only. Account ids and error strings must not be inserted as HTML. */
-function fillBlock(host: HTMLElement, title: string, message: string): void {
-  host.replaceChildren();
-  const heading = document.createElement("h3");
-  heading.textContent = title;
-  const paragraph = document.createElement("p");
-  paragraph.textContent = message;
-  host.append(heading, paragraph);
-}
-
-function fillResultWithLink(
-  title: string,
-  message: string,
-  transactionId: string | null,
-  explorer: string | null,
-): void {
-  result.replaceChildren();
-  const heading = document.createElement("h3");
-  heading.textContent = title;
-  const paragraph = document.createElement("p");
-  paragraph.textContent = message;
-  result.append(heading, paragraph);
-  if (transactionId) {
-    const idLine = document.createElement("p");
-    idLine.textContent = `Transaction id: ${transactionId}`;
-    result.append(idLine);
-  }
-  if (explorer) {
-    const link = document.createElement("a");
-    link.href = explorer;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = "Open transaction in explorer";
-    result.append(link);
-  }
-}
-
-function clearBlock(host: HTMLElement): void {
-  host.replaceChildren();
-}
-
-function colorName(index: number): string {
-  return PALETTE.find((swatch) => swatch.index === index)?.name ?? `index ${index}`;
 }
 
 function walletNetworkId(): NetworkId {
