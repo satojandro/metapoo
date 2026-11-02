@@ -4,7 +4,7 @@ import type { AppServices } from "../../app/services";
 import type { DrawRequest } from "../../draw-request";
 import type { Cell } from "../../selection";
 import { describeSponsorship } from "../../sponsorship";
-import { fitCamera } from "../../viewport";
+import { fitCamera, PAINT_CELL_PX, paintZoomCamera } from "../../viewport";
 import { mountWallHint } from "../../wall-hint";
 import { createBoardController } from "./board-controller";
 import { createCameraController } from "./camera-controller";
@@ -17,6 +17,8 @@ import { createWallScope } from "./wall-scope";
 import { createWallModes } from "./wall-modes";
 import { mountDockPrimary } from "./dock-primary";
 import { createWallViews, type WallViews } from "./wall-views";
+import { createTileInspector, parseTileHash, type TileInspector } from "./tile-inspector";
+import { PAGE_NETWORK } from "../../config";
 import { viewFunction } from "../../contract";
 import "./wall-page.css";
 
@@ -145,6 +147,7 @@ export function mountWall(
 
   const scope = createWallScope();
   let views: WallViews | null = null;
+  let inspector: TileInspector | null = null;
 
   // Look / Paint and Move decide what a gesture means; they never change the camera
   // maths or the paint path. Look is the default (owner, 2 Nov).
@@ -254,6 +257,7 @@ export function mountWall(
     onBoardUpdated: () => {
       pricing.onBoardUpdated();
       views?.refresh();
+      inspector?.render();
     },
     onSchemaChanged: () => pricing.onSchemaChanged(),
     onManualRefresh: () => pricing.manualRefresh(),
@@ -293,6 +297,7 @@ export function mountWall(
     boardSync: () => board.syncState(),
     onSelectionShown: () => {
       if (paintCreated) paint.syncSubmitEnabled();
+      inspector?.render();
     },
   });
 
@@ -336,7 +341,31 @@ export function mountWall(
     readTunables: () => pricing.viewTunables(),
     readFreeFirst: (account) => viewFunction("get_free_first_paints", { account_id: account }),
     render: () => camera.render(),
+    onChange: () => inspector?.render(),
   });
+
+  // The Tile card: painter, age, cost to cover, Paint over this, Copy link.
+  inspector = createTileInspector({
+    scope,
+    card: el<HTMLElement>(".wall-inspect"),
+    host: el<HTMLElement>("#tile-inspector"),
+    selected: () => view.selected(),
+    cachedPixel: (cell) => board.cachedPixel(cell),
+    viewer: () => scope.walletAccount(),
+    tunables: () => views?.tunables() ?? null,
+    free: () => views?.free() ?? { kind: "unknown" },
+    knownCost: (cell) => pricing.knownCost(cell),
+    network: PAGE_NETWORK,
+    prime: () => views?.prime(),
+    paintOver: (cell) => {
+      modes.setMode("paint");
+      view.select(cell);
+      view.showSelection();
+      camera.render();
+      el<HTMLElement>(".wall-dock").scrollIntoView?.({ block: "nearest" });
+    },
+  });
+  inspector.render();
 
   const dockPrimary = mountDockPrimary({
     scope,
@@ -364,6 +393,18 @@ export function mountWall(
   camera.applyCamera(fitCamera(camera.readViewportSize()));
   camera.render();
   view.showSelection();
+
+  // `#tile-x-y` opens the wall on that tile, in Look mode.
+  function focusTileFromHash(): void {
+    const cell = parseTileHash(window.location.hash);
+    if (!cell || scope.isDisposed()) return;
+    view.select(cell);
+    camera.applyCamera(paintZoomCamera(camera.readViewportSize(), cell, PAINT_CELL_PX));
+    camera.render();
+    view.showSelection();
+  }
+  focusTileFromHash();
+  scope.listen(window, "hashchange", focusTileFromHash);
   paint.showDrawingSession();
   view.applyRoutePaintingContext();
   void board.bootstrap();

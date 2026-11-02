@@ -201,7 +201,7 @@ function hslToHex(h: number, s: number, l: number): string {
 export function ageColor(age: bigint, tunables: ViewTunables | null, palette: ViewPalette): string {
   const young = tunables ? big(tunables.repaint_young_ns) : DEFAULT_YOUNG_NS;
   const mid = tunables ? big(tunables.repaint_mid_ns) : DEFAULT_MID_NS;
-  const faded = mixHex(palette.old, "#2a2b2e", 0.75);
+  const faded = mixHex(palette.old, "#2a2b2e", 0.45);
   const stops: Array<[bigint, string]> = [[0n, palette.wet], [young, palette.drying], [mid, palette.old], [DAY_NS, faded]];
   for (let i = 1; i < stops.length; i += 1) {
     const [t1, c1] = stops[i - 1];
@@ -302,7 +302,7 @@ export function legendFor(input: PainterInput & { pixels: readonly PixelView[] }
         { label: "Wet", color: palette.wet },
         { label: "Drying", color: palette.drying },
         { label: "Dry", color: palette.old },
-        { label: "A day or more", color: mixHex(palette.old, "#2a2b2e", 0.75) },
+        { label: "A day or more", color: mixHex(palette.old, "#2a2b2e", 0.45) },
       ],
       note: "Colours shift as paint dries.",
       painters: [],
@@ -333,6 +333,8 @@ export interface WallViewsDeps {
   /** `get_free_first_paints` for an account. Rejects when the board doesn't have it. */
   readFreeFirst(account: string): Promise<unknown>;
   render(): void;
+  /** Tunables or free paints arrived, or the view changed (the Tile card follows). */
+  onChange?(): void;
   /** Ms between "paint dries" re-renders. */
   tickMs?: number;
   now?: () => number;
@@ -350,6 +352,8 @@ export interface WallViews {
   /** Board pixels or the wallet changed: refresh legend (and free paints on wallet change). */
   refresh(): void;
   onWalletChanged(): void;
+  /** Read tunables and the viewer's free paints if not known yet (cached, rate-limited). */
+  prime(): void;
   dispose(): void;
 }
 
@@ -369,6 +373,8 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
   let tunables: ViewTunables | null = null;
   let tunablesTriedAt: number | null = null;
   let tunablesInFlight = false;
+  /** The Tile card asked for prices: keep trying until the board answers. */
+  let primed = false;
   let free: FreeFirstState = { kind: "unknown" };
   let freeFor: string | null = null;
   let freeReadAt = 0;
@@ -446,6 +452,9 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
       const value = await deps.readTunables();
       if (scope.isDisposed()) return;
       tunables = isViewTunables(value) ? value : null;
+      // Null without an error: the board's schema isn't known yet (or it has no paid
+      // pricing). Nothing was read, so the next board update may ask again.
+      if (value === null) tunablesTriedAt = null;
     } catch {
       tunables = null;
     }
@@ -479,6 +488,7 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
     syncChips();
     renderLegend();
     deps.render();
+    deps.onChange?.();
   }
 
   function setMode(next: WallViewMode): void {
@@ -521,6 +531,7 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
     tunables: () => tunables,
     free: () => free,
     refresh: () => {
+      if (!tunables && (primed || mode === "price" || mode === "age")) void ensureTunables();
       if (mode !== "art") renderLegend();
     },
     onWalletChanged: () => {
@@ -528,6 +539,11 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
       freeFor = null;
       if (mode === "price") void ensureFree(true);
       else if (mode !== "art") update();
+    },
+    prime: () => {
+      primed = true;
+      void ensureTunables();
+      void ensureFree();
     },
     dispose: () => clearTimer(timer),
   };
