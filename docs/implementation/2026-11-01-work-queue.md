@@ -2,52 +2,48 @@
 
 ## Status, 2 November — read this first
 
-**Merged (2 Nov, by Hermes):** #33 keeper, #34 REV-A, #39 the combined revision, #37 the wall split.
-Closed as superseded: #35, #36, #38.
+**Merged (2 Nov):** #33 keeper, #34 REV-A, #39 the combined revision, #37 the wall split, #44 CI,
+#41 FE-1, #43 FE-2, #40 FE-4, #42 FE-5 (`/money`), #45 board3 migration rehearsal, #46 ADM-1, #47 the TOILET
+round spec. Closed as superseded: #35, #36, #38.
 
-**Waiting for merge: a stacked chain. Merge in this order.** Each branch already contains the one
-before it, so each merges cleanly. After merging one, delete its branch (GitHub then retargets the
-next PR to `main`), or retarget the next PR by hand.
+**Waiting for merge:** nothing. **In progress:** nothing.
 
-| order | PR | what | tests on its branch |
+**Ready to pick up.** Each has a work order in this folder. The TOILET round spec is
+[`../economy/2026-11-02-toilet-round-spec.md`](../economy/2026-11-02-toilet-round-spec.md).
+
+Codex streams (run in parallel; each is contract or ops code with named tests, and none deploys):
+
+| stream | id | work order | needs |
 |---|---|---|---|
-| 0 | #44 | CI workflow (independent; merge first so the rest run through it) | all suites |
-| 1 | #41 | FE-1: swatch dock follows the board's palette. **Fixes `main`, which shows 16 swatches on 8-colour board3** | 338 |
-| 2 | #43 | FE-2: `max_credits`, one reserved credit balance | 353 |
-| 3 | #40 | FE-4: mPOO checkout | 369 |
-| 4 | #42 | FE-5: `/money` page | 398 |
+| 1 | **REV-G**, then **TR-B** | [`rev-followups`](rev-followups.task.json), then [`toilet-round-board`](toilet-round-board.task.json) | nothing; pause decided (distributions keep running). **Same line of work**: both change `Tunables` and `set_tunables`, so TR-B starts from REV-G's merge |
+| 2 | **TR-S** | [`toilet-staking`](toilet-staking.task.json) | nothing (no owner, no upgrade: T9). External review after, before any `set_staking_contract` |
+| 3 | **TR-K** | [`buyback-keeper`](buyback-keeper.task.json) | nothing; the swap route needs on-chain research. Hermes does the testnet run after |
 
-**In progress:** nothing.
+Claude (frontend, for one voice and look):
 
-**Ready to pick up.** Each has a work order in this folder:
+| id | work order | needs |
+|---|---|---|
+| **FE-HIW** | [`fe-how-it-works`](fe-how-it-works.task.json) | nothing |
+| **ADM-2** | [`adm-2-owner-console`](adm-2-owner-console.task.json) | nothing; step 7 waits for TR-B |
+| **FE-3** | [`fe-free-paints-happy-hour`](fe-free-paints-happy-hour.task.json) | nothing (reassigned to Claude, 2 Nov) |
+| **FE-BUYBACK** | [`fe-buyback-ledger`](fe-buyback-ledger.task.json) | nothing |
+| **FE-TOILET** | [`fe-toilet-page`](fe-toilet-page.task.json) | TR-B and TR-S rehearsed on testnet |
 
-| id | work order | who could take it | needs |
-|---|---|---|---|
-| **REV-E** | [`rev-testnet-rehearsal`](rev-testnet-rehearsal.task.json) | **Hermes** (keys, RPC, chain evidence) | #39 merged or its branch; the owner's testnet team and buyback accounts; board3's owner key |
-| **FE-3** | [`fe-free-paints-happy-hour`](fe-free-paints-happy-hour.task.json) | Codex, Cursor or Claude | start from `main` once #42 is merged (or branch `claude/gifted-knuth-bm5wrf-fe-5`) |
-| **ADM-1** | [`admin-dashboard`](admin-dashboard.task.json), [spec](2026-11-02-admin-dashboard-spec.md) | Cursor or Claude | can start now from `fe-base` |
-| **REV-G** | [`rev-followups`](rev-followups.task.json) | Codex or Claude | the revision branch; one owner decision (pause) |
-| **FE-29** | [`issue-29-recheck`](issue-29-recheck.task.json) | owner or Hermes | a browser and wallet; best after FE-2 |
-| REV-E0 | superseded: the burn goes by transfer to the 64-zero address, registered on mainnet 2 Nov | — | — |
+Hermes, the owner, or both (keys, a browser, a person):
 
-**TOILET round (added 2 Nov).** Spec: [`../economy/2026-11-02-toilet-round-spec.md`](../economy/2026-11-02-toilet-round-spec.md).
+| id | work order | needs |
+|---|---|---|
+| **REV-E** | [`rev-testnet-rehearsal`](rev-testnet-rehearsal.task.json) | the owner's testnet team and buyback accounts; board3's owner key |
+| **TR-X** | [`toilet-exchange-tax`](toilet-exchange-tax.task.json) | the owner's choice of tax split and treasury; a testnet venue |
+| **FE-29** | [`issue-29-recheck`](issue-29-recheck.task.json) | a browser and wallet |
+| REV-E0 | superseded: the burn goes by transfer to the 64-zero address, registered on mainnet 2 Nov | — |
 
-| id | work order | who could take it | needs |
-|---|---|---|---|
-| **TR-B** | [`toilet-round-board`](toilet-round-board.task.json) | Codex | can start now from `main` |
-| **TR-S** | [`toilet-staking`](toilet-staking.task.json) | Codex | can start now from `main` (no owner, no upgrade: T9) |
-| **TR-K** | [`buyback-keeper`](buyback-keeper.task.json) | Codex, then Hermes for the testnet run | can start now; the route needs on-chain research |
-| **TR-X** | [`toilet-exchange-tax`](toilet-exchange-tax.task.json) | Hermes | owner choice of tax split and treasury; a testnet venue |
-| **FE-HIW** | [`fe-how-it-works`](fe-how-it-works.task.json) | Claude | can start now |
-| **FE-BUYBACK** | [`fe-buyback-ledger`](fe-buyback-ledger.task.json) | Claude | can start now |
-| **FE-TOILET** | [`fe-toilet-page`](fe-toilet-page.task.json) | Claude | TR-B and TR-S rehearsed on testnet |
+ADM-1 ([`admin-dashboard`](admin-dashboard.task.json)) is delivered (#46); its follow-up is ADM-2.
 
 Frontend consistency (owner, 2 Nov): Claude takes the public-facing pages so they share one voice and look.
 Designs are in [`../visual-concepts/README.md`](../visual-concepts/README.md).
 
-**Branches to start from:** `main` (the wall split and the revision are merged). Frontend work that
-needs FE-1/2/4/5 starts from `main` once the chain above is merged, or from
-`claude/gifted-knuth-bm5wrf-fe-5`, which holds all four.
+**Branches to start from:** `main`. Everything above is merged.
 
 **Settings at a glance:** [`../payments/board-settings-reference.html`](../payments/board-settings-reference.html).
 
@@ -57,8 +53,7 @@ mainnet is a fresh deploy. New work doesn't need to support today's board3 contr
 **Workload note (owner, 2 Nov):** running five agents at once hit the 5-hour usage limit. Run two or
 three at a time, and spread work across Claude, Hermes, Cursor and Codex.
 
-**Open owner decisions:**
-- should distributions stop while the board is paused?
+**Open owner decisions:** (decided 2 Nov: distributions keep running while paused)
 - the mPOO daily cap at launch (recommended 20,000)
 - the testnet team and buyback account ids
 - bounding the distribution interval (proposed 10 min – 24 h, in REV-G)

@@ -159,10 +159,15 @@ amount). Stakers register with NEP-145 `storage_deposit` first; staking without 
 1. `release`, settle rewards (they stay in `pending`, unaffected by the tax), then subtract `amount`
    from the stake and `total_staked`.
 2. `tax = amount × EXIT_TAX_BPS / 10_000`, rounded down; `net = amount - tax`.
-3. Transfer `net` TOILET to the account. On success, burn `tax` by calling the TOILET token's `burn` on
-   the contract's own balance. On a failed transfer, restore the **full** `amount` to the stake and burn
+3. Transfer `net` TOILET to the account. On success, burn `tax` by `ft_transfer` to the 64-zero burn
+   address, the burn route recorded on 2 Nov in the [handover](../handover-2026-10-29.md) ("TOILET's 10%
+   exit tax later"). The burn address must be registered for storage on the TOILET token before the first
+   unstake; the deploy procedure does it. On a failed transfer, restore the **full** `amount` to the stake and burn
    nothing, so a failed exit costs nothing.
-4. A failed burn adds `tax` to `burn_pending`. A permissionless `flush_burn()` retries it.
+4. A failed burn transfer adds `tax` to `burn_pending`. A permissionless `flush_burn()` retries it.
+   Note for the burn page: a transfer to the burn address does not lower the token's `ft_total_supply`
+   or its `burned_total`; the staking contract's own `burned_total`, plus the burn address's balance,
+   are the figures to show.
 5. Events: `unstaked {account_id, amount, net, tax_burned}`.
 
 The tax applies to each unstake, on that amount only (owner, 2 Nov). Stake and unstake cycles therefore

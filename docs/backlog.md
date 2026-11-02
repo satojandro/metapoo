@@ -87,10 +87,19 @@ waves, each with its own `*.task.json`. Specs: [paid board revision](payments/20
 
 | id | item | evidence / gate | size |
 |---|---|---|---|
-| **REV-1** | Paid board revision (REV-A…REV-F in the queue) | spec reviewed by the owner 1 Nov; open: testnet account ids, mPOO cap value; open: should `distribute_near`/`distribute_mpoo` reject while paused (REV-D lets them run). **REV-A merged to `main` via PR #34; REV-B/C/D merged to `main` via PR #39** (`cargo test` 167/167, clippy clean, wasm builds, web 261/261 + build); REV-E not started | **L** |
+| **REV-1** | Paid board revision (REV-A…REV-F in the queue) | spec reviewed by the owner 1 Nov; open: testnet account ids, mPOO cap value; **decided 2 Nov: distributions keep running while paused** (handover; REV-G pins it with a test). **REV-A merged to `main` via PR #34; REV-B/C/D merged to `main` via PR #39** (`cargo test` 167/167, clippy clean, wasm builds, web 261/261 + build); REV-E not started | **L** |
 | **REV-F** | Revenue keeper: hourly `distribute_near` / `distribute_mpoo` caller (`ops/keeper/`, `.github/workflows/keeper.yml`, off until repo var `KEEPER_ENABLED=true`) | merged in PR #33 (`2c30870`); 30/30 keeper unit tests pass. **Unverified on chain**: needs REV-D's `distribute_*` methods deployed and a 24 h testnet run with tx hashes (REV-E) | **S** |
 | **F1-REFACTOR** | `mount-wall.ts` split (FE-0 in the queue) | [spec](implementation/2026-11-01-wall-split-spec.md); **done on this branch, merged via PR #37** (characterization tests first, then one commit per controller; `mount-wall.ts` 2,538 → 344 lines); 328/328 web tests pass, build clean. Testnet manual check on board3 still owed | **M** |
-| **TOILET-REVIEW** | Full TOILET cycle review: emission, claim, earning cap, staking contract, exit tax, distribution to stakers | next review round (owner, 1 Nov); out of this queue | — |
+| **TOILET-REVIEW** | Full TOILET cycle review | **Specced 2 Nov**: owner decisions T1–T10 in [`economy/2026-11-02-toilet-round-spec.md`](economy/2026-11-02-toilet-round-spec.md), merged via PR #47 (`f1e9e7c`). Nothing implemented; work moves to the TR rows | — |
+| **FE-0..5** | Wall split, CI, palette dock, `max_credits`, mPOO checkout, `/money` | Merged 2 Nov: #37, #44, #41, #43, #40, #42. `web/src/app/routes.ts` matches `/money`; `npx vitest run` on `f1e9e7c` with Node 22: **433/433, 55 files** | — |
+| **ADM-1** | `/admin` public board settings with owner edits | Merged via PR #46 (`833a131`). Read-only testnet view calls proven in the PR; **live owner-wallet signing unverified**. Follow-up ADM-2 makes it a private owner console | **M** |
+| **ADM-2** | Private owner console (out of nav, status first, pause without RPC gates) | [`adm-2-owner-console`](implementation/adm-2-owner-console.task.json); **Claude** (owner, 2 Nov); not started | **M** |
+| **REV-G** | Contract follow-ups: interval bound, `tunables_changed` event, `get_owner`, keeper gas, pause test | [`rev-followups`](implementation/rev-followups.task.json); Codex; not started | **S** |
+| **TR-B** | TOILET round, board: earning tiles only, no earning cap, guarded rate setter, stored token, minimum claim | [`toilet-round-board`](implementation/toilet-round-board.task.json); Codex, after REV-G (same files); not started | **M** |
+| **TR-S** | TOILET staking contract: 10%/day pool drip, 10% exit tax burned, no owner | [`toilet-staking`](implementation/toilet-staking.task.json); Codex; not started. External review required before `set_staking_contract` | **L** |
+| **TR-K** | Buyback keeper: NEAR → mPOO in capped chunks, returned to the board | [`buyback-keeper`](implementation/buyback-keeper.task.json); Codex, then Hermes on testnet; not started | **M** |
+| **TR-X** | TOILET exchange-tax configuration and venue evidence (nice-to-have) | [`toilet-exchange-tax`](implementation/toilet-exchange-tax.task.json); Hermes; needs the owner's split and treasury | **S** |
+| **FE-HIW / FE-3 / FE-BUYBACK / FE-TOILET** | `/how-it-works`, free paints and happy hour UI, `/money` buyback ledger, `/toilet` | Work orders in `implementation/`; **Claude**; FE-TOILET waits for TR-B and TR-S on testnet. Designs: [`visual-concepts/`](visual-concepts/README.md) | **M** each |
 
 ## Blocked on a human decision
 
@@ -121,7 +130,7 @@ confirmed by owner. A testnet token is needed for the first paid rehearsal.
 | PAY-SAFETY | On main and testnet; **two gaps found by the audit** | `contracts/paid-board/src/safety.rs`: pause, withdrawals, price bounds. Open: `set_tunables` can raise repaint credits without bound (audit C1), and `STORAGE_PER_PIXEL` is still the free-board estimate (C5) |
 | PAY-UPGRADE | Select deployment authority and rehearse state-preserving upgrades before public paid launch | Owner-only `upgrade()` in `34b1a84`; pause now local. New safety fields change the stored layout: migration and testnet rehearsal remain open. |
 | TOILET-TOKEN | On main and testnet (`metapoo-toilet.testnet`); venue compatibility unverified | `contracts/toilet`: 24 tests. Capped issuer, emitter-only mint, venue tax. A `resolve_claim` on a refused mint has been seen on testnet; a successful mint through the page has not |
-| ECONOMY-LATER | Staking, longevity rewards, board-to-token issuance, swaps, inventory shop | Still deferred. Standalone TOILET token code does not implement an emission schedule, vault or revenue distribution. |
+| ECONOMY-LATER | Longevity rewards beyond emission, swaps, inventory shop | Still deferred. **Staking, emission rules and the buyback moved to the TOILET round** (TR-B, TR-S, TR-K, 2 Nov). |
 
 ## Open gates and scoped work
 
