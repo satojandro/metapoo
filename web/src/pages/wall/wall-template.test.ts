@@ -34,16 +34,12 @@ describe("wallPageHtml", () => {
     expect(root.querySelectorAll(".wall-page details")).toHaveLength(1);
     // Phase 0: no "DEMO STALL ART / LIVE BOARD" label over the scene.
     expect(root.querySelector(".scene-label")).toBeNull();
-    // Phase 1 step 1: the wall is framed by a thin stall border, not the mural scene.
-    // The old scenery stays mounted but hidden until step 4 deletes it.
-    const legacy = root.querySelector<HTMLElement>(".wall-legacy")!;
-    expect(legacy.hidden).toBe(true);
-    const sceneryLayers = [
-      ...root.querySelectorAll<HTMLElement>("[data-stall-scenery]"),
-    ];
-    expect(sceneryLayers.length).toBeGreaterThanOrEqual(6);
-    expect(sceneryLayers.every((layer) => legacy.contains(layer))).toBe(true);
-    expect(legacy.contains(board)).toBe(false);
+    // Phase 1: the wall is framed by a thin stall border; the mural scene and the
+    // old Focus canvas / Paint zoom controls are gone (step 4).
+    expect(root.querySelector(".wall-legacy")).toBeNull();
+    expect(root.querySelectorAll("[data-stall-scenery]")).toHaveLength(0);
+    expect(root.querySelector("#focus-canvas")).toBeNull();
+    expect(root.querySelector("#zoom-paint")).toBeNull();
     expect(root.querySelector(".wall-frame")?.contains(board)).toBe(true);
     // Look is the default mode; the dock is the Paint-mode card in the side panel.
     expect(root.querySelector<HTMLElement>(".wall-page")?.dataset.mode).toBe("look");

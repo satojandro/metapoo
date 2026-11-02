@@ -54,6 +54,8 @@ export interface WallMountTestApi {
   /** Test-only read seam for verifying board-load ordering. */
   refreshPixel: (cell: Cell) => Promise<void>;
   cachedPixelColor: (cell: Cell) => number | null | undefined;
+  /** Zoom to painting size on the selection (what the old Paint zoom button did). */
+  paintZoom: () => void;
 }
 
 function mustFindIn<T extends Element>(root: ParentNode, selector: string): T {
@@ -111,7 +113,6 @@ export function mountWall(
   const refreshButton = el<HTMLButtonElement>("#refresh-board");
   const boardLoadStatus = el("#board-load-status");
   const boardFreshness = el("#board-freshness");
-  const zoomPaintButton = el<HTMLButtonElement>("#zoom-paint");
   const drawingSessionStatus = el("#drawing-session-status");
   const drawingSessionNote = el("#drawing-session-note");
   const authorizeSessionButton = el<HTMLButtonElement>("#authorize-session-button");
@@ -141,7 +142,6 @@ export function mountWall(
   const creditsBalance = el("#credits-balance");
   const buyCreditsButton = el<HTMLButtonElement>("#buy-credits-button");
   const buyCreditsHost = el("#buy-credits-host");
-  const focusCanvas = el<HTMLButtonElement>("#focus-canvas");
   // Keep the current cell coordinates available when keyboard users reach Place.
   drawButton.setAttribute("aria-describedby", "selection-summary place-reason cell-price stroke-total");
 
@@ -190,7 +190,6 @@ export function mountWall(
     boardFocus,
     selectionRing,
     hoverSummary,
-    zoomPaintButton,
     paintedPixels: () => board.paintedPixels(),
     overlayPixels: () => paint.overlayPixels(),
     selection: {
@@ -277,7 +276,6 @@ export function mountWall(
     sponsorNote,
     drawState,
     boardLoadStatus,
-    focusCanvas,
     flowState,
     compactStatus,
     sponsorship,
@@ -417,6 +415,7 @@ export function mountWall(
     pendingPaintCount: () => paint.pendingCount(),
     refreshPixel: (cell) => board.refreshSelectedPixel(cell),
     cachedPixelColor: (cell) => board.cachedPixel(cell)?.colorIndex,
+    paintZoom: () => camera.zoomToPaint(),
   });
 
   const unsubWallet = services.wallet.subscribe((session) => {

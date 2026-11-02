@@ -14,7 +14,6 @@ function setup(size = { width: 512, height: 512 }) {
     <div id="toolbar"></div>
     <div id="focus" tabindex="0"><div id="viewport"><div id="stage"><canvas id="board"></canvas><div id="ring"></div></div></div></div>
     <p id="hover"></p>
-    <button id="zoom-paint"></button>
   `;
   const viewport = document.querySelector<HTMLElement>("#viewport")!;
   Object.assign(viewport, { setPointerCapture: vi.fn() });
@@ -48,7 +47,6 @@ function setup(size = { width: 512, height: 512 }) {
     boardFocus: document.querySelector<HTMLElement>("#focus")!,
     selectionRing: document.querySelector<HTMLElement>("#ring")!,
     hoverSummary: document.querySelector<HTMLElement>("#hover")!,
-    zoomPaintButton: document.querySelector<HTMLButtonElement>("#zoom-paint")!,
     paintedPixels: () => [],
     overlayPixels: () => [],
     selection: {
@@ -195,7 +193,7 @@ describe("camera controller", () => {
 
   it("zoom-to-paint centres the selection or the middle of the board", () => {
     const { camera, deps, dispose } = setup();
-    deps.zoomPaintButton.click();
+    camera.zoomToPaint();
     expect(camera.camera()).toEqual({ cellSize: 20, panX: -1034, panY: -1034 });
     expect(deps.updateCompactStatus).toHaveBeenCalled();
     dispose();

@@ -46,7 +46,6 @@ function setup(options: { route?: string; wallet?: string | null } = {}) {
     sponsorNote: el("sponsor"),
     drawState: el("draw-state"),
     boardLoadStatus: el("status"),
-    focusCanvas: el("focus") as HTMLButtonElement,
     flowState: el("flow"),
     compactStatus: el("compact"),
     sponsorship: { flagEnabled: false, message: "Sponsorship is off." } as never,
@@ -235,12 +234,6 @@ describe("wall view", () => {
     expect(deps.refreshSelectedPixel).toHaveBeenCalled();
   });
 
-  it("focus canvas toggles the layout and its own label", () => {
-    const { deps } = setup();
-    deps.focusCanvas.click();
-    expect(document.querySelector(".wall-layout")!.classList.contains("is-focused")).toBe(true);
-    expect(deps.focusCanvas.textContent).toBe("Back to the stall ↙");
-  });
 });
 
 describe("wall view helpers", () => {

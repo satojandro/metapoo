@@ -54,7 +54,6 @@ export interface CameraControllerDeps {
   boardFocus: HTMLElement;
   selectionRing: HTMLElement;
   hoverSummary: HTMLElement;
-  zoomPaintButton: HTMLButtonElement;
   /** Confirmed pixels to draw. */
   paintedPixels(): PixelView[];
   /** Pending paints and the live stroke, drawn over the confirmed pixels. */
@@ -85,6 +84,7 @@ export interface CameraController {
   readZoomState(): WallZoomState;
   zoomFromCenter(factor: number): void;
   fitWallToView(): void;
+  zoomToPaint(): void;
   positionSelection(): void;
   updatePositionReadout(): void;
   cellAtClientPoint(clientX: number, clientY: number): Cell | null;
@@ -105,7 +105,6 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
     boardFocus,
     selectionRing,
     hoverSummary,
-    zoomPaintButton,
     selection,
     strokes,
   } = deps;
@@ -150,7 +149,8 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
   });
   resizeObserver.observe(boardViewport);
 
-  listen(zoomPaintButton, "click", () => {
+  /** Zoom to painting size on the selection, or the middle of the board. */
+  function zoomToPaint(): void {
     const focus = selection.selected() ?? {
       x: Math.floor(BOARD_WIDTH / 2),
       y: Math.floor(BOARD_HEIGHT / 2),
@@ -158,7 +158,7 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
     applyCamera(paintZoomCamera(readViewportSize(), focus));
     positionSelection();
     deps.updateCompactStatus();
-  });
+  }
 
   wirePointerGestures();
 
@@ -637,6 +637,7 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
     readZoomState,
     zoomFromCenter,
     fitWallToView,
+    zoomToPaint,
     positionSelection,
     updatePositionReadout,
     cellAtClientPoint,
