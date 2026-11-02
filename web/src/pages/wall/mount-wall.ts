@@ -8,16 +8,8 @@ import {
 } from "../../draw-request";
 import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
 import { isContractConfigured } from "../../contract";
-import { contractMetaBlockCopy, PAID_BOARD_SCHEMA_VERSION } from "../../contract-meta";
-import {
-  chainRepaintReaders,
-  creditShortfall,
-  quoteRepaint,
-  tapAffordability,
-  showPriceUnavailable,
-  showRepaintQuote,
-  type RepaintChrome,
-} from "./repaint-price";
+import { contractMetaBlockCopy } from "../../contract-meta";
+import type { RepaintChrome } from "./repaint-price";
 import { prepareDraw } from "../../draw-policy";
 import {
   describeDrawingSession,
@@ -49,6 +41,7 @@ import { describeSponsorship } from "../../sponsorship";
 import { submitDraw } from "../../submit-draw";
 import { fitCamera } from "../../viewport";
 import { createBoardController } from "./board-controller";
+import { createPricingController } from "./pricing-controller";
 import { clearBlock, colorName, createWallView, fillBlock, fillResultWithLink } from "./wall-view";
 import { createCameraController, type CameraStrokeHooks } from "./camera-controller";
 import type { WallScope } from "./wall-scope";
@@ -57,7 +50,6 @@ import type { PageMount } from "../../app/page-registry";
 import type { ParsedRoute } from "../../app/routes";
 import type { AppServices } from "../../app/services";
 import { paintOperationId } from "../../app/operations";
-import { mountBuyCreditsSheet } from "../../app/buy-credits-sheet";
 import { wallPageHtml } from "./wall-template";
 import { mountWallHint } from "../../wall-hint";
 import {
@@ -194,18 +186,6 @@ export function mountWall(
     "#buy-credits-button",
   );
   const buyCreditsHost = mustFindIn<HTMLElement>(pageRoot, "#buy-credits-host");
-  const buyCreditsSheet = mountBuyCreditsSheet(buyCreditsHost, services, {
-    onCreditsChanged: (balance) => {
-      if (disposed) return;
-      creditsBalance.textContent =
-        balance === null
-          ? "Credits: not registered · 0"
-          : balance === undefined
-            ? "Credits: …"
-            : `Credits: ${balance}`;
-    },
-  });
-
   // Keep the current cell coordinates available when keyboard users reach Place.
   drawButton.setAttribute("aria-describedby", "selection-summary cell-price stroke-total");
 
@@ -233,18 +213,26 @@ export function mountWall(
     walletNetworkId: () => walletNetworkId(),
   };
 
+  const pricing = createPricingController({
+    scope,
+    services,
+    creditsDock,
+    creditsBalance,
+    buyCreditsButton,
+    buyCreditsHost,
+    repaintChrome,
+    result,
+    boardSchema: () => board.boardSchema(),
+    cachedPixel: (cell) => board.cachedPixel(cell),
+    drawInFlight: () => drawInFlight,
+    syncSubmitEnabled: () => syncSubmitEnabled(),
+  });
+
   const strokeHooks: CameraStrokeHooks = {
     active: () => activeStroke !== null,
     begin(cell, wantsPan) {
       const selectedColor = view.selectedColor();
-      // One failed price read must not dead-end painting. `priceUnavailable`
-      // is a display state, but it also gated gesture start, so a single 4xx or
-      // 429 left the board refusing every tap and drag until a full reload --
-      // reported as "I click and nothing happens, then I am stuck". Clear it
-      // here so each gesture gets its own attempt; a fresh failure re-latches.
-      if (paidBoard() && priceUnavailable) {
-        priceUnavailable = false;
-      }
+      pricing.allowGestureRetry();
 
       if (cell && !wantsPan && directPaintToggle.checked &&
           walletAccount && selectedColor !== null && board.contractMetaOk() &&
@@ -264,7 +252,7 @@ export function mountWall(
           sessionActive: walletAccount
             ? canUseLocalDrawingSession(walletAccount, walletNetwork)
             : false,
-          priceOk: !paidBoard() || !priceUnavailable,
+          priceOk: !pricing.paidBoard() || !pricing.priceUnavailable(),
           drawInFlight,
           queueBusy: paintQueue.inFlight || paintQueueLength(paintQueue) > 0,
         });
@@ -328,7 +316,7 @@ export function mountWall(
       void attemptDraw();
     },
     tapSelected: (cell, tapOptions) => maybeEnqueueDirectPaint(cell, tapOptions),
-    hoverCell: (cell) => requestCellPrice(cell),
+    hoverCell: (cell) => pricing.requestCellPrice(cell),
   });
 
   const wallHint = mountWallHint(stallScene);
@@ -366,18 +354,9 @@ export function mountWall(
     updateDirectPaintAvailability: () => updateDirectPaintAvailability(),
     applyRoutePaintingContext: () => view.applyRoutePaintingContext(),
     reconcilePending: (pixels) => reconcilePendingWithConfirmed(pendingPaints, pixels),
-    onBoardUpdated: () => {
-      pricedCellKey = null;
-    },
-    onSchemaChanged: () => onBoardSchemaChanged(),
-    onManualRefresh: () => {
-      if (paidBoard()) {
-        pricedCellKey = null;
-        // Tunables only change on set_tunables; Refresh is the one deliberate re-read.
-        repaintReaders.clearTunablesCache();
-        void refreshPaidLegend();
-      }
-    },
+    onBoardUpdated: () => pricing.onBoardUpdated(),
+    onSchemaChanged: () => pricing.onSchemaChanged(),
+    onManualRefresh: () => pricing.manualRefresh(),
   });
 
   let tapToPaintEnabled = directPaintToggle.checked;
@@ -391,26 +370,6 @@ export function mountWall(
   type AnchoredStroke = { state: StrokeState; accountId: string; networkId: string; color: number };
   let activeStroke: AnchoredStroke | null = null;
 
-  /** A failed get_cell_cost / get_tunables read. Submit stays off until a later read works. */
-  let priceUnavailable = false;
-  /**
-   * Last credit balance the dock read. Advisory: the tap path checks against
-   * this instead of making a network read, because the contract enforces
-   * affordability itself (`draw` takes no max_cost).
-   */
-  let cachedCredits: bigint | null = null;
-  let creditsKnown = false;
-  /** Cost last quoted for a cell, keyed "x,y". Lets a tap skip the read. */
-  const cellCostCache = new Map<string, number>();
-  let pricedCellKey: string | null = null;
-  let priceRequest = 0;
-  let submitQuoteInFlight = false;
-  const repaintReaders = chainRepaintReaders({
-    writtenAtNsFromCache: (cell) => {
-      const cached = board.cachedPixel(cell);
-      return cached ? cached.lastWriteTimestampNs : null;
-    },
-  });
   const view = createWallView({
     scope,
     pageRoot,
@@ -433,7 +392,7 @@ export function mountWall(
     applyCamera: (next) => camera.applyCamera(next),
     readViewportSize: () => camera.readViewportSize(),
     cellSize: () => camera.camera().cellSize,
-    requestCellPrice: (cell) => requestCellPrice(cell),
+    requestCellPrice: (cell) => pricing.requestCellPrice(cell),
     cachedPixel: (cell) => board.cachedPixel(cell),
     refreshSelectedPixel: () => {
       void board.refreshSelectedPixel();
@@ -519,14 +478,11 @@ export function mountWall(
       view.setFlow(view.selected() ? "editing" : "connected");
     }
     showDrawingSession();
-    void refreshCreditsDock();
+    void pricing.refreshCreditsDock();
   });
   listenerCleanups.push(unsubWallet);
-  buyCreditsButton.addEventListener("click", () => {
-    buyCreditsSheet.open();
-  });
   listenerCleanups.push(() => {
-    buyCreditsSheet.dispose();
+    pricing.dispose();
   });
 
 async function attemptDraw(
@@ -600,7 +556,7 @@ async function attemptDraw(
   // leave a stripe on the board or open a signature request.
   drawInFlight = true;
   drawButton.disabled = true;
-  const priced = await ensurePaidQuote(
+  const priced = await pricing.ensurePaidQuote(
     [{ x: frozen.x, y: frozen.y }],
     frozen.accountId,
   );
@@ -885,11 +841,10 @@ async function attemptDraw(
       showDrawingSession();
       // Dock credits previously refreshed only on wallet change / shortfall —
       // after a confirmed (or delayed) spend the balance must re-read the chain.
-      void refreshCreditsDock();
+      void pricing.refreshCreditsDock();
       const selected = view.selected();
-      if (selected && paidBoard()) {
-        pricedCellKey = null;
-        requestCellPrice(selected);
+      if (selected) {
+        pricing.repriceCell(selected);
       }
     }
   }
@@ -940,7 +895,7 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
       stroke.networkId !== walletNetworkId() || !directPaintToggle.checked) return;
   drawInFlight = true;
   drawButton.disabled = true;
-  const priced = await ensurePaidQuote(stroke.state.cells, stroke.accountId);
+  const priced = await pricing.ensurePaidQuote(stroke.state.cells, stroke.accountId);
   if (!priced || disposed || stroke.accountId !== walletAccount ||
       stroke.networkId !== walletNetworkId() || !directPaintToggle.checked) {
     drawInFlight = false;
@@ -1024,11 +979,10 @@ async function commitStroke(stroke: AnchoredStroke): Promise<void> {
     if (!disposed) {
       syncSubmitEnabled();
       camera.render();
-      void refreshCreditsDock();
+      void pricing.refreshCreditsDock();
       const selected = view.selected();
-      if (selected && paidBoard()) {
-        pricedCellKey = null;
-        requestCellPrice(selected);
+      if (selected) {
+        pricing.repriceCell(selected);
       }
     }
   }
@@ -1073,23 +1027,8 @@ async function enqueuePricedDirectPaint(
   // which is why this board felt worse than the free one. Affordability is
   // checked against the cached dock balance and the last quoted cost for this
   // cell; the contract enforces the rest, because `draw` takes no max_cost.
-  if (paidBoard()) {
-    const decision = tapAffordability({
-      credits: cachedCredits,
-      creditsKnown,
-      knownCost: cellCostCache.get(`${cell.x},${cell.y}`),
-    });
-    if (!decision.allowed) {
-      const shortfall = creditShortfall(cachedCredits, decision.needed);
-      if (shortfall) {
-        fillBlock(result, "Not enough credits", shortfall);
-      }
-      buyCreditsSheet.open({ quantity: Math.max(1, decision.needed - Number(cachedCredits ?? 0n)) });
-      void refreshCreditsDock();
-      return;
-    }
-    // Price the badge in the background. It must never block the paint.
-    requestCellPrice(cell);
+  if (!pricing.admitTap(cell)) {
+    return;
   }
 
   const queued = createDrawRequest({
@@ -1273,211 +1212,8 @@ async function onRevokeSessionClick(): Promise<void> {
   }
 }
 
-function chainNowNs(): bigint {
-  return BigInt(Date.now()) * 1_000_000n;
-}
-
-function paidBoard(): boolean {
-  return board.boardSchema() === PAID_BOARD_SCHEMA_VERSION;
-}
-
 function syncSubmitEnabled(): void {
-  drawButton.disabled = drawInFlight || (paidBoard() && priceUnavailable);
-}
-
-function onBoardSchemaChanged(): void {
-  if (!paidBoard()) {
-    priceUnavailable = false;
-    pricedCellKey = null;
-    repaintChrome.legend.hidden = true;
-    repaintChrome.legend.textContent = "";
-    repaintChrome.badge.textContent = "";
-    repaintChrome.strokeTotal.textContent = "";
-    creditsDock.hidden = true;
-    buyCreditsSheet.setVisible(false);
-    syncSubmitEnabled();
-    return;
-  }
-  creditsDock.hidden = false;
-  buyCreditsSheet.setVisible(true);
-  void refreshPaidLegend();
-  void refreshCreditsDock();
-}
-
-async function refreshCreditsDock(): Promise<void> {
-  if (!paidBoard()) {
-    creditsDock.hidden = true;
-    buyCreditsSheet.setVisible(false);
-    return;
-  }
-  creditsDock.hidden = false;
-  buyCreditsSheet.setVisible(true);
-  if (!walletAccount) {
-    creditsBalance.textContent = "Credits: connect wallet";
-    cachedCredits = null;
-    creditsKnown = false;
-    buyCreditsButton.disabled = true;
-    buyCreditsSheet.setCredits(undefined);
-    return;
-  }
-  buyCreditsButton.disabled = false;
-  creditsBalance.textContent = "Credits: …";
-  try {
-    const balance = await repaintReaders.credits(walletAccount);
-    if (disposed) return;
-    creditsBalance.textContent =
-      balance === null ? "Credits: not registered · 0" : `Credits: ${balance}`;
-    buyCreditsSheet.setCredits(balance);
-    cachedCredits = balance;
-    creditsKnown = true;
-  } catch {
-    if (disposed) return;
-    creditsBalance.textContent = "Credits: unavailable — retry";
-  }
-}
-
-/** Legend only. An empty cell list still proves get_tunables answered. */
-async function refreshPaidLegend(): Promise<void> {
-  if (!paidBoard()) {
-    return;
-  }
-  const request = ++priceRequest;
-  const quote = await quoteRepaint({
-    readers: repaintReaders,
-    cells: [],
-    nowNs: chainNowNs(),
-  });
-  if (disposed || request !== priceRequest || submitQuoteInFlight) {
-    return;
-  }
-  if (!quote.ok) {
-    priceUnavailable = true;
-    showPriceUnavailable(repaintChrome);
-    syncSubmitEnabled();
-    return;
-  }
-  priceUnavailable = false;
-  showRepaintQuote(repaintChrome, quote);
-  syncSubmitEnabled();
-}
-
-function requestCellPrice(cell: Cell): void {
-  if (!paidBoard() || submitQuoteInFlight || drawInFlight) {
-    return;
-  }
-  const key = `${cell.x},${cell.y}`;
-  if (pricedCellKey === key) {
-    return;
-  }
-  pricedCellKey = key;
-  const request = ++priceRequest;
-  void quoteRepaint({
-    readers: repaintReaders,
-    cells: [cell],
-    nowNs: chainNowNs(),
-  }).then((quote) => {
-    if (disposed || request !== priceRequest || submitQuoteInFlight) {
-      return;
-    }
-    if (!quote.ok) {
-      priceUnavailable = true;
-      showPriceUnavailable(repaintChrome);
-      syncSubmitEnabled();
-      return;
-    }
-    priceUnavailable = false;
-    for (const row of quote.cells) {
-      cellCostCache.set(`${row.cell.x},${row.cell.y}`, row.credits);
-    }
-    showRepaintQuote(repaintChrome, quote);
-    syncSubmitEnabled();
-  });
-}
-
-/**
- * Price a stroke before anything is marked pending or sent to a wallet.
- * Returns false when the read failed or the account cannot afford the total.
- */
-async function ensurePaidQuote(cells: Cell[], accountId: string | null): Promise<boolean> {
-  if (!paidBoard()) {
-    return true;
-  }
-  submitQuoteInFlight = true;
-  const request = ++priceRequest;
-  try {
-    const quote = await quoteRepaint({
-      readers: repaintReaders,
-      cells,
-      nowNs: chainNowNs(),
-    });
-    if (disposed || request !== priceRequest) {
-      return false;
-    }
-    if (!quote.ok) {
-      priceUnavailable = true;
-      showPriceUnavailable(repaintChrome);
-      fillBlock(
-        result,
-        "Price unavailable",
-        "The repaint price could not be read, so nothing was submitted. Refresh the board and try again.",
-      );
-      syncSubmitEnabled();
-      return false;
-    }
-    priceUnavailable = false;
-    for (const row of quote.cells) {
-      cellCostCache.set(`${row.cell.x},${row.cell.y}`, row.credits);
-    }
-    showRepaintQuote(repaintChrome, quote);
-    syncSubmitEnabled();
-    if (!accountId) {
-      return true;
-    }
-    let have: bigint | null;
-    try {
-      have = await repaintReaders.credits(accountId);
-      cachedCredits = have;
-      creditsKnown = true;
-    } catch {
-      priceUnavailable = true;
-      showPriceUnavailable(repaintChrome);
-      fillBlock(
-        result,
-        "Price unavailable",
-        "The credit balance could not be read, so nothing was submitted. Refresh the board and try again.",
-      );
-      syncSubmitEnabled();
-      return false;
-    }
-    if (disposed || request !== priceRequest) {
-      return false;
-    }
-    const shortfall = creditShortfall(have, quote.totalCredits);
-    if (shortfall) {
-      repaintChrome.strokeTotal.textContent = `${quote.strokeText}. ${shortfall}`;
-      fillBlock(result, "Not enough credits", shortfall);
-      const haveCount = have === null ? 0 : Number(have);
-      const needCount = quote.totalCredits;
-      const buyQuantity =
-        Number.isFinite(haveCount) && needCount > haveCount
-          ? needCount - haveCount
-          : Math.max(1, needCount);
-      const buyMore = document.createElement("button");
-      buyMore.type = "button";
-      buyMore.className = "action place";
-      buyMore.textContent = "Buy credits";
-      buyMore.addEventListener("click", () => {
-        buyCreditsSheet.open({ quantity: Math.max(1, buyQuantity) });
-      });
-      result.append(buyMore);
-      buyCreditsSheet.open({ quantity: Math.max(1, buyQuantity) });
-      void refreshCreditsDock();
-      return false;
-    }
-    return true;
-  } finally {
-    submitQuoteInFlight = false;
-  }
+  drawButton.disabled = drawInFlight || (pricing.paidBoard() && pricing.priceUnavailable());
 }
 
 /**
