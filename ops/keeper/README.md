@@ -213,6 +213,29 @@ lines.
   If the hiccups get noisy, the next step is a final workflow step that only fails when the
   previous two runs also failed. Not built yet.
 
+## Staking sync (TR-S)
+
+The board pays the stakers' share to the staking contract
+([`contracts/toilet-staking`](../../contracts/toilet-staking/README.md)) with a plain `ft_transfer`, so
+the staking contract only counts it when someone calls its `sync_inflow()`. With the flag below set,
+the keeper does that right after a `distribute_mpoo` whose outcome is `distributed`, and logs a third
+JSON line (`"method":"sync_inflow"`, `"contract"` = the staking contract). It never syncs after
+`too_soon` or `failed`. A failed sync is logged and does not change the exit code: the next sync, by
+anyone, counts the same mPOO.
+
+**Off by default.** Leave it unset until the board's `set_staking_contract` has been called.
+
+| variable | required | notes |
+|---|---|---|
+| `KEEPER_STAKING_CONTRACT_ID` | no | the staking contract. Setting it switches the sync on |
+| `KEEPER_STAKING_PRIVATE_KEY` | when the above is set | a **second** function-call key on the same keeper account. A function-call key names one receiver, so the board key can't call the staking contract |
+| `KEEPER_GAS_SYNC_TGAS` | no | prepaid gas for `sync_inflow`, default 50. The contract refuses less than 40 |
+
+Add the second key as in steps 2–3 above, with `--receiver-account-id <staking contract>` and
+`--method-names 'sync_inflow'`. On GitHub Actions, [`keeper.yml`](../../.github/workflows/keeper.yml)
+passes the variable `KEEPER_STAKING_CONTRACT_ID` (and optional `KEEPER_GAS_SYNC_TGAS`) and the secret
+`KEEPER_STAKING_PRIVATE_KEY`; an unset variable arrives empty, which keeps the sync off.
+
 ## Tests
 
 ```sh

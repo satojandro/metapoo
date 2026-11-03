@@ -92,6 +92,63 @@ describe('runKeeper', () => {
   });
 });
 
+describe('runKeeper with a staking contract (TR-S)', () => {
+  const STAKING_KEY = `ed25519:${'2'.repeat(64)}`;
+  const stakingConfig = loadConfig({
+    KEEPER_NETWORK: 'testnet',
+    KEEPER_BOARD_CONTRACT_ID: 'board3.metapoo.testnet',
+    KEEPER_ACCOUNT_ID: 'keeper.metapoo.testnet',
+    KEEPER_PRIVATE_KEY: FAKE_KEY,
+    KEEPER_STAKING_CONTRACT_ID: 'staking.metapoo.testnet',
+    KEEPER_STAKING_PRIVATE_KEY: STAKING_KEY,
+  });
+
+  async function runStaking(answers, syncAnswer) {
+    const lines = [];
+    const client = mockClient(answers);
+    client.stakingCalls = [];
+    client.callStaking = async (method, gasTgas) => {
+      client.stakingCalls.push({ method, gasTgas });
+      return typeof syncAnswer === 'function' ? syncAnswer() : syncAnswer;
+    };
+    const out = await runKeeper({ config: stakingConfig, client, log: (l) => lines.push(l), now: () => new Date('2026-11-02T10:00:00Z') });
+    return { ...out, lines, client };
+  }
+
+  it('calls sync_inflow after a successful distribute_mpoo and logs it', async () => {
+    const { client, lines, exitCode } = await runStaking({ distribute_near: ok('h1'), distribute_mpoo: ok('h2') }, ok('h3'));
+    assert.deepEqual(client.stakingCalls, [{ method: 'sync_inflow', gasTgas: 50 }]);
+    const last = JSON.parse(lines[2]);
+    assert.equal(last.contract, 'staking.metapoo.testnet');
+    assert.equal(last.method, 'sync_inflow');
+    assert.equal(last.outcome, 'distributed');
+    assert.equal(last.txHash, 'h3');
+    assert.ok(!lines.join('\n').includes(STAKING_KEY));
+    assert.equal(exitCode, 0);
+  });
+
+  it('does not sync when distribute_mpoo was too soon or failed', async () => {
+    const soon = await runStaking({ distribute_near: ok('h1'), distribute_mpoo: tooSoon('h2') }, ok('h3'));
+    assert.equal(soon.client.stakingCalls.length, 0);
+    const failed = await runStaking({ distribute_near: ok('h1'), distribute_mpoo: () => { throw new Error('boom'); } }, ok('h3'));
+    assert.equal(failed.client.stakingCalls.length, 0);
+  });
+
+  it('a failed sync is logged and does not fail the run', async () => {
+    const { results, exitCode } = await runStaking({ distribute_near: ok('h1'), distribute_mpoo: ok('h2') }, () => {
+      throw new Error('fetch failed');
+    });
+    assert.equal(results[2].outcome, 'failed');
+    assert.equal(exitCode, 0);
+  });
+
+  it('is off by default: no staking config, no sync call', async () => {
+    assert.equal(config.staking, undefined);
+    const { client } = await run({ distribute_near: ok('h1'), distribute_mpoo: ok('h2') });
+    assert.equal(client.calls.length, 2);
+  });
+});
+
 describe('buildCall', () => {
   it('builds a no-arg, no-deposit function call that returns failures instead of throwing', () => {
     const tx = buildCall('board3.metapoo.testnet', 'distribute_mpoo', 100);

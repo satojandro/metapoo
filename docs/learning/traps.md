@@ -180,6 +180,18 @@ test loads those bytes. Do the same for every later layout change.
 **`#[payable]` cannot go on a `&self` method** in near-sdk 5 ("View function can't be
 payable"). Owner calls that only schedule a promise still take `&mut self`.
 
+**Counting inflow from your own token balance races every other balance movement.** A
+`ft_balance_of` read and its callback are separate receipts: a payout confirmed in between looks
+like inflow, a newer sync's inflow looks like a loss, and an `ft_transfer_call` that will be refunded
+looks like inflow and then leaves. Carry movement counters with the read and only act outside the
+range they allow (`contracts/toilet-staking`, `on_mpoo_balance`). Never add a notified amount *and*
+count the balance: a sync that saw it first counts it twice.
+
+**The NEAR sandbox wants 65,535 open files.** near-workspaces' neard raises `RLIMIT_NOFILE` to 65,535
+and dies with "couldn't set the file descriptor limit" where the hard limit is lower (some
+containers). GitHub's hosted runners allow it. Locally, either raise the hard limit or run with an
+`LD_PRELOAD` shim that clamps the request; say so when you report the run.
+
 ---
 
 ## Repository

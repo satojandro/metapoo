@@ -16,7 +16,14 @@ export function createNearClient(config) {
   const provider = new JsonRpcProvider({ url: config.rpcUrl });
   const signer = KeyPairSigner.fromSecretKey(config.privateKey);
   const account = new Account(config.accountId, provider, signer);
-  return {
+  const client = {
     call: (method, gasTgas) => account.signAndSendTransaction(buildCall(config.contractId, method, gasTgas)),
   };
+  if (config.staking) {
+    // Same keeper account, its second function-call key (receiver: the staking contract).
+    const stakingAccount = new Account(config.accountId, provider, KeyPairSigner.fromSecretKey(config.staking.privateKey));
+    client.callStaking = (method, gasTgas) =>
+      stakingAccount.signAndSendTransaction(buildCall(config.staking.contractId, method, gasTgas));
+  }
+  return client;
 }
