@@ -83,6 +83,19 @@
 .rev-result:empty { display: none; }
 .rev-result { font-size: 13px; color: var(--rev-fg); }
 
+.rev-ledger { background: var(--rev-card); border: 1px solid var(--rev-line); border-top: 3px solid var(--rev-near); border-radius: 8px; padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.rev-ledger-head { display: grid; gap: 6px; max-width: 72ch; }
+.rev-ledger-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 20px; border-top: 1px solid var(--rev-line); }
+.rev-ledger-cell { display: grid; gap: 6px; align-content: start; padding-top: 12px; min-width: 0; }
+.rev-ledger-label { font-size: 14px; font-weight: 700; color: var(--mp-soft); }
+.rev-ledger-account { overflow-wrap: anywhere; }
+.rev-ledger-account .rev-acc-id { font-size: 13px; }
+@media (max-width: 760px) {
+  .rev-ledger-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .rev-ledger-cell + .rev-ledger-cell { border-top: 1px solid var(--rev-line); margin-top: 12px; }
+}
+@media (max-width: 600px) { .rev-ledger { padding: 16px; } }
+
 .rev-accounts ul { list-style: none; margin: 0; padding: 0; display: grid; }
 .rev-accounts li { display: grid; grid-template-columns: 9rem minmax(0, 19rem) minmax(0, 1fr); gap: 4px 16px; padding: 11px 0; border-top: 1px solid var(--rev-line); align-items: baseline; }
 .rev-acc-role { font-weight: 700; font-size: 14px; }

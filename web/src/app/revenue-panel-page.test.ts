@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from "vitest";
+import type { LedgerHistory, LedgerSnapshot } from "./buyback-ledger";
 import { createOperationsStore } from "./operations";
 import type { PageContext } from "./page-registry";
 import { mountRevenuePage, type RevenuePageDeps } from "./revenue-panel-page";
@@ -47,7 +48,8 @@ function setup(deps: Partial<RevenuePageDeps>, session: WalletSession = { accoun
   document.body.append(root);
   const dispose = mountRevenuePage(root, ctx, {
     now: () => NOW, network: "testnet", contractId: "board.metapoo.testnet", example: false,
-    sign: vi.fn(), pollMs: 1e9, ...deps,
+    sign: vi.fn(), pollMs: 1e9, ledgerPollMs: 1e9,
+    loadLedger: async s => ({ buybackAccount: s.state.buybackAccount, history: null, historyError: null, tried: null, waiting: null }), ...deps,
   });
   cleanup.push(() => { dispose(); root.remove(); });
   const q = (sel: string) => root.querySelector<HTMLElement>(sel)!;
@@ -143,4 +145,108 @@ it("labels example numbers in mock mode and never offers to send", async () => {
   await flush();
   expect(t.text("source")).toMatch(/Example numbers/);
   expect(t.button("near").disabled).toBe(true);
+});
+
+
+type Live = Extract<RevenueSnapshot, { kind: "live" }>;
+
+const indexHistory = (complete = true): LedgerHistory => ({
+  origin: "index", label: "test index",
+  totals: { nearToBuyback: 11_250_000_000_000_000_000_000_000n, nearDistributions: 2, mpooReturned: 900_000_000_000_000_000_000n, mpooReturns: 1 },
+  complete, transactions: 3, indexedThroughMs: NOW - 5_000,
+});
+const boardHistory = (): LedgerHistory => ({
+  origin: "board", label: "board’s own running totals (get_buyback_totals)",
+  totals: { nearToBuyback: 123_456_789_000_000_000_000_000_000n, nearDistributions: null, mpooReturned: 4_000_000_000_000_000_000_000n, mpooReturns: null },
+  complete: true, transactions: null, indexedThroughMs: null,
+});
+const reading = (s: Live, extra: Partial<LedgerSnapshot>): LedgerSnapshot => ({
+  buybackAccount: s.state.buybackAccount, history: null, historyError: null, tried: null, waiting: null, ...extra,
+});
+
+it("shows exact all-time totals from the board, labelled as from the board", async () => {
+  const t = setup({
+    load: async () => live(),
+    loadLedger: async s => reading(s, { history: boardHistory(), tried: "board", waiting: 2_500_000_000_000_000_000_000_000n }),
+  });
+  await flush();
+  expect(t.text("ledger-near")).toBe("123.4567");
+  expect(t.text("ledger-mpoo")).toBe("4,000");
+  expect(t.text("ledger-waiting")).toBe("2.5");
+  expect(t.text("ledger-near")).not.toMatch(/≥/);
+  expect(t.text("ledger-near-note")).toMatch(/^All time/);
+  expect(t.text("ledger-source")).toMatch(/^From the board/);
+  expect(t.q('[data-rev="ledger-source"]').dataset.origin).toBe("board");
+  const link = t.q('[data-rev="ledger-account"] a') as HTMLAnchorElement;
+  expect(link.href).toBe("https://testnet.nearblocks.io/address/buyback.metapoo.testnet");
+});
+
+it("shows index totals as such, with counts and the 'may be incomplete' note", async () => {
+  const t = setup({
+    load: async () => live(),
+    loadLedger: async s => reading(s, { history: indexHistory(), tried: "index", waiting: 2_500_000_000_000_000_000_000_000n }),
+  });
+  await flush();
+  expect(t.text("ledger-near")).toBe("11.25");
+  expect(t.text("ledger-mpoo")).toBe("900");
+  expect(t.text("ledger-near-note")).toMatch(/^2 NEAR splits/);
+  expect(t.text("ledger-source")).toMatch(/^From the public index, may be incomplete/);
+  expect(t.text("ledger-source")).toMatch(/3 board transactions were found through the test index/);
+  expect(t.q('[data-rev="ledger-source"]').dataset.origin).toBe("index");
+});
+
+it("re-reads the board's totals with every poll, but the index only every ledgerPollMs", async () => {
+  let clock = NOW;
+  const boardLedger = vi.fn(async (s: Live) => reading(s, { history: boardHistory(), tried: "board" }));
+  const b = setup({ load: async () => live(), loadLedger: boardLedger, now: () => clock, pollMs: 30_000, ledgerPollMs: 300_000 });
+  await flush();
+  clock += 30_000;
+  window.dispatchEvent(new Event("focus"));
+  await flush();
+  expect(boardLedger).toHaveBeenCalledTimes(2);
+  b.root.remove();
+
+  clock = NOW;
+  const indexLedger = vi.fn(async (s: Live) => reading(s, { history: indexHistory(), tried: "index" }));
+  setup({ load: async () => live(), loadLedger: indexLedger, now: () => clock, pollMs: 30_000, ledgerPollMs: 300_000 });
+  await flush();
+  clock += 30_000;
+  window.dispatchEvent(new Event("focus"));
+  await flush();
+  expect(indexLedger).toHaveBeenCalledTimes(1);
+  clock += 300_000;
+  window.dispatchEvent(new Event("focus"));
+  await flush();
+  expect(indexLedger).toHaveBeenCalledTimes(2);
+});
+
+it("a ledger read that fails shows Unavailable, never zero, and each figure fails on its own", async () => {
+  const t = setup({
+    load: async () => live(),
+    loadLedger: async s => reading(s, { historyError: "Couldn’t read the board’s buyback totals.", tried: "board", waiting: 0n }),
+  });
+  await flush();
+  expect(t.text("ledger-near")).toBe("Unavailable");
+  expect(t.text("ledger-mpoo")).toBe("Unavailable");
+  expect(t.text("ledger-waiting")).toBe("0");
+  expect(t.text("ledger-source")).toMatch(/board’s buyback totals\. .*unknown, not zero/);
+  const t2 = setup({
+    load: async () => live(),
+    loadLedger: async () => { throw new Error("boom"); },
+  });
+  await flush();
+  expect(t2.text("ledger-near")).toBe("Unavailable");
+  expect(t2.text("ledger-waiting")).toBe("Unavailable");
+});
+
+it("an incomplete index scan is shown as a lower bound", async () => {
+  const t = setup({
+    load: async () => live(),
+    loadLedger: async s => reading(s, { history: indexHistory(false), tried: "index" }),
+  });
+  await flush();
+  expect(t.text("ledger-near")).toBe("≥ 11.25");
+  expect(t.text("ledger-near-note")).toMatch(/^at least 2/);
+  expect(t.text("ledger-source")).toMatch(/lower bounds/);
+  expect(t.text("ledger-waiting")).toBe("Unavailable");
 });
