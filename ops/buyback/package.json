@@ -1,0 +1,18 @@
+{
+  "name": "metapoo-buyback",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Buyback keeper: swaps the board's buyback NEAR to mPOO in capped chunks and returns the mPOO to the board",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "discover-route": "node scripts/discover-route.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "near-api-js": "7.3.1"
+  }
+}
