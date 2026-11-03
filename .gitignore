@@ -13,6 +13,8 @@
 .env.*
 !.env.example
 !web/.env.example
+# Public, non-secret build config for the hosted testnet deployment (no keys).
+!web/.env.production
 *.key
 *.pem
 
