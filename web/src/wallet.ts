@@ -731,6 +731,70 @@ export async function signAndSendDistribution(args: {
   });
 }
 
+type FunctionCallStep = { receiverId: string; methodName: string; args: Record<string, unknown>; gas: string; deposit: string };
+
+/** One wallet transaction per step, in order. A step that fails stops the rest. */
+async function sendSteps(steps: FunctionCallStep[]): Promise<unknown> {
+  const wallet = await ensureConnector().wallet();
+  let last: unknown;
+  for (const s of steps) {
+    last = await wallet.signAndSendTransaction({
+      receiverId: s.receiverId,
+      actions: [{ type: "FunctionCall", params: { methodName: s.methodName, args: s.args, gas: s.gas, deposit: s.deposit } }],
+    });
+  }
+  return last;
+}
+
+/**
+ * Stake: register with the staking contract first if needed (its fixed storage
+ * deposit, once), then `ft_transfer_call` on TOILET with `msg: "stake"`.
+ * The contract refunds a stake from an unregistered account in full.
+ */
+export async function signAndSendStake(args: {
+  toilet: string;
+  staking: string;
+  amount: string;
+  registerDeposit: string | null;
+  storageGas: string;
+  gas: string;
+}): Promise<unknown> {
+  const steps: FunctionCallStep[] = [];
+  if (args.registerDeposit) {
+    steps.push({ receiverId: args.staking, methodName: "storage_deposit", args: {}, gas: args.storageGas, deposit: args.registerDeposit });
+  }
+  steps.push({
+    receiverId: args.toilet, methodName: "ft_transfer_call",
+    args: { receiver_id: args.staking, amount: args.amount, msg: "stake" }, gas: args.gas, deposit: "1",
+  });
+  return sendSteps(steps);
+}
+
+/** Unstake: 10% of `amount` is burned by the contract, the rest comes back. 1 yoctoNEAR. */
+export async function signAndSendUnstake(args: { staking: string; amount: string; gas: string }): Promise<unknown> {
+  return sendSteps([{ receiverId: args.staking, methodName: "unstake", args: { amount: args.amount }, gas: args.gas, deposit: "1" }]);
+}
+
+/**
+ * Claim released mPOO. The mPOO token can only pay an account it knows, so a
+ * first-time claimer registers there first; otherwise the payout fails and the
+ * contract restores it.
+ */
+export async function signAndSendClaimRewards(args: {
+  staking: string;
+  mpoo: string;
+  mpooRegisterDeposit: string | null;
+  storageGas: string;
+  gas: string;
+}): Promise<unknown> {
+  const steps: FunctionCallStep[] = [];
+  if (args.mpooRegisterDeposit) {
+    steps.push({ receiverId: args.mpoo, methodName: "storage_deposit", args: { registration_only: true }, gas: args.storageGas, deposit: args.mpooRegisterDeposit });
+  }
+  steps.push({ receiverId: args.staking, methodName: "claim_rewards", args: {}, gas: args.gas, deposit: "1" });
+  return sendSteps(steps);
+}
+
 /**
  * Wallet path for `claim_toilet`: the board mints the caller's earned TOILET.
  * Exactly 1 yoctoNEAR, which the board requires so a function-call key can't claim.

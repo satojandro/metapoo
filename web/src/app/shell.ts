@@ -19,6 +19,7 @@ const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: string }> =
   { href: "/wall", label: "Wall", match: "wall" },
   { href: "/how-it-works", label: "How it works", match: "how" },
   { href: "/toilet", label: "TOILET", match: "toilet" },
+  { href: "/stake", label: "Stake", match: "stake" },
   { href: "/money", label: "Where the money goes", match: "money" },
 ];
 
@@ -94,6 +95,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     <p id="network-summary"></p>
     <p class="wallet-money-link"><a href="/money">Where the money goes →</a></p>
     <p class="wallet-toilet-link"><a href="/toilet">What TOILET is for →</a></p>
+    <p class="wallet-stake-link"><a href="/stake">Stake TOILET →</a></p>
     <label class="drawing-session-opt-in" for="authorize-drawing-session">
       <input id="authorize-drawing-session" type="checkbox" disabled />
       Also allow painting without a popup each time
@@ -129,6 +131,9 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     walletDetails.open = false;
   });
   walletPanel.querySelector(".wallet-toilet-link a")?.addEventListener("click", () => {
+    walletDetails.open = false;
+  });
+  walletPanel.querySelector(".wallet-stake-link a")?.addEventListener("click", () => {
     walletDetails.open = false;
   });
 
