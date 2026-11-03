@@ -27,7 +27,14 @@ are a dated snapshot, not a route manifest or authorization to trade.
   This is a pool quote, **not proof of post-tax wallet delivery** or an executed swap.
 - A nonzero-liquidity RHEA/wNEAR candidate exists at
   `token.v2.ref-finance.near|wrap.near|400`.
+  **Correction (3 Nov, same day):** that account is **REF**, not RHEA — `ft_metadata` on
+  `token.v2.ref-finance.near` returns `Ref Finance Token`. RHEA is `token.rhealab.near`, and every
+  DCL `token.rhealab.near|wrap.near` pool (fees 100/400/2000/10000) reports `liquidity: 0`. The liquid
+  RHEA/wNEAR venue is **classic ref pool #6458** (~$942k). Measurements and route:
+  [`2026-11-03-mpoo-near-price-route.md`](2026-11-03-mpoo-near-price-route.md).
 - The probed DIARHEA/RHEA DCL pools at fees 100, 400, 2000 and 10000 were absent.
+  **Correction (3 Nov):** the fee-10000 DIARHEA/RHEA pool is live now
+  (`diarhea.nearlytrade.near|token.rhealab.near|10000`, ~$22.6k).
 - The probed DIARHEA/wNEAR pool at fee 10000 existed but had zero current and total liquidity.
   The other three probed fee tiers were absent.
 

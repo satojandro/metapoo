@@ -122,17 +122,41 @@ Why drift matters less than it looks: credits can't be resold, refunded or trans
 credits can only be used to paint, and that drives buying of mPOO. Only three things are actually at risk:
 NEAR for storage, cheap TOILET farming (C3), and NEAR revenue.
 
-**Decided design (owner, 29 Oct): a holder discount, set by hand, with a cap. No oracle.**
+**Decided design (owner, 29 Oct; route measured and launch value set 3 Nov): a holder discount, set by
+hand, with a cap. No oracle, and no pool of our own as a price feed.**
 
-- **Rule:** `mpoo_per_credit = near_per_credit × (mPOO per NEAR, 7-day average) × 0.8`, so mPOO pays 20% less.
-- **Rate:** recomputed **weekly** off-chain from the NEARLY/Rhea pool and set with `set_credit_prices`. The
-  method is public and every change is a logged `price_changed` event. The ×2-per-day bound then only guards
+- **Rule:** `mpoo_per_credit = near_per_credit / (mPOO per NEAR, 7-day average) × 0.8`, so mPOO pays 20% less.
+- **Route (measured 3 Nov):** `mPOO → DIARHEA → RHEA → NEAR` — DCL `diarhea…|mpoo…|10000`, DCL
+  `diarhea…|token.rhealab.near|10000`, then **classic ref pool #6458** (RHEA/wNEAR, ~$942k, $149k/24h).
+  DCL has no liquid RHEA/wNEAR at any fee tier, so the route is two venues and two calls. At
+  2026-11-03T02:24:45Z this gave 1 mPOO = `0.0000022591` NEAR → ~442,657 mPOO per NEAR, ~1,107 mPOO per
+  0.0025-NEAR credit, ~885 after the discount. Full observations and rerun commands:
+  [`research/2026-11-03-mpoo-near-price-route.md`](research/2026-11-03-mpoo-near-price-route.md).
+- **Launch value: 1,000 mPOO per credit**, decided by the owner 3 Nov. Set it in `new()`, which takes
+  `mpoo_per_credit` directly — `set_mpoo_price` is bounded to ×2 / ÷2 per 24 h, so a board launched at
+  `1` would need ten doublings (ten days) to correct. At the measured price 1,000 is a ~9.6% discount to
+  NEAR (inside the 20% rule, conservative to the board); 885 is where the full 20% sits.
+- **Rate:** recomputed **weekly** off-chain by the route above and set with `set_mpoo_price`. The method
+  is public and every change is a logged `price_changed` event. The ×2-per-day bound then only guards
   against a compromised key.
-- **Cap (new contract work):** a tunable board-wide limit on credits sold for mPOO per UTC day, with a
-  counter. If mPOO pumps between updates, the cheap credits run out for the day and the UI offers NEAR
-  instead. This bounds exposure without an oracle.
-- **Separate cooldowns:** today one call sets both prices under one 24 h cooldown, so a weekly mPOO update
-  would block an emergency NEAR change for a day. Give each price its own cooldown when fixing C1.
+- **Cap — already implemented, not new work.** `mpoo_daily_credit_cap` is enforced
+  (`MpooDailyCapReached`, `payments.rs`), default `0` = mPOO sales closed until the owner sets one, and
+  `get_mpoo_sales_today` reports `sold_today`/`cap`/`remaining`. If mPOO pumps between weekly updates the
+  cheap credits run out for the day and the UI offers NEAR instead. At 1,000 mPOO per credit the
+  20,000-credit testnet cap is ~45 NEAR ≈ $174/day of credit value — that figure, not the credit count,
+  is the pump exposure.
+- **Cooldowns — already split, not new work.** `set_near_price` and `set_mpoo_price` each carry their own
+  cooldown (`near_price_cooldown_ns`, `mpoo_price_cooldown_ns`), so a weekly mPOO update never blocks an
+  emergency NEAR change. What C1 still allows is bypassing both through `set_tunables`.
+- **No pool as an oracle — decided 3 Nov.** A mPOO/NEAR pool is permissionless and would collapse the
+  route to one hop, but it cannot produce a price we do not set: at ~442,657 mPOO per NEAR even a
+  $5k pool needs ~59% of supply, and a pool small enough to afford is small enough to move for a few
+  hundred dollars. It would also price against our own buyback flow (TR-K). **The pool is a route, not a
+  price:** if created, it is for ACQ-3 and user funding, **on DCL** so mPOO's 200/300 bps tax keeps
+  applying (a classic pool would be an untaxed sell venue for a token we do not control) and after
+  asking `nearlytrade.near`. Automation, if ever wanted, is a keeper-posted price with a staleness bound
+  and ±band over the existing price history — an oracle with an audit trail, which a self-seeded pool is
+  not.
 - **Storage:** fund the board with NEAR for the whole wall's first paints, measured per C5. Then the payment
   currency doesn't affect solvency.
 
