@@ -10,8 +10,12 @@ const SUPPLY = { cap: "1", total_supply: "1204196097794000000", issued_total: "1
 
 function view(overrides: Record<string, unknown> = {}): View & { calls: string[] } {
   const calls: string[] = [];
-  const fn = (async (account: string, method: string) => {
+  const fn = (async (account: string, method: string, args?: Record<string, unknown>) => {
     calls.push(`${account}.${method}`);
+    // Mirror the contract: `get_pending_toilet(account)` deserializes a field named `account` and
+    // panics on anything else. A mock that ignores args hid exactly that mismatch once already.
+    if (method === "get_pending_toilet" && !(args && Object.hasOwn(args, "account")))
+      throw new Error("Failed to deserialize input from JSON. Error: missing field `account`");
     const table: Record<string, unknown> = {
       get_toilet_emission: EMISSION, get_supply_info: SUPPLY, is_paused: false,
       get_pending_toilet: "195000000000000000", ft_balance_of: "780000000000000000", ...overrides,
@@ -37,6 +41,18 @@ describe("parseEmission", () => {
 });
 
 describe("loadToilet", () => {
+  it("asks the board for pending with the contract's `account` field, not `account_id`", async () => {
+    const base = view();
+    const seen: Array<Record<string, unknown>> = [];
+    const spy: View = async (account, method, args) => {
+      if (args) seen.push({ [method]: args });
+      return base(account, method, args);
+    };
+    await loadToilet(spy, "board.testnet", "toilet.testnet", "alice.testnet");
+    expect(seen.find((entry) => "get_pending_toilet" in entry)?.get_pending_toilet).toEqual({ account: "alice.testnet" });
+    // ft_balance_of is NEP-141: its argument really is `account_id`.
+    expect(seen.find((entry) => "ft_balance_of" in entry)?.ft_balance_of).toEqual({ account_id: "alice.testnet" });
+  });
   it("reads board, token and account", async () => {
     const s = await loadToilet(view(), "board.testnet", "toilet.testnet", "alice.testnet");
     expect(s.kind).toBe("live");

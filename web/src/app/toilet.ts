@@ -141,7 +141,7 @@ export async function loadToilet(
   })();
   const accountRead = (async (): Promise<ToiletAccount | null> => {
     if (!account) return null;
-    const pending = parseU128(await view(board, "get_pending_toilet", { account_id: account }), "get_pending_toilet");
+    const pending = parseU128(await view(board, "get_pending_toilet", { account }), "get_pending_toilet");
     // An account the token has never seen has no balance yet: ft_balance_of answers "0".
     const balance = toilet
       ? parseU128(await view(toilet, "ft_balance_of", { account_id: account }), "ft_balance_of")
