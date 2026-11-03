@@ -311,9 +311,13 @@ export async function verifyAccessKeyOnAccount(
     } catch (error) {
       const detail = error instanceof Error ? error.message : "";
       const missing = /does not exist|doesn't exist|not found/i.test(detail);
-      if (!missing) return false; // RPC ambiguity: do not mark the session active
+      // A 429 or a dropped connection is not evidence that the key is absent. Under
+      // throttling the old code gave up on the first read, so a perfectly good key read
+      // as "not found" and the user was asked to approve again. Retry both cases, and
+      // only conclude "absent" after the attempts are spent.
       if (attempt === attempts - 1) return false;
-      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+      const wait = missing ? 250 * (attempt + 1) : 600 * (attempt + 1);
+      await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
   return false;
