@@ -1,0 +1,1218 @@
+{
+  "version": 1,
+  "captured_at": "2026-11-03T00:02:02.122Z",
+  "rpc_url": "https://free.rpc.fastnear.com",
+  "scope": "read-only public RPC view calls; no key loaded, nothing signed",
+  "reads": [
+    {
+      "account": "mpoo.nearlytrade.near",
+      "method": "get_tax",
+      "args": {},
+      "block_height": 222791421,
+      "value": {
+        "tax": {
+          "buy_bps": 200,
+          "sell_bps": 300,
+          "pairs": [
+            "dclv2.ref-labs.near"
+          ],
+          "admin": "nearlytrade.near",
+          "exempt": [
+            "lock_6.nearlytrade.near",
+            "feeswap.near"
+          ]
+        },
+        "pending": "0"
+      }
+    },
+    {
+      "account": "diarhea.nearlytrade.near",
+      "method": "get_tax",
+      "args": {},
+      "block_height": 222791421,
+      "value": {
+        "tax": {
+          "buy_bps": 100,
+          "sell_bps": 100,
+          "pairs": [
+            "dclv2.ref-labs.near"
+          ],
+          "admin": "nearlytrade.near",
+          "exempt": [
+            "lock2.nearlytrade.near"
+          ]
+        },
+        "pending": "272581507962053083179"
+      }
+    },
+    {
+      "account": "nearlytrade.near",
+      "method": "get_launch_by_token",
+      "args": {
+        "token": "mpoo.nearlytrade.near"
+      },
+      "block_height": 222791422,
+      "value": {
+        "id": 2311,
+        "token": "mpoo.nearlytrade.near",
+        "creator": "meta-poo-shitcoin.near",
+        "name": "Meta Poo",
+        "symbol": "MPOO",
+        "created_at_ms": 1790946760071,
+        "total_supply": "1000000000000000000000000000",
+        "pool_id": "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000",
+        "token_is_x": false,
+        "init_point": 50000,
+        "left_point": -400000,
+        "right_point": 49800,
+        "lpt_id": "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000#17973",
+        "step": "Done",
+        "inflight": false,
+        "dev_buy_near": "0",
+        "dev_buy_exact": false,
+        "dev_buy_tokens": "0",
+        "dev_buy_held": "0",
+        "claims": 135,
+        "fees_near_total": "0",
+        "fees_token_total": "17445490597378882916288789",
+        "creator_token_fees": "6455863462214692892007",
+        "protocol_token_fees": "74394702504478132097871",
+        "quote": "diarhea.nearlytrade.near",
+        "fees_quote_total": "897367122124384930972187",
+        "creator_quote_fees": "2594221068710228393141",
+        "protocol_quote_fees": "1111809029447240739918"
+      }
+    },
+    {
+      "account": "nearlytrade.near",
+      "method": "get_launch_by_token",
+      "args": {
+        "token": "diarhea.nearlytrade.near"
+      },
+      "block_height": 222791423,
+      "value": {
+        "id": 430,
+        "token": "diarhea.nearlytrade.near",
+        "creator": "aaalex.near",
+        "name": "DIARHEA",
+        "symbol": "DIARHEA",
+        "created_at_ms": 1790523537090,
+        "total_supply": "1000000000000000000000000000",
+        "pool_id": "diarhea.nearlytrade.near|token.rhealab.near|10000",
+        "token_is_x": true,
+        "init_point": -100600,
+        "left_point": -100400,
+        "right_point": 349400,
+        "lpt_id": "diarhea.nearlytrade.near|token.rhealab.near|10000#14733",
+        "step": "Done",
+        "inflight": false,
+        "dev_buy_near": "0",
+        "dev_buy_exact": false,
+        "dev_buy_tokens": "0",
+        "dev_buy_held": "0",
+        "claims": 535,
+        "fees_near_total": "0",
+        "fees_token_total": "24247365593055912993087748",
+        "creator_token_fees": "2074582504545937802232",
+        "protocol_token_fees": "9187584199326835922067",
+        "quote": "token.rhealab.near",
+        "fees_quote_total": "83303447422689547388959",
+        "creator_quote_fees": "18125951656530559697",
+        "protocol_quote_fees": "16853004278978176785"
+      }
+    },
+    {
+      "account": "wrap.near",
+      "method": "ft_metadata",
+      "args": {},
+      "block_height": 222791424,
+      "value": {
+        "symbol": "wNEAR",
+        "decimals": 24
+      }
+    },
+    {
+      "account": "token.rhealab.near",
+      "method": "ft_metadata",
+      "args": {},
+      "block_height": 222791424,
+      "value": {
+        "symbol": "RHEA",
+        "decimals": 18
+      }
+    },
+    {
+      "account": "diarhea.nearlytrade.near",
+      "method": "ft_metadata",
+      "args": {},
+      "block_height": 222791425,
+      "value": {
+        "symbol": "DIARHEA",
+        "decimals": 18
+      }
+    },
+    {
+      "account": "mpoo.nearlytrade.near",
+      "method": "ft_metadata",
+      "args": {},
+      "block_height": 222791426,
+      "value": {
+        "symbol": "MPOO",
+        "decimals": 18
+      }
+    },
+    {
+      "account": "meta-pool.near",
+      "method": "ft_metadata",
+      "args": {},
+      "block_height": 222791426,
+      "value": {
+        "symbol": "STNEAR",
+        "decimals": 24
+      }
+    },
+    {
+      "account": "v2.ref-finance.near",
+      "method": "view_account",
+      "block_height": 222791427,
+      "value": {
+        "code_hash": "GZmkbfVLcN7ErxU9RDxP24YTaKmoVixhM6XyycP15Qvi"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "view_account",
+      "block_height": 222791427,
+      "value": {
+        "code_hash": "BzhtCCGJibs9ykCZUuMZ9Diq3gFAi4ZGeMHgEuVqvoiA"
+      }
+    },
+    {
+      "account": "wrap.near",
+      "method": "view_account",
+      "block_height": 222791428,
+      "value": {
+        "code_hash": "DL2f5xmZ44cQRP6vBMt94rvseH5d5KKnAGis2WkTAsh1"
+      }
+    },
+    {
+      "account": "token.rhealab.near",
+      "method": "view_account",
+      "block_height": 222791429,
+      "value": {
+        "code_hash": "3XbB1xkQTNFhtizVSCNW5xM9MyuF3AYhFKc8HAPc3pdx"
+      }
+    },
+    {
+      "account": "diarhea.nearlytrade.near",
+      "method": "view_account",
+      "block_height": 222791429,
+      "value": {
+        "code_hash": "11111111111111111111111111111111"
+      }
+    },
+    {
+      "account": "mpoo.nearlytrade.near",
+      "method": "view_account",
+      "block_height": 222791430,
+      "value": {
+        "code_hash": "11111111111111111111111111111111"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|mpoo.nearlytrade.near|10000"
+      },
+      "block_height": 222791431,
+      "value": {
+        "token_x": "diarhea.nearlytrade.near",
+        "token_y": "mpoo.nearlytrade.near",
+        "fee": 10000,
+        "state": "Running",
+        "liquidity": "4145910796551150066448",
+        "total_x": "21782513333913311664281417",
+        "total_y": "246684364148698886578538908",
+        "current_point": 21409,
+        "total_liquidity": "4145910796551150066448"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|token.rhealab.near|10000"
+      },
+      "block_height": 222791431,
+      "value": {
+        "token_x": "diarhea.nearlytrade.near",
+        "token_y": "token.rhealab.near",
+        "fee": 10000,
+        "state": "Running",
+        "liquidity": "330284456081068912693",
+        "total_x": "166679534922541717077089161",
+        "total_y": "221512081411284873713657",
+        "current_point": -64420,
+        "total_liquidity": "330331921588474755121"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "token.rhealab.near|wrap.near|100"
+      },
+      "block_height": 222791432,
+      "value": {
+        "token_x": "token.rhealab.near",
+        "token_y": "wrap.near",
+        "fee": 100,
+        "state": "Running",
+        "liquidity": "0",
+        "total_x": "1245953031911593933130",
+        "total_y": "80166005175183495914978",
+        "current_point": 96261,
+        "total_liquidity": "0"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "mpoo.nearlytrade.near|wrap.near|100"
+      },
+      "block_height": 222791432,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|wrap.near|100"
+      },
+      "block_height": 222791433,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "meta-pool.near|mpoo.nearlytrade.near|100"
+      },
+      "block_height": 222791434,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|token.v2.ref-finance.near|100"
+      },
+      "block_height": 222791434,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "token.rhealab.near|wrap.near|400"
+      },
+      "block_height": 222791435,
+      "value": {
+        "token_x": "token.rhealab.near",
+        "token_y": "wrap.near",
+        "fee": 400,
+        "state": "Running",
+        "liquidity": "0",
+        "total_x": "3",
+        "total_y": "5",
+        "current_point": 95673,
+        "total_liquidity": "0"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "mpoo.nearlytrade.near|wrap.near|400"
+      },
+      "block_height": 222791436,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|wrap.near|400"
+      },
+      "block_height": 222791437,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "meta-pool.near|mpoo.nearlytrade.near|400"
+      },
+      "block_height": 222791438,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|token.v2.ref-finance.near|400"
+      },
+      "block_height": 222791438,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "token.rhealab.near|wrap.near|2000"
+      },
+      "block_height": 222791439,
+      "value": {
+        "token_x": "token.rhealab.near",
+        "token_y": "wrap.near",
+        "fee": 2000,
+        "state": "Running",
+        "liquidity": "0",
+        "total_x": "945160599738388423189",
+        "total_y": "14127421646883538938249789",
+        "current_point": 104160,
+        "total_liquidity": "0"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "mpoo.nearlytrade.near|wrap.near|2000"
+      },
+      "block_height": 222791439,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|wrap.near|2000"
+      },
+      "block_height": 222791440,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "meta-pool.near|mpoo.nearlytrade.near|2000"
+      },
+      "block_height": 222791440,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|token.v2.ref-finance.near|2000"
+      },
+      "block_height": 222791441,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "token.rhealab.near|wrap.near|10000"
+      },
+      "block_height": 222791441,
+      "value": {
+        "token_x": "token.rhealab.near",
+        "token_y": "wrap.near",
+        "fee": 10000,
+        "state": "Running",
+        "liquidity": "0",
+        "total_x": "3846769223160084119660",
+        "total_y": "84437019273242992973059983",
+        "current_point": 95400,
+        "total_liquidity": "0"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "mpoo.nearlytrade.near|wrap.near|10000"
+      },
+      "block_height": 222791442,
+      "value": null
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|wrap.near|10000"
+      },
+      "block_height": 222791443,
+      "value": {
+        "token_x": "diarhea.nearlytrade.near",
+        "token_y": "wrap.near",
+        "fee": 10000,
+        "state": "Running",
+        "liquidity": "0",
+        "total_x": "194129880569288556690",
+        "total_y": "7379722126104412426432",
+        "current_point": 40030,
+        "total_liquidity": "0"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "meta-pool.near|mpoo.nearlytrade.near|10000"
+      },
+      "block_height": 222791443,
+      "value": {
+        "token_x": "meta-pool.near",
+        "token_y": "mpoo.nearlytrade.near",
+        "fee": 10000,
+        "state": "Running",
+        "liquidity": "0",
+        "total_x": "12169640498559797250792",
+        "total_y": "1874090575303030965499",
+        "current_point": -10972,
+        "total_liquidity": "0"
+      }
+    },
+    {
+      "account": "dclv2.ref-labs.near",
+      "method": "get_pool",
+      "args": {
+        "pool_id": "diarhea.nearlytrade.near|token.v2.ref-finance.near|10000"
+      },
+      "block_height": 222791444,
+      "value": null
+    },
+    {
+      "account": "v2.ref-finance.near",
+      "method": "get_number_of_pools",
+      "args": {},
+      "block_height": 222791444,
+      "value": 8995
+    }
+  ],
+  "classic_scan": {
+    "pools_total": 8995,
+    "block_height": 222791460,
+    "matching": [
+      {
+        "index": 6409,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "wrap.near",
+          "token.rhealab.near"
+        ],
+        "amounts": [
+          "3576051284064024575478",
+          "308936212674755524"
+        ],
+        "total_fee": 60,
+        "nonEmpty": true
+      },
+      {
+        "index": 6458,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "10029979980397873398720630",
+          "122129434593545678446045534223"
+        ],
+        "total_fee": 30,
+        "nonEmpty": true
+      },
+      {
+        "index": 6459,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "294202675049063917",
+          "3511761511555630011312"
+        ],
+        "total_fee": 40,
+        "nonEmpty": true
+      },
+      {
+        "index": 6460,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "331285329637804750",
+          "3378649817922934199509"
+        ],
+        "total_fee": 50,
+        "nonEmpty": true
+      },
+      {
+        "index": 6461,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "315462819985693359",
+          "3266377364731741513372"
+        ],
+        "total_fee": 70,
+        "nonEmpty": true
+      },
+      {
+        "index": 6462,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "287560744877174235",
+          "3687514863078566695140"
+        ],
+        "total_fee": 80,
+        "nonEmpty": true
+      },
+      {
+        "index": 6463,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "316071010220427218",
+          "3321124363068195494362"
+        ],
+        "total_fee": 90,
+        "nonEmpty": true
+      },
+      {
+        "index": 6464,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "299101179905730367",
+          "3511606125918295517060"
+        ],
+        "total_fee": 100,
+        "nonEmpty": true
+      },
+      {
+        "index": 6465,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 20,
+        "nonEmpty": false
+      },
+      {
+        "index": 6466,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 20,
+        "nonEmpty": false
+      },
+      {
+        "index": 6467,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 10,
+        "nonEmpty": false
+      },
+      {
+        "index": 6468,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 20,
+        "nonEmpty": false
+      },
+      {
+        "index": 6469,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 20,
+        "nonEmpty": false
+      },
+      {
+        "index": 6470,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "212731339069",
+          "3008792316334995"
+        ],
+        "total_fee": 20,
+        "nonEmpty": true
+      },
+      {
+        "index": 6498,
+        "kind": "DEGEN_SWAP",
+        "tokens": [
+          "token.rhealab.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "1215385686138846627953",
+          "14450075423774111388180477"
+        ],
+        "total_fee": 30,
+        "nonEmpty": true
+      },
+      {
+        "index": 6663,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "wrap.near",
+          "token.rhealab.near"
+        ],
+        "amounts": [
+          "1121856556549486563621259",
+          "91951657004738581602"
+        ],
+        "total_fee": 0,
+        "nonEmpty": true
+      },
+      {
+        "index": 8585,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "wrap.near",
+          "token.rhealab.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 32,
+        "nonEmpty": false
+      },
+      {
+        "index": 8713,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "diarhea.nearlytrade.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "2362519468057863548846031",
+          "50173123388428419560988035"
+        ],
+        "total_fee": 500,
+        "nonEmpty": true
+      },
+      {
+        "index": 8715,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "diarhea.nearlytrade.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "13272994743834873250863480",
+          "253009978302827888552639019"
+        ],
+        "total_fee": 1000,
+        "nonEmpty": true
+      },
+      {
+        "index": 8717,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "diarhea.nearlytrade.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 1500,
+        "nonEmpty": false
+      },
+      {
+        "index": 8718,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "diarhea.nearlytrade.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 1500,
+        "nonEmpty": false
+      },
+      {
+        "index": 8831,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "diarhea.nearlytrade.near",
+          "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
+        ],
+        "amounts": [
+          "22038549456935786530712",
+          "1766467"
+        ],
+        "total_fee": 800,
+        "nonEmpty": true
+      },
+      {
+        "index": 8843,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "ninu-4.nearlytrade.near",
+          "diarhea.nearlytrade.near"
+        ],
+        "amounts": [
+          "21122223342075445175282",
+          "16365046272810876127511"
+        ],
+        "total_fee": 1000,
+        "nonEmpty": true
+      },
+      {
+        "index": 8851,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "diarhea.nearlytrade.near",
+          "wrap.gra-fun.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 30,
+        "nonEmpty": false
+      },
+      {
+        "index": 8861,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "mpoo.nearlytrade.near",
+          "meta-pool.near"
+        ],
+        "amounts": [
+          "25497180217182129412385",
+          "26822531306671908672335"
+        ],
+        "total_fee": 60,
+        "nonEmpty": true
+      },
+      {
+        "index": 8894,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "near.gra-fun.near",
+          "diarhea.nearlytrade.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 30,
+        "nonEmpty": false
+      },
+      {
+        "index": 8896,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "diarhea.nearlytrade.near",
+          "pre.meteor-token.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 30,
+        "nonEmpty": false
+      },
+      {
+        "index": 8897,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "wrap.near",
+          "diarhea.nearlytrade.near"
+        ],
+        "amounts": [
+          "0",
+          "0"
+        ],
+        "total_fee": 30,
+        "nonEmpty": false
+      },
+      {
+        "index": 8938,
+        "kind": "SIMPLE_POOL",
+        "tokens": [
+          "diarhea.nearlytrade.near",
+          "wrap.near"
+        ],
+        "amounts": [
+          "632248739103277019780",
+          "11075725020649540110902"
+        ],
+        "total_fee": 700,
+        "nonEmpty": true
+      }
+    ]
+  },
+  "candidate_quotes": [
+    {
+      "id": "near-ref6458-rhea-dcl-diarhea-mpoo",
+      "description": "classic wNEAR->RHEA (pool 6458), then DCL RHEA->DIARHEA->mPOO (two pools, one transaction)",
+      "rows": [
+        {
+          "nearIn": "10000000000000000000000",
+          "mpooGrossOut": "4283154064595523859567",
+          "impactBpsVs0_01Near": 0
+        },
+        {
+          "nearIn": "100000000000000000000000",
+          "mpooGrossOut": "42823422679322253897397",
+          "impactBpsVs0_01Near": 2
+        },
+        {
+          "nearIn": "1000000000000000000000000",
+          "mpooGrossOut": "427425890571152491089026",
+          "impactBpsVs0_01Near": 21
+        },
+        {
+          "nearIn": "2000000000000000000000000",
+          "mpooGrossOut": "853075393009369725588205",
+          "impactBpsVs0_01Near": 42
+        },
+        {
+          "nearIn": "5000000000000000000000000",
+          "mpooGrossOut": "2119477025093076976242012",
+          "impactBpsVs0_01Near": 104
+        },
+        {
+          "nearIn": "10000000000000000000000000",
+          "mpooGrossOut": "4195632018329727699844007",
+          "impactBpsVs0_01Near": 205
+        }
+      ]
+    },
+    {
+      "id": "near-dcl-rhea100-diarhea-mpoo",
+      "description": "DCL only: wNEAR->RHEA (fee 100), RHEA->DIARHEA, DIARHEA->mPOO",
+      "rows": [
+        {
+          "nearIn": "10000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "100000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "1000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "2000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "5000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "10000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        }
+      ]
+    },
+    {
+      "id": "near-dcl-rhea400-diarhea-mpoo",
+      "description": "DCL only: wNEAR->RHEA (fee 400), RHEA->DIARHEA, DIARHEA->mPOO",
+      "rows": [
+        {
+          "nearIn": "10000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "100000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "1000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "2000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "5000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "10000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        }
+      ]
+    },
+    {
+      "id": "near-dcl-rhea2000-diarhea-mpoo",
+      "description": "DCL only: wNEAR->RHEA (fee 2000), RHEA->DIARHEA, DIARHEA->mPOO",
+      "rows": [
+        {
+          "nearIn": "10000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "100000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "1000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "2000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "5000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "10000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        }
+      ]
+    },
+    {
+      "id": "near-dcl-rhea10000-diarhea-mpoo",
+      "description": "DCL only: wNEAR->RHEA (fee 10000), RHEA->DIARHEA, DIARHEA->mPOO",
+      "rows": [
+        {
+          "nearIn": "10000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "100000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "1000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "2000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "5000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        },
+        {
+          "nearIn": "10000000000000000000000000",
+          "mpooGrossOut": "0",
+          "impactBpsVs0_01Near": null
+        }
+      ]
+    },
+    {
+      "id": "near-ref8713-diarhea-dcl-mpoo",
+      "description": "classic wNEAR->DIARHEA (pool 8713, fee 500 bps), then DCL DIARHEA->mPOO",
+      "rows": [
+        {
+          "nearIn": "10000000000000000000000",
+          "mpooGrossOut": "3766304291231953973300",
+          "impactBpsVs0_01Near": 0
+        },
+        {
+          "nearIn": "100000000000000000000000",
+          "mpooGrossOut": "37592578759490733242670",
+          "impactBpsVs0_01Near": 19
+        },
+        {
+          "nearIn": "1000000000000000000000000",
+          "mpooGrossOut": "369131635428970616593413",
+          "impactBpsVs0_01Near": 200
+        },
+        {
+          "nearIn": "2000000000000000000000000",
+          "mpooGrossOut": "723730288473151517319443",
+          "impactBpsVs0_01Near": 393
+        },
+        {
+          "nearIn": "5000000000000000000000000",
+          "mpooGrossOut": "1708432912544208841519107",
+          "impactBpsVs0_01Near": 928
+        },
+        {
+          "nearIn": "10000000000000000000000000",
+          "mpooGrossOut": "3126313352714509435354517",
+          "impactBpsVs0_01Near": 1700
+        }
+      ]
+    },
+    {
+      "id": "near-ref8715-diarhea-dcl-mpoo",
+      "description": "classic wNEAR->DIARHEA (pool 8715, fee 1000 bps), then DCL DIARHEA->mPOO",
+      "rows": [
+        {
+          "nearIn": "10000000000000000000000",
+          "mpooGrossOut": "3975832679504995966871",
+          "impactBpsVs0_01Near": 0
+        },
+        {
+          "nearIn": "100000000000000000000000",
+          "mpooGrossOut": "39738555144756993789111",
+          "impactBpsVs0_01Near": 5
+        },
+        {
+          "nearIn": "1000000000000000000000000",
+          "mpooGrossOut": "395533952183627230812129",
+          "impactBpsVs0_01Near": 52
+        },
+        {
+          "nearIn": "2000000000000000000000000",
+          "mpooGrossOut": "786995859961132750167950",
+          "impactBpsVs0_01Near": 103
+        },
+        {
+          "nearIn": "5000000000000000000000000",
+          "mpooGrossOut": "1937567886663724531359477",
+          "impactBpsVs0_01Near": 254
+        },
+        {
+          "nearIn": "10000000000000000000000000",
+          "mpooGrossOut": "3779342009977323577689490",
+          "impactBpsVs0_01Near": 495
+        }
+      ]
+    },
+    {
+      "id": "near-ref8938-diarhea-dcl-mpoo",
+      "description": "classic wNEAR->DIARHEA (pool 8938, fee 700 bps), then DCL DIARHEA->mPOO",
+      "rows": [
+        {
+          "nearIn": "10000000000000000000000",
+          "mpooGrossOut": "2430119410763946306804",
+          "impactBpsVs0_01Near": 0
+        },
+        {
+          "nearIn": "100000000000000000000000",
+          "mpooGrossOut": "4757576234949653640766",
+          "impactBpsVs0_01Near": 8043
+        },
+        {
+          "nearIn": "1000000000000000000000000",
+          "mpooGrossOut": "5261468760698189212755",
+          "impactBpsVs0_01Near": 9784
+        },
+        {
+          "nearIn": "2000000000000000000000000",
+          "mpooGrossOut": "5292611261743312977808",
+          "impactBpsVs0_01Near": 9892
+        },
+        {
+          "nearIn": "5000000000000000000000000",
+          "mpooGrossOut": "5311474365549591309680",
+          "impactBpsVs0_01Near": 9957
+        },
+        {
+          "nearIn": "10000000000000000000000000",
+          "mpooGrossOut": "5317791984242425667126",
+          "impactBpsVs0_01Near": 9979
+        }
+      ]
+    }
+  ],
+  "not_established": [
+    "any executed swap on this route (no transaction was sent)",
+    "Ref classic instant swap via ft_transfer_call returning the output to an account with no Ref deposit",
+    "DCL multi-pool Swap returning output to the sender and refunding all input on a min-out failure",
+    "mPOO's 2% buy tax rounding and whether it is taken on a DCL multi-pool output exactly once",
+    "whether DIARHEA tax applies to DIARHEA that never leaves the DCL inside a multi-pool swap",
+    "gas used by each step"
+  ]
+}
