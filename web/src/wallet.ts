@@ -318,6 +318,32 @@ export async function verifyAccessKeyOnAccount(
   return false;
 }
 
+
+/**
+ * How many FunctionCall keys for this board already sit on the account.
+ *
+ * Used only for the message when this browser holds no secret for any of them: "there
+ * are N keys" and "I can sign with a key" are different facts, and the UI must not
+ * pretend otherwise.
+ */
+export async function countBoardKeysOnAccount(accountId: string): Promise<number> {
+  try {
+    const account = new NearAccount(accountId, new JsonRpcProvider({ url: RPC_URL }));
+    const list = await account.getAccessKeyList();
+    const keys = (list as { keys?: unknown }).keys;
+    if (!Array.isArray(keys)) return 0;
+    return keys.filter((entry) => {
+      const permission = (entry as { accessKey?: { permission?: unknown } }).accessKey?.permission;
+      if (!permission || typeof permission !== "object") return false;
+      const fc = (permission as { FunctionCall?: { receiverId?: unknown; receiver_id?: unknown } }).FunctionCall;
+      const receiver = fc?.receiverId ?? fc?.receiver_id;
+      return receiver === CONTRACT_ID;
+    }).length;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Ordinary Connect (default): sign in without requesting an FC key.
  * Opt-in: pass `{ authorizeDrawingSession: true }` when a contract id is set.
@@ -329,6 +355,9 @@ export async function connectWallet(
   await connectorReady.catch(() => undefined);
   const wantSession =
     options.authorizeDrawingSession === true && CONTRACT_ID.length > 0;
+  // The wallet can add the key and still fail to report the session. Keep who we were
+  // before the attempt so the account is never lost to a wallet-side TypeError.
+  const accountBeforeAttempt = session.accountId;
 
   if (wantSession) {
     const keypair = await createDrawingSessionKeypair();
@@ -378,31 +407,42 @@ export async function connectWallet(
     }
 
     const wallet = await current.wallet().catch(() => null);
-    const accountId = (await accountIdFromWallet(wallet)) ?? session.accountId;
-    if (!accountId) {
+    const resolved = await accountIdFromWallet(wallet);
+    const candidates = [resolved, session.accountId, accountBeforeAttempt].filter(
+      (id, index, all): id is string => typeof id === "string" && id.length > 0 && all.indexOf(id) === index,
+    );
+    if (candidates.length === 0) {
       wipeDrawingSessionStorage();
       throw connectFailure instanceof Error
         ? connectFailure
         : new Error(
-            "Wallet signed in but did not return an account id via getAccounts(). Drawing session was not saved.",
+            "Wallet signed in but did not return an account id. Drawing session was not saved.",
+          );
+    }
+
+    // The wallet may add the key to an account it then reports differently (or not at
+    // all). Ask every account we know about which one actually holds this key.
+    let accountId: string | null = null;
+    for (const candidate of candidates) {
+      if (await verifyAccessKeyOnAccount(candidate, keypair.publicKey, 2)) {
+        accountId = candidate;
+        break;
+      }
+    }
+    if (!accountId) {
+      const existing = await countBoardKeysOnAccount(candidates[0]);
+      wipeDrawingSessionStorage();
+      throw connectFailure instanceof Error
+        ? connectFailure
+        : new Error(
+            existing > 0
+              ? `Wallet signed in, but none of the ${existing} key(s) already on ${candidates[0]} for this board is one this browser holds the secret for, so it cannot sign with them. Revoke those keys in the wallet, then approve once more — or keep painting with ordinary wallet approval.`
+              : "Wallet signed in, but the draw-only access key did not arrive on the account. Try Authorize again, or keep painting with ordinary wallet approval.",
           );
     }
 
     session = { accountId, networkId: WALLET_NETWORK };
     emit();
-
-    const keyPresent = await verifyAccessKeyOnAccount(
-      accountId,
-      keypair.publicKey,
-    );
-    if (!keyPresent) {
-      wipeDrawingSessionStorage();
-      throw connectFailure instanceof Error
-        ? connectFailure
-        : new Error(
-            "Wallet signed in, but the draw-only access key was not found on the account. Try Authorize again, or use ordinary wallet approval.",
-          );
-    }
 
     saveDrawingSessionRecord(
       makeAuthorizedSessionRecord({
