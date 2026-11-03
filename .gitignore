@@ -25,3 +25,6 @@ orchestrator-init.log
 /contracts/toilet/target
 /contracts/toilet-staking/target
 /contracts/toilet-staking/sim/target
+
+# Vercel project link (local only)
+/web/.vercel

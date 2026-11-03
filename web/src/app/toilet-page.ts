@@ -322,7 +322,7 @@ export function mountToiletPage(root: HTMLElement, ctx: PageContext, overrides: 
     const staking = snapshot.stakingContract ?? null;
     q("[data-tlt-live-h]").textContent = staking ? "Earning is live. Staking is open." : "Earning is live. Staking opens next.";
     q("[data-tlt-live-p]").textContent = staking
-      ? `Paint with credits and your tiles start earning straight away. Staking is live on this board: TOILET staked at ${staking} collects the stakers’ share of the mPOO the stall takes in.`
+      ? `Paint with credits and your tiles start earning straight away. Staking is live on this board at ${staking}, funded and collecting the stakers’ share of the mPOO the stall takes in. The staking controls land on this page next.`
       : "Paint with credits and your tiles start earning straight away. Claim whenever you like: nothing is lost by waiting. Staking opens on this page once the staking contract is live.";
     q("[data-tlt-reserve-note]").textContent = staking
       ? `Forwarded to ${staking} with each distribution.`
