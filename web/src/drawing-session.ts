@@ -331,7 +331,15 @@ export function saveDrawingSessionRecord(
   if (!storage) {
     return;
   }
-  storage.setItem(DRAWING_SESSION_STORAGE_KEY, JSON.stringify(record));
+  try {
+    storage.setItem(DRAWING_SESSION_STORAGE_KEY, JSON.stringify(record));
+  } catch {
+    // Private windows and full quotas throw here. Without this the raw DOMException
+    // surfaced as "Drawing session was not authorized" with no hint of the real cause.
+    throw new Error(
+      "This browser refused to store the drawing key (private window or full storage). Authorize in a normal window.",
+    );
+  }
 }
 
 /**

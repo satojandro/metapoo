@@ -360,23 +360,32 @@ export async function connectWallet(
         window.localStorage,
       );
     }
+    // A wallet can add the key and *then* fail while returning its session state —
+    // Meteor does exactly that ("Cannot read properties of undefined (reading
+    // 'accountId')" after a successful sign-in). The chain is the source of truth, so
+    // hold the error instead of trusting it, and decide after the key read below.
+    let connectFailure: unknown = null;
     try {
       await current.connect({
         addFunctionCallKey,
         ...(walletId ? { walletId } : {}),
       });
+    } catch (error) {
+      connectFailure = error;
     } finally {
       if (walletId && typeof window !== "undefined")
         setPrivyPendingDrawingAuthorization(null, window.localStorage);
     }
 
-    const wallet = await current.wallet();
+    const wallet = await current.wallet().catch(() => null);
     const accountId = (await accountIdFromWallet(wallet)) ?? session.accountId;
     if (!accountId) {
       wipeDrawingSessionStorage();
-      throw new Error(
-        "Wallet signed in but did not return an account id via getAccounts(). Drawing session was not saved.",
-      );
+      throw connectFailure instanceof Error
+        ? connectFailure
+        : new Error(
+            "Wallet signed in but did not return an account id via getAccounts(). Drawing session was not saved.",
+          );
     }
 
     session = { accountId, networkId: WALLET_NETWORK };
@@ -388,9 +397,11 @@ export async function connectWallet(
     );
     if (!keyPresent) {
       wipeDrawingSessionStorage();
-      throw new Error(
-        "Wallet signed in, but the draw-only access key was not found on the account yet. Drawing session was not marked active. Try Authorize again, or use ordinary wallet approval.",
-      );
+      throw connectFailure instanceof Error
+        ? connectFailure
+        : new Error(
+            "Wallet signed in, but the draw-only access key was not found on the account. Try Authorize again, or use ordinary wallet approval.",
+          );
     }
 
     saveDrawingSessionRecord(
