@@ -1,13 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   aggregateLedger,
+  BOARD_TOTALS_LABEL,
+  createBoardTotalsSource,
   createIndexedLedgerSource,
+  createPreferredLedgerSource,
   eventsFromTxStatus,
   isRevenueTransferArgs,
   LedgerUnavailable,
   loadBuybackLedger,
+  parseBuybackTotals,
   parseLedgerLog,
   type LedgerEvent,
+  type LedgerHistory,
+  type LedgerSource,
 } from "./buyback-ledger";
 
 const BOARD = "board3.metapoo-player1.testnet";
@@ -171,7 +177,8 @@ describe("createIndexedLedgerSource", () => {
     expect(scan.complete).toBe(true);
     expect(scan.transactions).toBe(2);
     expect(scan.indexedThroughMs).toBe(NOW_MS - 5_000);
-    expect(aggregateLedger(scan.events)).toMatchObject({ nearToBuyback: 9n * NEAR, mpooReturned: 7n * MPOO });
+    expect(scan.origin).toBe("index");
+    expect(scan.totals).toMatchObject({ nearToBuyback: 9n * NEAR, mpooReturned: 7n * MPOO, nearDistributions: 1, mpooReturns: 1 });
     const urls = fetch.mock.calls.map(c => String(c[0]));
     expect(urls.filter(u => u.includes("api-testnet.nearblocks.io/v1/account/")).length).toBe(2);
     expect(urls.filter(u => u.includes("archival-rpc.testnet.near.org")).length).toBe(2);
@@ -215,16 +222,106 @@ describe("createIndexedLedgerSource", () => {
   });
 });
 
+/** `createRpcView`'s error for a board deployed before the view existed (seen live on board3, 2026-11-03). */
+const METHOD_NOT_FOUND = new Error("wasm execution failed with error: MethodResolveError(MethodNotFound)");
+const boardView = (result: unknown | Error) => vi.fn(async (account: string, method: string) => {
+  expect([account, method]).toEqual([BOARD, "get_buyback_totals"]);
+  if (result instanceof Error) throw result;
+  return result;
+});
+const fakeIndex = (): LedgerSource & { scan: ReturnType<typeof vi.fn> } => ({
+  scan: vi.fn(async (): Promise<LedgerHistory> => ({
+    origin: "index", label: "index", complete: false, transactions: 1, indexedThroughMs: 1,
+    totals: { nearToBuyback: 1n, nearDistributions: 1, mpooReturned: 1n, mpooReturns: 1 },
+  })),
+});
+
+describe("board totals (get_buyback_totals)", () => {
+  it("parses decimal U128 strings exactly", () => {
+    expect(parseBuybackTotals({ near_to_buyback: "340282366920938463463374607431768211455", mpoo_returned: "0" }))
+      .toEqual({ nearToBuyback: (1n << 128n) - 1n, mpooReturned: 0n });
+  });
+
+  it.each([
+    ["a number", { near_to_buyback: 5, mpoo_returned: "1" }],
+    ["a negative", { near_to_buyback: "-5", mpoo_returned: "1" }],
+    ["a decimal point", { near_to_buyback: "1.5", mpoo_returned: "1" }],
+    ["hex", { near_to_buyback: "0x10", mpoo_returned: "1" }],
+    ["an empty string", { near_to_buyback: "", mpoo_returned: "1" }],
+    ["a missing field", { near_to_buyback: "1" }],
+    ["not an object", ["1", "1"]],
+    ["null", null],
+  ])("refuses %s", (_, raw) => {
+    expect(() => parseBuybackTotals(raw)).toThrow(/get_buyback_totals/);
+  });
+
+  it("view present: exact all-time figures, no lower bound, the index never asked", async () => {
+    const index = fakeIndex();
+    const source = createPreferredLedgerSource(
+      createBoardTotalsSource(boardView({ near_to_buyback: `${27n * NEAR + 1n}`, mpoo_returned: `${150n * MPOO}` }), BOARD), index);
+    const history = await source.scan();
+    expect(history).toEqual({
+      origin: "board", label: BOARD_TOTALS_LABEL, complete: true, transactions: null, indexedThroughMs: null,
+      totals: { nearToBuyback: 27n * NEAR + 1n, nearDistributions: null, mpooReturned: 150n * MPOO, mpooReturns: null },
+    });
+    expect(source.lastTried).toBe("board");
+    expect(index.scan).not.toHaveBeenCalled();
+  });
+
+  it("method missing: falls back to the index, with its own honesty rules", async () => {
+    const index = fakeIndex();
+    const source = createPreferredLedgerSource(createBoardTotalsSource(boardView(METHOD_NOT_FOUND), BOARD), index);
+    expect(await source.scan()).toMatchObject({ origin: "index", complete: false });
+    expect(source.lastTried).toBe("index");
+    expect(index.scan).toHaveBeenCalledTimes(1);
+  });
+
+  it("method missing and no index on this network: unavailable, explained", async () => {
+    const source = createPreferredLedgerSource(createBoardTotalsSource(boardView(METHOD_NOT_FOUND), BOARD), null);
+    await expect(source.scan()).rejects.toThrow(/keeps no buyback totals/);
+  });
+
+  it.each([
+    ["a network error", new Error("RPC HTTP 503 while calling get_buyback_totals")],
+    ["a timeout", new DOMException("The operation was aborted.", "AbortError")],
+    ["a contract panic", new Error("wasm execution failed with error: FunctionCallError(ExecutionError(\"Smart contract panicked\"))")],
+  ])("view errors (%s): Unavailable, and no silent fall back to the index", async (_, error) => {
+    const index = fakeIndex();
+    const source = createPreferredLedgerSource(createBoardTotalsSource(boardView(error), BOARD), index);
+    await expect(source.scan()).rejects.toBeInstanceOf(LedgerUnavailable);
+    expect(index.scan).not.toHaveBeenCalled();
+    expect(source.lastTried).toBe("board");
+  });
+
+  it.each([
+    ["a non-decimal string", { near_to_buyback: "12abc", mpoo_returned: "1" }],
+    ["a JSON number", { near_to_buyback: 12, mpoo_returned: "1" }],
+    ["not an object", "oops"],
+  ])("malformed values (%s): Unavailable, and no fall back", async (_, raw) => {
+    const index = fakeIndex();
+    const source = createPreferredLedgerSource(createBoardTotalsSource(boardView(raw), BOARD), index);
+    await expect(source.scan()).rejects.toThrow(/Couldn’t read the board’s buyback totals/);
+    expect(index.scan).not.toHaveBeenCalled();
+  });
+
+  it("through loadBuybackLedger: a failed view is Unavailable with its reason; the balance still shows", async () => {
+    const source = createPreferredLedgerSource(createBoardTotalsSource(boardView(new Error("503")), BOARD), fakeIndex());
+    expect(await loadBuybackLedger(source, async () => 3n, BUYBACK)).toEqual({
+      buybackAccount: BUYBACK, history: null, historyError: "Couldn’t read the board’s buyback totals.", tried: "board", waiting: 3n,
+    });
+  });
+});
+
 describe("loadBuybackLedger", () => {
   it("lets the history and the balance fail independently", async () => {
-    const source = { label: "x", scan: async () => ({ events: [], complete: true, transactions: 0, indexedThroughMs: null }) };
+    const source = fakeIndex();
     expect(await loadBuybackLedger(source, async () => { throw new Error("rpc"); }, BUYBACK)).toMatchObject({
-      history: { totals: { nearToBuyback: 0n }, complete: true }, waiting: null,
+      history: { totals: { nearToBuyback: 1n } }, tried: "index", waiting: null,
     });
-    const broken = { label: "x", scan: async () => { throw new Error("index"); } };
+    const broken = { scan: async () => { throw new Error("index"); } };
     expect(await loadBuybackLedger(broken, async () => 3n, BUYBACK))
-      .toEqual({ buybackAccount: BUYBACK, history: null, historyError: null, waiting: 3n });
-    const stalled = { label: "x", scan: async () => { throw new LedgerUnavailable("stopped"); } };
+      .toEqual({ buybackAccount: BUYBACK, history: null, historyError: null, tried: null, waiting: 3n });
+    const stalled = { scan: async () => { throw new LedgerUnavailable("stopped"); } };
     expect(await loadBuybackLedger(stalled, async () => 3n, BUYBACK)).toMatchObject({ history: null, historyError: "stopped" });
     expect(await loadBuybackLedger(null, async () => 3n, BUYBACK)).toMatchObject({
       history: null, historyError: expect.stringMatching(/no public event index/), waiting: 3n,

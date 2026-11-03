@@ -15,14 +15,19 @@
  * refunds the board and is sent again by a later split, so a failed buyback leg is
  * subtracted here or that NEAR would be counted twice.
  *
- * NEAR RPC has no event index. The board keeps no running totals either. So the events
- * are found through a `LedgerSource`; the one wired today pairs the public NearBlocks
- * receipt index (which board receipts to look at) with an archival RPC (the logs
- * themselves, read from the chain). Any read that fails makes the figure unavailable,
- * never zero.
+ * Two `LedgerSource`s, chosen per read by `createPreferredLedgerSource`:
+ *
+ * - the board's own running totals, `get_buyback_totals()` (TR-B), exact and all-time;
+ * - for boards without that view (MethodNotFound), the public NearBlocks receipt index
+ *   (which board receipts to look at) plus archival RPC (their logs), since NEAR RPC has
+ *   no event index. It may be incomplete and says so.
+ *
+ * Any other failure makes the figure unavailable, never zero, and never silently swaps
+ * an exact source for a partial one.
  */
 
 import { parseChainJson } from "../chain-json";
+import { isMethodNotFound, type View } from "./revenue-panel";
 
 export const PAYMENTS_EVENT_STANDARD = "mpoo_payments";
 export const PAYMENTS_EVENT_VERSION = "1.0.0";
@@ -128,12 +133,12 @@ export function eventsFromTxStatus(result: unknown, board: string, txHash: strin
 export interface LedgerTotals {
   /** NEAR (yocto) the board sent to the buyback account, failed legs taken out. */
   nearToBuyback: bigint;
-  /** `near_distributed` events counted. */
-  nearDistributions: number;
+  /** `near_distributed` events counted; null when the source keeps only sums. */
+  nearDistributions: number | null;
   /** mPOO (1e-18) the buyback account sent back and the board accepted. */
   mpooReturned: bigint;
-  /** `mpoo_revenue_received` events counted. */
-  mpooReturns: number;
+  /** `mpoo_revenue_received` events counted; null when the source keeps only sums. */
+  mpooReturns: number | null;
 }
 
 /**
@@ -149,7 +154,7 @@ export function aggregateLedger(events: readonly LedgerEvent[]): LedgerTotals {
     seen.add(key);
     return true;
   });
-  const totals: LedgerTotals = { nearToBuyback: 0n, nearDistributions: 0, mpooReturned: 0n, mpooReturns: 0 };
+  const totals = { nearToBuyback: 0n, nearDistributions: 0, mpooReturned: 0n, mpooReturns: 0 };
   // Buyback legs still unmatched by a failure, per transaction.
   const openLegs = new Map<string, Array<{ account: string; amount: bigint }>>();
   for (const e of unique) {
@@ -176,26 +181,26 @@ export function aggregateLedger(events: readonly LedgerEvent[]): LedgerTotals {
   return totals;
 }
 
-/** What a source found. `complete: false` means older history exists that wasn't scanned. */
-export interface LedgerScan {
-  events: LedgerEvent[];
+/** What a source read. */
+export interface LedgerHistory {
+  /** "board": the board's own running totals, exact. "index": events found through a public index. */
+  origin: "board" | "index";
+  /** e.g. "NearBlocks receipt index + archival RPC logs". */
+  label: string;
+  totals: LedgerTotals;
+  /** False when history exists that wasn't read: the totals are lower bounds. */
   complete: boolean;
-  /** Board transactions whose logs were read. */
-  transactions: number;
+  /** Board transactions whose logs were read; null for the board's own totals. */
+  transactions: number | null;
   /** Block time (ms) the index has reached; null when the source reads the chain head itself. */
   indexedThroughMs: number | null;
 }
 
-/** Where board events come from. Swap this for a cumulative view or an indexer later. */
+/** Where the totals come from. */
 export interface LedgerSource {
-  /** Shown under the figures, e.g. "NearBlocks receipt index + archival RPC". */
-  label: string;
-  scan(): Promise<LedgerScan>;
-}
-
-export interface LedgerHistory extends Omit<LedgerScan, "events"> {
-  totals: LedgerTotals;
-  label: string;
+  scan(): Promise<LedgerHistory>;
+  /** Which kind of source the last scan used, success or not (sets the re-read pace). */
+  readonly lastTried?: LedgerHistory["origin"] | null;
 }
 
 export interface LedgerSnapshot {
@@ -204,6 +209,8 @@ export interface LedgerSnapshot {
   history: LedgerHistory | null;
   /** Why `history` is null, in words fit for the page; null for an unexplained failure. */
   historyError: string | null;
+  /** The kind of source this read used or tried; null when unknown. */
+  tried: LedgerHistory["origin"] | null;
   /** NEAR (yocto) on the buyback account; null when that read failed. */
   waiting: bigint | null;
 }
@@ -221,17 +228,72 @@ export async function loadBuybackLedger(
     source ? source.scan() : Promise.reject(new LedgerUnavailable("There’s no public event index for this network.")),
     readBalance(buybackAccount),
   ]);
-  const history = scan.status === "fulfilled" && source
-    ? {
-        totals: aggregateLedger(scan.value.events), complete: scan.value.complete, transactions: scan.value.transactions,
-        indexedThroughMs: scan.value.indexedThroughMs, label: source.label,
-      }
-    : null;
   return {
     buybackAccount,
-    history,
+    history: scan.status === "fulfilled" ? scan.value : null,
+    tried: scan.status === "fulfilled" ? scan.value.origin : source?.lastTried ?? null,
     historyError: scan.status === "rejected" && scan.reason instanceof LedgerUnavailable ? scan.reason.message : null,
     waiting: balance.status === "fulfilled" ? balance.value : null,
+  };
+}
+
+/**
+ * `get_buyback_totals()` → `{"near_to_buyback": "<yocto>", "mpoo_returned": "<1e-18>"}`.
+ * Both decimal strings (U128); a number, a sign or a missing field is refused.
+ */
+export function parseBuybackTotals(raw: unknown): { nearToBuyback: bigint; mpooReturned: bigint } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("get_buyback_totals: not an object");
+  const r = raw as Record<string, unknown>;
+  const read = (key: string): bigint => {
+    const value = r[key];
+    if (typeof value !== "string" || !/^\d+$/.test(value)) throw new Error(`get_buyback_totals: ${key} is not a decimal U128 string`);
+    return BigInt(value);
+  };
+  return { nearToBuyback: read("near_to_buyback"), mpooReturned: read("mpoo_returned") };
+}
+
+export const BOARD_TOTALS_LABEL = "board’s own running totals (get_buyback_totals)";
+export const INDEX_LABEL = "NearBlocks receipt index + archival RPC logs";
+
+/**
+ * The board's running totals. Exact and all-time: `near_to_buyback` counts only NEAR that
+ * reached the buyback account, so failed and resent legs are already out. Errors propagate
+ * as they are (a MethodNotFound is how the caller tells an older board).
+ */
+export function createBoardTotalsSource(view: View, board: string): LedgerSource {
+  return {
+    async scan() {
+      const t = parseBuybackTotals(await view(board, "get_buyback_totals"));
+      return {
+        origin: "board", label: BOARD_TOTALS_LABEL, complete: true, transactions: null, indexedThroughMs: null,
+        totals: { nearToBuyback: t.nearToBuyback, nearDistributions: null, mpooReturned: t.mpooReturned, mpooReturns: null },
+      };
+    },
+  };
+}
+
+/**
+ * The board's totals when the board has them; the index only for a board deployed before
+ * `get_buyback_totals` existed. Any other failure of the view is reported, never covered
+ * by the partial index. Checked on every read, so an upgraded board switches on its own.
+ */
+export function createPreferredLedgerSource(board: LedgerSource, fallback: LedgerSource | null): LedgerSource {
+  let lastTried: LedgerHistory["origin"] | null = null;
+  return {
+    get lastTried() {
+      return lastTried;
+    },
+    async scan() {
+      lastTried = "board";
+      try {
+        return await board.scan();
+      } catch (error) {
+        if (!isMethodNotFound(error)) throw new LedgerUnavailable("Couldn’t read the board’s buyback totals.");
+      }
+      lastTried = "index";
+      if (!fallback) throw new LedgerUnavailable("This board keeps no buyback totals, and there’s no public event index for this network.");
+      return fallback.scan();
+    },
   };
 }
 
@@ -370,7 +432,6 @@ export function createIndexedLedgerSource(options: IndexedSourceOptions): Ledger
   }
 
   return {
-    label: "NearBlocks receipt index + archival RPC logs",
     async scan() {
       // The index head first: a stopped index isn't worth paging through (its API is rate-limited).
       const head = await indexHead();
@@ -387,7 +448,10 @@ export function createIndexedLedgerSource(options: IndexedSourceOptions): Ledger
         for (const batch of await Promise.all(hashes.slice(i, i + 4).map(readTx))) events.push(...batch);
       }
       const complete = !lists.some(l => l.more) && all.length <= maxTransactions && lag <= INDEX_LAG_OK_MS;
-      return { events, complete, transactions: hashes.length, indexedThroughMs: head };
+      return {
+        origin: "index", label: INDEX_LABEL, totals: aggregateLedger(events), complete,
+        transactions: hashes.length, indexedThroughMs: head,
+      };
     },
   };
 }
@@ -399,16 +463,18 @@ export function exampleLedger(buybackAccount: string): LedgerSnapshot {
     history: {
       totals: {
         nearToBuyback: 164_250_000_000_000_000_000_000_000n,
-        nearDistributions: 23,
+        nearDistributions: null,
         mpooReturned: 1_204_880_000_000_000_000_000_000n,
-        mpooReturns: 19,
+        mpooReturns: null,
       },
+      origin: "board",
       complete: true,
-      transactions: 42,
+      transactions: null,
       indexedThroughMs: null,
       label: "example",
     },
     historyError: null,
+    tried: "board",
     waiting:3_120_000_000_000_000_000_000_000n,
   };
 }

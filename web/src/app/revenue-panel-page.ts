@@ -13,7 +13,9 @@ import { isUserRejection, parseTxOutcome } from "../tx-outcome";
 import { signAndSendDistribution } from "../wallet";
 import { createAccountBalanceReader } from "./admin-settings";
 import {
+  createBoardTotalsSource,
   createIndexedLedgerSource,
+  createPreferredLedgerSource,
   exampleLedger,
   loadBuybackLedger,
   type LedgerSnapshot,
@@ -55,7 +57,10 @@ export interface RevenuePageDeps {
   pollMs: number;
   /** Buyback ledger for the board's current revenue state (events + NEAR waiting). */
   loadLedger: (snapshot: Extract<RevenueSnapshot, { kind: "live" }>) => Promise<LedgerSnapshot>;
-  /** How often the ledger is re-read. It scans an indexer, so far less often than `pollMs`. */
+  /**
+   * How often the ledger is re-read while it comes from the public index (far less often
+   * than `pollMs`). The board's own totals are re-read with every `pollMs` poll.
+   */
   ledgerPollMs: number;
 }
 
@@ -78,15 +83,22 @@ function defaultDeps(): RevenuePageDeps {
   };
 }
 
-/** One source per mPOO token, so transactions already read stay cached between polls. */
+/**
+ * The board's `get_buyback_totals` first; the public index only for a board without it.
+ * One source per mPOO token, so index transactions already read stay cached between polls.
+ */
 function defaultLedgerLoader(): RevenuePageDeps["loadLedger"] {
   const readBalance = createAccountBalanceReader(RPC_URL);
+  const board = createBoardTotalsSource(createRpcView(RPC_URL), CONTRACT_ID);
   let source: LedgerSource | null = null;
   let sourceToken: string | null | undefined;
   return snapshot => {
-    if (sourceToken !== snapshot.mpooToken) {
+    if (!source || sourceToken !== snapshot.mpooToken) {
       sourceToken = snapshot.mpooToken;
-      source = createIndexedLedgerSource({ network: PAGE_NETWORK, board: CONTRACT_ID, mpooToken: snapshot.mpooToken });
+      source = createPreferredLedgerSource(
+        board,
+        createIndexedLedgerSource({ network: PAGE_NETWORK, board: CONTRACT_ID, mpooToken: snapshot.mpooToken }),
+      );
     }
     return loadBuybackLedger(source, readBalance, snapshot.state.buybackAccount);
   };
@@ -412,7 +424,7 @@ export function mountRevenuePage(
       for (const key of ["ledger-near", "ledger-mpoo", "ledger-waiting"]) $(key).textContent = "…";
       $("ledger-near-note").textContent = "";
       $("ledger-mpoo-note").textContent = "";
-      $("ledger-source").textContent = ledgerLoading ? "Reading the board’s events…" : "";
+      $("ledger-source").textContent = ledgerLoading ? "Reading the buyback totals…" : "";
       return;
     }
     const history = current.history;
@@ -426,31 +438,51 @@ export function mountRevenuePage(
       }
       const n = history.totals.nearDistributions;
       const m = history.totals.mpooReturns;
-      $("ledger-near-note").textContent = `${prefix}${n} NEAR split${n === 1 ? "" : "s"}, failed transfers taken out.`;
-      $("ledger-mpoo-note").textContent = `${prefix}${m} return${m === 1 ? "" : "s"} accepted by the board.`;
+      $("ledger-near-note").textContent = n === null
+        ? "All time. Only NEAR that reached the buyback account counts."
+        : `${prefix}${n} NEAR split${n === 1 ? "" : "s"}, failed transfers taken out.`;
+      $("ledger-mpoo-note").textContent = m === null
+        ? "All time, as accepted by the board."
+        : `${prefix}${m} return${m === 1 ? "" : "s"} accepted by the board.`;
     } else {
-      const why = "The board’s events could not be read. This total is unknown, not zero.";
+      const why = "The buyback totals could not be read. This total is unknown, not zero.";
       unavailable("ledger-near", why);
       unavailable("ledger-mpoo", why);
-      $("ledger-near-note").textContent = "Couldn’t read the board’s events.";
-      $("ledger-mpoo-note").textContent = "Couldn’t read the board’s events.";
+      $("ledger-near-note").textContent = "Couldn’t read the buyback totals.";
+      $("ledger-mpoo-note").textContent = "Couldn’t read the buyback totals.";
     }
     if (current.waiting === null) unavailable("ledger-waiting", "The buyback account balance could not be read.");
     else setAmount("ledger-waiting", current.waiting, NEAR_DECIMALS);
 
     const parts: string[] = [];
-    if (deps.example) parts.push("Example numbers.");
-    else if (history) {
-      const t = history.transactions;
+    const source = $("ledger-source");
+    if (deps.example) {
+      parts.push("Example numbers.");
+      delete source.dataset.origin;
+    } else if (history?.origin === "board") {
+      source.dataset.origin = "board";
+      parts.push(`From the board: its ${history.label}, exact.`);
+    } else if (history) {
+      source.dataset.origin = "index";
+      const t = history.transactions ?? 0;
       const through = history.indexedThroughMs === null ? "" : ` The index has reached ${new Date(history.indexedThroughMs).toLocaleString()}.`;
-      parts.push(`From ${t} board transaction${t === 1 ? "" : "s"}, found through the ${history.label}.${through}`);
+      parts.push(`From the public index, may be incomplete: this board has no running totals, so ${t} board transaction${t === 1 ? " was" : "s were"} found through the ${history.label}.${through}`);
       if (!history.complete) parts.push("Some history isn’t covered (older than the scan, or newer than the index), so these totals are lower bounds.");
     } else {
-      parts.push(current.historyError ?? "The public event index or the archival RPC didn’t answer.");
-      parts.push("NEAR RPC alone can’t list past events, so the totals are unknown, not zero.");
+      delete source.dataset.origin;
+      if (current.tried === "index") parts.push("This board keeps no running totals, so the public index was asked.");
+      parts.push(current.historyError ?? "The buyback totals couldn’t be read.");
+      parts.push("The totals are unknown, not zero.");
     }
     if (ledgerStale) parts.push("The last ledger refresh failed; showing the previous reading.");
-    $("ledger-source").textContent = parts.join(" ");
+    source.textContent = parts.join(" ");
+  }
+
+  /** The board's totals are a cheap view: every poll. The index is rate-limited: every `ledgerPollMs`. */
+  function ledgerDue(live: Extract<RevenueSnapshot, { kind: "live" }>): boolean {
+    if (ledger?.buybackAccount !== live.state.buybackAccount) return true;
+    const pace = ledger.tried === "index" ? deps.ledgerPollMs : deps.pollMs;
+    return deps.now() - ledgerReadAt >= pace;
   }
 
   async function refreshLedger(live: Extract<RevenueSnapshot, { kind: "live" }>): Promise<void> {
@@ -468,12 +500,13 @@ export function mountRevenuePage(
         buybackAccount: next.buybackAccount,
         history: next.history ?? prev?.history ?? null,
         historyError: (next.history ?? prev?.history) ? null : next.historyError,
+        tried: next.tried,
         waiting: next.waiting ?? prev?.waiting ?? null,
       };
     } catch {
       if (disposed) return;
       ledgerStale = ledger?.buybackAccount === live.state.buybackAccount;
-      if (!ledgerStale) ledger = { buybackAccount: live.state.buybackAccount, history: null, historyError: null, waiting: null };
+      if (!ledgerStale) ledger = { buybackAccount: live.state.buybackAccount, history: null, historyError: null, tried: null, waiting: null };
     } finally {
       ledgerLoading = false;
     }
@@ -488,8 +521,7 @@ export function mountRevenuePage(
       snapshot = next;
       failed = false;
       updatedAt = deps.now();
-      if (next.kind === "live" && (ledger?.buybackAccount !== next.state.buybackAccount
-        || deps.now() - ledgerReadAt >= deps.ledgerPollMs)) void refreshLedger(next);
+      if (next.kind === "live" && ledgerDue(next)) void refreshLedger(next);
     } catch {
       if (disposed || current !== generation) return;
       failed = true;
