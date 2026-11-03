@@ -10,6 +10,7 @@
 
 import { isViewTunables, type ViewTunables } from "../pages/wall/wall-views";
 import {
+  formatAmount,
   isMethodNotFound,
   loadRevenue,
   MPOO_SPLIT,
@@ -162,6 +163,9 @@ export async function loadToilet(
   };
 }
 
+/** The board refuses a claim below this (§B5, `ClaimBelowMinimum`). */
+export const MIN_CLAIM = 1_000_000_000_000_000_000n;
+
 export interface ClaimInput {
   pending: bigint | null;
   accountId: string | null;
@@ -192,6 +196,15 @@ export function claimButtonState(input: ClaimInput): ClaimState {
   if (input.paused) return { enabled: false, label, hint: "TOILET is paused right now. Your earnings keep counting and wait for you." };
   if (input.pending === null) return { enabled: false, label, hint: "Couldn’t read your earnings. Try again in a moment." };
   if (input.pending === 0n) return { enabled: false, label, hint: "Nothing to claim yet. Tiles you paint with credits earn TOILET while you hold them." };
+  // The board's own floor (B5). Below it the transaction panics `ClaimBelowMinimum`, so
+  // the button says how much is left instead of inviting a failure.
+  if (input.pending < MIN_CLAIM) {
+    return {
+      enabled: false,
+      label,
+      hint: `${formatAmount(input.pending, TOILET_DECIMALS, { maxFraction: 2 })} of 1.00 TOILET earned. Claim opens at 1.00 — your tiles keep earning either way.`,
+    };
+  }
   return { enabled: true, label, hint: "Your wallet signs. You attach 1 yoctoNEAR and pay gas; the TOILET lands in your wallet." };
 }
 

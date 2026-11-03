@@ -87,11 +87,18 @@ describe("loadToilet", () => {
 
 describe("claimButtonState", () => {
   const ready: ClaimInput = {
-    pending: 5n, accountId: "a.testnet", walletNetwork: "testnet", pageNetwork: "testnet",
+    pending: 2n * 10n ** 18n, accountId: "a.testnet", walletNetwork: "testnet", pageNetwork: "testnet",
     toilet: "t.testnet", paused: false, busy: false, example: false,
   };
   it("enables only when everything lines up", () => {
     expect(claimButtonState(ready).enabled).toBe(true);
+  });
+  it("explains the board's 1.00 TOILET floor instead of inviting a ClaimBelowMinimum failure", () => {
+    const s = claimButtonState({ ...ready, pending: 195_000_000_000_000_000n });
+    expect(s.enabled).toBe(false);
+    expect(s.hint).toMatch(/0\.19 of 1\.00 TOILET/);
+    expect(claimButtonState({ ...ready, pending: 999_999_999_999_999_999n }).enabled).toBe(false);
+    expect(claimButtonState({ ...ready, pending: 1_000_000_000_000_000_000n }).enabled).toBe(true);
   });
   it.each<[Partial<ClaimInput>, RegExp]>([
     [{ example: true }, /Example/],

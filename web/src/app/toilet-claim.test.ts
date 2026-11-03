@@ -7,7 +7,7 @@ import type { ToiletSnapshot } from "./toilet";
 import type { WalletSession } from "../wallet";
 
 const E18 = 10n ** 18n;
-const live = (pending = 195n * E18 / 1000n): ToiletSnapshot => ({
+const live = (pending = 195n * E18 / 100n): ToiletSnapshot => ({
   kind: "live",
   emission: { perCellSecond: 1_000_000_000_000_000n, accruedTotal: 0n, cap: 1n, remaining: 1n },
   supply: null,
@@ -41,7 +41,7 @@ async function setup(deps: Partial<ToiletClaimDeps>, session: WalletSession = { 
 
 it("shows balance and unclaimed TOILET, and enables the claim", async () => {
   const t = await setup({});
-  await vi.waitFor(() => expect(t.text("pending")).toBe("0.19 TOILET"));
+  await vi.waitFor(() => expect(t.text("pending")).toBe("1.95 TOILET"));
   expect(t.text("balance")).toBe("0.78 TOILET");
   expect(t.button.disabled).toBe(false);
 });
@@ -88,4 +88,11 @@ it("disables claim with nothing pending, and shows unknown when the read fails",
   expect(empty.button.disabled).toBe(true);
   const broken = await setup({ load: vi.fn(async () => { throw new Error("rpc"); }) });
   await vi.waitFor(() => expect(broken.text("pending")).toBe("Unavailable"));
+});
+
+it("keeps claim disabled below the board's 1.00 TOILET floor and says how far off it is", async () => {
+  const t = await setup({ load: vi.fn(async () => live(4n * E18 / 10n)) });
+  await vi.waitFor(() => expect(t.text("pending")).toBe("0.4 TOILET"));
+  expect(t.button.disabled).toBe(true);
+  expect(t.text("hint")).toMatch(/0\.4 of 1\.00 TOILET/);
 });

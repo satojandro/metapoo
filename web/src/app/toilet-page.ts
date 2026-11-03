@@ -89,15 +89,15 @@ const TEMPLATE = `
   <section class="tlt-sec" aria-labelledby="tlt-live-h">
     <div class="tlt-head">
       <p class="mp-eyebrow">On the board now</p>
-      <h3 id="tlt-live-h">Earning is live. Staking opens next.</h3>
-      <p>Paint with credits and your tiles start earning straight away. Claim whenever you like: nothing is lost by waiting. Staking opens on this page once the staking contract is live.</p>
+      <h3 id="tlt-live-h" data-tlt-live-h>Earning is live. Staking opens next.</h3>
+      <p data-tlt-live-p>Paint with credits and your tiles start earning straight away. Claim whenever you like: nothing is lost by waiting. Staking opens on this page once the staking contract is live.</p>
     </div>
     <div class="tlt-live">
       <section class="mp-card" data-tlt-claim aria-label="Your TOILET"></section>
       <dl class="tlt-stats">
         <div data-c="tag" data-needs="rate"><dt>Earning rate</dt><dd><span data-tl="rate">…</span></dd><span class="tlt-stat-note" data-tl="rateNote">TOILET per tile per day</span></div>
         <div data-needs="accrued"><dt>TOILET earned so far</dt><dd data-tl="accrued">…</dd><span class="tlt-stat-note" data-needs="remaining"><span data-tl="remaining">…</span> of the billion left</span></div>
-        <div data-c="stake" data-needs="reserve"><dt>mPOO waiting for stakers</dt><dd data-tl="reserve">…</dd><span class="tlt-stat-note">Held on the board until staking opens. Nobody can spend it, the owner included.</span></div>
+        <div data-c="stake" data-needs="reserve"><dt>mPOO waiting for stakers</dt><dd data-tl="reserve">…</dd><span class="tlt-stat-note" data-tlt-reserve-note>Held on the board until staking opens. Nobody can spend it, the owner included.</span></div>
         <div data-c="burn" data-needs="burned"><dt>TOILET burned</dt><dd data-tl="burned">…</dd><span class="tlt-stat-note">Burns never reopen the cap.</span></div>
       </dl>
     </div>
@@ -317,6 +317,16 @@ export function mountToiletPage(root: HTMLElement, ctx: PageContext, overrides: 
       : !loaded
         ? `Reading ${deps.board} on ${deps.network}…`
         : `Live numbers read from ${deps.board}${deps.toilet ? ` and ${deps.toilet}` : ""} on ${deps.network}. Anything they couldn’t confirm is left out, never guessed.`;
+    // The board publishes its staking contract once `set_staking_contract` has been called.
+    // Read it: claiming is live as soon as emission is, and staking is live as soon as this is set.
+    const staking = snapshot.stakingContract ?? null;
+    q("[data-tlt-live-h]").textContent = staking ? "Earning is live. Staking is open." : "Earning is live. Staking opens next.";
+    q("[data-tlt-live-p]").textContent = staking
+      ? `Paint with credits and your tiles start earning straight away. Staking is live on this board: TOILET staked at ${staking} collects the stakers’ share of the mPOO the stall takes in.`
+      : "Paint with credits and your tiles start earning straight away. Claim whenever you like: nothing is lost by waiting. Staking opens on this page once the staking contract is live.";
+    q("[data-tlt-reserve-note]").textContent = staking
+      ? `Forwarded to ${staking} with each distribution.`
+      : "Held on the board until staking opens. Nobody can spend it, the owner included.";
     whale();
     resetMeter();
   }
