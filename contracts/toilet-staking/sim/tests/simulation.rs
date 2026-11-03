@@ -186,7 +186,8 @@ async fn distribute_sync_drip_claim_unstake() -> anyhow::Result<()> {
         board.id(),
         "new",
         json!({"mpoo_token": mpoo.id(), "mpoo_per_credit": "1",
-               "team_account": team.id(), "buyback_account": buyback.id()}),
+               "team_account": team.id(), "buyback_account": buyback.id(),
+               "toilet": toilet.id()}),
         0,
         100,
     )
