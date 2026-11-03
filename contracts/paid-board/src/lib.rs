@@ -54,6 +54,10 @@ const MAX_REPAINT_CREDITS: u32 = 8;
 const MAX_REPAINT_WINDOW_NS: u64 = 86_400_000_000_000;
 /// C8: `mpoo_daily_credit_cap` is at most this many credits a day.
 const MAX_MPOO_DAILY_CREDIT_CAP: u128 = 1_000_000;
+/// REV-G: `distribution_interval_ns` is at least 10 minutes …
+const MIN_DISTRIBUTION_INTERVAL_NS: u64 = 600_000_000_000;
+/// … and at most 24 hours, so the owner cannot freeze revenue sharing for years.
+const MAX_DISTRIBUTION_INTERVAL_NS: u64 = 86_400_000_000_000;
 
 /// One cell inside a batched stroke.
 ///
@@ -117,7 +121,11 @@ pub struct PaletteColor {
 #[near(serializers = [json, borsh])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tunables {
-    /// Emergency stop for painting and purchases. Views and treasury withdrawals stay open.
+    /// Emergency stop. Pausing stops painting (`draw`, `draw_many`, free paints
+    /// included) and buying credits with NEAR or mPOO (an mPOO purchase is refunded).
+    /// Views keep answering, and `distribute_near`, `distribute_mpoo` and the
+    /// buyback's mPOO revenue transfers keep running (owner, 2 Nov): pause stops
+    /// paint, not revenue.
     pub paused: bool,
     /// Additional liquid NEAR retained after existing storage and credit obligations.
     pub reserve_floor: near_sdk::json_types::U128,
@@ -167,6 +175,7 @@ pub struct Tunables {
     /// History for the happy-hour cooldown; `set_tunables` refuses to change it.
     pub last_happy_hour_change_ns: Option<u64>,
     /// R1/R2: minimum time between `distribute_near` (or `distribute_mpoo`) calls.
+    /// 10 minutes through 24 hours inclusive (`DistributionIntervalOutOfRange`).
     pub distribution_interval_ns: u64,
 }
 
@@ -259,7 +268,79 @@ impl Tunables {
         if self.quota_max > 0 {
             assert!(self.quota_base <= self.quota_max, "QuotaBaseAboveMax");
         }
+        assert!(
+            (MIN_DISTRIBUTION_INTERVAL_NS..=MAX_DISTRIBUTION_INTERVAL_NS)
+                .contains(&self.distribution_interval_ns),
+            "DistributionIntervalOutOfRange"
+        );
     }
+
+    /// `{field, old, new}` for every field whose value differs between `old` and
+    /// `self`, in declaration order. Values use the same JSON as `get_tunables`; a
+    /// `u128` too large for a JSON number is written as a decimal string.
+    fn changes_from(&self, old: &Tunables) -> Vec<near_sdk::serde_json::Value> {
+        macro_rules! diff {
+            ($($field:ident),* $(,)?) => {{
+                // Exhaustive on purpose: adding or removing a field without listing
+                // it here fails to compile, so the event can never silently miss one.
+                let Tunables { $($field: _),* } = self;
+                let mut changed = Vec::new();
+                $(
+                    if self.$field != old.$field {
+                        changed.push(near_sdk::serde_json::json!({
+                            "field": stringify!($field),
+                            "old": event_value(&old.$field),
+                            "new": event_value(&self.$field),
+                        }));
+                    }
+                )*
+                changed
+            }};
+        }
+        diff!(
+            paused,
+            reserve_floor,
+            near_price_cooldown_ns,
+            last_near_price_change_ns,
+            mpoo_price_cooldown_ns,
+            last_mpoo_price_change_ns,
+            repaint_young_ns,
+            repaint_young_credits,
+            repaint_mid_ns,
+            repaint_mid_credits,
+            repaint_base_credits,
+            max_outstanding_credits,
+            quota_base,
+            quota_per_cell,
+            quota_max,
+            max_earning_cells,
+            toilet_per_cell_second,
+            mpoo_daily_credit_cap,
+            free_first_paints_per_account,
+            happy_hour_enabled,
+            happy_hour_weekday,
+            happy_hour_start_s,
+            happy_hour_length_s,
+            happy_hour_cap_per_account,
+            happy_hour_requires_purchase,
+            last_happy_hour_change_ns,
+            distribution_interval_ns,
+        )
+    }
+}
+
+/// One tunable value as event JSON. Only a `u128` above `u64::MAX` fails
+/// `to_value` (no arbitrary precision); it falls back to its decimal string
+/// rather than failing the owner's call.
+fn event_value<T: near_sdk::serde::Serialize>(value: &T) -> near_sdk::serde_json::Value {
+    near_sdk::serde_json::to_value(value).unwrap_or_else(|_| {
+        near_sdk::serde_json::Value::String(
+            near_sdk::serde_json::to_string(value)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string(),
+        )
+    })
 }
 
 impl Default for Tunables {
@@ -559,8 +640,20 @@ impl Board {
         self.tunables.clone()
     }
 
+    /// The account allowed to call owner methods (`set_tunables`, prices, pause,
+    /// revenue accounts, `upgrade`): the account that called `new`.
+    pub fn get_owner(&self) -> AccountId {
+        self.payments.owner.clone()
+    }
+
     /// Owner-only. Changing a game rule is a transaction, not a redeployment and
     /// not a migration — that is the whole point of storing the knobs on chain.
+    ///
+    /// Emits `tunables_changed` (`mpoo_payments` 1.0.0) with
+    /// `data: [{changed: [{field, old, new}], changed_at_ns}]`, listing every stored
+    /// field this call changed, including history the call moved itself
+    /// (`last_near_price_change_ns`, `last_happy_hour_change_ns`). A call that
+    /// changes nothing emits no event.
     #[payable]
     pub fn set_tunables(&mut self, tunables: Tunables) {
         let mut tunables = tunables;
@@ -606,9 +699,19 @@ impl Board {
         // mpoo_daily_credit_cap applies immediately too (C8): it bounds protocol
         // loss, not what users pay, so it has no cooldown.
         self.accrue(now);
-        self.tunables = tunables;
+        let old = std::mem::replace(&mut self.tunables, tunables);
         if repaint_changed {
             self.tunables.last_near_price_change_ns = Some(now);
+        }
+        let changed = self.tunables.changes_from(&old);
+        if !changed.is_empty() {
+            Self::safety_event(
+                "tunables_changed",
+                near_sdk::serde_json::json!({
+                    "changed": changed,
+                    "changed_at_ns": now.to_string()
+                }),
+            );
         }
     }
 
@@ -1678,6 +1781,115 @@ mod tests {
         };
         board.set_tunables(tunables);
         assert_eq!(board.get_tunables().last_near_price_change_ns, Some(now));
+    }
+
+    // --- REV-G: distribution interval bounds, tunables event, owner view ----
+
+    const MINUTE_NS: u64 = 60_000_000_000;
+
+    #[test]
+    fn distribution_interval_outside_ten_minutes_to_a_day_is_rejected() {
+        let mut board = setup();
+        paying_context(0, 1, 1_000);
+        for too_far in [10 * MINUTE_NS - 1_000_000_000, 86_400_000_000_000 + 1, 0, u64::MAX] {
+            let tunables = Tunables {
+                distribution_interval_ns: too_far,
+                ..Tunables::default()
+            };
+            rejected_with("DistributionIntervalOutOfRange", || {
+                board.set_tunables(tunables)
+            });
+        }
+        for allowed in [10 * MINUTE_NS, 86_400_000_000_000] {
+            board.set_tunables(Tunables {
+                distribution_interval_ns: allowed,
+                ..Tunables::default()
+            });
+            assert_eq!(board.get_tunables().distribution_interval_ns, allowed);
+        }
+        assert_eq!(Tunables::default().distribution_interval_ns, 60 * MINUTE_NS);
+    }
+
+    fn tunables_events() -> Vec<serde_json::Value> {
+        near_sdk::test_utils::get_logs()
+            .iter()
+            .filter_map(|line| line.strip_prefix("EVENT_JSON:"))
+            .map(|json| serde_json::from_str::<serde_json::Value>(json).unwrap())
+            .filter(|event| event["event"] == "tunables_changed")
+            .collect()
+    }
+
+    #[test]
+    fn set_tunables_emits_one_event_listing_exactly_the_changed_fields() {
+        let mut board = setup();
+        let now = 5_000;
+        paying_context(0, 1, now);
+        board.set_tunables(Tunables {
+            quota_base: 33,
+            distribution_interval_ns: 2 * 3_600_000_000_000,
+            ..board.get_tunables()
+        });
+        let events = tunables_events();
+        assert_eq!(events.len(), 1, "{events:?}");
+        let event = &events[0];
+        assert_eq!(event["standard"], "mpoo_payments");
+        assert_eq!(event["version"], "1.0.0");
+        let data = event["data"].as_array().unwrap();
+        assert_eq!(data.len(), 1);
+        assert_eq!(data[0]["changed_at_ns"], now.to_string());
+        let mut changed: Vec<_> = data[0]["changed"].as_array().unwrap().clone();
+        changed.sort_by_key(|c| c["field"].as_str().unwrap().to_string());
+        assert_eq!(
+            changed,
+            vec![
+                serde_json::json!({
+                    "field": "distribution_interval_ns",
+                    "old": 3_600_000_000_000u64,
+                    "new": 7_200_000_000_000u64
+                }),
+                serde_json::json!({"field": "quota_base", "old": 32, "new": 33}),
+            ]
+        );
+    }
+
+    #[test]
+    fn tunables_event_writes_a_u128_above_u64_as_a_decimal_string() {
+        let mut board = setup();
+        paying_context(0, 1, 5_000);
+        board.set_tunables(Tunables {
+            max_outstanding_credits: u128::MAX,
+            ..board.get_tunables()
+        });
+        let events = tunables_events();
+        assert_eq!(
+            events[0]["data"][0]["changed"],
+            serde_json::json!([{
+                "field": "max_outstanding_credits",
+                "old": 0,
+                "new": u128::MAX.to_string()
+            }])
+        );
+    }
+
+    #[test]
+    fn set_tunables_without_a_change_emits_no_event() {
+        let mut board = setup();
+        paying_context(0, 1, 5_000);
+        board.set_tunables(board.get_tunables());
+        assert!(tunables_events().is_empty());
+    }
+
+    #[test]
+    fn get_owner_returns_the_account_that_called_new() {
+        context(accounts(2), 1_000);
+        let board = Board::new(
+            accounts(5),
+            near_sdk::json_types::U128(100),
+            crate::test_team(),
+            crate::test_buyback(),
+        );
+        context(accounts(3), 2_000);
+        assert_eq!(board.get_owner(), accounts(2));
     }
 
     #[test]

@@ -12,7 +12,7 @@ export const DEFAULT_RPC = Object.freeze({
 // tune: distribute_mpoo makes three outgoing transfers with callbacks, so it needs more.
 export const DEFAULT_GAS_TGAS = Object.freeze({
   distribute_near: 50,
-  distribute_mpoo: 100,
+  distribute_mpoo: 150,
 });
 
 export const METHODS = Object.freeze(['distribute_near', 'distribute_mpoo']);
