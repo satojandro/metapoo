@@ -51,4 +51,8 @@ jobs:
           KEEPER_GAS_NEAR_TGAS: ${{ vars.KEEPER_GAS_NEAR_TGAS }}
           KEEPER_GAS_MPOO_TGAS: ${{ vars.KEEPER_GAS_MPOO_TGAS }}
           KEEPER_PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+          # TR-S staking sync: off while KEEPER_STAKING_CONTRACT_ID is unset (ops/keeper/README.md).
+          KEEPER_STAKING_CONTRACT_ID: ${{ vars.KEEPER_STAKING_CONTRACT_ID }}
+          KEEPER_GAS_SYNC_TGAS: ${{ vars.KEEPER_GAS_SYNC_TGAS }}
+          KEEPER_STAKING_PRIVATE_KEY: ${{ secrets.KEEPER_STAKING_PRIVATE_KEY }}
         run: node src/main.js

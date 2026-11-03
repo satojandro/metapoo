@@ -96,6 +96,24 @@ describe('loadConfig', () => {
     assert.ok(problemsFor({ ...base, KEEPER_GAS_NEAR_TGAS: '2.5' }).some((m) => m.includes('KEEPER_GAS_NEAR_TGAS')));
   });
 
+  it('staking sync is off by default and needs its own key when switched on (TR-S)', () => {
+    assert.equal(loadConfig(base).staking, undefined);
+    // GitHub Actions passes an unset variable as an empty string.
+    assert.equal(loadConfig({ ...base, KEEPER_STAKING_CONTRACT_ID: '', KEEPER_STAKING_PRIVATE_KEY: '' }).staking, undefined);
+    const stakingKey = `ed25519:${'2'.repeat(64)}`;
+    const c = loadConfig({ ...base, KEEPER_STAKING_CONTRACT_ID: 'staking.metapoo.testnet', KEEPER_STAKING_PRIVATE_KEY: stakingKey });
+    assert.equal(c.staking.contractId, 'staking.metapoo.testnet');
+    assert.equal(c.staking.gasTgas, 50);
+    assert.equal(c.staking.privateKey, stakingKey);
+    assert.ok(!JSON.stringify(c).includes(stakingKey));
+    assert.ok(problemsFor({ ...base, KEEPER_STAKING_CONTRACT_ID: 'staking.metapoo.testnet' }).some((m) => m.includes('KEEPER_STAKING_PRIVATE_KEY')));
+    const bad = problemsFor({ ...base, KEEPER_STAKING_CONTRACT_ID: 'staking.metapoo.near', KEEPER_STAKING_PRIVATE_KEY: 'ed25519:short', KEEPER_GAS_SYNC_TGAS: '1' });
+    assert.ok(bad.some((m) => m.includes('KEEPER_STAKING_CONTRACT_ID')));
+    assert.ok(bad.some((m) => m.includes('KEEPER_STAKING_PRIVATE_KEY')));
+    assert.ok(bad.some((m) => m.includes('KEEPER_GAS_SYNC_TGAS')));
+    assert.ok(!bad.join(' ').includes('ed25519:short'));
+  });
+
   it('trims whitespace (e.g. a trailing newline pasted into a secret)', () => {
     const c = loadConfig({ ...base, KEEPER_PRIVATE_KEY: `${FAKE_KEY}\n`, KEEPER_NETWORK: ' testnet ' });
     assert.equal(c.privateKey, FAKE_KEY);

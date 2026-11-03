@@ -17,6 +17,12 @@ export const DEFAULT_GAS_TGAS = Object.freeze({
 
 export const METHODS = Object.freeze(['distribute_near', 'distribute_mpoo']);
 
+// TR-S: after a successful distribute_mpoo, call sync_inflow on the staking contract so the
+// stakers' share the board just sent is counted. Off unless KEEPER_STAKING_CONTRACT_ID is set.
+// The contract refuses less than 40 TGas (a balance read plus its callback).
+export const SYNC_INFLOW_METHOD = 'sync_inflow';
+export const DEFAULT_SYNC_INFLOW_GAS_TGAS = 50;
+
 const ACCOUNT_ID_RE = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
 const IMPLICIT_RE = /^[0-9a-f]{64}$/;
 const PRIVATE_KEY_RE = /^(ed25519|secp256k1):[1-9A-HJ-NP-Za-km-z]{32,}$/;
@@ -95,10 +101,28 @@ export function loadConfig(env = process.env) {
     distribute_mpoo: parseGas('KEEPER_GAS_MPOO_TGAS', trim('KEEPER_GAS_MPOO_TGAS'), DEFAULT_GAS_TGAS.distribute_mpoo, problems),
   };
 
+  // A function-call key names one receiver, so the staking contract needs its own key on
+  // the same keeper account (README, "Staking sync").
+  const stakingContractId = trim('KEEPER_STAKING_CONTRACT_ID');
+  let staking;
+  let stakingPrivateKey;
+  if (stakingContractId) {
+    checkAccountId('KEEPER_STAKING_CONTRACT_ID', stakingContractId, validNetwork, problems);
+    stakingPrivateKey = trim('KEEPER_STAKING_PRIVATE_KEY');
+    if (!stakingPrivateKey) problems.push('KEEPER_STAKING_PRIVATE_KEY is required when KEEPER_STAKING_CONTRACT_ID is set');
+    else if (!PRIVATE_KEY_RE.test(stakingPrivateKey)) problems.push('KEEPER_STAKING_PRIVATE_KEY must look like ed25519:<base58>');
+    const gasTgas = parseGas('KEEPER_GAS_SYNC_TGAS', trim('KEEPER_GAS_SYNC_TGAS'), DEFAULT_SYNC_INFLOW_GAS_TGAS, problems);
+    staking = { contractId: stakingContractId, gasTgas };
+  }
+
   if (problems.length > 0) throw new ConfigError(problems);
 
   const config = { network, rpcUrl, contractId, accountId, gasTgas };
   // Non-enumerable so JSON.stringify(config) or console.log(config) cannot leak it.
   Object.defineProperty(config, 'privateKey', { value: privateKey, enumerable: false });
+  if (staking) {
+    Object.defineProperty(staking, 'privateKey', { value: stakingPrivateKey, enumerable: false });
+    config.staking = Object.freeze(staking);
+  }
   return Object.freeze(config);
 }

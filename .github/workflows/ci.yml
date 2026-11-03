@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [board, paid-board, toilet]
+        crate: [board, paid-board, toilet, toilet-staking]
         include:
           # The retired free board stays live on testnet; its code is ask-first (AGENT.md),
           # so its lints are reported, not enforced. The launch contracts are held to -D warnings.
@@ -62,6 +62,8 @@ jobs:
           - crate: paid-board
             clippy_deny: '-D warnings'
           - crate: toilet
+            clippy_deny: '-D warnings'
+          - crate: toilet-staking
             clippy_deny: '-D warnings'
     defaults:
       run:
@@ -79,6 +81,32 @@ jobs:
       - run: cargo clippy --locked --all-targets -- ${{ matrix.clippy_deny }}
       # The deployed artifact must build, not just the host tests.
       - run: cargo build --locked --release --target wasm32-unknown-unknown
+
+  # The staking contract against the real board and token wasm in a local NEAR sandbox
+  # (TR-S). The test builds the three wasm files itself; near-workspaces downloads neard.
+  staking-sim:
+    name: staking sandbox simulation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: contracts/toilet-staking/sim
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            contracts/toilet-staking/sim
+            contracts/toilet-staking
+            contracts/toilet
+            contracts/paid-board
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      # neard raises its open-file limit to 65,535; the hosted runners allow it.
+      - run: cargo test --locked -- --nocapture
 
   keeper:
     name: revenue keeper

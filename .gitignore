@@ -21,3 +21,5 @@
 orchestrator-init.log
 /contracts/paid-board/target
 /contracts/toilet/target
+/contracts/toilet-staking/target
+/contracts/toilet-staking/sim/target
