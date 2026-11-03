@@ -466,6 +466,26 @@ export function fillBlock(host: HTMLElement, title: string, message: string): vo
   host.append(heading, paragraph);
 }
 
+/**
+ * Like `fillBlock`, but dismissible. The wallet-error host floats over the page
+ * (`.wallet-chrome > .result`), so a block without a close control is a trap: it
+ * stays until the next attempt and sits on top of the palette.
+ */
+export function fillDismissibleBlock(
+  host: HTMLElement,
+  title: string,
+  message: string,
+): void {
+  fillBlock(host, title, message);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "result-dismiss";
+  close.setAttribute("aria-label", "Dismiss this message");
+  close.textContent = "\u00d7";
+  close.addEventListener("click", () => clearBlock(host));
+  host.prepend(close);
+}
+
 export function fillResultWithLink(
   result: HTMLElement,
   title: string,

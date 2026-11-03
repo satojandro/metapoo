@@ -10,6 +10,7 @@ import {
   colorName,
   createWallView,
   fillBlock,
+  fillDismissibleBlock,
   fillResultWithLink,
 } from "./wall-view";
 
@@ -245,6 +246,18 @@ describe("wall view", () => {
 });
 
 describe("wall view helpers", () => {
+  it("fillDismissibleBlock can be closed by the user", () => {
+    const host = document.createElement("p");
+    document.body.append(host);
+    fillDismissibleBlock(host, "Drawing session was not authorized", "Retry or paint per stroke.");
+    expect(host.querySelector("h3")!.textContent).toMatch(/not authorized/);
+    const close = host.querySelector<HTMLButtonElement>("button.result-dismiss")!;
+    expect(close).toBeTruthy();
+    close.click();
+    expect(host.childElementCount).toBe(0);
+    host.remove();
+  });
+
   it("fillBlock, fillResultWithLink and clearBlock write text only", () => {
     const host = document.createElement("div");
     fillBlock(host, "<b>Title</b>", "Body");

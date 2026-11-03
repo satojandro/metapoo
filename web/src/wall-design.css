@@ -46,7 +46,35 @@ summary { cursor: pointer; }
 
 .result { border-radius: var(--mp-radius-md); font-size: var(--mp-text-md); }
 .result:empty { display: none; }
-.wallet-chrome > .result:not(:empty) { position: absolute; right: 32px; top: 100px; max-width: 360px; z-index: 21; }
+.wallet-chrome > .result:not(:empty) {
+  position: absolute;
+  right: 32px;
+  top: 100px;
+  max-width: 360px;
+  /* It floats over the palette: cap it and keep it scrollable so a long wallet error
+     can never sit on top of the colours, and give it a close control below. */
+  max-height: 42vh;
+  overflow: auto;
+  z-index: 21;
+}
+.wallet-chrome > .result { position: relative; padding-right: 28px; }
+.result-dismiss {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.65;
+}
+.result-dismiss:hover, .result-dismiss:focus-visible { opacity: 1; }
 
 /* The soft button still used by /money and the About details. */
 .action { border: 1px solid var(--mp-soft-btn-line); border-radius: 4px; background: var(--mp-soft-btn); color: var(--mp-soft-btn-ink); font-size: var(--mp-text-sm); font-weight: 700; padding: 12px 18px; transition: background .18s, transform .18s; }

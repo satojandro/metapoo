@@ -10,7 +10,7 @@ import {
 import { canUseLocalDrawingSession, fetchDrawingSessionAllowance } from "../../local-draw";
 import type { Cell } from "../../selection";
 import { revokeDrawingSessionKeyOnChain } from "../../wallet";
-import { clearBlock, fillBlock, type UiPhase } from "./wall-view";
+import { clearBlock, fillBlock, fillDismissibleBlock, type UiPhase } from "./wall-view";
 import type { WallScope } from "./wall-scope";
 
 /** The paint dock's session and Direct paint controls. */
@@ -129,7 +129,7 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
       const detail = error instanceof Error ? error.message : "Unknown wallet error";
       deps.setFlow("failed");
       if (walletError) {
-        fillBlock(
+        fillDismissibleBlock(
           walletError,
           "Drawing session was not authorized",
           `Ordinary wallet approval still works for each draw. ${detail} (build ${__BUILD_ID__})`,
@@ -251,6 +251,11 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
     revokeSessionButton.disabled = !sessionActive || !walletAccount;
     updateDirectPaintAvailability();
 
+    // A stale error must never outlive a good state: the block floats over the page.
+    if (sessionActive) {
+      const stale = walletErrorHost();
+      if (stale) clearBlock(stale);
+    }
     if (sessionActive && walletAccount) {
       void refreshAllowanceNote(walletAccount, walletNetwork ?? PAGE_NETWORK);
     }
