@@ -9,7 +9,7 @@ import {
 } from "../../drawing-session";
 import { canUseLocalDrawingSession, fetchDrawingSessionAllowance } from "../../local-draw";
 import type { Cell } from "../../selection";
-import { countBoardKeysOnAccount, revokeDrawingSessionKeyOnChain } from "../../wallet";
+import { revokeDrawingSessionKeyOnChain } from "../../wallet";
 import { clearBlock, fillBlock, fillDismissibleBlock, type UiPhase } from "./wall-view";
 import type { WallScope } from "./wall-scope";
 
@@ -123,8 +123,18 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
     authorizeSessionButton.disabled = true;
     unlockPaintButton.disabled = true;
     try {
-      await services.wallet.connect({ authorizeDrawingSession: true });
+      if (!scope.walletAccount()) await services.wallet.connect();
+      const authorize = services.wallet.authorizeDrawingSession;
+      if (!authorize) throw new Error("Drawing sessions are not available in this build.");
+      const authorization = await authorize();
       deps.setFlow(deps.selected() ? "editing" : "connected");
+      if (!authorization.confirmed) {
+        fillBlock(
+          result,
+          "Approval submitted",
+          "The key is on chain but not readable from this RPC yet. Painting will pick it up on the next refresh.",
+        );
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown wallet error";
       deps.setFlow("failed");
@@ -256,27 +266,9 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
       const stale = walletErrorHost();
       if (stale) clearBlock(stale);
     }
-    if (!sessionActive && walletAccount) {
-      void refreshStrayKeysNote(walletAccount);
-    }
     if (sessionActive && walletAccount) {
       void refreshAllowanceNote(walletAccount, walletNetwork ?? PAGE_NETWORK);
     }
-  }
-
-  /**
-   * A key on the account is not a key this browser can paint with: the secret lives in
-   * localStorage, and a failed attempt used to delete it. Say which case the user is in
-   * instead of showing the same "approve" prompt as if nothing had ever happened.
-   */
-  async function refreshStrayKeysNote(accountId: string): Promise<void> {
-    if (loadDrawingSessionRecord()) return; // we hold a secret: not a stray situation
-    const count = await countBoardKeysOnAccount(accountId).catch(() => 0);
-    if (count === 0) return;
-    drawingSessionNote.textContent = [
-      `${count} drawing key${count === 1 ? "" : "s"} for this board already exist${count === 1 ? "s" : ""} on ${accountId}, but this browser holds none of their secrets, so it cannot paint with them.`,
-      "Revoke them in the wallet, then approve once — or keep painting with ordinary wallet approval.",
-    ].join(" ");
   }
 
   async function refreshAllowanceNote(

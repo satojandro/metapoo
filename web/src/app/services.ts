@@ -5,11 +5,13 @@
 
 import { createOperationsStore, type OperationsStore } from "./operations";
 import {
+  authorizeDrawingSession,
   connectWallet,
   disconnectWallet,
   onWalletSession,
   restoreWalletSession,
   type ConnectWalletOptions,
+  type DrawingSessionAuthorization,
   type WalletSession,
 } from "../wallet";
 
@@ -18,6 +20,11 @@ export interface WalletService {
   connect(options?: ConnectWalletOptions): Promise<void>;
   disconnect(): Promise<void>;
   subscribe(listener: (session: WalletSession) => void): () => void;
+  /**
+   * Add the draw-only key with one wallet transaction (see `authorizeDrawingSession`).
+   * Optional so test doubles that never paint do not have to stub it.
+   */
+  authorizeDrawingSession?(): Promise<DrawingSessionAuthorization>;
   /** Resolves after the boot-time wallet restore attempt finishes. */
   whenReady: Promise<WalletSession>;
 }
@@ -51,6 +58,9 @@ export function createAppServices(): AppServices {
     },
     subscribe(listener) {
       return onWalletSession(listener);
+    },
+    authorizeDrawingSession() {
+      return authorizeDrawingSession();
     },
     whenReady,
   };

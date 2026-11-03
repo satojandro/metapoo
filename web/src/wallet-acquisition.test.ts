@@ -1,7 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const getAccessKey = vi.hoisted(() => vi.fn());
 vi.mock("@near-js/accounts", () => ({
-  Account: vi.fn().mockImplementation(() => ({ getAccessKey })),
+  Account: vi.fn().mockImplementation(() => ({ getAccessKey, getAccessKeyList: async () => ({ keys: [] }) })),
+}));
+const signAndSend = vi.hoisted(() => vi.fn());
+vi.mock("@hot-labs/near-connect", () => ({
+  NearConnector: class {
+    on() {}
+    async connect() {}
+    async disconnect() {}
+    async getConnectedWallet() {
+      return null;
+    }
+    async wallet() {
+      return {
+        signAndSendTransaction: signAndSend,
+        getAccounts: async () => [{ accountId: "alice.testnet" }],
+      };
+    }
+  },
 }));
 vi.mock("./config", () => ({
   CONTRACT_ID: "board.testnet",
@@ -13,8 +30,48 @@ vi.mock("./config", () => ({
   RHEA_MPOO_SWAP_ENABLED: false,
   ACQUISITION_PLAY_RESERVE_YOCTO: "",
 }));
-import { verifyAccessKeyOnAccount } from "./wallet";
+import { authorizeDrawingSession, verifyAccessKeyOnAccount } from "./wallet";
 import { DRAWING_SESSION_GAS_ALLOWANCE_YOCTO } from "./drawing-session";
+
+describe("authorizeDrawingSession", () => {
+  it("adds the key as a wallet transaction carrying our own permission", async () => {
+    signAndSend.mockReset();
+    signAndSend.mockResolvedValue({
+      transaction: { hash: "addkey-hash" },
+      status: { SuccessValue: "" },
+    });
+    getAccessKey.mockResolvedValue({
+      permission: {
+        FunctionCall: {
+          receiver_id: "board.testnet",
+          method_names: ["draw", "draw_many"],
+          allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+        },
+      },
+    });
+    const result = await authorizeDrawingSession();
+    expect(result.confirmed).toBe(true);
+    expect(result.transactionHash).toBe("addkey-hash");
+    const call = signAndSend.mock.calls[0][0];
+    expect(call.receiverId).toBe("alice.testnet");
+    expect(call.actions).toHaveLength(1);
+    expect(call.actions[0].type).toBe("AddKey");
+    // The whole point: the method filter is ours, so the wallet cannot widen it.
+    expect(call.actions[0].params.accessKey.permission).toEqual({
+      receiverId: "board.testnet",
+      allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+      methodNames: ["draw", "draw_many"],
+    });
+  });
+
+  it("keeps the secret when the chain read lags, and reports not-confirmed", async () => {
+    signAndSend.mockReset();
+    signAndSend.mockResolvedValue({ transaction: { hash: "h" }, status: { SuccessValue: "" } });
+    getAccessKey.mockRejectedValue(new Error("does not exist while viewing"));
+    const result = await authorizeDrawingSession();
+    expect(result.confirmed).toBe(false);
+  });
+});
 
 describe("drawing authorization verifies installed authority, not merely key existence", () => {
   beforeEach(() => {

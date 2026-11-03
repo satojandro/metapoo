@@ -98,9 +98,16 @@ describe("mountWall dispose", () => {
   function connectedWallServices() {
     const services = createAppServices();
     const connect = vi.fn(async () => undefined);
+    const authorize = vi.fn(async () => ({
+      accountId: "alice.testnet",
+      publicKey: "ed25519:fixture",
+      transactionHash: "hash",
+      confirmed: true,
+    }));
     services.wallet = {
       getSession: () => ({ accountId: "alice.testnet", networkId: "testnet" }),
       connect,
+      authorizeDrawingSession: authorize,
       disconnect: async () => undefined,
       subscribe: (listener) => {
         listener({ accountId: "alice.testnet", networkId: "testnet" });
@@ -111,7 +118,7 @@ describe("mountWall dispose", () => {
         networkId: "testnet",
       }),
     };
-    return { services, connect };
+    return { services, connect, authorize };
   }
 
   function touchPointer(
@@ -601,7 +608,7 @@ describe("mountWall dispose", () => {
 
   it("offers one-approval unlock in the dock instead of a dead Direct paint toggle", async () => {
     vi.mocked(canUseLocalDrawingSession).mockReturnValue(false);
-    const { services, connect } = connectedWallServices();
+    const { services, connect, authorize } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
 
@@ -624,9 +631,11 @@ describe("mountWall dispose", () => {
     expect(dock.textContent).not.toMatch(/drawing session/i);
 
     root.querySelector<HTMLButtonElement>("#unlock-paint-button")!.click();
-    await vi.waitFor(() =>
-      expect(connect).toHaveBeenCalledWith({ authorizeDrawingSession: true }),
-    );
+    // The key is added by an ordinary wallet transaction now, not by sign-in, so the
+    // permission (receiver + draw methods + allowance) is ours and the wallet cannot
+    // store an empty method filter.
+    await vi.waitFor(() => expect(authorize).toHaveBeenCalled());
+    expect(connect).not.toHaveBeenCalledWith({ authorizeDrawingSession: true });
     expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
     dispose();
   });

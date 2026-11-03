@@ -37,6 +37,7 @@ import {
   type OperationContext,
 } from "./integrations/types";
 import { stringifyChainJson } from "./chain-json";
+import { parseTxOutcome } from "./tx-outcome";
 import {
   buildAddFunctionCallKeyParams,
   classifyDrawingKeyAccessKey,
@@ -342,6 +343,87 @@ export async function countBoardKeysOnAccount(accountId: string): Promise<number
   } catch {
     return 0;
   }
+}
+
+
+export interface DrawingSessionAuthorization {
+  accountId: string;
+  publicKey: string;
+  transactionHash: string | null;
+  /** False when the key is not readable yet. The secret is kept either way. */
+  confirmed: boolean;
+}
+
+/**
+ * Add the draw-only key with an ordinary wallet transaction.
+ *
+ * We build the AddKey action ourselves instead of asking the wallet to add it during
+ * sign-in. Two reasons, both observed on testnet: Meteor ignores
+ * `allowMethods.methodNames` on sign-in and stores an empty filter (any method on the
+ * board), and it can throw after the key is already on chain. A plain transaction is
+ * the path this app already uses successfully, it carries *our* permission — receiver,
+ * draw methods, bounded allowance — and it reports a real result.
+ *
+ * The secret is saved before the chain check, so a slow RPC can never cost the user
+ * another approval.
+ */
+export async function authorizeDrawingSession(): Promise<DrawingSessionAuthorization> {
+  const current = ensureConnector();
+  await connectorReady.catch(() => undefined);
+  const wallet = await current.wallet().catch(() => null);
+  if (!wallet) {
+    throw new Error("Connect a wallet first: the drawing key is added by a wallet approval.");
+  }
+  const accountId = (await accountIdFromWallet(wallet)) ?? session.accountId;
+  if (!accountId) {
+    throw new Error("Could not read the connected account. Reconnect the wallet and try again.");
+  }
+
+  const keypair = await createDrawingSessionKeypair();
+  const outcome = await wallet.signAndSendTransaction({
+    receiverId: accountId,
+    actions: [
+      {
+        type: "AddKey",
+        params: {
+          publicKey: keypair.publicKey,
+          accessKey: {
+            nonce: 0,
+            permission: {
+              receiverId: CONTRACT_ID,
+              allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+              methodNames: [...DRAWING_SESSION_METHODS],
+            },
+          },
+        },
+      },
+    ],
+  });
+  const parsed = parseTxOutcome(outcome);
+  if (parsed.status === "failed") {
+    throw new Error(parsed.failureMessage ?? "The wallet refused the AddKey transaction.");
+  }
+
+  saveDrawingSessionRecord(
+    makeAuthorizedSessionRecord({
+      accountId,
+      networkId: WALLET_NETWORK,
+      contractId: CONTRACT_ID,
+      publicKey: keypair.publicKey,
+      secretKey: keypair.secretKey,
+      gasAllowanceYocto: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+    }),
+  );
+  session = { accountId, networkId: WALLET_NETWORK };
+  emit();
+
+  const confirmed = await verifyAccessKeyOnAccount(accountId, keypair.publicKey);
+  return {
+    accountId,
+    publicKey: keypair.publicKey,
+    transactionHash: parsed.transactionHash,
+    confirmed,
+  };
 }
 
 /**

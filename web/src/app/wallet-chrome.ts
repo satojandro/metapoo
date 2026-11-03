@@ -144,9 +144,10 @@ export function mountWalletChrome(
         } else {
           const wantSession =
             Boolean(authorizeDrawingSession?.checked) && isContractConfigured();
-          await services.wallet.connect({
-            authorizeDrawingSession: wantSession,
-          });
+          // Connect first, then add the draw-only key as its own transaction: the
+          // permission has to be ours, not something the wallet fills in during sign-in.
+          await services.wallet.connect();
+          if (wantSession) await services.wallet.authorizeDrawingSession?.();
         }
       } catch (error) {
         const detail =
