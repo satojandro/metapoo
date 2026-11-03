@@ -292,23 +292,30 @@ export async function drawingKeyScopeOnAccount(
 export async function verifyAccessKeyOnAccount(
   accountId: string,
   publicKey: string,
+  attempts = 4,
 ): Promise<boolean> {
   const account = new NearAccount(
     accountId,
     new JsonRpcProvider({ url: RPC_URL }),
   );
-  try {
-    const access = await account.getAccessKey(publicKey);
-    const scope = classifyDrawingKeyAccessKey(access.permission, CONTRACT_ID);
-    return scope === "scoped" || scope === "wildcard";
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : "";
-    if (/does not exist|doesn't exist|not found/i.test(detail)) {
-      return false;
+  // The wallet returns as soon as it has signed. AddKey is a separate receipt, and the
+  // RPC we read from can lag a block behind — a single read reports "not found" for a
+  // key that is about to exist, and the old code then wiped the secret.
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const access = await account.getAccessKey(publicKey);
+      const scope = classifyDrawingKeyAccessKey(access.permission, CONTRACT_ID);
+      if (scope === "scoped" || scope === "wildcard") return true;
+      return false; // the key exists and is genuinely unusable — retrying cannot help
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "";
+      const missing = /does not exist|doesn't exist|not found/i.test(detail);
+      if (!missing) return false; // RPC ambiguity: do not mark the session active
+      if (attempt === attempts - 1) return false;
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
     }
-    // RPC ambiguity: do not mark the session active.
-    return false;
   }
+  return false;
 }
 
 /**

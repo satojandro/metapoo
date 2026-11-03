@@ -132,7 +132,7 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
         fillBlock(
           walletError,
           "Drawing session was not authorized",
-          `Ordinary wallet approval still works for each draw. ${detail}`,
+          `Ordinary wallet approval still works for each draw. ${detail} (build ${__BUILD_ID__})`,
         );
       }
     } finally {
@@ -240,6 +240,7 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
       `Configured allowance for a new session: ${status.allowanceLabel}.`,
       "Renewal: authorize again to request a new limited key (old on-chain keys are not auto-removed).",
       "Forget clears this browser only. Revoke on-chain asks the wallet to DeleteKey.",
+      `Build ${__BUILD_ID__}.`,
     ].join(" ");
 
     const canUseContract = isContractConfigured();
