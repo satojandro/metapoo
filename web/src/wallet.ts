@@ -39,11 +39,13 @@ import {
 import { stringifyChainJson } from "./chain-json";
 import {
   buildAddFunctionCallKeyParams,
+  classifyDrawingKeyAccessKey,
   createDrawingSessionKeypair,
   DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
   DRAWING_SESSION_METHODS,
   makeAuthorizedSessionRecord,
   saveDrawingSessionRecord,
+  type DrawingKeyScope,
   wipeDrawingSessionStorage,
 } from "./drawing-session";
 
@@ -259,7 +261,34 @@ export async function accountIdFromWallet(
   return firstString(record.accountId, record.account_id);
 }
 
-/** True when the public key exists on the account (on-chain check). */
+/**
+ * What the on-chain key at `publicKey` is, for drawing purposes (see `DrawingKeyScope`).
+ * Reads the account directly so a stale local record can never impersonate a key.
+ */
+export async function drawingKeyScopeOnAccount(
+  accountId: string,
+  publicKey: string,
+): Promise<DrawingKeyScope> {
+  const account = new NearAccount(accountId, new JsonRpcProvider({ url: RPC_URL }));
+  try {
+    const access = await account.getAccessKey(publicKey);
+    return classifyDrawingKeyAccessKey(access.permission, CONTRACT_ID);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "";
+    if (/does not exist|doesn't exist|not found/i.test(detail)) return "absent";
+    throw error;
+  }
+}
+
+/**
+ * True when the public key can paint on this board.
+ *
+ * Accepts a wallet-wide key (`wildcard`) as well as one scoped to draw/draw_many:
+ * Meteor ignores `allowMethods.methodNames` and adds a key for any method on the
+ * receiver. Rejecting that made "Approve painting key" fail every single time, while
+ * each attempt still wrote another live key to the user's account. The key can paint,
+ * so the session is valid; the panel says out loud that it is wider than requested.
+ */
 export async function verifyAccessKeyOnAccount(
   accountId: string,
   publicKey: string,
@@ -270,22 +299,8 @@ export async function verifyAccessKeyOnAccount(
   );
   try {
     const access = await account.getAccessKey(publicKey);
-    if (
-      typeof access.permission !== "object" ||
-      !("FunctionCall" in access.permission)
-    )
-      return false;
-    const permission = access.permission.FunctionCall;
-    return (
-      permission.receiver_id === CONTRACT_ID &&
-      permission.method_names.length === 2 &&
-      ["draw", "draw_many"].every((method) =>
-        permission.method_names.includes(method),
-      ) &&
-      permission.allowance !== null &&
-      BigInt(permission.allowance) <=
-        BigInt(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO)
-    );
+    const scope = classifyDrawingKeyAccessKey(access.permission, CONTRACT_ID);
+    return scope === "scoped" || scope === "wildcard";
   } catch (error) {
     const detail = error instanceof Error ? error.message : "";
     if (/does not exist|doesn't exist|not found/i.test(detail)) {

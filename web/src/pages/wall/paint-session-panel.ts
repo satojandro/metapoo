@@ -272,8 +272,11 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
       drawingSessionNote.textContent = [
         `Live remaining allowance: ${remaining}.`,
         info.permissionSummary,
+        info.wildcard
+          ? `This wallet added a key for ANY method on ${CONTRACT_ID}, not just painting — it can also spend credits or claim TOILET from this browser. Revoke it when you are done.`
+          : "",
         "Forget clears this browser only. Revoke on-chain asks the wallet to DeleteKey.",
-      ].join(" ");
+      ].filter(Boolean).join(" ");
     } catch {
       // Keep the static note if the live query fails.
     }

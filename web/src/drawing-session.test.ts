@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAddFunctionCallKeyParams,
+  classifyDrawingKeyAccessKey,
   describeDrawingSession,
   DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
   DRAWING_SESSION_METHODS,
@@ -217,5 +218,44 @@ describe("localStorage session persistence", () => {
     const storage = memoryStorage();
     storage.setItem("metapoo.experimental.drawingSession.v1", "{not-json");
     expect(loadDrawingSessionRecord(storage)).toBeNull();
+  });
+});
+
+describe("classifyDrawingKeyAccessKey", () => {
+  const board = "board.testnet";
+  const fc = (over: { receiver_id?: string; method_names?: string[]; allowance?: string | null }) => ({
+    FunctionCall: {
+      receiver_id: over.receiver_id ?? board,
+      method_names: over.method_names ?? ["draw", "draw_many"],
+      allowance: over.allowance === undefined ? DRAWING_SESSION_GAS_ALLOWANCE_YOCTO : over.allowance,
+    },
+  });
+
+  it("accepts a key scoped to the drawing methods", () => {
+    expect(classifyDrawingKeyAccessKey(fc({}), board)).toBe("scoped");
+  });
+
+  it("accepts, and names, a wallet-wide key: Meteor adds method_names: []", () => {
+    // Observed on testnet 2026-11-03: near-connect forwards allowMethods.methodNames and
+    // Meteor stores an empty filter. Rejecting it broke every authorize attempt.
+    expect(classifyDrawingKeyAccessKey(fc({ method_names: [] }), board)).toBe("wildcard");
+  });
+
+  it("rejects what a session must never use", () => {
+    expect(classifyDrawingKeyAccessKey("FullAccess", board)).toBe("rejected");
+    expect(classifyDrawingKeyAccessKey(null, board)).toBe("absent");
+    expect(classifyDrawingKeyAccessKey(fc({ receiver_id: "other.testnet" }), board)).toBe("rejected");
+    expect(classifyDrawingKeyAccessKey(fc({ method_names: ["draw"] }), board)).toBe("rejected");
+    expect(classifyDrawingKeyAccessKey(fc({ allowance: null }), board)).toBe("rejected");
+    expect(
+      classifyDrawingKeyAccessKey(
+        fc({ allowance: (BigInt(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO) + 1n).toString() }),
+        board,
+      ),
+    ).toBe("rejected");
+  });
+
+  it("treats the exact requested allowance as acceptable", () => {
+    expect(classifyDrawingKeyAccessKey(fc({ allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO }), board)).toBe("scoped");
   });
 });

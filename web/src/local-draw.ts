@@ -71,6 +71,8 @@ export interface AccessKeyAllowanceInfo {
   /** Remaining allowance in yoctoNEAR, or null when unlimited / unknown. */
   remainingYocto: string | null;
   permissionSummary: string;
+  /** True when the wallet added a key with no method filter: any method on the board. */
+  wildcard?: boolean;
 }
 
 function provider(): JsonRpcProvider {
@@ -141,6 +143,7 @@ export async function fetchDrawingSessionAllowance(input: {
       found: true,
       remainingYocto: allowance,
       permissionSummary: `receiver ${fn.receiver_id}; methods ${(fn.method_names ?? []).join(", ") || "(any)"}`,
+      wildcard: (fn.method_names ?? []).length === 0,
     };
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";

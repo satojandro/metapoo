@@ -26,7 +26,7 @@ describe("drawing authorization verifies installed authority, not merely key exi
       await verifyAccessKeyOnAccount("alice.testnet", "ed25519:fixture"),
     ).toBe(false);
   });
-  it("accepts only the existing board, exact drawing methods and bounded gas allowance", async () => {
+  it("accepts the board with drawing methods or a wallet-wide filter, and nothing wider", async () => {
     const permission = {
       receiver_id: "board.testnet",
       method_names: ["draw", "draw_many"],
@@ -38,11 +38,19 @@ describe("drawing authorization verifies installed authority, not merely key exi
     expect(
       await verifyAccessKeyOnAccount("alice.testnet", "ed25519:fixture"),
     ).toBe(true);
+    // Meteor stores an empty method filter, i.e. any method on the receiver. The key can
+    // still paint, so it activates the session; the panel reports the wider scope.
+    getAccessKey.mockResolvedValue({
+      permission: { FunctionCall: { ...permission, method_names: [] } },
+    });
+    expect(
+      await verifyAccessKeyOnAccount("alice.testnet", "ed25519:fixture"),
+    ).toBe(true);
     for (const changed of [
       { receiver_id: "other.testnet" },
-      { method_names: [] },
       { method_names: ["draw", "ft_transfer"] },
       { allowance: null },
+      { allowance: (BigInt(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO) + 1n).toString() },
     ]) {
       getAccessKey.mockResolvedValue({
         permission: { FunctionCall: { ...permission, ...changed } },

@@ -156,6 +156,49 @@ export function formatAllowanceNear(yocto: string): string {
 }
 
 /**
+ * What an on-chain access key is worth to a drawing session.
+ *
+ * `scoped`   — a FunctionCall key on this board limited to drawing methods.
+ * `wildcard` — a FunctionCall key on this board with **no** method filter, i.e. any
+ *              method on the receiver. Painters can use it, but it is wider than
+ *              requested. Wallets do this: @hot-labs/near-connect forwards
+ *              `allowMethods.methodNames` to the injected wallet, and Meteor ignores
+ *              it, adding `method_names: []` (observed on testnet, 2026-11-03).
+ *              Rejecting such a key strands the user *and* leaves another live orphan
+ *              key on their account after every retry, so it is accepted and reported.
+ * `rejected` — wrong receiver, more allowance than asked, or a filter missing drawing.
+ * `absent`   — no key at that public key.
+ */
+export type DrawingKeyScope = "absent" | "scoped" | "wildcard" | "rejected";
+
+export function classifyDrawingKeyAccessKey(
+  permission: unknown,
+  contractId: string,
+  allowanceYocto: string = DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+): DrawingKeyScope {
+  if (permission === null || permission === undefined) return "absent";
+  if (typeof permission !== "object") return "rejected"; // "FullAccess"
+  const fn = (permission as {
+    FunctionCall?: { receiver_id?: unknown; method_names?: unknown; allowance?: unknown };
+  }).FunctionCall;
+  if (!fn) return "rejected";
+  if (fn.receiver_id !== contractId) return "rejected";
+  if (typeof fn.allowance !== "string" || fn.allowance === "") return "rejected";
+  let overBudget: boolean;
+  try {
+    overBudget = BigInt(fn.allowance) > BigInt(allowanceYocto);
+  } catch {
+    return "rejected";
+  }
+  if (overBudget) return "rejected";
+  if (!Array.isArray(fn.method_names)) return "rejected";
+  const methods = fn.method_names.filter((m): m is string => typeof m === "string");
+  // An empty filter is "any method on this receiver" — the NEAR protocol semantics.
+  if (methods.length === 0) return "wildcard";
+  return DRAWING_SESSION_METHODS.every((method) => methods.includes(method)) ? "scoped" : "rejected";
+}
+
+/**
  * Build the near-connect `addFunctionCallKey` payload for this experiment.
  */
 export function buildAddFunctionCallKeyParams(
