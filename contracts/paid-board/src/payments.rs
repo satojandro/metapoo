@@ -507,6 +507,7 @@ mod tests {
             U128(100),
             crate::test_team(),
             crate::test_buyback(),
+            crate::test_toilet(),
         );
         // Tiny prices keep arithmetic edge-case tests readable; production
         // initialization is exercised separately below.
@@ -539,6 +540,7 @@ mod tests {
             U128(100),
             crate::test_team(),
             crate::test_buyback(),
+            crate::test_toilet(),
         );
         let price = 2_500_000_000_000_000_000_000u128;
         assert_eq!(board.get_payment_config().near_per_credit, U128(price));
