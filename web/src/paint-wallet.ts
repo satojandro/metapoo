@@ -1,3 +1,4 @@
+import { readRpcFetch } from "./read-rpc";
 /** Read-only balances. No wallet signatures, transfers or optimistic credits. */
 import { TOKEN_PAYMENTS_ENABLED } from "./payment-flags";
 
@@ -40,10 +41,10 @@ export function availableNear(amount: string, locked: string, bytes: number, byt
 }
 export function createReadRpc(url: string, signal: AbortSignal): Rpc {
   return async (method, params) => {
-    const response = await fetch(url, {
+    const response = await readRpcFetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, signal,
       body: JSON.stringify({ jsonrpc: "2.0", id: "paint-wallet", method, params }),
-    });
+    }, 1);
     if (!response.ok) throw new Error("Network unavailable");
     const data = record(await response.json());
     if (data.error || !("result" in data)) throw new Error("Read failed");
