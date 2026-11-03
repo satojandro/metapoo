@@ -9,12 +9,14 @@ import { mountRevenuePage } from "../app/revenue-panel-page";
 import { mountAdminPage } from "../app/admin-page";
 import { mountHowItWorksPage } from "../app/how-it-works-page";
 import { mountToiletPage } from "../app/toilet-page";
+import { mountStakePage } from "../app/stake-page";
 
 export function registerDefaultPages(): void {
   registerPageMount("home", mountWallPage);
   registerPageMount("wall", mountWallPage);
   registerPageMount("how", (root, ctx) => mountHowItWorksPage(root, ctx));
   registerPageMount("toilet", (root, ctx) => mountToiletPage(root, ctx));
+  registerPageMount("stake", (root, ctx) => mountStakePage(root, ctx));
   registerPageMount("money", (root, ctx) => mountRevenuePage(root, ctx));
   registerPageMount("admin", (root, ctx) => mountAdminPage(root, ctx));
   registerPageMount(

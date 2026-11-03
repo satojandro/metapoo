@@ -31,6 +31,7 @@ export type PageId =
   | "how"
   | "money"
   | "toilet"
+  | "stake"
   | "admin"
   | "not-found";
 

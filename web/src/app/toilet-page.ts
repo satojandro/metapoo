@@ -216,6 +216,7 @@ const TEMPLATE = `
       </div>
       <p class="tlt-small"><b style="color:var(--mp-fg)">Paper hands pay.</b> Unstaking burns ${pct(EXIT_TAX)} of the TOILET you take out, every time, on that amount only.</p>
       <p class="tlt-small">Before swap costs. mPOO paid directly for credits joins the same split. <a href="/money">Live flows on Where the money goes →</a></p>
+      <p><a class="mp-btn mp-btn-primary" href="/stake">Stake your TOILET →</a></p>
     </div>
   </section>
 

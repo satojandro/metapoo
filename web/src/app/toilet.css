@@ -143,3 +143,4 @@
   .tlt-dt, .tlt-track i { transition: none; }
   .tlt-dt.flash { animation: none; }
 }
+.tlt a.mp-btn-primary { color: var(--mp-on-tag); text-decoration: none; display: inline-flex; align-items: center; }
