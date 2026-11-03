@@ -50,9 +50,41 @@ change they fail to compile rather than fail.
 - Same-artist free → paid starts earning; free happy-hour repaint of a paid cell stops earning, for
   another artist and the same artist (`f2_a_free_repaint_of_a_paid_cell_stops_its_earning`).
 
+## Owner decisions, 3 November
+
+1. **Confirmed:** the 24 h rate cooldown also applies to switching emission back on after 0,
+   but not to the very first switch-on.
+2. **Confirmed:** `MIN_CLAIM = 1 TOILET` (10^18 atomic units).
+3. **Approved, new contract change:** cumulative buyback totals on the board (below).
+
+## Buyback totals (`get_buyback_totals`)
+
+Two board fields, `total_near_to_buyback` (yoctoNEAR) and `total_mpoo_returned` (mPOO base units),
+fresh init; `from_v1` starts both at 0. The view returns
+`{"near_to_buyback": "<decimal>", "mpoo_returned": "<decimal>"}`.
+
+- The NEAR counter increments in `on_near_distributed`, inside `if ok && to_buyback == Some(true)`,
+  where `ok` is the existing `leg_succeeded()` check. Leg success was already observed there (the
+  callback logged `near_distribution_leg_sent`). `distribute_near` now passes the leg's role
+  (`Some(false)` team, `Some(true)` buyback) to the callback; nothing else in it changed.
+  Identifying the leg by role, not by comparing `account` with `buyback_account`, keeps a team
+  account equal to the buyback account from counting, and survives a buyback-account change while
+  the callback is in flight.
+- The mPOO counter increments in `receive_mpoo_revenue`, next to `mpoo_revenue_received`, by the
+  same amount. Credit purchases go through `add_mpoo_revenue` only and are not counted.
+
+Failed before the counting was wired (fields and view in place, no increments):
+`a_successful_buyback_leg_counts_once` and `a_failed_then_resent_buyback_leg_counts_once`
+(`left: U128(0)`, `right: U128(165699921600000000000000007)`), and
+`a_revenue_receipt_adds_exactly_its_amount_and_mpoo_purchases_do_not` (`left: U128(0)`,
+`right: U128(507)`). `buyback_totals_are_zero_on_a_fresh_board` does not compile without the view.
+The failed-then-resent test asserts 0 after the failed leg, so counting at schedule time (which
+would count the resend twice) fails it too.
+
 ## Decisions made here, for review
 
-- **The 24 h cooldown also applies to a switch-on after a stop** (not to the first switch-on ever).
+- **The 24 h cooldown also applies to a switch-on after a stop** (not to the first switch-on ever;
+  owner confirmed 3 Nov).
   The spec lists the switch-on bound and the cooldown in separate bullets. Without the cooldown on a
   switch-on, stop → 2× → stop → 2× compounds without limit in one block, which defeats T2. Only 0 is
   "at any time". If the owner wants switch-on exempt, it is one condition in `set_toilet_rate`.

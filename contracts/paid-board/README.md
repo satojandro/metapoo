@@ -95,8 +95,9 @@ one price each, with exactly 1 yoctoNEAR attached. Existing credits are unaffect
   else `DistributionTooSoon`). Sends `get_withdrawable_near()` as native transfers: 10% to
   `team_account`, 90% plus rounding dust to `buyback_account`. `NothingToDistribute` if
   zero. A failed transfer refunds itself to the board, so the callback
-  `on_near_distributed` only logs `near_distribution_leg_sent` / `_failed`; the next call
-  sends the refund again.
+  `on_near_distributed` logs `near_distribution_leg_sent` / `_failed`; the next call
+  sends the refund again. On a confirmed buyback leg the callback also adds it to
+  `total_near_to_buyback` (below).
 - `ft_on_transfer` with msg `{"revenue":{}}` from `buyback_account` adds to
   `mpoo_undistributed` (accepted even while paused); from anyone else it is refunded.
   Every successful mPOO credit purchase also adds its amount.
@@ -114,6 +115,17 @@ one price each, with exactly 1 yoctoNEAR attached. Existing credits are unaffect
 - `set_staking_contract(account_id)` — owner, 1 yocto, once (`StakingContractAlreadySet`).
 - `get_revenue_state()` — withdrawable NEAR, undistributed mPOO, staker reserve, next
   distribution times (U64 strings, 0 = now), accounts and burn address.
+- `get_buyback_totals()` — `{"near_to_buyback": "<yoctoNEAR>", "mpoo_returned": "<mPOO base
+  units>"}`, decimal strings, cumulative since `new` (owner, 3 Nov). Both start at 0.
+  - `near_to_buyback` counts only NEAR that **reached** `buyback_account`: it is added in
+    `on_near_distributed` when the buyback leg's transfer succeeded, not when
+    `near_distributed` is logged. A failed leg is refunded and resent by a later call, and
+    counts once, when that send is confirmed. The leg's role travels in the callback
+    (`to_buyback`), so a team account equal to the buyback account is not counted.
+  - `mpoo_returned` counts the mPOO accepted from `buyback_account` with `{"revenue":{}}`:
+    the same amounts as the `mpoo_revenue_received` events. Refused revenue messages and
+    credit purchases paid in mPOO are not counted.
+  - NEAR waiting on the buyback account is not on the board; read that account's balance.
 
 - Reserve floor defaults to **5 NEAR** and cannot be configured below it. Cooldown
   cannot be configured below 24 hours, and `last_price_change_ns` cannot be rewritten
@@ -334,7 +346,7 @@ old rate up to now first, so no change is retroactive. Its guards:
 - Any change to a non-zero rate, a switch-on after a stop included, waits
   `TOILET_RATE_COOLDOWN_NS` (24 h, a constant) after the last change to a non-zero
   rate (`ToiletRateCooldown`). Without that, stop → 2× → stop → 2× would compound in
-  one block.
+  one block. Owner confirmed this rule on 3 Nov.
 - Event `toilet_rate_changed {old, new, changed_at_ns}` (decimal strings).
 
 At the start of `draw`, `draw_many`, and `claim_toilet`, the board reserves elapsed
@@ -362,7 +374,7 @@ stops and previously earned claims remain available.
   `mint(account, amount)` on the TOILET token stored at `new` (§B4) with zero deposit
   and 10 Tgas, **chained to a private `resolve_claim(account_id, amount)` callback**.
   An empty claim fails `NothingToClaim`. A claim below `MIN_CLAIM` (1 TOILET,
-  10^18 atomic units, a constant; §B5, proposed value awaiting owner confirmation)
+  10^18 atomic units, a constant; §B5, value confirmed by the owner on 3 Nov)
   fails `ClaimBelowMinimum`, so dust claims cannot drain the token's
   auto-registration balance. The `toilet_claimed` event includes `account_id`, `amount`,
   and `accrued_total`; it proves the claim was scheduled, not that the mint succeeded.

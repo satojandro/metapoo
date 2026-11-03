@@ -51,6 +51,20 @@ pub struct RevenueState {
     pub mpoo_token: AccountId,
 }
 
+/// What `get_buyback_totals` returns: cumulative buyback flows since `new`, as
+/// decimal strings. JSON `{"near_to_buyback":"…","mpoo_returned":"…"}`.
+#[near(serializers = [json])]
+pub struct BuybackTotalsView {
+    /// yoctoNEAR that reached `buyback_account` through `distribute_near`: counted
+    /// when the buyback leg's transfer is confirmed, so a failed leg (refunded and
+    /// sent again later) counts once.
+    pub near_to_buyback: U128,
+    /// mPOO base units the buyback account returned with `{"revenue":{}}`, the same
+    /// amounts as the `mpoo_revenue_received` events. Credit purchases paid in mPOO
+    /// are not included.
+    pub mpoo_returned: U128,
+}
+
 /// Which mPOO leg a callback is settling.
 #[near(serializers = [json])]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,8 +85,9 @@ impl Board {
     /// The time is recorded before the transfers leave. A native transfer that
     /// fails (say, a deleted recipient) refunds its deposit to this account, so the
     /// NEAR is back in `get_withdrawable_near` and the next call sends it again;
-    /// there is no counter to restore. `on_near_distributed` therefore only logs
-    /// the outcome of each leg.
+    /// there is no counter to restore. `on_near_distributed` logs the outcome of
+    /// each leg and, for a confirmed buyback leg only, adds it to
+    /// `get_buyback_totals().near_to_buyback`.
     pub fn distribute_near(&mut self) {
         let now = env::block_timestamp();
         assert_interval(
@@ -94,9 +109,9 @@ impl Board {
                 "status": "scheduled"
             }),
         );
-        for (account, share) in [
-            (self.payments.team_account.clone(), team),
-            (self.payments.buyback_account.clone(), buyback),
+        for (account, share, to_buyback) in [
+            (self.payments.team_account.clone(), team, false),
+            (self.payments.buyback_account.clone(), buyback, true),
         ] {
             if share == 0 {
                 continue;
@@ -106,17 +121,26 @@ impl Board {
                 .then(
                     Self::ext(env::current_account_id())
                         .with_static_gas(CALLBACK_GAS)
-                        .on_near_distributed(account, U128(share)),
+                        .on_near_distributed(account, U128(share), Some(to_buyback)),
                 )
                 .detach();
         }
     }
 
-    /// Callback for one NEAR leg. Logs only: a failed transfer has already
-    /// returned its deposit to this account (see `distribute_near`).
+    /// Callback for one NEAR leg. A failed transfer has already returned its
+    /// deposit to this account (see `distribute_near`), so failure only logs. A
+    /// confirmed buyback leg (`to_buyback`, set by `distribute_near`; the leg's
+    /// role, not a comparison of account ids, so a team account equal to the
+    /// buyback account is not counted twice) adds `amount` to
+    /// `total_near_to_buyback`. A failed leg is resent by a later call and counted
+    /// when that one is confirmed: once.
     #[private]
-    pub fn on_near_distributed(&mut self, account: AccountId, amount: U128) -> bool {
+    pub fn on_near_distributed(&mut self, account: AccountId, amount: U128, to_buyback: Option<bool>) -> bool {
         let ok = leg_succeeded();
+        if ok && to_buyback == Some(true) {
+            // Saturating: a total of all NEAR ever sent cannot reach u128::MAX.
+            self.total_near_to_buyback = self.total_near_to_buyback.saturating_add(amount.0);
+        }
         Self::safety_event(
             if ok {
                 "near_distribution_leg_sent"
@@ -255,6 +279,14 @@ impl Board {
         self.payments.staking_contract = Some(account_id);
     }
 
+    /// Cumulative buyback totals: NEAR delivered to the buyback, mPOO returned.
+    pub fn get_buyback_totals(&self) -> BuybackTotalsView {
+        BuybackTotalsView {
+            near_to_buyback: U128(self.total_near_to_buyback),
+            mpoo_returned: U128(self.total_mpoo_returned),
+        }
+    }
+
     pub fn get_revenue_state(&self) -> RevenueState {
         let interval = self.tunables.distribution_interval_ns;
         let next = |last: Option<u64>| U64(last.map_or(0, |t| t.saturating_add(interval)));
@@ -294,6 +326,9 @@ impl Board {
             return amount;
         }
         self.add_mpoo_revenue(amount.0);
+        // Same amount as the event below. add_mpoo_revenue already proved the
+        // undistributed pot did not overflow; the lifetime total saturates.
+        self.total_mpoo_returned = self.total_mpoo_returned.saturating_add(amount.0);
         Self::safety_event(
             "mpoo_revenue_received",
             near_sdk::serde_json::json!({"sender_id": sender_id, "amount": amount}),
@@ -591,12 +626,12 @@ mod tests {
     fn failed_near_transfer_is_logged_and_the_refund_is_distributed_next_time() {
         let mut board = setup();
         callback_ctx(PromiseResult::Failed);
-        assert!(!board.on_near_distributed(crate::test_team(), U128(42)));
+        assert!(!board.on_near_distributed(crate::test_team(), U128(42), Some(false)));
         assert!(get_logs()
             .iter()
             .any(|l| l.contains("near_distribution_leg_failed") && l.contains("\"42\"")));
         callback_ctx(PromiseResult::Successful(vec![]));
-        assert!(board.on_near_distributed(crate::test_team(), U128(42)));
+        assert!(board.on_near_distributed(crate::test_team(), U128(42), Some(false)));
         assert!(get_logs()
             .iter()
             .any(|l| l.contains("near_distribution_leg_sent")));
@@ -638,6 +673,106 @@ mod tests {
         assert_eq!(board.payments.mpoo_undistributed, 0);
         assert_eq!(board.payments.last_mpoo_distribution_ns, Some(0));
         assert!(board.get_tunables().paused);
+    }
+
+    // ---------------- Buyback totals (owner, 3 Nov) ----------------
+
+    #[test]
+    fn buyback_totals_are_zero_on_a_fresh_board() {
+        let board = setup();
+        let totals = board.get_buyback_totals();
+        assert_eq!(
+            near_sdk::serde_json::to_value(&totals).unwrap(),
+            near_sdk::serde_json::json!({"near_to_buyback": "0", "mpoo_returned": "0"})
+        );
+    }
+
+    /// The scheduled `on_near_distributed` callback for the buyback leg.
+    fn buyback_callback_args() -> near_sdk::serde_json::Value {
+        calls()
+            .into_iter()
+            .filter(|(to, m, ..)| *to == board_id() && m == "on_near_distributed")
+            .map(|(_, _, args, ..)| args)
+            .find(|args| args["account"] == crate::test_buyback().as_str())
+            .expect("buyback leg callback")
+    }
+
+    /// Run the scheduled buyback callback with `result`, as the runtime would.
+    fn settle_buyback_leg(board: &mut Board, args: &near_sdk::serde_json::Value, result: PromiseResult) -> bool {
+        callback_ctx(result);
+        board.on_near_distributed(
+            args["account"].as_str().unwrap().parse().unwrap(),
+            U128(args["amount"].as_str().unwrap().parse().unwrap()),
+            args.get("to_buyback").and_then(|v| v.as_bool()),
+        )
+    }
+
+    #[test]
+    fn a_successful_buyback_leg_counts_once() {
+        let mut board = setup();
+        ctx(accounts(3), 0, 0);
+        let amount = board.get_withdrawable_near().0;
+        board.distribute_near();
+        let buyback = amount - amount / 10;
+        // Scheduling alone counts nothing.
+        assert_eq!(board.get_buyback_totals().near_to_buyback, U128(0));
+        let args = buyback_callback_args();
+        assert_eq!(args["amount"], buyback.to_string());
+        assert!(settle_buyback_leg(&mut board, &args, PromiseResult::Successful(vec![])));
+        assert_eq!(board.get_buyback_totals().near_to_buyback, U128(buyback));
+        // The team leg's success adds nothing, even if the team is the buyback account.
+        callback_ctx(PromiseResult::Successful(vec![]));
+        board.on_near_distributed(crate::test_buyback(), U128(amount / 10), Some(false));
+        assert_eq!(board.get_buyback_totals().near_to_buyback, U128(buyback));
+    }
+
+    #[test]
+    fn a_failed_then_resent_buyback_leg_counts_once() {
+        let mut board = setup();
+        ctx(accounts(3), 0, 0);
+        board.distribute_near();
+        let first = buyback_callback_args();
+        assert!(!settle_buyback_leg(&mut board, &first, PromiseResult::Failed));
+        assert_eq!(board.get_buyback_totals().near_to_buyback, U128(0));
+        // The refund is back in the withdrawable balance; the next run resends it.
+        ctx(accounts(3), HOUR, 0);
+        board.distribute_near();
+        let second = buyback_callback_args();
+        assert_eq!(second["amount"], first["amount"]);
+        assert!(settle_buyback_leg(&mut board, &second, PromiseResult::Successful(vec![])));
+        let sent: u128 = second["amount"].as_str().unwrap().parse().unwrap();
+        assert_eq!(board.get_buyback_totals().near_to_buyback, U128(sent));
+    }
+
+    #[test]
+    fn a_revenue_receipt_adds_exactly_its_amount_and_mpoo_purchases_do_not() {
+        let mut board = setup();
+        ctx_full(token(), crate::test_buyback(), 0, 0, balance(), vec![]);
+        board.ft_on_transfer(crate::test_buyback(), U128(500), revenue());
+        board.ft_on_transfer(crate::test_buyback(), U128(7), revenue());
+        assert_eq!(board.get_buyback_totals().mpoo_returned, U128(507));
+        // Refused revenue (not the buyback account) counts nothing.
+        ctx_full(token(), crate::test_team(), 0, 0, balance(), vec![]);
+        board.ft_on_transfer(crate::test_team(), U128(900), revenue());
+        assert_eq!(board.get_buyback_totals().mpoo_returned, U128(507));
+        // A credit purchase in mPOO is revenue but not a buyback return.
+        board.tunables.mpoo_daily_credit_cap = 1_000_000;
+        let fee = board.get_payment_config().registration_fee.0;
+        ctx(accounts(1), 0, fee);
+        board.register_credit_account();
+        ctx_full(token(), accounts(1), 0, 0, balance(), vec![]);
+        assert_eq!(
+            board.ft_on_transfer(
+                accounts(1),
+                U128(200),
+                r#"{"min_credits":"2","expected_price":"100"}"#.into()
+            ),
+            U128(0)
+        );
+        assert_eq!(board.payments.mpoo_undistributed, 707);
+        assert_eq!(board.get_buyback_totals().mpoo_returned, U128(507));
+        // NEAR is untouched by mPOO flows.
+        assert_eq!(board.get_buyback_totals().near_to_buyback, U128(0));
     }
 
     // ---------------- R2: receiving mPOO ----------------

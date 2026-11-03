@@ -493,6 +493,12 @@ pub struct Board {
     last_toilet_rate_change_ns: Option<u64>,
     /// B3: the last non-zero rate; bounds a switch-on after an emergency stop.
     last_nonzero_toilet_rate: u128,
+    /// yoctoNEAR confirmed delivered to the buyback account by `distribute_near`
+    /// (counted in the buyback leg's success callback, never when scheduled).
+    total_near_to_buyback: u128,
+    /// mPOO base units accepted from the buyback account as `{"revenue":{}}`.
+    /// Credit purchases paid in mPOO are not counted.
+    total_mpoo_returned: u128,
 }
 
 #[near]
@@ -534,6 +540,8 @@ impl Board {
             toilet_token: toilet,
             last_toilet_rate_change_ns: None,
             last_nonzero_toilet_rate: 0,
+            total_near_to_buyback: 0,
+            total_mpoo_returned: 0,
         }
     }
 

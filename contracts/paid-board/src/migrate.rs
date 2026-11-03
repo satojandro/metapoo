@@ -187,6 +187,9 @@ impl Board {
             // A non-zero v1 rate is treated as the first switch-on: no history.
             last_toilet_rate_change_ns: None,
             last_nonzero_toilet_rate: v1_rate,
+            // Version 1 had no revenue split: nothing went to a buyback yet.
+            total_near_to_buyback: 0,
+            total_mpoo_returned: 0,
         }
     }
 }
@@ -437,6 +440,8 @@ mod tests {
             }
         }
         assert!(holders > 0, "fixture must hold v1 cells");
+        let totals = board.get_buyback_totals();
+        assert_eq!((totals.near_to_buyback, totals.mpoo_returned), (U128(0), U128(0)));
         assert!(board.total_earning > 0);
     }
 
