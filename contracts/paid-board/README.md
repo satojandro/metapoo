@@ -51,13 +51,13 @@ one price each, with exactly 1 yoctoNEAR attached. Existing credits are unaffect
   native purchases with `Paused`. Authenticated FT purchases return the full unused
   amount for refund. Views, upgrades and both distributions remain available.
   `get_tunables().paused` exposes the state.
-- Owner-only `set_toilet_paused(toilet, paused)` requires exactly 1 yoctoNEAR
-  and returns a promise calling the supplied token's `set_paused` with 1 yoctoNEAR
-  and 10 Tgas. The board must be that token's current emitter. This makes TOILET's
+- Owner-only `set_toilet_paused(paused)` requires exactly 1 yoctoNEAR
+  and returns a promise calling `set_paused` with 1 yoctoNEAR and 10 Tgas on the
+  TOILET token stored at `new` (TR-B §B4; the caller no longer names the token). The
+  board must be that token's current emitter. This makes TOILET's
   emitter-only circuit breaker reachable without adding a token owner; it works
   even while painting is paused. Follow the returned receipt to confirm success:
-  scheduling does not prove the token paused. The token address is an argument,
-  so this passthrough adds no state or migration. Emitter handoff passthroughs remain outside this task.
+  scheduling does not prove the token paused. Emitter handoff passthroughs remain outside this task.
 - `set_near_price(near_per_credit)` and `set_mpoo_price(mpoo_per_credit)` (REV-B, C8)
   each move one price between half and double its prior value (odd-number halving
   rounds up; `PriceStepTooLarge`, `ZeroPrice`). Each has its own cooldown, at least
@@ -95,8 +95,9 @@ one price each, with exactly 1 yoctoNEAR attached. Existing credits are unaffect
   else `DistributionTooSoon`). Sends `get_withdrawable_near()` as native transfers: 10% to
   `team_account`, 90% plus rounding dust to `buyback_account`. `NothingToDistribute` if
   zero. A failed transfer refunds itself to the board, so the callback
-  `on_near_distributed` only logs `near_distribution_leg_sent` / `_failed`; the next call
-  sends the refund again.
+  `on_near_distributed` logs `near_distribution_leg_sent` / `_failed`; the next call
+  sends the refund again. On a confirmed buyback leg the callback also adds it to
+  `total_near_to_buyback` (below).
 - `ft_on_transfer` with msg `{"revenue":{}}` from `buyback_account` adds to
   `mpoo_undistributed` (accepted even while paused); from anyone else it is refunded.
   Every successful mPOO credit purchase also adds its amount.
@@ -114,6 +115,17 @@ one price each, with exactly 1 yoctoNEAR attached. Existing credits are unaffect
 - `set_staking_contract(account_id)` — owner, 1 yocto, once (`StakingContractAlreadySet`).
 - `get_revenue_state()` — withdrawable NEAR, undistributed mPOO, staker reserve, next
   distribution times (U64 strings, 0 = now), accounts and burn address.
+- `get_buyback_totals()` — `{"near_to_buyback": "<yoctoNEAR>", "mpoo_returned": "<mPOO base
+  units>"}`, decimal strings, cumulative since `new` (owner, 3 Nov). Both start at 0.
+  - `near_to_buyback` counts only NEAR that **reached** `buyback_account`: it is added in
+    `on_near_distributed` when the buyback leg's transfer succeeded, not when
+    `near_distributed` is logged. A failed leg is refunded and resent by a later call, and
+    counts once, when that send is confirmed. The leg's role travels in the callback
+    (`to_buyback`), so a team account equal to the buyback account is not counted.
+  - `mpoo_returned` counts the mPOO accepted from `buyback_account` with `{"revenue":{}}`:
+    the same amounts as the `mpoo_revenue_received` events. Refused revenue messages and
+    credit purchases paid in mPOO are not counted.
+  - NEAR waiting on the buyback account is not on the board; read that account's balance.
 
 - Reserve floor defaults to **5 NEAR** and cannot be configured below it. Cooldown
   cannot be configured below 24 hours, and `last_price_change_ns` cannot be rewritten
@@ -140,8 +152,9 @@ including liquidity, slippage and tax, not nominal market capitalization.
 
 ## Calls
 
-- `new(mpoo_token, mpoo_per_credit, team_account, buyback_account)`: initializer becomes pricing
-  owner; writes state version 2. Revenue accounts may not be the board itself.
+- `new(mpoo_token, mpoo_per_credit, team_account, buyback_account, toilet)`: initializer becomes
+  pricing owner; writes state version 2. Revenue accounts may not be the board itself. `toilet` is
+  the TOILET token this board mints on, fixed for the board's life (TR-B §B4).
 - `get_state_version()`: storage layout version (2).
 - `get_payment_config()`: token address, prices and registration fee; amounts are strings.
 - `register_credit_account()`: exact 0.01 NEAR, once per caller, before purchasing.
@@ -182,25 +195,33 @@ Every rule the game is expected to tune lives in a `Tunables` struct, so retunin
 transaction rather than a redeploy plus a migration:
 
 - `get_tunables()` / `set_tunables(tunables)` — owner-only, one yocto. Holds the repaint tiers, the paint
-  quota (`quota_base`, `quota_per_cell`, `quota_max`), the credit float cap (`max_outstanding_credits`)
-  and the emission cap (`max_earning_cells`). **The quota and the emission cap are stored but not yet
-  enforced** — a zero limit disables that rule.
+  quota (`quota_base`, `quota_per_cell`, `quota_max`) and the credit float cap
+  (`max_outstanding_credits`). **The quota is stored but not yet enforced** — a zero limit disables
+  that rule. There is no earning cap (owner decision T3): `max_earning_cells` is deleted. The
+  emission rate `toilet_per_cell_second` is shown here but changes only through `set_toilet_rate`;
+  `set_tunables` refuses a changed value with `RateViaSetter`.
 - `get_cell_cost(x, y)` — what that cell costs right now. The page must display this rather than
   re-implementing the tier rule in JavaScript.
 - `get_cell_costs(cells)` — the same answer for a whole stroke in one call, bounded by
   `MAX_DRAW_BATCH`. Use it instead of `get_cell_cost` per cell: a 64-cell drag priced cell by cell
   is ~129 round-trips (each cell also needs `get_pixel`) before the wallet prompt.
-- `get_cells_owned(account_id)` — cells an account holds; the input to the quota and the earning cap.
+- `get_cells_owned(account_id)` — cells an account holds, free or paid; the input to the quota.
+  Not every owned cell earns TOILET: see "TOILET accrual and claims".
 - `get_outstanding_credits()` — credits sold and not yet spent. Prepaid service, never profit.
 - `upgrade(code, migrate_args)` — owner-only, one yocto. Deploys `code` and calls its
   `migrate(migrate_args)` in **one receipt** on the board account, so a rejected migration rolls the
-  deploy back. For v1 → v2, `migrate_args` is `{"team_account": "…", "buyback_account": "…"}`. The
+  deploy back. For v1 → v2, `migrate_args` is `{"team_account": "…", "buyback_account": "…", "toilet": "…"}`. The
   board keeps this; TOILET does not (D4), because the board custodies credits and pixels.
   Never call `new` over live state.
-- `migrate(team_account, buyback_account)` — `#[private]`, `#[init(ignore_state)]`. Accepts only
+- `migrate(team_account, buyback_account, toilet)` — `#[private]`, `#[init(ignore_state)]`. Accepts only
   version-1 state (detected by its first u32, see `src/migrate.rs`); rejects a second run, a fresh
   v2 board, or anything unknown with `UnsupportedStateVersion`. Maps `p`, `h`, `c` keep prefix and
-  value type; new maps `a` (account extras) and `f` (free cells) start empty.
+  value type; new maps `a` (account extras) and `f` (free cells) start empty. Holder records in `h`
+  gained a trailing `earning` count (TR-B); a version-1 record still decodes, as `earning = cells`
+  (version 1 had no free paints), and `total_earning` starts at `total_cells`. TR-B also added board
+  fields without bumping the state version: a board already running version-2 code cannot be
+  upgraded to this code (its `migrate` rejects version 2, so the deploy rolls back). New layouts
+  are fresh-init only (owner, 2 Nov).
 
 The board account must also be registered on the mPOO token before receiving it.
 The board credit-registration fee does not perform that token registration.
@@ -298,11 +319,35 @@ Do not run `new` over live state. An existing board moves to a new layout only t
 `upgrade` → `migrate` (see Calls).
 
 `toilet_per_cell_second` in `Tunables` defaults to 0, so no emission begins until
-the owner sets a rate. It counts atomic units (18 decimals) per held cell per
-second. The maximum is `u128::MAX / (86_400e9 * 16_384)`; higher values fail
-`ToiletRateTooHigh`. Changing tunables settles the elapsed interval at the old
-rate before applying the new one. Stored quota and `max_earning_cells` limits
-remain unenforced; accrual uses all held cells.
+the owner sets a rate. It counts atomic units (18 decimals) per **earning** cell
+per second. The maximum is `u128::MAX / (86_400e9 * 16_384)`; higher values fail
+`ToiletRateTooHigh`.
+
+**Earning tiles (TR-B §B1, owner decision T4).** A cell earns while it holds paint
+whose latest paint was paid with credits. A free paint (F1 free first paints, F2
+happy hour) owns its cell, and counts in `get_cells_owned`, but earns nothing until
+someone repaints it with credits. That includes the same artist: repainting your own
+free cell with credits starts it earning, and a free happy-hour repaint of a paid
+cell stops it. Each holder record keeps `cells` (ownership) and `earning`; the board
+keeps `total_cells` and `total_earning`, and accrual uses only the earning counts.
+A free tile's share is never reserved, so it stays in the unissued part of the cap:
+nothing is minted for it and nothing is burned. There is no per-account earning cap
+(T3).
+
+**The rate setter (TR-B §B3, owner decision T2).** `set_toilet_rate(per_cell_second)`,
+owner-only, exactly 1 yoctoNEAR, is the only way to change the rate. It accrues the
+old rate up to now first, so no change is retroactive. Its guards:
+
+- **0 is allowed at any time** (the emergency stop). It does not restart the cooldown.
+- The **first** switch-on ever may be any value up to the maximum.
+- A later switch-on from 0 may be at most 2× the last non-zero rate.
+- A change between non-zero rates stays within ×2 and ÷2 of the current rate
+  (`ToiletRateStepTooLarge`; odd halving rounds up, like prices).
+- Any change to a non-zero rate, a switch-on after a stop included, waits
+  `TOILET_RATE_COOLDOWN_NS` (24 h, a constant) after the last change to a non-zero
+  rate (`ToiletRateCooldown`). Without that, stop → 2× → stop → 2× would compound in
+  one block. Owner confirmed this rule on 3 Nov.
+- Event `toilet_rate_changed {old, new, changed_at_ns}` (decimal strings).
 
 At the start of `draw`, `draw_many`, and `claim_toilet`, the board reserves elapsed
 emission against the lifetime 1 billion TOILET cap. The invariant is
@@ -311,22 +356,27 @@ are iterated. A shared per-cell accumulator uses `SCALE = 1e9`, with a compile-t
 assertion that `CAP * SCALE` fits `u128`. Accumulator division loses less than
 `total_cells / SCALE` atomic units per call (at most 0.000016384). Subsecond
 per-cell emission is truncated before multiplying by the number of cells.
-Empty-board intervals earn nothing. Long idle intervals clamp safely at the cap.
+Intervals with no earning cell reserve nothing. Long idle intervals clamp safely at the cap.
 
-Ownership changes settle both holders before changing their cell counts and
-checkpoint their new debts. Same-artist repaints leave ownership unchanged;
+Ownership and earning changes settle both holders before changing their counts and
+checkpoint their new debts against `earning`. Same-artist repaints leave ownership unchanged;
 losing every cell preserves pending emission. Once the cap is reserved, accrual
 stops and previously earned claims remain available.
 
 - `get_pending_toilet(account)` returns a decimal-string amount including accrual
   projected through the current block. This view does not reserve or mutate state.
-- `get_toilet_emission()` returns `{per_cell_second, accrued_total, cap, remaining}`
-  as decimal strings. Totals describe persisted reservations, not a view projection.
-- `claim_toilet(toilet)` requires exactly 1 yoctoNEAR. It settles the caller, takes
-  and zeroes their pending amount, and returns a promise to `mint(account, amount)`
-  on the supplied token with zero deposit and 10 Tgas, **chained to a private
-  `resolve_claim(account_id, amount)` callback**. An empty claim fails
-  `NothingToClaim`. The `toilet_claimed` event includes `account_id`, `amount`,
+- `get_toilet_emission()` returns `{per_cell_second, accrued_total, cap, remaining,
+  toilet, last_toilet_rate_change_ns, last_nonzero_toilet_rate}`; amounts and times are
+  decimal strings, `last_toilet_rate_change_ns` is null before the first switch-on.
+  Totals describe persisted reservations, not a view projection.
+- `claim_toilet()` takes no argument and requires exactly 1 yoctoNEAR. It settles the
+  caller, takes and zeroes their pending amount, and returns a promise to
+  `mint(account, amount)` on the TOILET token stored at `new` (§B4) with zero deposit
+  and 10 Tgas, **chained to a private `resolve_claim(account_id, amount)` callback**.
+  An empty claim fails `NothingToClaim`. A claim below `MIN_CLAIM` (1 TOILET,
+  10^18 atomic units, a constant; §B5, value confirmed by the owner on 3 Nov)
+  fails `ClaimBelowMinimum`, so dust claims cannot drain the token's
+  auto-registration balance. The `toilet_claimed` event includes `account_id`, `amount`,
   and `accrued_total`; it proves the claim was scheduled, not that the mint succeeded.
 - `resolve_claim` restores the claim when the mint fails — wrong token address, wrong
   emitter, registration reserve low, or gas. The amount goes back into `pending` and
@@ -334,7 +384,7 @@ stops and previously earned claims remain available.
   succeeded and only the payload could not be read, so treating it as failure would
   double-credit. Without this callback a refused mint silently destroys the claim.
 
-Configure this board as the supplied TOILET token's emitter and fund the token's
+Configure this board as the stored TOILET token's emitter and fund the token's
 registration reserve. Emission mints only through a player claim. Follow the
 returned receipt: the event records a scheduled claim, not successful minting.
 As specified, there is no mint-failure callback or retry restoration: pending is

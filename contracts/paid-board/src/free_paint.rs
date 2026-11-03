@@ -391,7 +391,7 @@ mod tests {
     /// Owner accounts(0); accounts(1..=3) registered with 1,000 credits each.
     fn setup() -> Board {
         context(0, SUN_1_NOV_2026 - 7 * DAY);
-        let mut board = Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback());
+        let mut board = Board::new(accounts(5), U128(100), crate::test_team(), crate::test_buyback(), crate::test_toilet());
         for i in 1..=3 {
             board.payments.balances.insert(accounts(i), 1_000);
         }
@@ -422,7 +422,7 @@ mod tests {
     }
 
     /// Paint every cell except `(127, 127)` as accounts(3), long ago, without
-    /// charging anyone (raw records plus the matching holder count).
+    /// charging anyone (raw paid records plus the matching holder and earning counts).
     fn fill_all_but_last(board: &mut Board) {
         let filler = accounts(3);
         for key in 0..(WIDTH * HEIGHT - 1) {
@@ -435,7 +435,8 @@ mod tests {
                 },
             );
         }
-        crate::bump_cells_owned(board, &filler, (WIDTH * HEIGHT - 1) as i32);
+        let n = i64::from(WIDTH * HEIGHT - 1);
+        crate::adjust_holder(board, &filler, n, n);
     }
 
     /// Latch set and happy hour on, every test account a buyer.
@@ -660,6 +661,28 @@ mod tests {
         board.draw_many(row(2, 3, 1), 0);
         assert_eq!(balance(&board, 1), 998);
         assert_eq!(board.account_extra(&accounts(1)).happy_hour_window, week_index(OPEN + 7 * DAY));
+    }
+
+    /// §B1: a free happy-hour repaint of a paid cell stops that cell earning,
+    /// for another artist and for the same artist alike.
+    #[test]
+    fn f2_a_free_repaint_of_a_paid_cell_stops_its_earning() {
+        let mut board = happy_board();
+        board.tunables.toilet_per_cell_second = 7;
+        context(2, OPEN - 2 * HOUR);
+        board.draw_many(row(0, 2, 1), u32::MAX); // two paid cells
+        assert_eq!(balance(&board, 2), 998);
+        assert_eq!(board.total_earning, 2);
+        context(1, OPEN);
+        board.draw(0, 0, 2, 0); // free, another artist
+        context(2, OPEN);
+        board.draw(1, 0, 2, 0); // free, same artist
+        assert_eq!(balance(&board, 1), 1_000);
+        assert_eq!(balance(&board, 2), 998);
+        assert_eq!((board.total_cells, board.total_earning), (2, 0));
+        context(2, OPEN + 10 * S);
+        assert_eq!(board.get_pending_toilet(accounts(1)), U128(0));
+        assert_eq!(board.get_pending_toilet(accounts(2)), U128(2 * 7 * 7_200));
     }
 
     #[test]

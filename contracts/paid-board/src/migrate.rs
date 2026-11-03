@@ -136,7 +136,7 @@ impl Tunables {
             quota_base: v1.quota_base,
             quota_per_cell: v1.quota_per_cell,
             quota_max: v1.quota_max,
-            max_earning_cells: v1.max_earning_cells,
+            // `max_earning_cells` is gone (§B2): nothing ever enforced it.
             toilet_per_cell_second: v1.toilet_per_cell_second,
             ..Tunables::default()
         }
@@ -149,6 +149,7 @@ impl Board {
         v1: BoardV1,
         team_account: AccountId,
         buyback_account: AccountId,
+        toilet: AccountId,
     ) -> Self {
         let p = v1.payments;
         let payments = Payments::from_v1(
@@ -164,6 +165,7 @@ impl Board {
         // The latch is a fact about the board, not a setting: derive it rather than
         // assume a migrated board is not full.
         let first_fill_complete = v1.pixels.len() >= WIDTH * HEIGHT;
+        let v1_rate = v1.tunables.toilet_per_cell_second;
         Self {
             state_version: STATE_VERSION,
             schema_version: SCHEMA_VERSION,
@@ -178,6 +180,16 @@ impl Board {
             first_fill_complete,
             account_extra: LookupMap::<AccountId, AccountExtra>::new(crate::PREFIX_ACCOUNT_EXTRA),
             free_cells: LookupSet::new(crate::PREFIX_FREE_CELLS),
+            // Version 1 had no free paints: every held cell was paid for, so every
+            // held cell earns, and its holder records decode with earning = cells.
+            total_earning: v1.total_cells,
+            toilet_token: toilet,
+            // A non-zero v1 rate is treated as the first switch-on: no history.
+            last_toilet_rate_change_ns: None,
+            last_nonzero_toilet_rate: v1_rate,
+            // Version 1 had no revenue split: nothing went to a buyback yet.
+            total_near_to_buyback: 0,
+            total_mpoo_returned: 0,
         }
     }
 }
@@ -259,7 +271,7 @@ mod tests {
     #[test]
     fn migrating_real_v1_state_preserves_every_balance_pixel_and_holder() {
         let expected = load_v1_state();
-        let mut board = Board::migrate(team(), buyback());
+        let mut board = Board::migrate(team(), buyback(), crate::test_toilet());
         persist(&mut board);
         // Read back through the runtime path, as the next transaction would.
         let board: Board = env::state_read().expect("v2 state");
@@ -338,7 +350,6 @@ mod tests {
             "quota_base",
             "quota_per_cell",
             "quota_max",
-            "max_earning_cells",
             "toilet_per_cell_second",
         ] {
             assert_eq!(new[field], old[field], "{field}");
@@ -394,7 +405,7 @@ mod tests {
     #[test]
     fn a_migrated_board_keeps_working_on_the_old_maps() {
         load_v1_state();
-        let mut board = Board::migrate(team(), buyback());
+        let mut board = Board::migrate(team(), buyback(), crate::test_toilet());
         persist(&mut board);
         let mut board: Board = env::state_read().unwrap();
         // bob held 3 credits; a base-tier repaint of his own old cell costs 1.
@@ -410,13 +421,37 @@ mod tests {
         assert_eq!(board.get_credits(accounts(3)), Some(U128(4)));
     }
 
+    /// §B1 on a migrated board: version 1 had no free paints, so every held cell
+    /// keeps earning, and holder records written by version 1 still decode.
+    #[test]
+    fn a_migrated_board_counts_every_v1_cell_as_earning() {
+        let expected = load_v1_state();
+        let mut board = Board::migrate(team(), buyback(), crate::test_toilet());
+        persist(&mut board);
+        let board: Board = env::state_read().unwrap();
+        assert_eq!(board.total_earning, board.total_cells);
+        assert_eq!(board.get_toilet_emission().toilet, crate::test_toilet());
+        let mut holders = 0;
+        for account in expected["accounts"].as_array().unwrap() {
+            let id: AccountId = account["account_id"].as_str().unwrap().parse().unwrap();
+            if let Some(holder) = board.holders.get(&id) {
+                assert_eq!(holder.earning, holder.cells, "{id}");
+                holders += u32::from(holder.cells > 0);
+            }
+        }
+        assert!(holders > 0, "fixture must hold v1 cells");
+        let totals = board.get_buyback_totals();
+        assert_eq!((totals.near_to_buyback, totals.mpoo_returned), (U128(0), U128(0)));
+        assert!(board.total_earning > 0);
+    }
+
     #[test]
     fn migrating_twice_is_rejected() {
         load_v1_state();
-        let mut board = Board::migrate(team(), buyback());
+        let mut board = Board::migrate(team(), buyback(), crate::test_toilet());
         persist(&mut board);
         rejected("UnsupportedStateVersion", || {
-            Board::migrate(team(), buyback());
+            Board::migrate(team(), buyback(), crate::test_toilet());
         });
         // The rejected second run left version 2 intact.
         let board: Board = env::state_read().unwrap();
@@ -427,10 +462,10 @@ mod tests {
     #[test]
     fn migrating_a_fresh_v2_board_is_rejected() {
         ctx(accounts(0), 0, 0);
-        let mut board = Board::new(accounts(5), U128(100), team(), buyback());
+        let mut board = Board::new(accounts(5), U128(100), team(), buyback(), crate::test_toilet());
         persist(&mut board);
         rejected("UnsupportedStateVersion", || {
-            Board::migrate(team(), buyback());
+            Board::migrate(team(), buyback(), crate::test_toilet());
         });
     }
 
@@ -438,7 +473,7 @@ mod tests {
     fn migrating_without_state_is_rejected() {
         ctx(board_account(), 0, 0);
         rejected("UnsupportedStateVersion", || {
-            Board::migrate(team(), buyback());
+            Board::migrate(team(), buyback(), crate::test_toilet());
         });
     }
 
@@ -466,7 +501,7 @@ mod tests {
             load_v1_state();
             env::storage_write(STATE_KEY, &bytes);
             rejected("UnsupportedStateVersion", || {
-                Board::migrate(team(), buyback());
+                Board::migrate(team(), buyback(), crate::test_toilet());
             });
             let _ = name;
         }
@@ -476,18 +511,18 @@ mod tests {
     fn migration_rejects_the_board_itself_as_a_revenue_account() {
         load_v1_state();
         rejected("InvalidRevenueAccount", || {
-            Board::migrate(board_account(), buyback());
+            Board::migrate(board_account(), buyback(), crate::test_toilet());
         });
         load_v1_state();
         rejected("InvalidRevenueAccount", || {
-            Board::migrate(team(), board_account());
+            Board::migrate(team(), board_account(), crate::test_toilet());
         });
     }
 
     #[test]
     fn fresh_board_starts_at_version_2_with_default_revision_fields() {
         ctx(accounts(0), 0, 0);
-        let board = Board::new(accounts(5), U128(100), team(), buyback());
+        let board = Board::new(accounts(5), U128(100), team(), buyback(), crate::test_toilet());
         assert_eq!(board.get_state_version(), 2);
         assert_eq!(board.get_tunables(), Tunables::default());
         assert_eq!(board.payments.team_account, team());
@@ -499,9 +534,9 @@ mod tests {
     #[test]
     fn upgrade_deploys_and_migrates_in_one_batch_on_this_account() {
         ctx(accounts(0), 0, 0);
-        let mut board = Board::new(accounts(5), U128(100), team(), buyback());
+        let mut board = Board::new(accounts(5), U128(100), team(), buyback(), crate::test_toilet());
         ctx(accounts(0), 1, 0);
-        let args = serde_json::json!({"team_account": team(), "buyback_account": buyback()});
+        let args = serde_json::json!({"team_account": team(), "buyback_account": buyback(), "toilet": crate::test_toilet()});
         board.upgrade(
             near_sdk::json_types::Base64VecU8(vec![0, 97, 115, 109]),
             args.clone(),
@@ -535,7 +570,7 @@ mod tests {
     #[test]
     fn upgrade_requires_exactly_one_yocto() {
         ctx(accounts(0), 0, 0);
-        let mut board = Board::new(accounts(5), U128(100), team(), buyback());
+        let mut board = Board::new(accounts(5), U128(100), team(), buyback(), crate::test_toilet());
         for deposit in [0, 2] {
             ctx(accounts(0), deposit, 0);
             rejected("exactly 1 yoctoNEAR", || {
