@@ -40,6 +40,7 @@ Where each surface picks it up:
 |---|---|---|
 | web (browser) | `VITE_NEAR_RPC_API_KEY` | **published in the bundle** — see the caveat below |
 | keeper | `KEEPER_RPC_API_KEY` | sent as a header; non-enumerable on the config object so it cannot reach a log |
+| buyback | `BUYBACK_RPC_API_KEY` | same rule as the keeper |
 | one-off scripts / harness | `FASTNEAR_API_KEY` | header added next to `Content-Type` |
 
 The key is only attached to hosts it was issued for: the configured endpoint, plus other

@@ -103,6 +103,7 @@ logged by accident.
 |---|---|---|
 | `BUYBACK_NETWORK` | yes | `testnet` or `mainnet`. Account ids with the other network's suffix (anywhere, including the route) are rejected |
 | `BUYBACK_RPC_URL` | no | defaults to `https://rpc.testnet.near.org` / `https://rpc.mainnet.near.org`, the same as `ops/keeper`. **Set it.** On 3 Nov 2026 the public mainnet endpoint answered with `-429 "THIS ENDPOINT IS DEPRECATED"` after a few dozen reads |
+| `BUYBACK_RPC_API_KEY` | no | bearer token for a paid RPC (FastNEAR). Sent as an `Authorization` header, never in the URL; non-enumerable on the config. From a secret env var only; see [`../../docs/ops/fastnear-rpc.md`](../../docs/ops/fastnear-rpc.md) |
 | `BUYBACK_BOARD_CONTRACT_ID` | yes | the board |
 | `BUYBACK_ACCOUNT_ID` | yes | the dedicated buyback account, which must be the board's `buyback_account`. Must not be the board |
 | `BUYBACK_PRIVATE_KEY` | yes | `ed25519:…` full-access key of that account (below). Secret env var only |
