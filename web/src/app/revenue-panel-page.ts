@@ -14,6 +14,7 @@ import { signAndSendDistribution } from "../wallet";
 import { createAccountBalanceReader } from "./admin-settings";
 import {
   createBoardTotalsSource,
+  createFastNearLedgerSource,
   createIndexedLedgerSource,
   createPreferredLedgerSource,
   exampleLedger,
@@ -91,13 +92,20 @@ function defaultLedgerLoader(): RevenuePageDeps["loadLedger"] {
   const readBalance = createAccountBalanceReader(RPC_URL);
   const board = createBoardTotalsSource(createRpcView(RPC_URL), CONTRACT_ID);
   let source: LedgerSource | null = null;
-  let sourceToken: string | null | undefined;
+  // Rebuild when either input changes: the token gates the mPOO side, and the buyback
+  // account is the account the index is queried for (see createFastNearLedgerSource).
+  let sourceKey: string | null = null;
   return snapshot => {
-    if (!source || sourceToken !== snapshot.mpooToken) {
-      sourceToken = snapshot.mpooToken;
+    const key = `${snapshot.mpooToken}|${snapshot.state.buybackAccount}`;
+    if (!source || sourceKey !== key) {
+      sourceKey = key;
       source = createPreferredLedgerSource(
         board,
-        createIndexedLedgerSource({ network: PAGE_NETWORK, board: CONTRACT_ID, mpooToken: snapshot.mpooToken }),
+        // FastNEAR's index first: one paged listing plus 20-transaction log batches, no key
+        // needed. NearBlocks stays as the fallback for a network FastNEAR does not index.
+        createFastNearLedgerSource({
+          network: PAGE_NETWORK, board: CONTRACT_ID, buybackAccount: snapshot.state.buybackAccount,
+        }) ?? createIndexedLedgerSource({ network: PAGE_NETWORK, board: CONTRACT_ID, mpooToken: snapshot.mpooToken }),
       );
     }
     return loadBuybackLedger(source, readBalance, snapshot.state.buybackAccount);

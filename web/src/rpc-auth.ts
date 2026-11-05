@@ -33,6 +33,11 @@ function isFastNearHost(host: string | null): boolean {
   return host !== null && (host === "fastnear.com" || host.endsWith(".fastnear.com"));
 }
 
+/** True for any FastNEAR host (RPC, archival, tx, api, kv): one key covers all of them. */
+export function isFastNearUrl(url: string): boolean {
+  return isFastNearHost(hostOf(url));
+}
+
 /** `Bearer` value for `requestUrl`, or no header when that host is not the key's host. */
 export function rpcAuthHeaders(
   requestUrl: string,

@@ -9,7 +9,7 @@
  */
 
 import { setBoardSide, type NetworkId } from "@shared/types.ts";
-import { rpcAuthHeaders } from "./rpc-auth";
+import { isFastNearUrl, rpcAuthHeaders } from "./rpc-auth";
 
 function envString(name: keyof ImportMetaEnv): string {
   const value = import.meta.env[name];
@@ -92,6 +92,21 @@ export function rpcConnection(url: string = RPC_URL): {
 } {
   const headers = rpcAuthHeaders(url, RPC_URL, RPC_API_KEY);
   return Object.keys(headers).length > 0 ? { url, headers } : { url };
+}
+
+/**
+ * Headers for a FastNEAR service other than RPC (the transaction index, account API).
+ *
+ * Those hosts answer without a credential, which is why the /money ledger can use
+ * them from the browser with no key at all. When a key *is* configured it is sent,
+ * because the key is what raises the rate limit; one FastNEAR key covers every host.
+ */
+export function fastnearHeaders(url: string, withBody = true): Record<string, string> {
+  // `Content-Type` on a GET turns a simple request into a CORS preflight; send it only
+  // when there is a body to describe.
+  const headers: Record<string, string> = withBody ? { "Content-Type": "application/json" } : {};
+  if (RPC_API_KEY && isFastNearUrl(url)) headers.Authorization = `Bearer ${RPC_API_KEY}`;
+  return headers;
 }
 
 /**

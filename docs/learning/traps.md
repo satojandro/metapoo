@@ -26,6 +26,18 @@ contract.** `quoteRepaint` used to call `get_tunables` + per-cell `get_cell_cost
 session, read `written_at_ns` from the wall pixel cache, and de-duplicate cells.
 A `quote_stroke` contract view is a separate ask-first follow-up. See issue #26.
 
+**An indexed API's filter can mean the opposite of what its name suggests.**
+`is_event_log` on FastNEAR's `/v0/account` means "this account is *named in* an event's data",
+not "this account emitted an event". Measured 2026-11-05: board3 emitted 17 `EVENT_JSON` logs in
+38 transactions and 3 rows were flagged; board5 emitted 23 and none were flagged. `near_distributed`
+names `team_account` and `buyback_account`, never the board — so filtering the board by that flag
+returns **every** split missing and reports `0 NEAR, complete: true`. Before trusting an index
+filter, count the rows it returns against the rows you can prove exist: list everything, fetch the
+transactions, and compare. Ask the index about the account the money moved to, not the one that
+logged the event. And a scan that can be read mid-flight must not be cached: FastNEAR items carry
+each receipt's own outcome, so a transaction is only final when every `receipt_id` it references is
+present.
+
 ## Environment
 
 **`cargo` is not on `PATH`.** It lives at
