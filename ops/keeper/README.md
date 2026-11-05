@@ -46,6 +46,7 @@ names the error differently, change that one line.
 |---|---|---|
 | `KEEPER_NETWORK` | yes | `testnet` or `mainnet`. Account ids ending in the other network's suffix are rejected |
 | `KEEPER_RPC_URL` | no | defaults to `https://rpc.testnet.near.org` / `https://rpc.mainnet.near.org` |
+| `KEEPER_RPC_API_KEY` | no | bearer token for a paid RPC (FastNEAR). Sent as an `Authorization` header, never in the URL. From a secret env var only; see [`../../docs/ops/fastnear-rpc.md`](../../docs/ops/fastnear-rpc.md) |
 | `KEEPER_BOARD_CONTRACT_ID` | yes | the board contract, e.g. board3 on testnet |
 | `KEEPER_ACCOUNT_ID` | yes | the dedicated keeper account (below) |
 | `KEEPER_PRIVATE_KEY` | yes | `ed25519:…` private key of the keeper's **function-call** key. Comes from a secret env var only. Never put it in a file in this repo |

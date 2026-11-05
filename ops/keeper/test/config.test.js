@@ -89,6 +89,14 @@ describe('loadConfig', () => {
     assert.ok(problemsFor({ ...base, KEEPER_RPC_URL: 'ftp://x.org' }).some((m) => m.includes('KEEPER_RPC_URL')));
   });
 
+  it('keeps a paid RPC key off the printed config but available to the client', () => {
+    assert.equal(loadConfig(base).rpcApiKey, undefined);
+    const c = loadConfig({ ...base, KEEPER_RPC_API_KEY: '  test-key  ' });
+    assert.equal(c.rpcApiKey, 'test-key');
+    assert.equal(JSON.stringify(c).includes('test-key'), false);
+    assert.equal(Object.keys(c).includes('rpcApiKey'), false);
+  });
+
   it('accepts gas overrides within bounds and rejects others', () => {
     const c = loadConfig({ ...base, KEEPER_GAS_NEAR_TGAS: '30', KEEPER_GAS_MPOO_TGAS: '150' });
     assert.deepEqual(c.gasTgas, { distribute_near: 30, distribute_mpoo: 150 });
