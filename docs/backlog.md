@@ -80,6 +80,7 @@ Latest full runs on `0b03bef` (after #58/#59/#61/#62), 3 Nov, Node 22.23.4: web 
 |---|---|---|---|
 | **R2.2** | Cheap change detection before paging | Full read is now `ceil(painted/256) + 1` requests every 4 s (17 on a full 64², 65 on a full 128²) because `pageLimit` is still 256 per `get_pixels`. Needs an O(1) view → **contract change = ask-first** | **M** |
 | **T2b** | *(unverified)* roving tabindex over swatches | Not checked this revision. Tab moves through all 8 swatches rather than arrow keys within the group — cosmetic a11y, not a blocker | **S** |
+| **MAINNET-TEST** | Mainnet testing round | `75f2e6c` config only. Four empty implicit accounts exist (board `fcd66acf…`, toilet `a571dead…`, treasury `81656289…`, buyback `e297202d…`), signer holds ~0.4 NEAR of the ~12–15 NEAR the two deploys need. Nothing deployed, nothing initialised, no `toilet_per_cell_second` set. Order, args and verification: [`payments/mainnet-deploy-runbook.md`](payments/mainnet-deploy-runbook.md). Cost rows C01+ stay pending | **M** |
 
 ## Next, owner-approved order (1 Nov)
 
