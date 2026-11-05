@@ -83,9 +83,18 @@ authorization`. That is why `/money` can use them from the browser without shipp
 
 | use | call | why |
 |---|---|---|
-| buyback ledger (`web/src/app/buyback-ledger.ts`) | `POST /v0/account` `{account_id, is_event_log:true, desc:true, limit, resume_token}`, then `POST /v0/transactions` `{tx_hashes: ≤20}` | one listing page plus one request per 20 transactions, instead of one archival RPC request per transaction |
+| buyback ledger (`web/src/app/buyback-ledger.ts`) | `POST /v0/account` for the **buyback account's** history `{account_id, desc:true, limit, resume_token}`, then `POST /v0/transactions` `{tx_hashes: ≤20}` | one listing page plus one request per 20 transactions, instead of one archival RPC request per transaction |
 | index freshness | `GET /status` → `latest_block_timestamp` | the scan refuses to report from a stopped index |
 | account panels | `GET https://api.fastnear.com/v1/account/{id}/full` | balances, FTs, NFTs and staking in one call |
+
+**Trap: `is_event_log` does not mean "emitted an event".** It means *this account is named in*
+an event's data. Measured on 2026-11-05: board3 emitted 17 `EVENT_JSON` logs across 38
+transactions and 3 rows were flagged; board5 emitted 23 and **none** were flagged. The 3 flagged
+board3 rows were MPOO purchases, flagged because the token's `ft_transfer` names the board as
+`new_owner_id`. A split's data holds `team_account` and `buyback_account` but never the board, so
+filtering the board by that flag drops **every** `near_distributed` and the ledger reports
+`0 NEAR, complete: true`. Ask the index about the account the money moved to (the buyback), not
+the account that emitted the log.
 
 `/v0/account` filters that matter: `is_event_log`, `is_function_call`, `is_success`, `desc`,
 `from_tx_block_height` / `to_tx_block_height`, `limit` ≤ 200. Pagination is an opaque
