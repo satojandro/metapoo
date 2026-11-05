@@ -11,6 +11,7 @@ import { wallPageHtml } from "./wall-template";
 import {
   PRICE_UNAVAILABLE,
   chainRepaintReaders,
+  formatCellPrice,
   creditShortfall,
   quoteRepaint,
   showPriceUnavailable,
@@ -474,5 +475,25 @@ describe("tapAffordability", () => {
     expect(
       tapAffordability({ credits: 1n, creditsKnown: true, knownCost: undefined }),
     ).toEqual({ allowed: true });
+  });
+});
+
+describe("a free paint is labelled free, not 0 credits", () => {
+  it("says so on a blank cell", () => {
+    expect(formatCellPrice({ credits: 0, writtenAtNs: null, nowNs: 0n, free: true })).toBe(
+      "unpainted · free for you",
+    );
+  });
+
+  it("keeps the age but drops the price on a repaint", () => {
+    expect(
+      formatCellPrice({ credits: 0, writtenAtNs: "0", nowNs: 120_000_000_000n, free: true }),
+    ).toBe("repaint 2 min ago · free for you");
+  });
+
+  it("still shows a price when the cell is not free", () => {
+    expect(formatCellPrice({ credits: 2, writtenAtNs: null, nowNs: 0n })).toBe(
+      "unpainted · 2 credits",
+    );
   });
 });

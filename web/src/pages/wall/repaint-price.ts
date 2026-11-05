@@ -133,15 +133,18 @@ export function formatCellPrice(input: {
   credits: number;
   writtenAtNs: string | null;
   nowNs: bigint;
+  /** This cell is a free first paint (or happy hour) for this account: price is 0. */
+  free?: boolean;
 }): string {
   const unit = input.credits === 1 ? "credit" : "credits";
+  const price = input.free ? "free for you" : `${input.credits} ${unit}`;
   if (input.writtenAtNs === null) {
-    return `unpainted · ${input.credits} ${unit}`;
+    return `unpainted · ${price}`;
   }
   const written = BigInt(input.writtenAtNs);
   const age = input.nowNs > written ? input.nowNs - written : 0n;
   const minutes = age / MINUTE_NS;
-  return `repaint ${minutes} min ago · ${input.credits} ${unit}`;
+  return `repaint ${minutes} min ago · ${price}`;
 }
 
 /** Shown before Place paint or a drag is sent. */
@@ -249,6 +252,16 @@ export async function quoteRepaint(input: {
         for (let i = 0; i < chunk.length; i++) {
           const row = quotedRow(chunk[i]!, Number(view.costs[i]), pixels[i]!.writtenAtNs, input.nowNs);
           row.free = Array.isArray(view.free) && view.free[i] === true;
+          if (row.free) {
+            // The chain says this cell costs nothing for this account: say so
+            // rather than printing "0 credits" next to a price the page quotes.
+            row.line = formatCellPrice({
+              credits: row.credits,
+              writtenAtNs: row.writtenAtNs,
+              nowNs: input.nowNs,
+              free: true,
+            });
+          }
           rows.push(row);
         }
       }
@@ -292,17 +305,24 @@ export async function quoteRepaint(input: {
 
   const priced = rows ?? [];
   const totalCredits = priced.reduce((sum, row) => sum + row.credits, 0);
+  const freeCells = priced.filter((row) => row.free).length;
   const chunkTotals: number[] = [];
   for (let index = 0; index < priced.length; index += MAX_COST_BATCH) {
     chunkTotals.push(
       priced.slice(index, index + MAX_COST_BATCH).reduce((sum, row) => sum + row.credits, 0),
     );
   }
+  const strokeText =
+    priced.length === 0
+      ? ""
+      : totalCredits === 0 && freeCells === priced.length
+        ? `${priced.length === 1 ? "This cell is" : `All ${priced.length} cells are`} free for you`
+        : formatStrokeTotal(priced.length, totalCredits);
   return {
     ok: true,
     legend: repaintLegend(tunables),
     cells: priced,
-    strokeText: priced.length > 0 ? formatStrokeTotal(priced.length, totalCredits) : "",
+    strokeText,
     totalCredits,
     chunkTotals,
   };
