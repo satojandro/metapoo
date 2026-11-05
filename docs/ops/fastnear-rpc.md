@@ -74,6 +74,27 @@ anonymous endpoint.
 The trap this replaces: `quoteRepaint` once issued ≈129 RPCs for a single 64-cell stroke
 (`docs/learning/traps.md`). That shape, not the board load, is what would eat the trial.
 
+## Indexed APIs we use, and what they change
+
+One key covers the indexed surfaces too, but they **answer without a key** (verified 2026-11-05):
+`POST https://tx.test.fastnear.com/v0/account` returned `200` to an unauthenticated request, and the
+host answers the browser CORS preflight with `access-control-allow-headers: content-type, accept,
+authorization`. That is why `/money` can use them from the browser without shipping a credential.
+
+| use | call | why |
+|---|---|---|
+| buyback ledger (`web/src/app/buyback-ledger.ts`) | `POST /v0/account` `{account_id, is_event_log:true, desc:true, limit, resume_token}`, then `POST /v0/transactions` `{tx_hashes: ≤20}` | one listing page plus one request per 20 transactions, instead of one archival RPC request per transaction |
+| index freshness | `GET /status` → `latest_block_timestamp` | the scan refuses to report from a stopped index |
+| account panels | `GET https://api.fastnear.com/v1/account/{id}/full` | balances, FTs, NFTs and staking in one call |
+
+`/v0/account` filters that matter: `is_event_log`, `is_function_call`, `is_success`, `desc`,
+`from_tx_block_height` / `to_tx_block_height`, `limit` ≤ 200. Pagination is an opaque
+`resume_token`; reuse it exactly as returned.
+
+**These are indexes, not the chain.** `/status` reported 2.4–3.4 s of sync lag on both networks.
+Use them for history and balances; never for post-transaction confirmation, nonces or access-key
+checks — those stay on RPC.
+
 ## Where consumption is actually visible
 
 `https://dashboard.fastnear.com` → project → usage. The number behind that page is
