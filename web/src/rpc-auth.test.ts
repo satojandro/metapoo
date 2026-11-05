@@ -31,6 +31,7 @@ describe("rpc auth headers", () => {
     expect(rpcAuthHeaders("/relative", FASTNEAR_TESTNET, KEY)).toEqual({});
     expect(rpcAuthHeaders(FASTNEAR_TESTNET, "not a url", KEY)).toEqual({});
   });
+});
 
 describe("isFastNearUrl", () => {
   it("recognises every FastNEAR service host and nothing else", () => {
@@ -43,5 +44,4 @@ describe("isFastNearUrl", () => {
     for (const url of ["https://rpc.near.org", "https://notfastnear.com", "https://fastnear.com.evil.test", "/relative"])
       expect(isFastNearUrl(url)).toBe(false);
   });
-});
 });

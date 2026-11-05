@@ -237,15 +237,15 @@ describe("createFastNearLedgerSource", () => {
     json: async () => ({ status: "ok", latest_block_timestamp: `${BigInt(NOW_MS - lagMs) * 1_000_000n}` }),
   });
   /** One transaction as the index returns it: RPC-shaped, receipts carry their own outcome. */
-  const indexTx = (hash: string, receipts: unknown[]) => ({
+  const indexTx = (hash: string, receipts: unknown[], top: unknown = receipt("top", "keeper.testnet", [])) => ({
     transaction: { hash, signer_id: "keeper.testnet", receiver_id: BOARD },
-    execution_outcome: receipt("top", "keeper.testnet", []),
+    execution_outcome: top,
     receipts: receipts.map(r => ({ execution_outcome: r })),
   });
   const accountRow = (hash: string, ok = true) => ({ transaction_hash: hash, is_success: ok });
 
   const source = (fetch: typeof globalThis.fetch, extra: Partial<Parameters<typeof createFastNearLedgerSource>[0]> = {}) =>
-    createFastNearLedgerSource({ network: "testnet", board: BOARD, fetch, now: () => NOW_MS, ...extra })!;
+    createFastNearLedgerSource({ network: "testnet", board: BOARD, buybackAccount: BUYBACK, fetch, now: () => NOW_MS, ...extra })!;
 
   function stubFetch(
     pages: Array<{ rows: unknown[]; resume_token?: string }>,
@@ -253,21 +253,64 @@ describe("createFastNearLedgerSource", () => {
     lagMs = 5_000,
   ) {
     const bodies: unknown[] = [];
+    const statusHeaders: Array<Record<string, string>> = [];
     const doFetch = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.endsWith("/status")) return statusHead(lagMs);
+      if (url.endsWith("/status")) {
+        statusHeaders.push((init?.headers ?? {}) as Record<string, string>);
+        return statusHead(lagMs);
+      }
       if (url.endsWith("/v0/account")) {
         const page = pages.shift() ?? { rows: [] };
+        bodies.push(JSON.parse(String(init!.body)));
         return { ok: true, json: async () => ({ account_txs: page.rows, txs_count: page.rows.length, resume_token: page.resume_token }) };
       }
       const body = JSON.parse(String(init!.body)) as { tx_hashes: string[] };
       bodies.push(body);
       return { ok: true, json: async () => ({ transactions: body.tx_hashes.map(h => txs[h]).filter(Boolean) }) };
     }) as unknown as typeof globalThis.fetch & { mock: { calls: Array<[string, RequestInit?]> } };
-    return { fetch: doFetch, bodies };
+    return { fetch: doFetch, bodies, statusHeaders };
   }
 
+  it("counts a split whose event data never names the board, and never relies on is_event_log", async () => {
+    // The bug this replaces: `is_event_log` means "named in an event", and a split's data
+    // holds team_account + buyback_account, never the board. On 2026-11-05 board5's 23
+    // board-emitted event logs were flagged zero times.
+    const h1 = txHash(1);
+    const { fetch, bodies } = stubFetch(
+      [{ rows: [{ ...accountRow(h1), is_event_log: false }] }],
+      { [h1]: indexTx(h1, [receipt("r1", BOARD, [distributed(10n * NEAR)])]) },
+    );
+    const scan = await source(fetch).scan();
+    expect(scan.totals.nearToBuyback).toBe(9n * NEAR);
+    expect(scan.totals.nearDistributions).toBe(1);
+    expect(scan.complete).toBe(true);
+    // The listing is the buyback account's history, and it carries no event-log filter.
+    expect(bodies[0]).toMatchObject({ account_id: BUYBACK, desc: true });
+    expect((bodies[0] as Record<string, unknown>).is_event_log).toBeUndefined();
+  });
+
+  it("falls back to the board's function calls when the buyback account is unknown", async () => {
+    const h1 = txHash(2);
+    const { fetch, bodies } = stubFetch(
+      [{ rows: [accountRow(h1)] }],
+      { [h1]: indexTx(h1, [receipt("r1", BOARD, [distributed(10n * NEAR)])]) },
+    );
+    const scan = await createFastNearLedgerSource({
+      network: "testnet", board: BOARD, fetch, now: () => NOW_MS,
+    })!.scan();
+    expect(scan.totals.nearToBuyback).toBe(9n * NEAR);
+    expect(bodies[0]).toMatchObject({ account_id: BOARD, is_function_call: true });
+  });
+
+  it("sends no Content-Type on the status GET, so the scan needs no CORS preflight", async () => {
+    const { fetch, statusHeaders } = stubFetch([{ rows: [] }], {});
+    await source(fetch).scan();
+    expect(statusHeaders).toHaveLength(1);
+    expect(Object.keys(statusHeaders[0]!).map(k => k.toLowerCase())).not.toContain("content-type");
+  });
+
   it("reads the split from event-log transactions in batches, not one request each", async () => {
-    const h1 = txHash(1), h2 = txHash(2);
+    const h1 = txHash(3), h2 = txHash(4);
     const { fetch, bodies } = stubFetch(
       [{ rows: [accountRow(h1), accountRow(h2)] }],
       {
@@ -277,36 +320,66 @@ describe("createFastNearLedgerSource", () => {
     );
     const scan = await source(fetch).scan();
     expect(scan.origin).toBe("index");
-    expect(scan.complete).toBe(true);
     expect(scan.transactions).toBe(2);
     expect(scan.indexedThroughMs).toBe(NOW_MS - 5_000);
     expect(scan.totals).toMatchObject({ nearToBuyback: 9n * NEAR, nearDistributions: 1, mpooReturned: 7n * MPOO, mpooReturns: 1 });
     // One listing page plus one batch for both transactions — no per-hash request.
-    expect(bodies).toHaveLength(1);
-    expect(bodies[0]).toEqual({ tx_hashes: [h1, h2] });
-    const urls = fetch.mock.calls.map(c => String(c[0]));
-    expect(urls.filter(u => u.includes("tx.test.fastnear.com")).length).toBe(3);
-    expect(urls.some(u => u.includes("/v0/account"))).toBe(true);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toEqual({ tx_hashes: [h1, h2] });
   });
 
   it("skips a transaction the index marks failed, and never re-reads a cached one", async () => {
-    const h1 = txHash(3), h2 = txHash(4);
+    const h1 = txHash(5), h2 = txHash(6);
     const { fetch, bodies } = stubFetch(
       [{ rows: [accountRow(h1), accountRow(h2, false)] }],
       { [h1]: indexTx(h1, [receipt("r1", BOARD, [distributed(10n * NEAR)])]) },
     );
     const s = source(fetch);
-    const scan = await s.scan();
-    expect(scan.transactions).toBe(1);
-    expect(bodies[0]).toEqual({ tx_hashes: [h1] });
+    expect((await s.scan()).transactions).toBe(1);
+    expect(bodies[1]).toEqual({ tx_hashes: [h1] });
     await s.scan();
     // Logs are final: the listing is read again, the transaction is not.
     expect(fetch.mock.calls.filter(c => String(c[0]).endsWith("/v0/transactions"))).toHaveLength(1);
   });
 
+  it("leaves a split mid-flight out of the total, and re-reads it once its callback lands", async () => {
+    const h1 = txHash(7);
+    // The scheduled split has landed; the callback receipt that reports the failed buyback
+    // leg has not been indexed yet, so `r2` is referenced but absent.
+    const pending = indexTx(h1, [receipt("r1", BOARD, [distributed(10n * NEAR)])], {
+      id: "top", outcome: { executor_id: "keeper.testnet", logs: [], status: { SuccessValue: "" }, receipt_ids: ["r1", "r2"] },
+    });
+    const settled = indexTx(
+      h1,
+      [receipt("r1", BOARD, [distributed(10n * NEAR)]), receipt("r2", BOARD, [legFailed(BUYBACK, 9n * NEAR)])],
+      { id: "top", outcome: { executor_id: "keeper.testnet", logs: [], status: { SuccessValue: "" }, receipt_ids: ["r1", "r2"] } },
+    );
+    const replies = [pending, settled, settled];
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/status")) return statusHead(0);
+      if (url.endsWith("/v0/account")) return { ok: true, json: async () => ({ account_txs: [accountRow(h1)] }) };
+      JSON.parse(String(init!.body));
+      return { ok: true, json: async () => ({ transactions: [replies.shift()] }) };
+    }) as unknown as typeof globalThis.fetch & { mock: { calls: Array<[string, RequestInit?]> } };
+    const s = source(fetch);
+
+    const first = await s.scan();
+    // Counted as nothing, not as a 9 NEAR split whose failure simply has not been seen yet.
+    expect(first.totals.nearToBuyback).toBe(0n);
+    expect(first.complete).toBe(false);
+    expect(first.transactions).toBe(0);
+
+    const second = await s.scan();
+    expect(second.complete).toBe(true);
+    expect(second.transactions).toBe(1);
+    // 9 NEAR scheduled minus the 9 NEAR leg that failed: the callback was read because the
+    // unfinished transaction was never cached.
+    expect(second.totals.nearToBuyback).toBe(0n);
+    expect(fetch.mock.calls.filter(c => String(c[0]).endsWith("/v0/transactions"))).toHaveLength(2);
+  });
+
   it("pages with the index's own resume token and says when it stopped early", async () => {
-    // A full page plus a token means there are older rows we chose not to read.
-    const h1 = txHash(1);
+    const h1 = txHash(8);
     const rows = Array.from({ length: FASTNEAR_ACCOUNT_PAGE }, () => accountRow(h1));
     const { fetch } = stubFetch(
       [{ rows, resume_token: "next" }, { rows, resume_token: "next" }],
@@ -319,12 +392,13 @@ describe("createFastNearLedgerSource", () => {
   });
 
   it("stops at 20 hashes per transaction request", async () => {
-    const rows = Array.from({ length: 25 }, (_, i) => accountRow(txHash(i)));
+    const rows = Array.from({ length: 25 }, (_, i) => accountRow(txHash(i + 10)));
     const txs = Object.fromEntries(rows.map((r, i) => [r.transaction_hash, indexTx(r.transaction_hash, [receipt(`r${i}`, BOARD, [])])]));
     const { fetch, bodies } = stubFetch([{ rows }], txs);
     const scan = await source(fetch).scan();
     expect(scan.transactions).toBe(25);
-    expect(bodies.map(b => (b as { tx_hashes: string[] }).tx_hashes.length)).toEqual([FASTNEAR_TX_BATCH, 5]);
+    const batches = bodies.filter(b => (b as { tx_hashes?: unknown }).tx_hashes) as Array<{ tx_hashes: string[] }>;
+    expect(batches.map(b => b.tx_hashes.length)).toEqual([FASTNEAR_TX_BATCH, 5]);
   });
 
   it("gives a lower bound when the index is hours behind, and no figure when it has stopped", async () => {

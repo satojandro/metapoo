@@ -101,8 +101,10 @@ export function rpcConnection(url: string = RPC_URL): {
  * them from the browser with no key at all. When a key *is* configured it is sent,
  * because the key is what raises the rate limit; one FastNEAR key covers every host.
  */
-export function fastnearHeaders(url: string): Record<string, string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+export function fastnearHeaders(url: string, withBody = true): Record<string, string> {
+  // `Content-Type` on a GET turns a simple request into a CORS preflight; send it only
+  // when there is a body to describe.
+  const headers: Record<string, string> = withBody ? { "Content-Type": "application/json" } : {};
   if (RPC_API_KEY && isFastNearUrl(url)) headers.Authorization = `Bearer ${RPC_API_KEY}`;
   return headers;
 }
