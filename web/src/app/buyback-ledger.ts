@@ -15,19 +15,22 @@
  * refunds the board and is sent again by a later split, so a failed buyback leg is
  * subtracted here or that NEAR would be counted twice.
  *
- * Two `LedgerSource`s, chosen per read by `createPreferredLedgerSource`:
+ * `LedgerSource`s, chosen per read by `createPreferredLedgerSource`:
  *
  * - the board's own running totals, `get_buyback_totals()` (TR-B), exact and all-time;
- * - for boards without that view (MethodNotFound), the public NearBlocks receipt index
- *   (which board receipts to look at) plus archival RPC (their logs), since NEAR RPC has
- *   no event index. It may be incomplete and says so.
+ * - for boards without that view (MethodNotFound), FastNEAR's transaction index: event-log
+ *   transactions listed by account, logs fetched 20 transactions at a time (`createFastNearLedgerSource`);
+ * - and, only where that index does not exist, the older NearBlocks receipt index plus
+ *   archival RPC (one request per transaction), since NEAR RPC has no event index.
+ *
+ * The indexed fallbacks may be incomplete and say so.
  *
  * Any other failure makes the figure unavailable, never zero, and never silently swaps
  * an exact source for a partial one.
  */
 
 import { parseChainJson } from "../chain-json";
-import { rpcHeaders } from "../config";
+import { fastnearHeaders, rpcHeaders } from "../config";
 import { isMethodNotFound, type View } from "./revenue-panel";
 
 export const PAYMENTS_EVENT_STANDARD = "mpoo_payments";
@@ -451,6 +454,155 @@ export function createIndexedLedgerSource(options: IndexedSourceOptions): Ledger
       const complete = !lists.some(l => l.more) && all.length <= maxTransactions && lag <= INDEX_LAG_OK_MS;
       return {
         origin: "index", label: INDEX_LABEL, totals: aggregateLedger(events), complete,
+        transactions: hashes.length, indexedThroughMs: head,
+      };
+    },
+  };
+}
+
+/** FastNEAR's indexed history host per network; it answers without a key. */
+export function fastnearTxBase(network: string): string | null {
+  if (network === "mainnet") return "https://tx.main.fastnear.com";
+  if (network === "testnet") return "https://tx.test.fastnear.com";
+  return null;
+}
+
+export const FASTNEAR_LABEL = "FastNEAR transaction index";
+/** Rows per `/v0/account` page — the API's own maximum. */
+export const FASTNEAR_ACCOUNT_PAGE = 200;
+/** Hashes per `/v0/transactions` request — the API's own maximum. */
+export const FASTNEAR_TX_BATCH = 20;
+
+export interface FastNearSourceOptions {
+  network: string;
+  board: string;
+  fetch?: typeof fetch;
+  /** `/v0/account` pages to read, 200 rows each. */
+  maxPages?: number;
+  /** Transactions whose logs are read per scan, in batches of 20. */
+  maxTransactions?: number;
+  timeoutMs?: number;
+  /** Wall clock (ms), to tell how far the index is behind. */
+  now?: () => number;
+}
+
+/**
+ * The index's item is RPC-shaped, with one difference: each entry of `receipts` carries
+ * its own `execution_outcome`. Flattening it back lets `eventsFromTxStatus` stay the one
+ * place that reads logs.
+ */
+function asRpcTxResult(item: unknown): unknown {
+  const receipts = (item as { receipts?: unknown } | null)?.receipts;
+  if (!Array.isArray(receipts)) throw new Error("tx: no receipts");
+  return { receipts_outcome: receipts.map(r => (r as { execution_outcome?: unknown } | null)?.execution_outcome) };
+}
+
+/**
+ * The board's history from FastNEAR's transaction index (TR-K, 2026-11-05).
+ *
+ * `POST /v0/account` with `is_event_log: true` lists the transactions where the board
+ * appeared in a JSON event log — the board is the emitter of every `mpoo_payments`
+ * event, so that is the whole ledger, paged through an opaque `resume_token`.
+ * `POST /v0/transactions` then returns up to 20 transactions' logs in one request,
+ * where an archival RPC needed one request each. Same parser, same totals.
+ *
+ * The index is eventually consistent (`/status` reports its head), so this source is
+ * for history only: a scan vouches for what it has read, and says when it is behind.
+ */
+export function createFastNearLedgerSource(options: FastNearSourceOptions): LedgerSource | null {
+  const base = fastnearTxBase(options.network);
+  if (!base) return null;
+  const doFetch = options.fetch ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
+  const maxPages = options.maxPages ?? 3;
+  const maxTransactions = options.maxTransactions ?? 200;
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  const now = options.now ?? (() => Date.now());
+  const { board } = options;
+  const cache = new Map<string, LedgerEvent[]>();
+
+  async function request(path: string, init: RequestInit = {}): Promise<unknown> {
+    const url = `${base}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      // No key is required; one is sent when configured, because it is what raises the limit.
+      const response = await doFetch(url, { ...init, headers: fastnearHeaders(url), signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status} from ${new URL(url).host}`);
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Block time (ms) of the newest block the index has processed. */
+  async function indexHead(): Promise<number> {
+    const body = (await request("/status")) as { latest_block_timestamp?: unknown };
+    const ns = body?.latest_block_timestamp;
+    if (typeof ns !== "string" || !/^\d+$/.test(ns)) throw new Error("Invalid FastNEAR status response");
+    return Number(BigInt(ns) / 1_000_000n);
+  }
+
+  /** Newest first. `more` is true when the index has older transactions than were read. */
+  async function listEventHashes(): Promise<{ hashes: string[]; more: boolean }> {
+    const hashes: string[] = [];
+    let token: string | undefined;
+    for (let page = 0; page < maxPages; page++) {
+      const body = (await request("/v0/account", {
+        method: "POST",
+        body: JSON.stringify({
+          account_id: board, is_event_log: true, desc: true, limit: FASTNEAR_ACCOUNT_PAGE,
+          ...(token ? { resume_token: token } : {}),
+        }),
+      })) as { account_txs?: unknown; resume_token?: unknown };
+      if (!Array.isArray(body?.account_txs)) throw new Error("Invalid FastNEAR account response");
+      for (const row of body.account_txs as Array<Record<string, unknown>>) {
+        const hash = row.transaction_hash;
+        if (typeof hash !== "string" || !TX_HASH.test(hash)) continue;
+        // A failed transaction may still be logged; only successful ones can carry the split.
+        if (row.is_success === false) continue;
+        if (!hashes.includes(hash)) hashes.push(hash);
+      }
+      token = typeof body.resume_token === "string" && body.resume_token ? body.resume_token : undefined;
+      if (!token || body.account_txs.length < FASTNEAR_ACCOUNT_PAGE) return { hashes, more: false };
+    }
+    return { hashes, more: true };
+  }
+
+  async function readBatch(batch: string[]): Promise<void> {
+    const fresh = batch.filter(hash => !cache.has(hash));
+    if (fresh.length === 0) return;
+    const body = (await request("/v0/transactions", {
+      method: "POST",
+      body: JSON.stringify({ tx_hashes: fresh }),
+    })) as { transactions?: unknown };
+    if (!Array.isArray(body?.transactions)) throw new Error("Invalid FastNEAR transactions response");
+    for (const item of body.transactions as Array<Record<string, unknown>>) {
+      const hash = (item.transaction as { hash?: unknown } | undefined)?.hash;
+      if (typeof hash !== "string") throw new Error("FastNEAR transaction without a hash");
+      cache.set(hash, eventsFromTxStatus(asRpcTxResult(item), board, hash));
+    }
+    // A listed hash the index does not return is an error, never an empty result.
+    const missing = fresh.filter(hash => !cache.has(hash));
+    if (missing.length > 0) throw new Error(`The index returned no transaction for ${missing.length} of ${fresh.length} hashes`);
+  }
+
+  return {
+    async scan() {
+      const head = await indexHead();
+      const lag = now() - head;
+      if (lag > INDEX_LAG_MAX_MS) {
+        throw new LedgerUnavailable(`The event index stopped at ${new Date(head).toUTCString()}, so it can’t show recent splits.`);
+      }
+      const list = await listEventHashes();
+      const hashes = list.hashes.slice(0, maxTransactions);
+      for (let i = 0; i < hashes.length; i += FASTNEAR_TX_BATCH) {
+        await readBatch(hashes.slice(i, i + FASTNEAR_TX_BATCH));
+      }
+      const events: LedgerEvent[] = [];
+      for (const hash of hashes) events.push(...(cache.get(hash) ?? []));
+      return {
+        origin: "index", label: FASTNEAR_LABEL, totals: aggregateLedger(events),
+        complete: !list.more && list.hashes.length <= maxTransactions && lag <= INDEX_LAG_OK_MS,
         transactions: hashes.length, indexedThroughMs: head,
       };
     },

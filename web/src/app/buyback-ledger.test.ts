@@ -3,9 +3,13 @@ import {
   aggregateLedger,
   BOARD_TOTALS_LABEL,
   createBoardTotalsSource,
+  createFastNearLedgerSource,
   createIndexedLedgerSource,
   createPreferredLedgerSource,
+  FASTNEAR_ACCOUNT_PAGE,
+  FASTNEAR_TX_BATCH,
   eventsFromTxStatus,
+  fastnearTxBase,
   isRevenueTransferArgs,
   LedgerUnavailable,
   loadBuybackLedger,
@@ -219,6 +223,133 @@ describe("createIndexedLedgerSource", () => {
 
   it("has no source where there is no public index", () => {
     expect(createIndexedLedgerSource({ network: "localnet", board: BOARD, mpooToken: TOKEN })).toBeNull();
+  });
+});
+
+
+describe("createFastNearLedgerSource", () => {
+  // Base58 has no 0, O, I or l: skip them so the hash passes the real TX_HASH check.
+  const B58 = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const txHash = (n: number) => (B58[Math.floor(n / B58.length)] + B58[n % B58.length]).repeat(20).slice(0, 40);
+  const NOW_MS = 1_793_000_000_000;
+  const statusHead = (lagMs: number) => ({
+    ok: true,
+    json: async () => ({ status: "ok", latest_block_timestamp: `${BigInt(NOW_MS - lagMs) * 1_000_000n}` }),
+  });
+  /** One transaction as the index returns it: RPC-shaped, receipts carry their own outcome. */
+  const indexTx = (hash: string, receipts: unknown[]) => ({
+    transaction: { hash, signer_id: "keeper.testnet", receiver_id: BOARD },
+    execution_outcome: receipt("top", "keeper.testnet", []),
+    receipts: receipts.map(r => ({ execution_outcome: r })),
+  });
+  const accountRow = (hash: string, ok = true) => ({ transaction_hash: hash, is_success: ok });
+
+  const source = (fetch: typeof globalThis.fetch, extra: Partial<Parameters<typeof createFastNearLedgerSource>[0]> = {}) =>
+    createFastNearLedgerSource({ network: "testnet", board: BOARD, fetch, now: () => NOW_MS, ...extra })!;
+
+  function stubFetch(
+    pages: Array<{ rows: unknown[]; resume_token?: string }>,
+    txs: Record<string, unknown>,
+    lagMs = 5_000,
+  ) {
+    const bodies: unknown[] = [];
+    const doFetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/status")) return statusHead(lagMs);
+      if (url.endsWith("/v0/account")) {
+        const page = pages.shift() ?? { rows: [] };
+        return { ok: true, json: async () => ({ account_txs: page.rows, txs_count: page.rows.length, resume_token: page.resume_token }) };
+      }
+      const body = JSON.parse(String(init!.body)) as { tx_hashes: string[] };
+      bodies.push(body);
+      return { ok: true, json: async () => ({ transactions: body.tx_hashes.map(h => txs[h]).filter(Boolean) }) };
+    }) as unknown as typeof globalThis.fetch & { mock: { calls: Array<[string, RequestInit?]> } };
+    return { fetch: doFetch, bodies };
+  }
+
+  it("reads the split from event-log transactions in batches, not one request each", async () => {
+    const h1 = txHash(1), h2 = txHash(2);
+    const { fetch, bodies } = stubFetch(
+      [{ rows: [accountRow(h1), accountRow(h2)] }],
+      {
+        [h1]: indexTx(h1, [receipt("r1", BOARD, [distributed(10n * NEAR)])]),
+        [h2]: indexTx(h2, [receipt("r2", BOARD, [returned(7n * MPOO)])]),
+      },
+    );
+    const scan = await source(fetch).scan();
+    expect(scan.origin).toBe("index");
+    expect(scan.complete).toBe(true);
+    expect(scan.transactions).toBe(2);
+    expect(scan.indexedThroughMs).toBe(NOW_MS - 5_000);
+    expect(scan.totals).toMatchObject({ nearToBuyback: 9n * NEAR, nearDistributions: 1, mpooReturned: 7n * MPOO, mpooReturns: 1 });
+    // One listing page plus one batch for both transactions — no per-hash request.
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toEqual({ tx_hashes: [h1, h2] });
+    const urls = fetch.mock.calls.map(c => String(c[0]));
+    expect(urls.filter(u => u.includes("tx.test.fastnear.com")).length).toBe(3);
+    expect(urls.some(u => u.includes("/v0/account"))).toBe(true);
+  });
+
+  it("skips a transaction the index marks failed, and never re-reads a cached one", async () => {
+    const h1 = txHash(3), h2 = txHash(4);
+    const { fetch, bodies } = stubFetch(
+      [{ rows: [accountRow(h1), accountRow(h2, false)] }],
+      { [h1]: indexTx(h1, [receipt("r1", BOARD, [distributed(10n * NEAR)])]) },
+    );
+    const s = source(fetch);
+    const scan = await s.scan();
+    expect(scan.transactions).toBe(1);
+    expect(bodies[0]).toEqual({ tx_hashes: [h1] });
+    await s.scan();
+    // Logs are final: the listing is read again, the transaction is not.
+    expect(fetch.mock.calls.filter(c => String(c[0]).endsWith("/v0/transactions"))).toHaveLength(1);
+  });
+
+  it("pages with the index's own resume token and says when it stopped early", async () => {
+    // A full page plus a token means there are older rows we chose not to read.
+    const h1 = txHash(1);
+    const rows = Array.from({ length: FASTNEAR_ACCOUNT_PAGE }, () => accountRow(h1));
+    const { fetch } = stubFetch(
+      [{ rows, resume_token: "next" }, { rows, resume_token: "next" }],
+      { [h1]: indexTx(h1, [receipt("r1", BOARD, [distributed(10n * NEAR)])]) },
+    );
+    const first = await source(fetch, { maxPages: 1 }).scan();
+    expect(first.complete).toBe(false);
+    expect(first.transactions).toBe(1);
+    expect(first.totals.nearToBuyback).toBe(9n * NEAR);
+  });
+
+  it("stops at 20 hashes per transaction request", async () => {
+    const rows = Array.from({ length: 25 }, (_, i) => accountRow(txHash(i)));
+    const txs = Object.fromEntries(rows.map((r, i) => [r.transaction_hash, indexTx(r.transaction_hash, [receipt(`r${i}`, BOARD, [])])]));
+    const { fetch, bodies } = stubFetch([{ rows }], txs);
+    const scan = await source(fetch).scan();
+    expect(scan.transactions).toBe(25);
+    expect(bodies.map(b => (b as { tx_hashes: string[] }).tx_hashes.length)).toEqual([FASTNEAR_TX_BATCH, 5]);
+  });
+
+  it("gives a lower bound when the index is hours behind, and no figure when it has stopped", async () => {
+    const h1 = txHash(1);
+    const rows = [{ rows: [accountRow(h1)] }];
+    const txs = { [h1]: indexTx(h1, [receipt("r1", BOARD, [distributed(10n * NEAR)])]) };
+    const behind = stubFetch([...rows], txs, 3 * 3_600_000);
+    expect((await source(behind.fetch).scan()).complete).toBe(false);
+    const stalledFetch = stubFetch([...rows], txs, 36 * 86_400_000);
+    const stalled = source(stalledFetch.fetch);
+    await expect(stalled.scan()).rejects.toBeInstanceOf(LedgerUnavailable);
+    await expect(stalled.scan()).rejects.toThrow(/stopped at/);
+    // A stopped index is not paged through at all.
+    expect(stalledFetch.fetch.mock.calls.every(c => String(c[0]).endsWith("/status"))).toBe(true);
+  });
+
+  it("fails the scan when a listed hash comes back without its transaction", async () => {
+    const { fetch } = stubFetch([{ rows: [accountRow(txHash(9))] }], {});
+    await expect(source(fetch).scan()).rejects.toThrow(/no transaction for 1 of 1/);
+  });
+
+  it("has no source where FastNEAR does not index the network", () => {
+    expect(createFastNearLedgerSource({ network: "localnet", board: BOARD })).toBeNull();
+    expect(fastnearTxBase("mainnet")).toBe("https://tx.main.fastnear.com");
+    expect(fastnearTxBase("testnet")).toBe("https://tx.test.fastnear.com");
   });
 });
 

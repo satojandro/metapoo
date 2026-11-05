@@ -14,6 +14,7 @@ import { signAndSendDistribution } from "../wallet";
 import { createAccountBalanceReader } from "./admin-settings";
 import {
   createBoardTotalsSource,
+  createFastNearLedgerSource,
   createIndexedLedgerSource,
   createPreferredLedgerSource,
   exampleLedger,
@@ -97,7 +98,10 @@ function defaultLedgerLoader(): RevenuePageDeps["loadLedger"] {
       sourceToken = snapshot.mpooToken;
       source = createPreferredLedgerSource(
         board,
-        createIndexedLedgerSource({ network: PAGE_NETWORK, board: CONTRACT_ID, mpooToken: snapshot.mpooToken }),
+        // FastNEAR's index first: one paged listing plus 20-transaction log batches, no key
+        // needed. NearBlocks stays as the fallback for a network FastNEAR does not index.
+        createFastNearLedgerSource({ network: PAGE_NETWORK, board: CONTRACT_ID })
+          ?? createIndexedLedgerSource({ network: PAGE_NETWORK, board: CONTRACT_ID, mpooToken: snapshot.mpooToken }),
       );
     }
     return loadBuybackLedger(source, readBalance, snapshot.state.buybackAccount);
