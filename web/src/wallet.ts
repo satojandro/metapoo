@@ -4,6 +4,7 @@ import { JsonRpcProvider } from "@near-js/providers";
 import {
   CONTRACT_ID,
   RPC_URL,
+  rpcConnection,
   PAGE_NETWORK,
   WALLET_NETWORK,
   PRIVY_ENABLED,
@@ -270,7 +271,7 @@ export async function drawingKeyScopeOnAccount(
   accountId: string,
   publicKey: string,
 ): Promise<DrawingKeyScope> {
-  const account = new NearAccount(accountId, new JsonRpcProvider({ url: RPC_URL }));
+  const account = new NearAccount(accountId, new JsonRpcProvider(rpcConnection(RPC_URL)));
   try {
     const access = await account.getAccessKey(publicKey);
     return classifyDrawingKeyAccessKey(access.permission, CONTRACT_ID);
@@ -297,7 +298,7 @@ export async function verifyAccessKeyOnAccount(
 ): Promise<boolean> {
   const account = new NearAccount(
     accountId,
-    new JsonRpcProvider({ url: RPC_URL }),
+    new JsonRpcProvider(rpcConnection(RPC_URL)),
   );
   // The wallet returns as soon as it has signed. AddKey is a separate receipt, and the
   // RPC we read from can lag a block behind — a single read reports "not found" for a
@@ -333,7 +334,7 @@ export async function verifyAccessKeyOnAccount(
  */
 export async function countBoardKeysOnAccount(accountId: string): Promise<number> {
   try {
-    const account = new NearAccount(accountId, new JsonRpcProvider({ url: RPC_URL }));
+    const account = new NearAccount(accountId, new JsonRpcProvider(rpcConnection(RPC_URL)));
     const list = await account.getAccessKeyList();
     const keys = (list as { keys?: unknown }).keys;
     if (!Array.isArray(keys)) return 0;

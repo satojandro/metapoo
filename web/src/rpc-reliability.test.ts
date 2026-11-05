@@ -1,6 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { viewFunction } from "./contract";
-vi.mock("./config", () => ({ CONTRACT_ID: "board5.metapoo-player1.testnet", RPC_URL: "https://rpc.testnet.fastnear.com" }));
+vi.mock("./config", () => ({
+  CONTRACT_ID: "board5.metapoo-player1.testnet",
+  RPC_URL: "https://rpc.testnet.fastnear.com",
+  rpcHeaders: () => ({ "Content-Type": "application/json" }),
+}));
 afterEach(() => vi.unstubAllGlobals());
 it("reads board5 through a backup when the primary rate limits", async () => {
   const fetcher = vi.fn().mockResolvedValueOnce(new Response("busy", { status: 429 }))

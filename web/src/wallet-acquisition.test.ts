@@ -29,6 +29,7 @@ vi.mock("./config", () => ({
   INTENTS_FUNDING_ENABLED: false,
   RHEA_MPOO_SWAP_ENABLED: false,
   ACQUISITION_PLAY_RESERVE_YOCTO: "",
+  rpcConnection: () => ({ url: "https://rpc.testnet.near.org" }),
 }));
 import { authorizeDrawingSession, verifyAccessKeyOnAccount } from "./wallet";
 import { DRAWING_SESSION_GAS_ALLOWANCE_YOCTO } from "./drawing-session";

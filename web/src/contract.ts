@@ -1,6 +1,6 @@
 import { readRpcFetch } from "./read-rpc";
 import type { PixelView, PixelsPageView } from "@shared/types.ts";
-import { CONTRACT_ID, RPC_URL } from "./config";
+import { CONTRACT_ID, RPC_URL, rpcHeaders } from "./config";
 import { loadAllPaintedPixels } from "./load-board";
 
 /**
@@ -171,7 +171,7 @@ export async function viewFunction<T>(
 
   const response = await fetchWithTimeout(RPC_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: rpcHeaders(),
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: "metapoo-view",
@@ -243,7 +243,7 @@ export async function viewFunctionWithMeta<T>(
 
   const response = await fetchWithTimeout(RPC_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: rpcHeaders(),
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: "metapoo-view",
@@ -299,7 +299,7 @@ export async function viewFunctionWithMeta<T>(
 export async function fetchLatestBlockHeight(): Promise<number> {
   const response = await fetchWithTimeout(RPC_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: rpcHeaders(),
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: "metapoo-block",

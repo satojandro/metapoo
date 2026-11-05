@@ -27,6 +27,7 @@
  */
 
 import { parseChainJson } from "../chain-json";
+import { rpcHeaders } from "../config";
 import { isMethodNotFound, type View } from "./revenue-panel";
 
 export const PAYMENTS_EVENT_STANDARD = "mpoo_payments";
@@ -410,7 +411,7 @@ export function createIndexedLedgerSource(options: IndexedSourceOptions): Ledger
     if (cached) return cached;
     const body = (await getJson(rpc!, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: rpcHeaders(rpc ?? undefined),
       body: JSON.stringify({
         jsonrpc: "2.0", id: "ledger", method: "tx",
         // An archival node finds the transaction by hash; the sender only routes the lookup.

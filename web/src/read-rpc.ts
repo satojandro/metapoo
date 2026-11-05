@@ -1,4 +1,6 @@
 /** Shared read-only transport. Never accepts broadcasts or changes wallet signing. */
+import { rpcAuthHeaders } from "./rpc-auth";
+
 export class RpcBusyError extends Error {
   constructor() { super("Network busy. Please retry shortly."); }
 }
@@ -9,6 +11,8 @@ export function createReadTransport(options: {
   fallback?: string;
   spacingMs?: number;
   timeoutMs?: number;
+  /** Bearer token for the primary endpoint; defaults to `VITE_NEAR_RPC_API_KEY`. */
+  apiKey?: string;
 } = {}) {
   const pending = new Map<string, Promise<Response>>();
   const health = new Map<string, { failures: number; until: number }>();
@@ -17,6 +21,9 @@ export function createReadTransport(options: {
   let nextStart = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const spacing = options.spacingMs ?? 200;
+
+  // Read at request time, not import time, so a test or a late env load still applies.
+  const apiKey = (): string => (options.apiKey ?? import.meta.env.VITE_NEAR_RPC_API_KEY ?? "").trim();
 
   // Two reads at a time, with priority for prices, balances and confirmation.
   function pump(): void {
@@ -54,7 +61,11 @@ export function createReadTransport(options: {
               const controller = new AbortController();
               const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 8_000);
               try {
-                const response = await (options.fetcher ?? fetch)(endpoint, { ...init, signal: controller.signal });
+                const headers = new Headers(init.headers);
+                for (const [name, value] of Object.entries(rpcAuthHeaders(endpoint, url, apiKey()))) {
+                  headers.set(name, value);
+                }
+                const response = await (options.fetcher ?? fetch)(endpoint, { ...init, headers, signal: controller.signal });
                 if (response.status === 429 || response.status >= 500) {
                   const retry = response.headers.get("Retry-After");
                   const wait = retry ? (/^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now()) : 0;
