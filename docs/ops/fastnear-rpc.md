@@ -63,8 +63,16 @@ Two consequences that shaped the code:
    before and after traffic. It is a plan score, not remaining credits. Do not build a
    meter on it.
 
+What one page view costs, measured on 2026-11-05 against `board3.metapoo-player1.testnet`
+(128×128, 8 painted cells): **2 requests** — one `get_board` plus one `get_pixels` page, because
+`get_pixels` walks painted cells only, not the whole grid. Cost grows with content:
+`1 + ceil(painted / 256)` page requests, plus one block read when the load pins a block. A fully
+painted 128×128 board is therefore 66 requests. At 500k credits that is roughly 7.5k cold loads of
+a *full* board, or ~166k loads of a fresh one — unbilled today, because the deployed page uses the
+anonymous endpoint.
+
 The trap this replaces: `quoteRepaint` once issued ≈129 RPCs for a single 64-cell stroke
-(`docs/learning/traps.md`). At that shape, 500k credits is a few thousand strokes.
+(`docs/learning/traps.md`). That shape, not the board load, is what would eat the trial.
 
 ## Where consumption is actually visible
 
