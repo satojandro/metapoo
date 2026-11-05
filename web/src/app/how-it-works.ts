@@ -6,10 +6,12 @@
  * and the sample-wall story are client-side only and never touch the wallet.
  */
 
+import { wallTiles } from "@shared/types.ts";
 import { isViewTunables, type ViewTunables } from "../pages/wall/wall-views";
 import { MPOO_SPLIT, NEAR_SPLIT, type View } from "./revenue-panel";
 
-export const WALL_TILES = 128 * 128;
+/** Tiles on the wall at its current size (live: a paid board can grow). */
+export { wallTiles };
 const MINUTE_NS = 60_000_000_000n;
 
 export interface HappyHourSchedule {
@@ -82,7 +84,7 @@ export function parseSnapshot(reads: {
     out.firstFillComplete = hh.first_fill_complete;
   }
   const page = reads.pixelsPage as Record<string, unknown> | undefined;
-  if (page && typeof page === "object") out.painted = intOrNull(page.total, WALL_TILES);
+  if (page && typeof page === "object") out.painted = intOrNull(page.total, wallTiles());
   return out;
 }
 

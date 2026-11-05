@@ -270,6 +270,12 @@ export function mountWall(
     onSchemaChanged: () => pricing.onSchemaChanged(),
     onManualRefresh: () => pricing.manualRefresh(),
     onPaletteChanged: (paletteLength) => view.setPaletteLength(paletteLength),
+    onBoardSizeChanged: () => {
+      // The fit, the canvas bitmap and the rules text all read the live size.
+      camera.applyCamera(fitCamera(camera.readViewportSize()));
+      camera.render();
+      view.fillRules();
+    },
   });
 
   // The view reports selection changes; Place paint follows once painting is wired.

@@ -7,11 +7,41 @@
  * (schema 4) boards. Paid credit and price reads are typed in `web/src`.
  */
 
-/** How wide the wall is, in pixels. Column 0 is the left edge. */
-export const BOARD_WIDTH = 128;
+/**
+ * The largest the square wall can grow to (the paid board's `MAX_SIDE`), and the
+ * size of the free board and of paid boards deployed before the wall could grow.
+ */
+export const MAX_BOARD_SIDE = 128;
 
-/** How tall the wall is, in pixels. Row 0 is the top edge. */
-export const BOARD_HEIGHT = 128;
+/**
+ * How wide the wall is, in pixels. Column 0 is the left edge.
+ *
+ * A live binding, not a constant: a paid board starts at 64 × 64 and the owner can
+ * grow it (`expand_board`), so the page takes the size `get_board` reports via
+ * `setBoardSide`. Read it at call time; never copy it into a module-level constant.
+ */
+export let BOARD_WIDTH = MAX_BOARD_SIDE;
+
+/** How tall the wall is, in pixels. Row 0 is the top edge. Live, like `BOARD_WIDTH`. */
+export let BOARD_HEIGHT = MAX_BOARD_SIDE;
+
+/** True when `side` is a square size this page can draw: a whole number, 1 through 128. */
+export function isValidBoardSide(side: unknown): side is number {
+  return Number.isInteger(side) && (side as number) >= 1 && (side as number) <= MAX_BOARD_SIDE;
+}
+
+/** Set the square wall size. Returns true when it changed. Ignores invalid sizes. */
+export function setBoardSide(side: number): boolean {
+  if (!isValidBoardSide(side) || (side === BOARD_WIDTH && side === BOARD_HEIGHT)) return false;
+  BOARD_WIDTH = side;
+  BOARD_HEIGHT = side;
+  return true;
+}
+
+/** Every tile the wall holds at its current size. */
+export function wallTiles(): number {
+  return BOARD_WIDTH * BOARD_HEIGHT;
+}
 
 /**
  * Where this board thinks it is running.

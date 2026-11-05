@@ -8,7 +8,7 @@
  * The wallet network default is testnet. That is not a mainnet deployment.
  */
 
-import type { NetworkId } from "@shared/types.ts";
+import { setBoardSide, type NetworkId } from "@shared/types.ts";
 
 function envString(name: keyof ImportMetaEnv): string {
   const value = import.meta.env[name];
@@ -90,3 +90,11 @@ export const PRIVY_ENABLED = envString("VITE_PRIVY_ENABLED") === "true";
 export const INTENTS_FUNDING_ENABLED = envString("VITE_INTENTS_FUNDING_ENABLED") === "true";
 export const RHEA_MPOO_SWAP_ENABLED = envString("VITE_RHEA_MPOO_SWAP_ENABLED") === "true";
 export const ACQUISITION_PLAY_RESERVE_YOCTO = envString("VITE_ACQUISITION_PLAY_RESERVE_YOCTO");
+
+/**
+ * Board side to draw before `get_board` answers (default 128). Set it to the
+ * deployed board's size (64 for a fresh paid board) so the first frame is already
+ * the right size; the contract's reported size always wins once it is read.
+ */
+const INITIAL_BOARD_SIDE = Number(envString("VITE_BOARD_SIDE") || "0");
+if (INITIAL_BOARD_SIDE) setBoardSide(INITIAL_BOARD_SIDE);

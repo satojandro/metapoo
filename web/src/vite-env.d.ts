@@ -21,6 +21,7 @@ interface ImportMetaEnv {
 
   readonly VITE_BOARD_OWNER?: string;
   readonly VITE_CONTRACT_ID?: string;
+  readonly VITE_BOARD_SIDE?: string;
   readonly VITE_NEAR_NETWORK?: string;
   readonly VITE_NEAR_RPC_URL?: string;
   readonly VITE_NEAR_READ_FALLBACK_URL?: string;

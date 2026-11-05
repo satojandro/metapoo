@@ -1,6 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
+import { BOARD_HEIGHT, BOARD_WIDTH, MAX_BOARD_SIDE, setBoardSide } from "@shared/types.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBoardController } from "./board-controller";
 import { createWallScope } from "./wall-scope";
@@ -74,6 +75,7 @@ function setup() {
     onSchemaChanged: vi.fn(),
     onManualRefresh: vi.fn(),
     onPaletteChanged: vi.fn(),
+    onBoardSizeChanged: vi.fn(),
   };
   const controller = createBoardController(deps);
   return {
@@ -91,11 +93,29 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setBoardSide(MAX_BOARD_SIDE);
   vi.useRealTimers();
   document.body.innerHTML = "";
 });
 
 describe("board controller", () => {
+  it("takes a 64 × 64 board's size from get_board and asks the page to refit", async () => {
+    vi.mocked(getBoard).mockResolvedValueOnce({ ...board(4), width: 64, height: 64 } as never);
+    const { controller, deps, dispose } = setup();
+    await controller.bootstrap();
+    expect(controller.contractMetaOk()).toBe(true);
+    expect([BOARD_WIDTH, BOARD_HEIGHT]).toEqual([64, 64]);
+    expect(deps.onBoardSizeChanged).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it("does not refit when the board is already the size the page draws", async () => {
+    const { controller, deps, dispose } = setup();
+    await controller.bootstrap();
+    expect(deps.onBoardSizeChanged).not.toHaveBeenCalled();
+    dispose();
+  });
+
   it("bootstraps: validates metadata, remembers the schema, loads every painted cell", async () => {
     const { controller, deps, dispose } = setup();
     await controller.bootstrap();

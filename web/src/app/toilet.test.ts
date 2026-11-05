@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   claimButtonState, earnOutcome, EMPTY_PAGE, loadToilet, loadToiletPage, mintRefused, parseEmission, perCellDay,
-  stakeOutcome, WALL_TILES, whaleOutcome, yearsAtRate, type ClaimInput,
+  stakeOutcome, wallTiles, whaleOutcome, yearsAtRate, type ClaimInput,
 } from "./toilet";
 import type { View } from "./revenue-panel";
 
@@ -151,13 +151,13 @@ describe("loadToiletPage", () => {
 
 describe("explorers", () => {
   it("earnings: a 4-year pace on a full wall mints 25% a year", () => {
-    const r = earnOutcome({ years: 4, held: 24, hours: 12, painted: WALL_TILES });
+    const r = earnOutcome({ years: 4, held: 24, hours: 12, painted: wallTiles() });
     expect(r.mintedPct).toBeCloseTo(25);
     expect(r.runYears).toBeCloseTo(4);
     expect(r.tone).toBe("warn");
     expect(r.you).toBeCloseTo(24 * r.perTileDay / 2);
-    expect(earnOutcome({ years: 1, held: 1, hours: 24, painted: WALL_TILES }).tone).toBe("bad");
-    expect(earnOutcome({ years: 10, held: 1, hours: 24, painted: WALL_TILES }).tone).toBe("good");
+    expect(earnOutcome({ years: 1, held: 1, hours: 24, painted: wallTiles() }).tone).toBe("bad");
+    expect(earnOutcome({ years: 10, held: 1, hours: 24, painted: wallTiles() }).tone).toBe("good");
   });
   it("turns the board's rate into a pace, and a zero rate into none", () => {
     // 0.001 TOILET per tile per second on a full wall: 1e9 / (86.4 × 365 × 16384) ≈ 1.94 years.

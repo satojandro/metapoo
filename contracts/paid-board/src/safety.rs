@@ -10,8 +10,6 @@ pub(crate) const MIN_COOLDOWN_NS: u64 = 86_400_000_000_000;
 // 152,724 bytes / 2,301 painted cells ≈ 66.4 bytes, at 10^19 yoctoNEAR/byte.
 // This is a baseline estimate, not a measurement of the new paid-board layout.
 pub(crate) const STORAGE_PER_PIXEL: u128 = 664_000_000_000_000_000_000;
-/// Every cell the board can ever hold (128 × 128).
-const BOARD_CELLS: u32 = crate::WIDTH * crate::HEIGHT;
 
 #[near]
 impl Board {
@@ -49,7 +47,9 @@ impl Board {
     pub fn get_withdrawable_near(&self) -> U128 {
         let storage =
             u128::from(env::storage_usage()).checked_mul(env::storage_byte_cost().as_yoctonear());
-        let empty_cells = u128::from(BOARD_CELLS.saturating_sub(self.pixels.len()));
+        // Reserve storage for every empty cell of the board at its current size; a
+        // larger board reserves more, so `expand_board` lowers what can be withdrawn.
+        let empty_cells = u128::from(crate::board_cells().saturating_sub(self.pixels.len()));
         let protected = empty_cells
             .checked_mul(STORAGE_PER_PIXEL)
             .and_then(|owed| owed.checked_add(self.tunables.reserve_floor.0))
@@ -65,7 +65,7 @@ impl Board {
         assert!(!self.tunables.paused, "Paused");
     }
 
-    fn assert_safety_owner(&self) {
+    pub(crate) fn assert_safety_owner(&self) {
         assert_eq!(
             env::attached_deposit().as_yoctonear(),
             1,
@@ -167,6 +167,9 @@ mod tests {
     #[test]
     fn withdrawable_reserves_storage_empty_cells_and_floor_but_not_credits() {
         let mut board = setup();
+        // `new` writes the board-side key during init; reset the mocked storage
+        // usage so the baseline matches what every later `context` call reports.
+        context(0, 0);
         let storage = u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear();
         let before = board.get_withdrawable_near().0;
         assert_eq!(
@@ -174,7 +177,7 @@ mod tests {
             env::account_balance().as_yoctonear()
                 - MIN_RESERVE
                 - storage
-                - u128::from(BOARD_CELLS) * STORAGE_PER_PIXEL
+                - u128::from(crate::board_cells()) * STORAGE_PER_PIXEL
         );
         // Outstanding credits no longer reserve storage (spec C5).
         board.payments.outstanding = 10_000;
@@ -195,9 +198,10 @@ mod tests {
     #[test]
     fn underfunded_board_has_no_withdrawable_balance() {
         let board = setup();
+        // 64 × 64 empty cells reserve about 2.7 NEAR; 2 NEAR cannot cover them.
         testing_env!(VMContextBuilder::new()
             .current_account_id(accounts(4))
-            .account_balance(NearToken::from_near(10))
+            .account_balance(NearToken::from_near(2))
             .storage_usage(1000)
             .build());
         assert_eq!(board.get_withdrawable_near(), U128(0));

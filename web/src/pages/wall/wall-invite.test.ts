@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { PixelView } from "@shared/types.ts";
-import { createWallInvite, freeFirstOffer, inviteModel, WALL_TILES, wallStats } from "./wall-invite";
+import { createWallInvite, freeFirstOffer, inviteModel, wallTiles, wallStats } from "./wall-invite";
 import { createWallScope } from "./wall-scope";
 import type { ViewTunables } from "./wall-views";
 
@@ -31,7 +31,7 @@ function px(x: number, minutesAgo: number | null, artist = "a.testnet"): PixelVi
 describe("wall stats", () => {
   it("counts painted, never painted and wet tiles from loaded data", () => {
     const stats = wallStats([px(0, 3), px(1, 30), px(2, 600), px(3, null)], NOW, tunables);
-    expect(stats).toEqual({ painted: 3, neverPainted: WALL_TILES - 3, wetNow: 1, nearlyEmpty: true });
+    expect(stats).toEqual({ painted: 3, neverPainted: wallTiles() - 3, wetNow: 1, nearlyEmpty: true });
   });
 
   it("doesn't guess the wet count without the board's window", () => {

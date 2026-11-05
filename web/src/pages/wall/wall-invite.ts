@@ -5,11 +5,12 @@
  * Nothing here draws on the wall, and an unknown number is never shown as a guess.
  */
 
-import { BOARD_HEIGHT, BOARD_WIDTH, type PixelView } from "@shared/types.ts";
+import { wallTiles, type PixelView } from "@shared/types.ts";
 import type { WallScope } from "./wall-scope";
 import { blankIsFree, nowNs, repaintTier, type FreeFirstState, type ViewTunables } from "./wall-views";
 
-export const WALL_TILES = BOARD_WIDTH * BOARD_HEIGHT;
+/** Re-exported so callers read the live size, never a copy taken at import. */
+export { wallTiles };
 /** Under 2% painted (fewer than 328 of 16,384 tiles) reads as "almost blank". */
 export const NEARLY_EMPTY_SHARE = 0.02;
 
@@ -29,12 +30,12 @@ export function wallStats(pixels: readonly PixelView[], now: bigint, tunables: V
     painted += 1;
     if (tunables && repaintTier(pixel.lastWriteTimestampNs, now, tunables).wetness === "wet") wet += 1;
   }
-  painted = Math.min(painted, WALL_TILES);
+  painted = Math.min(painted, wallTiles());
   return {
     painted,
-    neverPainted: WALL_TILES - painted,
+    neverPainted: wallTiles() - painted,
     wetNow: tunables ? wet : null,
-    nearlyEmpty: painted < WALL_TILES * NEARLY_EMPTY_SHARE,
+    nearlyEmpty: painted < wallTiles() * NEARLY_EMPTY_SHARE,
   };
 }
 
@@ -87,7 +88,7 @@ export function inviteModel(input: {
       accent: "Get on it first.",
       body: stats.painted === 0
         ? "Nobody has painted here yet. The first mark on the wall could be yours."
-        : `Only ${count(stats.painted)} of ${count(WALL_TILES)} tiles have paint so far. Whoever shows up now decides what the wall becomes.`,
+        : `Only ${count(stats.painted)} of ${count(wallTiles())} tiles have paint so far. Whoever shows up now decides what the wall becomes.`,
       stats,
       free,
       action: "Start painting",

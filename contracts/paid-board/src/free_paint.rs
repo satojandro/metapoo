@@ -284,8 +284,9 @@ impl Board {
             crate::reject("StrokeTooLarge");
         }
         let mut keys = Vec::with_capacity(cells.len());
+        let side = crate::board_side();
         for cell in &cells {
-            if let Err(code) = crate::check_coordinate(cell.x, cell.y) {
+            if let Err(code) = crate::check_coordinate(cell.x, cell.y, side) {
                 crate::reject(code);
             }
             keys.push(crate::pixel_key(cell.x, cell.y));
@@ -357,7 +358,7 @@ impl Board {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DrawCell, PixelRecord, HEIGHT, WIDTH};
+    use crate::{DrawCell, PixelRecord, LAUNCH_SIDE};
     use near_sdk::json_types::U128;
     use near_sdk::test_utils::{accounts, VMContextBuilder};
     use near_sdk::{testing_env, NearToken};
@@ -421,13 +422,19 @@ mod tests {
         assert!(message.contains(code), "{message}");
     }
 
-    /// Paint every cell except `(127, 127)` as accounts(3), long ago, without
+    /// The bottom-right cell of a fresh (`LAUNCH_SIDE`) board.
+    const LAST: u32 = LAUNCH_SIDE - 1;
+
+    /// Paint every cell except `(LAST, LAST)` as accounts(3), long ago, without
     /// charging anyone (raw paid records plus the matching holder and earning counts).
     fn fill_all_but_last(board: &mut Board) {
         let filler = accounts(3);
-        for key in 0..(WIDTH * HEIGHT - 1) {
+        let cells = (0..LAUNCH_SIDE)
+            .flat_map(|y| (0..LAUNCH_SIDE).map(move |x| (x, y)))
+            .filter(|&cell| cell != (LAST, LAST));
+        for (x, y) in cells {
             board.pixels.insert(
-                key,
+                crate::pixel_key(x, y),
                 PixelRecord {
                     color: 0,
                     artist: filler.clone(),
@@ -435,7 +442,7 @@ mod tests {
                 },
             );
         }
-        let n = i64::from(WIDTH * HEIGHT - 1);
+        let n = i64::from(LAUNCH_SIDE * LAUNCH_SIDE - 1);
         crate::adjust_holder(board, &filler, n, n);
     }
 
@@ -545,9 +552,9 @@ mod tests {
         context(1, SUN_1_NOV_2026);
         assert!(!board.first_fill_complete);
         assert!(board.get_free_first_paints(accounts(1)).active);
-        board.draw(127, 127, 4, 0); // last empty cell, free
+        board.draw(LAST, LAST, 4, 0); // last empty cell, free
         assert!(board.first_fill_complete);
-        assert!(board.free_cells.contains(&crate::pixel_key(127, 127)));
+        assert!(board.free_cells.contains(&crate::pixel_key(LAST, LAST)));
         let view = board.get_free_first_paints(accounts(1));
         assert_eq!((view.active, view.remaining, view.used), (false, 0, 1));
         // A base-tier repaint now costs the base rate.

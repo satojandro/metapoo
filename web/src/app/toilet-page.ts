@@ -20,7 +20,7 @@ import {
   stakeOutcome,
   TOILET_CAP,
   TOILET_DECIMALS,
-  WALL_TILES,
+  wallTiles,
   whaleOutcome,
   yearsAtRate,
   type ToiletPageSnapshot,
@@ -146,7 +146,7 @@ const TEMPLATE = `
         </div>
         <div class="tlt-ctrl">
           <div class="tlt-ctrl-top"><label for="tlt-painted">Tiles painted on the wall</label><output data-o="painted" for="tlt-painted">16,384</output></div>
-          <input id="tlt-painted" type="range" min="1024" max="${WALL_TILES}" step="256" value="${WALL_TILES}">
+          <input id="tlt-painted" type="range" min="1024" max="${wallTiles()}" step="256" value="${wallTiles()}">
         </div>
       </div>
       <div class="mp-card">
@@ -172,7 +172,7 @@ const TEMPLATE = `
       <div class="tlt-explorer">
         <div class="tlt-ctrl">
           <div class="tlt-ctrl-top"><label for="tlt-whale">A whale paints this many tiles</label><output data-o="whale" for="tlt-whale">4,096 tiles</output></div>
-          <input id="tlt-whale" type="range" min="128" max="${WALL_TILES}" step="128" value="4096">
+          <input id="tlt-whale" type="range" min="128" max="${wallTiles()}" step="128" value="4096">
         </div>
         <div class="tlt-ctrl">
           <div class="tlt-ctrl-top"><label for="tlt-pokers">Players poking the whale, 32 tiles each a day</label><output data-o="pokers" for="tlt-pokers">100 players</output></div>
@@ -447,7 +447,7 @@ export function mountToiletPage(root: HTMLElement, ctx: PageContext, overrides: 
   let last = 0;
   function resetMeter(): void {
     const rate = snapshot.emission && snapshot.emission.perCellSecond > 0n ? Number(snapshot.emission.perCellSecond) / 1e18 : null;
-    perTileSecond = rate ?? TOILET_CAP / (DEFAULT_YEARS * 365 * 86_400 * WALL_TILES);
+    perTileSecond = rate ?? TOILET_CAP / (DEFAULT_YEARS * 365 * 86_400 * wallTiles());
     const pace = rate === null ? "4-year pace" : "board’s rate";
     q("[data-tlt-pace]").textContent = deps.reducedMotion ? `one hour, ${pace}` : `${pace}, ${SPEED}× speed`;
     if (deps.reducedMotion) q("[data-tlt-count]").textContent = fmt(mineCount() * perTileSecond * 3_600, 3);

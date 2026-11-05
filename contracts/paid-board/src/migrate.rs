@@ -34,7 +34,7 @@
 //! read as defaults when absent.
 use crate::emission::Holder;
 use crate::payments::Payments;
-use crate::{AccountExtra, Board, PixelRecord, Tunables, HEIGHT, SCHEMA_VERSION, WIDTH};
+use crate::{AccountExtra, Board, PixelRecord, Tunables, MAX_SIDE, SCHEMA_VERSION};
 use near_sdk::borsh::BorshDeserialize;
 use near_sdk::store::{IterableMap, LookupMap, LookupSet};
 use near_sdk::{env, near, AccountId};
@@ -164,7 +164,8 @@ impl Board {
         );
         // The latch is a fact about the board, not a setting: derive it rather than
         // assume a migrated board is not full.
-        let first_fill_complete = v1.pixels.len() >= WIDTH * HEIGHT;
+        // A version-1 board was always MAX_SIDE square and writes no side key.
+        let first_fill_complete = v1.pixels.len() >= MAX_SIDE * MAX_SIDE;
         let v1_rate = v1.tunables.toilet_per_cell_second;
         Self {
             state_version: STATE_VERSION,

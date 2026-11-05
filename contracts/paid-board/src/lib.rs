@@ -30,11 +30,17 @@ const PREFIX_PIXELS: &[u8] = b"p";
 const PREFIX_HOLDERS: &[u8] = b"h";
 const PREFIX_ACCOUNT_EXTRA: &[u8] = b"a";
 const PREFIX_FREE_CELLS: &[u8] = b"f";
+/// Raw storage key for the board's side length (a little-endian `u32`). Kept out of
+/// the `Board` struct so adding it does not change the deployed state layout: a board
+/// that has never written it (board3, board5) reads as `MAX_SIDE`.
+const KEY_BOARD_SIDE: &[u8] = b"s";
 
-/// Board width in pixels. Coordinate x must be 0 through 127.
-const WIDTH: u32 = 128;
-/// Board height in pixels. Coordinate y must be 0 through 127.
-const HEIGHT: u32 = 128;
+/// The largest the square board can ever grow to, and the fixed row stride of a
+/// pixel key. Keys are `y * MAX_SIDE + x` whatever the current side, so growing the
+/// board never moves an existing cell to a different key.
+const MAX_SIDE: u32 = 128;
+/// Side length a fresh board starts at. `expand_board` can only make it larger.
+const LAUNCH_SIDE: u32 = 64;
 /// (0, 0) is the top-left square. x grows to the right. y grows downward.
 const ORIGIN: &str = "top-left";
 /// Accepted product rule: any account may paint any cell.
@@ -469,7 +475,7 @@ pub struct Board {
     payments: Payments,
     /// Every tunable rule. Everything here can change without a code upgrade.
     tunables: Tunables,
-    /// Key is `y * WIDTH + x`. Only painted cells appear here.
+    /// Key is `y * MAX_SIDE + x`, whatever the current side. Only painted cells appear here.
     pixels: IterableMap<u32, PixelRecord>,
     /// Ownership and settled emission survive even after the last cell is lost.
     holders: LookupMap<AccountId, Holder>,
@@ -516,6 +522,7 @@ impl Board {
         buyback_account: AccountId,
         toilet: AccountId,
     ) -> Self {
+        write_board_side(LAUNCH_SIDE);
         Self {
             state_version: migrate::STATE_VERSION,
             schema_version: SCHEMA_VERSION,
@@ -572,8 +579,8 @@ impl Board {
     pub fn get_board(&self) -> BoardView {
         BoardView {
             schema_version: self.schema_version,
-            width: WIDTH,
-            height: HEIGHT,
+            width: board_side(),
+            height: board_side(),
             origin: ORIGIN.to_string(),
             overwrite_rule: OVERWRITE_RULE.to_string(),
             sponsorship_enabled: false,
@@ -589,9 +596,31 @@ impl Board {
         }
     }
 
+    /// Grow the square board to `side` × `side`. Owner-only, one yocto attached.
+    ///
+    /// Grow-only and bounded by `MAX_SIDE`: existing cells keep their key, colour,
+    /// artist and age, and the new cells start empty along the right and bottom
+    /// edges. There is no way to shrink, so no painted cell can ever fall off the
+    /// board. Free first paints (F1) that already ended do not restart.
+    #[payable]
+    pub fn expand_board(&mut self, side: u32) {
+        self.assert_safety_owner();
+        let from = board_side();
+        if side <= from {
+            env::panic_str(&format!("BoardCanOnlyGrow: the board is already {from} × {from}"));
+        }
+        if side > MAX_SIDE {
+            env::panic_str(&format!("BoardTooLarge: the board cannot exceed {MAX_SIDE} × {MAX_SIDE}"));
+        }
+        write_board_side(side);
+        env::log_str(&format!(
+            "EVENT_JSON:{{\"standard\":\"mpoo_board\",\"version\":\"1.0.0\",\"event\":\"board_expanded\",\"data\":[{{\"from\":{from},\"to\":{side}}}]}}"
+        ));
+    }
+
     /// Read one square. Missing storage means the square is unpainted.
     pub fn get_pixel(&self, x: u32, y: u32) -> PixelView {
-        if let Err(code) = check_coordinate(x, y) {
+        if let Err(code) = check_coordinate(x, y, board_side()) {
             reject(code);
         }
         match self.pixels.get(&pixel_key(x, y)) {
@@ -631,8 +660,8 @@ impl Board {
             .take(limit as usize)
         {
             let key = *key;
-            let x = key % WIDTH;
-            let y = key / WIDTH;
+            let x = key % MAX_SIDE;
+            let y = key / MAX_SIDE;
             pixels.push(PaintedPixelView {
                 x,
                 y,
@@ -746,7 +775,7 @@ impl Board {
     /// What this cell costs to paint right now. The page must display this rather
     /// than re-implement the tier rule in JavaScript, or the two will drift.
     pub fn get_cell_cost(&self, x: u32, y: u32) -> u32 {
-        if let Err(code) = check_coordinate(x, y) {
+        if let Err(code) = check_coordinate(x, y, board_side()) {
             reject(code);
         }
         self.tunables
@@ -764,10 +793,11 @@ impl Board {
             reject("StrokeTooLarge");
         }
         let now = env::block_timestamp();
+        let side = board_side();
         cells
             .iter()
             .map(|cell| {
-                if let Err(code) = check_coordinate(cell.x, cell.y) {
+                if let Err(code) = check_coordinate(cell.x, cell.y, side) {
                     reject(code);
                 }
                 self.tunables
@@ -862,8 +892,9 @@ impl Board {
         if cells.len() as u32 > MAX_DRAW_BATCH {
             reject("StrokeTooLarge");
         }
+        let side = board_side();
         for cell in cells.iter() {
-            if let Err(code) = validate_draw_args(cell.x, cell.y, cell.color) {
+            if let Err(code) = validate_draw_args(cell.x, cell.y, cell.color, side) {
                 reject(code);
             }
         }
@@ -940,7 +971,9 @@ impl Board {
         }
 
         // F1 latch: set the first time every cell holds paint. Never unset.
-        if !self.first_fill_complete && self.pixels.len() == WIDTH * HEIGHT {
+        // Compared to the side *now*: growing the board before the latch sets means
+        // the larger board has to fill. Once set, growing it does not clear it.
+        if !self.first_fill_complete && self.pixels.len() >= board_cells() {
             self.first_fill_complete = true;
         }
 
@@ -962,7 +995,25 @@ pub(crate) fn cooldown_elapsed(last: Option<u64>, cooldown: u64, now: u64) -> bo
 }
 
 fn pixel_key(x: u32, y: u32) -> u32 {
-    y * WIDTH + x
+    y * MAX_SIDE + x
+}
+
+/// Current side length of the square board. Absent key = a board deployed before
+/// the board could grow, which was always `MAX_SIDE`.
+pub(crate) fn board_side() -> u32 {
+    env::storage_read(KEY_BOARD_SIDE)
+        .and_then(|raw| <[u8; 4]>::try_from(raw.as_slice()).ok())
+        .map_or(MAX_SIDE, u32::from_le_bytes)
+}
+
+/// Every cell the board can hold at its current size.
+pub(crate) fn board_cells() -> u32 {
+    let side = board_side();
+    side * side
+}
+
+fn write_board_side(side: u32) {
+    env::storage_write(KEY_BOARD_SIDE, &side.to_le_bytes());
 }
 
 impl Board {
@@ -1009,16 +1060,18 @@ fn adjust_holder(board: &mut Board, account: &AccountId, cells: i64, earning: i6
     board.holders.insert(account.clone(), holder);
 }
 
-fn validate_draw_args(x: u32, y: u32, color: u32) -> Result<(), &'static str> {
-    check_coordinate(x, y)?;
+fn validate_draw_args(x: u32, y: u32, color: u32, side: u32) -> Result<(), &'static str> {
+    check_coordinate(x, y, side)?;
     if color >= PALETTE.len() as u32 {
         return Err("ColorOutOfRange");
     }
     Ok(())
 }
 
-fn check_coordinate(x: u32, y: u32) -> Result<(), &'static str> {
-    if x >= WIDTH || y >= HEIGHT {
+/// `side` is `board_side()`, read once by the caller so a 64-cell stroke costs one
+/// storage read, not 64.
+fn check_coordinate(x: u32, y: u32, side: u32) -> Result<(), &'static str> {
+    if x >= side || y >= side {
         return Err("CoordinateOutOfRange");
     }
     Ok(())
@@ -1120,8 +1173,8 @@ mod tests {
         let board = setup();
         let view = board.get_board();
         assert_eq!(view.schema_version, 4);
-        assert_eq!(view.width, 128);
-        assert_eq!(view.height, 128);
+        assert_eq!(view.width, LAUNCH_SIDE);
+        assert_eq!(view.height, LAUNCH_SIDE);
         assert_eq!(view.origin, "top-left");
         assert_eq!(view.overwrite_rule, "open_wall");
         assert!(!view.sponsorship_enabled);
@@ -1155,8 +1208,9 @@ mod tests {
     fn shared_json_matches_contract_constants() {
         let raw = include_str!("../../../shared/board.json");
         let shared: serde_json::Value = serde_json::from_str(raw).expect("shared board json");
-        assert_eq!(shared["width"], serde_json::json!(WIDTH));
-        assert_eq!(shared["height"], serde_json::json!(HEIGHT));
+        // board.json describes the free board, which is the largest a paid board grows to.
+        assert_eq!(shared["width"], serde_json::json!(MAX_SIDE));
+        assert_eq!(shared["height"], serde_json::json!(MAX_SIDE));
         assert_eq!(shared["origin"], ORIGIN);
         assert_eq!(shared["overwrite_rule"], OVERWRITE_RULE);
         assert_eq!(shared["sponsorship_enabled"], false);
@@ -1177,7 +1231,7 @@ mod tests {
         assert!(pixel.color.is_none());
         assert!(pixel.artist.is_none());
         assert!(pixel.written_at_ns.is_none());
-        let corner = board.get_pixel(127, 127);
+        let corner = board.get_pixel(LAUNCH_SIDE - 1, LAUNCH_SIDE - 1);
         assert!(corner.color.is_none());
     }
 
@@ -1954,5 +2008,134 @@ mod tests {
             near_sdk::json_types::Base64VecU8(Vec::new()),
             near_sdk::serde_json::json!({}),
         );
+    }
+
+    // ---- Grow-only board (64 × 64 at launch, up to MAX_SIDE) ----
+
+    fn owner_call() {
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(near_sdk::NearToken::from_yoctonear(1))
+            .block_timestamp(1_000)
+            .build());
+    }
+
+    #[test]
+    fn a_fresh_board_is_launch_size_and_rejects_cells_past_it() {
+        let mut board = setup();
+        assert_eq!((board.get_board().width, board.get_board().height), (64, 64));
+        context(accounts(1), 2_000);
+        board.draw(63, 63, 1, u32::MAX);
+        let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            board.draw(64, 0, 1, u32::MAX)
+        }));
+        assert!(err.is_err());
+        let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| board.get_cell_cost(0, 64)));
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn expanding_keeps_every_painted_cell_where_it_was() {
+        let mut board = setup();
+        context(accounts(1), 2_000);
+        board.draw_many(stroke(&[(5, 5, 3), (63, 0, 4), (0, 63, 6)]), u32::MAX);
+        owner_call();
+        board.expand_board(96);
+        assert_eq!((board.get_board().width, board.get_board().height), (96, 96));
+        let logs = near_sdk::test_utils::get_logs();
+        assert!(logs.iter().any(|l| l.contains("\"board_expanded\"") && l.contains("\"from\":64,\"to\":96")));
+        // Same cells, same keys, same colours, same artist.
+        assert_eq!(board.get_pixel(5, 5).color, Some(3));
+        assert_eq!(board.get_pixel(63, 0).color, Some(4));
+        assert_eq!(board.get_pixel(0, 63).color, Some(6));
+        assert_eq!(board.get_pixel(5, 5).artist.as_deref(), Some(accounts(1).as_str()));
+        // The new right and bottom edges are empty and paintable.
+        assert!(board.get_pixel(95, 95).color.is_none());
+        context(accounts(1), 3_000);
+        board.draw(95, 2, 7, u32::MAX);
+        // get_pixels reports the true coordinates of a cell beyond the old edge.
+        let page = board.get_pixels(0, 256);
+        assert!(page.pixels.iter().any(|p| (p.x, p.y, p.color) == (95, 2, 7)));
+        assert!(page.pixels.iter().any(|p| (p.x, p.y, p.color) == (0, 63, 6)));
+        assert_eq!(page.total, 4);
+    }
+
+    #[test]
+    fn expanding_to_the_maximum_matches_a_legacy_board() {
+        let mut board = setup();
+        owner_call();
+        board.expand_board(MAX_SIDE);
+        assert_eq!(board.get_board().width, 128);
+        context(accounts(1), 2_000);
+        board.draw(127, 127, 2, u32::MAX);
+        assert_eq!(board.get_pixel(127, 127).color, Some(2));
+    }
+
+    #[test]
+    fn a_board_without_the_side_key_reads_as_the_legacy_128() {
+        let board = setup();
+        // board3 / board5 were deployed before the key existed.
+        env::storage_remove(KEY_BOARD_SIDE);
+        assert_eq!((board.get_board().width, board.get_board().height), (128, 128));
+        assert!(board.get_pixel(127, 127).color.is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "BoardCanOnlyGrow")]
+    fn the_board_cannot_shrink() {
+        let mut board = setup();
+        owner_call();
+        board.expand_board(32);
+    }
+
+    #[test]
+    #[should_panic(expected = "BoardCanOnlyGrow")]
+    fn expanding_to_the_same_size_is_rejected() {
+        let mut board = setup();
+        owner_call();
+        board.expand_board(64);
+    }
+
+    #[test]
+    #[should_panic(expected = "BoardTooLarge")]
+    fn the_board_cannot_pass_the_maximum() {
+        let mut board = setup();
+        owner_call();
+        board.expand_board(MAX_SIDE + 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "OwnerOnly")]
+    fn only_the_owner_can_expand_the_board() {
+        let mut board = setup();
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(accounts(1))
+            .attached_deposit(near_sdk::NearToken::from_yoctonear(1))
+            .build());
+        board.expand_board(96);
+    }
+
+    #[test]
+    #[should_panic(expected = "OneYoctoRequired")]
+    fn expanding_requires_one_yocto() {
+        let mut board = setup();
+        context(accounts(0), 1_000);
+        board.expand_board(96);
+    }
+
+    #[test]
+    fn expanding_reserves_storage_for_the_new_empty_cells() {
+        let mut board = setup();
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(accounts(0))
+            .attached_deposit(near_sdk::NearToken::from_yoctonear(1))
+            .account_balance(near_sdk::NearToken::from_near(100))
+            .build());
+        let before = board.get_withdrawable_near().0;
+        board.expand_board(96);
+        let after = board.get_withdrawable_near().0;
+        let new_cells = u128::from(96u32 * 96 - 64 * 64);
+        // A 4-byte value under a new key also costs a little storage.
+        assert!(before - after >= new_cells * safety::STORAGE_PER_PIXEL);
     }
 }
