@@ -80,7 +80,7 @@ Latest full runs on `0b03bef` (after #58/#59/#61/#62), 3 Nov, Node 22.23.4: web 
 |---|---|---|---|
 | **R2.2** | Cheap change detection before paging | Full read is now `ceil(painted/256) + 1` requests every 4 s (17 on a full 64², 65 on a full 128²) because `pageLimit` is still 256 per `get_pixels`. Needs an O(1) view → **contract change = ask-first** | **M** |
 | **T2b** | *(unverified)* roving tabindex over swatches | Not checked this revision. Tab moves through all 8 swatches rather than arrow keys within the group — cosmetic a11y, not a blocker | **S** |
-| **MAINNET-TEST** | Mainnet testing round | `75f2e6c` config only. Four empty implicit accounts exist (board `fcd66acf…`, toilet `a571dead…`, treasury `81656289…`, buyback `e297202d…`), signer holds ~0.4 NEAR of the ~12–15 NEAR the two deploys need. Nothing deployed, nothing initialised, no `toilet_per_cell_second` set. Order, args and verification: [`payments/mainnet-deploy-runbook.md`](payments/mainnet-deploy-runbook.md). Cost rows C01+ stay pending | **M** |
+| **MAINNET-TEST** | Mainnet testing round | **Deployed 2026-11-05** from `10632a2`: board `fcd66acf…` (64 × 64, schema 4, owner = itself), TOILET `a571dead…` (tax 200/300 bps buy/sell, 7000 bps burn / 3000 bps treasury, owner decision), rate 1e15, one free pixel at (10,10), page live at https://metapoo-testnet.vercel.app. Record: [`payments/mainnet-test-deployment-2026-11-05.md`](payments/mainnet-test-deployment-2026-11-05.md). **Open:** wallet-signed paint E2E, paid-repaint credit decrement, mPOO path, C02+ cost rows, board ~1.1 NEAR short of its reserve so `get_withdrawable_near` is 0, key custody is a file on the Mini | **M** |
 
 ## Next, owner-approved order (1 Nov)
 

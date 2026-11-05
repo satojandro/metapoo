@@ -138,6 +138,7 @@ Read-only mainnet observations, not used by the current board code:
 - MPOO launch creator: `meta-poo-shitcoin.near` (not proof of the game deployer)
 - Intended network: NEAR mainnet
 - Configured tax: 2% buy / 3% sell; burn and holder allocations recorded in the [MPOO evidence](archive/research/2026-10-12-mpoo-live-contract-readout.json). Actual transfers/refunds/burns have not been trialled.
+- **TOILET tax (owner decision, 2026-11-05)**: mirrors the mPOO structure — `buy_bps` 200, `sell_bps` 300, split `burn_bps` 7000 / `treasury_bps` 3000. Frozen at `new()` (D4), set on the testing-round token `a571dead…`. The separate 10% **paperhand tax is a staking-contract rule**, not a TOILET transfer tax, so it is not configured here. See [the deployment record](payments/mainnet-test-deployment-2026-11-05.md).
 
 Those identifiers are not the game contract. Do not point the pixel contract at the token account.
 

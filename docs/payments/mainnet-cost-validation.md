@@ -29,7 +29,7 @@ outcomes, balance deltas and costs rather than checking it merely because it ran
 
 | ID | Case | What must be measured / verified | Status |
 |---|---|---|---|
-| C01 | Paid-board deployment and initialization | One-time gas, code/state storage, owner, schema, 0.0025 NEAR price | Pending |
+| C01 | Paid-board deployment and initialization | One-time gas, code/state storage, owner, schema, 0.0025 NEAR price | **Partially measured 2026-11-05** — see the [deployment record](mainnet-test-deployment-2026-11-05.md): board storage 442,837 B ≈ 4.43 NEAR, TOILET code 2.32 NEAR, ~0.01 NEAR fees across 13 txs; owner/schema/price confirmed on chain. Gas per call still to be read from the tx receipts |
 | C02 | First credit-account registration | Actual storage bytes versus 0.01 NEAR charge; no credits minted | Pending |
 | C03 | Duplicate / incorrect-fee registration | Rejection, attached-deposit recovery, gas still paid, no duplicate ledger | Pending |
 | C04 | NEAR purchase: 1, 10 and 100 credits | 0.0025 / 0.025 / 0.25 NEAR deposits; exact credits; gas separately | Pending |
