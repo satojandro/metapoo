@@ -177,7 +177,35 @@ drag-to-paint, which made drag silently pan for anyone who had not found the but
 
 ---
 
+## Board reads
+
+**A poll's cost is per open tab, and it grows with the board.** Before `get_board_version`, every
+4 s poll walked the whole painted set: `1 + ceil(painted / 256)` requests, 65 on a full 128 × 128,
+in every visible tab. Measure the cost of one poll at the board's *full* size before you call a
+polling interval cheap. Now an unchanged board costs one `get_board_version` call, and a tab with no
+input for 10 minutes stops polling (`BOARD_IDLE_PAUSE_MS`). Do not add a background read to the wall
+without asking what it costs per tab per hour.
+
+**A version and the pixels it describes must come from the same block.** `fetchAllPaintedPixels`
+pins the `get_pixels` walk to the `block_height` the version was read at. A version read at one block
+and pixels from a later one would record the new pixels under the old version, and the next poll
+would then skip one real change.
+
+---
+
 ## Contract state
+
+**Check the live state before you claim a raw storage key.** A raw key (`s`, `board_version`) lives
+in the same trie as every collection's `prefix + key` entries, and boards deployed from older code can
+hold prefixes this code no longer declares: board5 holds keys under `v…` that nothing in
+`contracts/paid-board` writes. List them first (`view_state` with `prefix_base64`), then pick a name
+that cannot collide. The board version is `board_version`, not `v`, for that reason.
+
+**`upgrade()` cannot deliver a code-only change to a version-2 board.** It deploys and then calls
+`migrate` in one batch, and `migrate` rejects a state that is already version 2
+(`UnsupportedStateVersion`), so the batch fails. A change that adds methods or raw keys but leaves
+`Board` alone (`get_cell_costs`, `get_board_version`) is deployed directly with the board account's
+own full-access key, with no `migrate` call. Record the code hash before and after.
 
 **Capture old state with the old code before you change the struct.** Once `Board` changes, the
 code that wrote the old layout is gone, and a test that builds "old state" with the new types
