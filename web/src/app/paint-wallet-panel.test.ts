@@ -27,7 +27,7 @@ it("blocks network mismatches and offers Buy NEAR while mPOO is disabled",()=>{
   expect(t.host.textContent).not.toContain("Buy mPOO on NEARLY");
   expect(t.host.textContent).not.toContain("cannot fund testnet");
   expect(t.host.querySelector("[data-row=mpoo]")?.hasAttribute("hidden")).toBe(true);
-  expect(t.host.querySelector("a")?.href).toMatch(/near\.org\/?$/);
+  expect(t.host.querySelector("a")?.href).toMatch(/near\.com\/?$/);
   expect(t.host.querySelector("a")?.textContent).toMatch(/Buy NEAR/);
  }
  finally{dispose();t.host.remove();}

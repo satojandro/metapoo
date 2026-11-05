@@ -14,7 +14,19 @@ export interface PendingPaint {
   accountId: string;
   transactionId: string | null;
   phase: PendingPaintPhase;
+  /** When this browser last set the marker (ms). Set by `setPendingPaint`. */
+  markedAtMs?: number;
 }
+
+/**
+ * How long a pending marker may outlive its paint before the board shows chain
+ * state instead. A NEAR transaction executes within a few blocks; a marker that is
+ * still unmatched after this long belongs to a paint that failed, never left the
+ * browser, or was painted over — and leaving it up forever (issue #70) shows the
+ * painter pixels the chain does not have. Dropping it only removes an overlay:
+ * nothing is resubmitted, and a late execution still appears through the board read.
+ */
+export const PENDING_PAINT_MAX_AGE_MS = 90_000;
 
 export type PendingPaintMap = Map<string, PendingPaint>;
 
@@ -29,8 +41,9 @@ export function createPendingPaintMap(): PendingPaintMap {
 export function setPendingPaint(
   map: PendingPaintMap,
   paint: PendingPaint,
+  nowMs: number = Date.now(),
 ): void {
-  map.set(key(paint.x, paint.y), paint);
+  map.set(key(paint.x, paint.y), { ...paint, markedAtMs: nowMs });
 }
 
 export function clearPendingPaint(
@@ -66,7 +79,9 @@ export function reconcilePendingWithConfirmed(
     colorIndex: number | null;
     artistAccountId: string | null;
   }>,
+  nowMs: number = Date.now(),
 ): void {
+  expirePendingPaints(map, nowMs);
   for (const pixel of confirmed) {
     const pending = map.get(key(pixel.x, pixel.y));
     if (!pending) {
@@ -78,6 +93,15 @@ export function reconcilePendingWithConfirmed(
     ) {
       map.delete(key(pixel.x, pixel.y));
       continue;
+    }
+  }
+}
+
+/** Drop markers older than `PENDING_PAINT_MAX_AGE_MS`; see that constant. */
+export function expirePendingPaints(map: PendingPaintMap, nowMs: number = Date.now()): void {
+  for (const [cell, paint] of map) {
+    if (paint.markedAtMs !== undefined && nowMs - paint.markedAtMs > PENDING_PAINT_MAX_AGE_MS) {
+      map.delete(cell);
     }
   }
 }

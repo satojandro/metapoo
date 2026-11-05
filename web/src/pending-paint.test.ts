@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  PENDING_PAINT_MAX_AGE_MS,
   clearPendingPaint,
   createPendingPaintMap,
   listPendingPaints,
@@ -63,5 +64,17 @@ describe("pending paint layer", () => {
       },
     ]);
     expect(listPendingPaints(map)).toHaveLength(1);
+  });
+
+  it("drops a marker the chain never matched once it is older than the limit", () => {
+    // Issue #70: a paint that failed or never left the browser stayed on the
+    // board as pending forever, because only an exact chain match cleared it.
+    const map = createPendingPaintMap();
+    const paint = { x: 4, y: 4, colorIndex: 2, accountId: "alice.near", transactionId: null, phase: "confirmation_delayed" as const };
+    setPendingPaint(map, paint, 1_000);
+    reconcilePendingWithConfirmed(map, [], 1_000 + PENDING_PAINT_MAX_AGE_MS);
+    expect(listPendingPaints(map)).toHaveLength(1);
+    reconcilePendingWithConfirmed(map, [], 1_000 + PENDING_PAINT_MAX_AGE_MS + 1);
+    expect(listPendingPaints(map)).toHaveLength(0);
   });
 });

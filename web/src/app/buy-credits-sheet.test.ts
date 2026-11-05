@@ -84,7 +84,7 @@ describe("mountBuyCreditsSheet", () => {
     expect(host.querySelector("[data-buy=nearly]")?.hasAttribute("hidden")).toBe(true);
     expect(host.querySelector("[data-buy=buy-near]")?.hasAttribute("hidden")).toBe(false);
     expect(host.querySelector<HTMLAnchorElement>("[data-buy=buy-near]")?.href).toContain(
-      "near.org",
+      "near.com",
     );
     sheet.dispose();
     host.remove();
