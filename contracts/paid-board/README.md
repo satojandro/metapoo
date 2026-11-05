@@ -156,6 +156,7 @@ including liquidity, slippage and tax, not nominal market capitalization.
   pricing owner; writes state version 2. Revenue accounts may not be the board itself. `toilet` is
   the TOILET token this board mints on, fixed for the board's life (TR-B §B4).
 - `get_state_version()`: storage layout version (2).
+- `get_board_version()`: a `u64` that goes up by one on every successful `draw` / `draw_many` and on nothing else. Readers compare it (at the block they read pixels at) before walking `get_pixels`, so polling an unchanged board is one call. Stored under the raw key `board_version`, outside `Board`, so it needs no migration: a board upgraded to this code reads `0` until its next paint.
 - `get_payment_config()`: token address, prices and registration fee; amounts are strings.
 - `register_credit_account()`: exact 0.01 NEAR, once per caller, before purchasing.
 - `get_credits(account_id)`: decimal-string balance, or null if unregistered.
