@@ -388,22 +388,91 @@ export async function getPixelsPage(
 export interface PaintedBoardSnapshot {
   pixels: PixelView[];
   blockHeight: number;
+  /**
+   * `get_board_version` at `blockHeight`, or null when the board has no such view
+   * (boards deployed before it). Pass it back as `knownVersion` on the next read.
+   */
+  version?: number | null;
+  unchanged?: false;
+}
+
+/** The board's version at `blockHeight` equals the caller's: every cell is as they have it. */
+export interface UnchangedBoard {
+  unchanged: true;
+  blockHeight: number;
+  version: number;
+}
+
+export type BoardRead = PaintedBoardSnapshot | UnchangedBoard;
+
+/**
+ * Whether this page's board answers `get_board_version`. Learned once per page:
+ * a board without the view gets the full walk every time, with no failed call first.
+ */
+let boardVersionView: "unknown" | "yes" | "no" = "unknown";
+
+/** Tests only: forget what was learned about the configured board. */
+export function resetBoardVersionSupport(): void {
+  boardVersionView = "unknown";
+}
+
+function isMissingView(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error);
+  return /MethodNotFound|MethodResolveError|method .*not found/i.test(text);
 }
 
 /**
- * Download every painted cell pinned to one block height so pages do not mix
- * optimistic tip changes mid-walk.
+ * Read the board, or learn that it has not changed.
+ *
+ * With `knownVersion` (the `version` of the copy the caller holds), one
+ * `get_board_version` call decides: same version → `{ unchanged: true }` and nothing
+ * else is read. Otherwise every painted cell is downloaded pinned to the block that
+ * version was read at, so the version and the pixels describe the same moment. That
+ * block replaces the separate `block` request the walk used to start with.
+ *
+ * Without `knownVersion` (first load, Refresh) the walk always runs.
+ * A board without the view falls back to the plain walk, every time.
  */
 export async function fetchAllPaintedPixels(
-  pageLimit: number = PIXELS_PAGE_LIMIT,
-): Promise<PaintedBoardSnapshot> {
-  const blockHeight = await fetchLatestBlockHeight();
+  options: { knownVersion?: number | null; pageLimit?: number } = {},
+): Promise<BoardRead> {
+  const pageLimit = options.pageLimit ?? PIXELS_PAGE_LIMIT;
+  let blockHeight: number | null = null;
+  let version: number | null = null;
+  if (boardVersionView !== "no") {
+    try {
+      const read = await viewFunctionWithMeta<number>("get_board_version");
+      if (typeof read.data !== "number" || !Number.isSafeInteger(read.data)) {
+        throw new Error("get_board_version did not return a whole number.");
+      }
+      boardVersionView = "yes";
+      version = read.data;
+      blockHeight = read.blockHeight;
+    } catch (error) {
+      if (!isMissingView(error)) throw error;
+      boardVersionView = "no";
+    }
+  }
+  if (
+    version !== null &&
+    blockHeight !== null &&
+    options.knownVersion != null &&
+    options.knownVersion === version
+  ) {
+    return { unchanged: true, blockHeight, version };
+  }
+  if (blockHeight === null) {
+    // No version view, or an RPC that left out block_height: pin the walk the old way,
+    // and do not pair a version with pixels from a different block.
+    blockHeight = await fetchLatestBlockHeight();
+    version = null;
+  }
   const block: ViewBlockRef = { kind: "block", blockId: blockHeight };
   const pixels = await loadAllPaintedPixels(
     (fromIndex, limit) => getPixelsPage(fromIndex, limit, block),
     pageLimit,
   );
-  return { pixels, blockHeight };
+  return { pixels, blockHeight, version };
 }
 
 export type PixelConfirmKind =
@@ -488,7 +557,10 @@ async function fetchWithTimeout(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const body = JSON.parse(String(init.body));
-    const background = body.method === "block" || body.params?.method_name === "get_pixels";
+    // Board polling waits behind prices, balances and confirmations.
+    const background = body.method === "block"
+      || body.params?.method_name === "get_pixels"
+      || body.params?.method_name === "get_board_version";
     return await readRpcFetch(url, { ...init, signal: controller.signal }, background ? 1 : 0);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {

@@ -34,6 +34,13 @@ const PREFIX_FREE_CELLS: &[u8] = b"f";
 /// the `Board` struct so adding it does not change the deployed state layout: a board
 /// that has never written it (board3, board5) reads as `MAX_SIDE`.
 const KEY_BOARD_SIDE: &[u8] = b"s";
+/// Raw storage key for the board version: a little-endian `u64` bumped once by every
+/// successful paint call. Readers compare it before re-reading the pixels, so a poll of
+/// an unchanged board is one small view call instead of a full `get_pixels` walk. Kept
+/// out of the `Board` struct, like the side, so adding it needs no state migration: a
+/// board that has never been painted under this code reads as version `0`. Spelled out
+/// rather than `v` because board5's state already holds keys under a `v…` prefix.
+const KEY_BOARD_VERSION: &[u8] = b"board_version";
 
 /// The largest the square board can ever grow to, and the fixed row stride of a
 /// pixel key. Keys are `y * MAX_SIDE + x` whatever the current side, so growing the
@@ -618,6 +625,14 @@ impl Board {
         ));
     }
 
+    /// The board version: changes whenever any cell's colour, artist or age changes,
+    /// and at no other time. Read it before `get_pixels`: when it equals the version
+    /// your copy was read at, every painted cell is exactly as you have it. Read both
+    /// at the same block to compare them; the number means nothing across boards.
+    pub fn get_board_version(&self) -> u64 {
+        board_version()
+    }
+
     /// Read one square. Missing storage means the square is unpainted.
     pub fn get_pixel(&self, x: u32, y: u32) -> PixelView {
         if let Err(code) = check_coordinate(x, y, board_side()) {
@@ -977,6 +992,9 @@ impl Board {
             self.first_fill_complete = true;
         }
 
+        // Once per call, not per cell: readers only need to know that something changed.
+        bump_board_version();
+
         // One event per call keeps an indexer's work proportional to drags,
         // not to pixels.
         env::log_str(&format!(
@@ -1014,6 +1032,18 @@ pub(crate) fn board_cells() -> u32 {
 
 fn write_board_side(side: u32) {
     env::storage_write(KEY_BOARD_SIDE, &side.to_le_bytes());
+}
+
+/// Absent key = no paint since this code was deployed.
+pub(crate) fn board_version() -> u64 {
+    env::storage_read(KEY_BOARD_VERSION)
+        .and_then(|raw| <[u8; 8]>::try_from(raw.as_slice()).ok())
+        .map_or(0, u64::from_le_bytes)
+}
+
+fn bump_board_version() {
+    // u64 cannot overflow at one bump per transaction; wrapping keeps it a non-panic.
+    env::storage_write(KEY_BOARD_VERSION, &board_version().wrapping_add(1).to_le_bytes());
 }
 
 impl Board {
@@ -1478,6 +1508,65 @@ mod tests {
         board.draw_many(stroke(&[(9, 9, 5), (10, 9, 5)]), u32::MAX);
         assert_eq!(board.get_pixel(9, 9).color, Some(5));
         assert_eq!(board.get_pixels(0, 256).total, 2);
+    }
+
+    // --- board version ---------------------------------------------------
+    // The reader's cheap "did anything change?" check. It must move on every
+    // successful paint and on nothing else, or a reader skips a real change
+    // (stale wall) or re-reads for nothing (the cost this exists to remove).
+
+    #[test]
+    fn a_board_that_was_never_painted_is_version_zero() {
+        let board = setup();
+        assert_eq!(board.get_board_version(), 0);
+    }
+
+    #[test]
+    fn every_successful_paint_call_bumps_the_version_once() {
+        let mut board = setup();
+        board.draw(1, 1, 1, u32::MAX);
+        assert_eq!(board.get_board_version(), 1);
+        // A stroke is one change however many cells it holds.
+        board.draw_many(stroke(&[(2, 1, 1), (3, 1, 1), (4, 1, 1)]), u32::MAX);
+        assert_eq!(board.get_board_version(), 2);
+        // Repainting a cell with the same colour still changes its artist and age.
+        context(accounts(1), 2_000);
+        board.draw(1, 1, 1, u32::MAX);
+        assert_eq!(board.get_board_version(), 3);
+    }
+
+    #[test]
+    fn a_rejected_paint_leaves_the_version_alone() {
+        let mut board = setup();
+        board.draw(0, 0, 1, u32::MAX);
+        rejected_with("ColorOutOfRange", || board.draw(1, 0, 16, u32::MAX));
+        rejected_with("EmptyStroke", || board.draw_many(vec![], u32::MAX));
+        context(accounts(0), 2_000);
+        rejected_with("PriceRoseAboveMax", || board.draw(0, 0, 2, 1));
+        assert_eq!(board.get_board_version(), 1);
+    }
+
+    #[test]
+    fn reads_and_growing_the_board_leave_the_version_alone() {
+        let mut board = setup();
+        board.draw(0, 0, 1, u32::MAX);
+        let _ = board.get_pixels(0, 256);
+        let _ = board.get_pixel(0, 0);
+        let _ = board.get_board();
+        owner_call();
+        board.expand_board(MAX_SIDE);
+        // Growing adds empty cells only: every painted cell a reader holds is unchanged.
+        assert_eq!(board.get_board_version(), 1);
+    }
+
+    #[test]
+    fn a_board_without_the_version_key_reads_as_zero_and_counts_from_there() {
+        // board3/board5 before this code: no key. The first paint after an upgrade is 1.
+        let mut board = setup();
+        env::storage_remove(KEY_BOARD_VERSION);
+        assert_eq!(board.get_board_version(), 0);
+        board.draw(0, 0, 1, u32::MAX);
+        assert_eq!(board.get_board_version(), 1);
     }
 
     // --- repaint pricing -------------------------------------------------

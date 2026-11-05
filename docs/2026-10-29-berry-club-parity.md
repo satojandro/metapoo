@@ -52,7 +52,7 @@ with three corrections that matter:
 | Image upload, scaled to ≤50 px, previewed, then painted (hidden behind the `idkfa` cheat) | `Weapons.js` | no | missing |
 | Many pixels per transaction: a client queue of 100-pixel batches every 500 ms, with retries | `App.js` `_sendQueue` | `draw_many` (≤64 cells), atomic strokes, `paint-queue.ts` | done |
 | No wallet popup per paint: a function-call access key, with a prompt to sign in again when its allowance runs out | `App.js` `refreshAllowance` | session key in `localStorage` | done (CSP still open, audit §1) |
-| Live board: polls `get_line_versions` and refetches only changed rows | `App.js` `refreshBoard` | polling `get_pixels` every 4–30 s (`board-sync.ts`) | done (not yet recorded across two browsers: step 3) |
+| Live board: polls `get_line_versions` and refetches only changed rows; stops refreshing after 10 minutes without input | `App.js` `refreshBoard`, `MaxWorkTime` | polls `get_board_version` every 4–30 s and walks `get_pixels` only when it changed; pauses after 10 idle minutes (`board-controller.ts`). One board-wide counter, not per row: a change still re-reads every cell | done (counter needs the contract deployed; not yet recorded across two browsers: step 3) |
 | Watch mode: board only, no controls, keeps refreshing | `App.js` `enableWatchMode` | no | missing |
 | "Please don't destroy art" warning at high opacity | `App.js` | no equivalent | missing (minor) |
 

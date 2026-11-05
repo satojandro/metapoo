@@ -11,6 +11,7 @@ import {
 } from "../../board-cache";
 import {
   beginBoardLoad,
+  BOARD_IDLE_PAUSE_MS,
   createBoardSyncState,
   formatFreshness,
   markBoardLoadApplied,
@@ -32,7 +33,16 @@ import type { Cell } from "../../selection";
 import type { SponsorshipStatus } from "../../sponsorship";
 import type { WallScope } from "./wall-scope";
 
-export type BoardLoadReason = "manual" | "poll" | "visible" | "reconnect" | "after_draw";
+export type BoardLoadReason = "manual" | "poll" | "visible" | "reconnect" | "after_draw" | "resume";
+
+/**
+ * Reasons that may stop at "the board has not changed". A first load and Refresh
+ * always re-read every cell: Refresh is the visitor saying they do not trust the copy.
+ */
+const VERSION_CHECKED: ReadonlySet<BoardLoadReason> = new Set(["poll", "visible", "reconnect", "after_draw", "resume"]);
+
+/** Input that means someone is at the page. Scrolling the wall is `wheel`. */
+const ACTIVITY_EVENTS = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"] as const;
 
 export interface BoardControllerDeps {
   scope: WallScope;
@@ -118,10 +128,32 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
   let contractMetaIssue: ContractMetaIssue | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   const loadAbort: AbortController = new AbortController();
+  /** `get_board_version` of the copy in `pixelCache`; null = unknown, or a board without the view. */
+  let cachedVersion: number | null = null;
+  /** Last input on the page. Polling stops after `BOARD_IDLE_PAUSE_MS` without any. */
+  let lastActivityMs = Date.now();
+  let idlePaused = false;
+
+  for (const type of ACTIVITY_EVENTS) {
+    scope.listen(window, type, noteActivity, { passive: true });
+  }
+
+  /** Someone is here. If polling had stopped for idleness, catch up now and resume. */
+  function noteActivity(): void {
+    lastActivityMs = Date.now();
+    if (!idlePaused || scope.isDisposed()) return;
+    idlePaused = false;
+    showBoardFreshness();
+    void refreshBoardFromContract({ reason: "resume" });
+    scheduleBoardPoll();
+  }
 
   scope.listen(document, "visibilitychange", () => {
     if (scope.isDisposed()) return;
     if (document.visibilityState === "visible") {
+      // Coming back to the tab is activity: it must not land on a paused wall.
+      lastActivityMs = Date.now();
+      idlePaused = false;
       void refreshBoardFromContract({ reason: "visible" });
       scheduleBoardPoll();
     } else {
@@ -152,6 +184,11 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     : "Configure VITE_CONTRACT_ID to load chain state";
 
   function showBoardFreshness(): void {
+    if (idlePaused) {
+      const age = boardSync.lastAppliedAtMs === null ? "" : `Wall updated ${plainAge(Date.now() - boardSync.lastAppliedAtMs)}. `;
+      boardFreshness.textContent = `${age}Live updates paused while you're away. Move the mouse or tap to resume.`;
+      return;
+    }
     if (boardSync.lastAppliedAtMs === null) {
       boardFreshness.textContent = boardSync.consecutiveFailures > 0
         ? "Couldn't read the wall yet. Retrying."
@@ -295,12 +332,25 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     const reason = options?.reason ?? "manual";
     boardLoadStatus.textContent = `Board load (${reason}): fetching painted pages at one block…`;
     try {
-      const snapshot = await fetchAllPaintedPixels();
+      const snapshot = await fetchAllPaintedPixels({
+        knownVersion: VERSION_CHECKED.has(reason) ? cachedVersion : null,
+      });
       if (!shouldApplyBoardLoad(boardSync, loadId, snapshot.blockHeight)) {
         boardLoadStatus.textContent = `Board load skipped stale snapshot (block ${snapshot.blockHeight}). ${formatFreshness(boardSync, Date.now())}`;
         return;
       }
+      if (snapshot.unchanged) {
+        // Same version at a newer block: the copy is current. Nothing to replace or
+        // reconcile, but time has passed, so ages and the quoted price still move on.
+        markBoardLoadApplied(boardSync, loadId, snapshot.blockHeight, Date.now());
+        showBoardFreshness();
+        deps.render();
+        deps.onBoardUpdated();
+        boardLoadStatus.textContent = `Board unchanged at block ${snapshot.blockHeight} (version ${snapshot.version}). ${formatFreshness(boardSync, Date.now())}`;
+        return;
+      }
       replaceCacheAtBlock(pixelCache, snapshot.pixels, snapshot.blockHeight);
+      cachedVersion = snapshot.version ?? null;
       deps.reconcilePending(snapshot.pixels);
       markBoardLoadApplied(boardSync, loadId, snapshot.blockHeight, Date.now());
       showBoardFreshness();
@@ -371,7 +421,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     }
     // Healthy visible tabs poll every 4s (BOARD_POLL_BASE_MS), keeping the
     // expected cross-session update window auditable at roughly 3–5 seconds.
-    // Read failures back off through nextPollDelayMs; hidden tabs schedule none.
+    // Read failures back off through nextPollDelayMs; hidden tabs schedule none,
+    // and neither does a tab nobody has touched for BOARD_IDLE_PAUSE_MS.
     const delay = nextPollDelayMs(boardSync.consecutiveFailures);
     pollTimer = setTimeout(() => {
       void runBoardPoll();
@@ -379,6 +430,13 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
   }
 
   async function runBoardPoll(): Promise<void> {
+    if (Date.now() - lastActivityMs >= BOARD_IDLE_PAUSE_MS) {
+      // Nobody is looking: stop until input arrives (noteActivity) instead of
+      // reading the chain every 4 s for an empty room.
+      idlePaused = true;
+      showBoardFreshness();
+      return;
+    }
     if (
       !shouldPollNow({
         contractConfigured: isContractConfigured(),

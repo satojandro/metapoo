@@ -111,6 +111,12 @@ export function isWriteAtLeastAsNew(candidateNs: string | null, existingNs: stri
   try { return BigInt(candidateNs) >= BigInt(existingNs); } catch { return true; }
 }
 export const BOARD_POLL_BASE_MS = 4_000;
+/**
+ * A visible tab with no input for this long stops polling until the next input.
+ * Berry Club stopped after 10 minutes too. A forgotten tab otherwise reads the
+ * chain every 4 s for as long as the browser stays open.
+ */
+export const BOARD_IDLE_PAUSE_MS = 10 * 60_000;
 export const BOARD_POLL_MAX_MS = 30_000;
 export function nextPollDelayMs(consecutiveFailures: number, baseMs = BOARD_POLL_BASE_MS, maxMs = BOARD_POLL_MAX_MS): number {
   return consecutiveFailures <= 0 ? baseMs : Math.min(maxMs, baseMs * 2 ** Math.min(consecutiveFailures, 4));
