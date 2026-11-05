@@ -4,6 +4,7 @@
 import { BOARD_HEIGHT, BOARD_WIDTH, MAX_BOARD_SIDE, setBoardSide } from "@shared/types.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBoardController } from "./board-controller";
+import { BOARD_IDLE_PAUSE_MS } from "../../board-sync";
 import { createWallScope } from "./wall-scope";
 
 vi.mock("../../config", async (importOriginal) => {
@@ -213,6 +214,99 @@ describe("board controller", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(fetchAllPaintedPixels).toHaveBeenCalledTimes(2);
     expect(controller.syncState().consecutiveFailures).toBe(0);
+    dispose();
+  });
+
+  it("polls with the version it holds and keeps the copy when the board has not changed", async () => {
+    vi.mocked(fetchAllPaintedPixels).mockResolvedValueOnce({ pixels: [pixel(1, 2, 3)], blockHeight: 7, version: 12 });
+    const { controller, deps, dispose } = setup();
+    await controller.bootstrap();
+    // The first load always walks every cell.
+    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith({ knownVersion: null });
+    vi.mocked(fetchAllPaintedPixels).mockClear();
+    deps.reconcilePending.mockClear();
+    deps.onBoardUpdated.mockClear();
+    vi.mocked(fetchAllPaintedPixels).mockResolvedValueOnce({ unchanged: true, blockHeight: 9, version: 12 });
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(fetchAllPaintedPixels).toHaveBeenCalledWith({ knownVersion: 12 });
+    // Same picture: nothing replaced or reconciled, but the copy is now vouched for at block 9.
+    expect(controller.cachedPixel({ x: 1, y: 2 })?.colorIndex).toBe(3);
+    expect(deps.reconcilePending).not.toHaveBeenCalled();
+    expect(controller.syncState().appliedBlockHeight).toBe(9);
+    expect(deps.onBoardUpdated).toHaveBeenCalledTimes(1);
+    expect(deps.boardLoadStatus.textContent).toMatch(/^Board unchanged at block 9 \(version 12\)\./);
+    dispose();
+  });
+
+  it("takes the new version from a changed board, and Refresh never trusts the version", async () => {
+    vi.mocked(fetchAllPaintedPixels).mockResolvedValueOnce({ pixels: [], blockHeight: 7, version: 12 });
+    const { controller, deps, dispose } = setup();
+    await controller.bootstrap();
+    vi.mocked(fetchAllPaintedPixels).mockResolvedValueOnce({ pixels: [pixel(4, 4, 2)], blockHeight: 9, version: 13 });
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(controller.cachedPixel({ x: 4, y: 4 })?.colorIndex).toBe(2);
+    vi.mocked(fetchAllPaintedPixels).mockClear();
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith({ knownVersion: 13 });
+    deps.refreshButton.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith({ knownVersion: null });
+    dispose();
+  });
+
+  it("a board without the version view is re-read in full on every poll", async () => {
+    // fetchAllPaintedPixels reports version null for such a board (board3/board5 today).
+    vi.mocked(fetchAllPaintedPixels).mockResolvedValue({ pixels: [pixel(1, 2, 3)], blockHeight: 7, version: null });
+    const { controller, dispose } = setup();
+    await controller.bootstrap();
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith({ knownVersion: null });
+    dispose();
+  });
+
+  it("stops polling after 10 idle minutes and catches up on the next input", async () => {
+    const { controller, deps, dispose } = setup();
+    await controller.bootstrap();
+    await vi.advanceTimersByTimeAsync(BOARD_IDLE_PAUSE_MS - 1);
+    vi.mocked(fetchAllPaintedPixels).mockClear();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    // At most the one poll that was already due when the idle limit passed: then nothing.
+    expect(vi.mocked(fetchAllPaintedPixels).mock.calls.length).toBeLessThanOrEqual(1);
+    expect(deps.boardFreshness.textContent).toContain("paused while you're away");
+    expect(vi.getTimerCount()).toBe(0);
+    vi.mocked(fetchAllPaintedPixels).mockClear();
+    window.dispatchEvent(new Event("pointermove"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchAllPaintedPixels).toHaveBeenCalledTimes(1);
+    expect(deps.boardFreshness.textContent).not.toContain("paused");
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(fetchAllPaintedPixels).toHaveBeenCalledTimes(2);
+    dispose();
+  });
+
+  it("input keeps a watched wall live past 10 minutes", async () => {
+    const { controller, dispose } = setup();
+    await controller.bootstrap();
+    vi.mocked(fetchAllPaintedPixels).mockClear();
+    for (let minute = 0; minute < 15; minute += 1) {
+      window.dispatchEvent(new Event("keydown"));
+      await vi.advanceTimersByTimeAsync(60_000);
+    }
+    // 15 minutes at one poll per 4 s.
+    expect(vi.mocked(fetchAllPaintedPixels).mock.calls.length).toBeGreaterThanOrEqual(220);
+    dispose();
+  });
+
+  it("returning to the tab after an idle pause reloads instead of staying paused", async () => {
+    const { controller, deps, dispose } = setup();
+    await controller.bootstrap();
+    await vi.advanceTimersByTimeAsync(BOARD_IDLE_PAUSE_MS + 4_000);
+    expect(deps.boardFreshness.textContent).toContain("paused");
+    vi.mocked(fetchAllPaintedPixels).mockClear();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(vi.mocked(fetchAllPaintedPixels).mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(deps.boardFreshness.textContent).not.toContain("paused");
     dispose();
   });
 
