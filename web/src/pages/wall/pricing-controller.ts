@@ -14,11 +14,18 @@ import {
   type RepaintQuote,
 } from "./repaint-price";
 import { clearBlock, fillBlock } from "./wall-view";
+import { blankIsFree, type FreeFirstState } from "./wall-views";
 import type { WallScope } from "./wall-scope";
 
 export interface PricingControllerDeps {
   scope: WallScope;
   services: AppServices;
+  /**
+   * Whether the viewer still has free first paints. Read at tap time: an empty
+   * account whose first tap is on a blank cell must not be told to buy credits.
+   * Omitted: treated as `unknown`.
+   */
+  freePaints?: () => FreeFirstState;
   creditsDock: HTMLElement;
   creditsBalance: HTMLElement;
   buyCreditsButton: HTMLButtonElement;
@@ -169,8 +176,6 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
   let nextReservationId = 1;
   /** Incremented as each balance read starts, so a read knows which settlements it covers. */
   let readEpoch = 0;
-  /** A quote has shown a free paint: an unknown cost may be 0. */
-  let freePaintsSeen = false;
   /**
    * Cost last quoted for a cell, keyed "x,y", with the cell's write stamp in the
    * board cache at quote time. A different stamp means someone repainted it.
@@ -215,7 +220,6 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
         credits: row.credits,
         writtenAtNs: writeStamp(row.cell),
       });
-      if (row.free) freePaintsSeen = true;
     }
   }
 
@@ -537,8 +541,12 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
     }
     const needed = known ?? 1;
     if (have < BigInt(needed)) {
-      if (known === undefined && freePaintsSeen) {
-        // May be a free paint; the send-time quote decides before any wallet call.
+      // A blank cell may be a free first paint. Never answer it with a buy prompt
+      // on a guess: admit it at 0 and let the send-time quote, which knows the
+      // account's allowance and the real price, decide before any wallet call.
+      const free = deps.freePaints?.() ?? { kind: "unknown" as const };
+      const mayBeFree = known === undefined && (blankIsFree(free) || free.kind === "unknown");
+      if (mayBeFree) {
         requestCellPrice(cell);
         return reserve(0);
       }

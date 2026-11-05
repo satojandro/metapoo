@@ -9,6 +9,9 @@ import { createWallScope } from "./wall-scope";
 const chain = {
   credits: [] as Array<string | null | Error>,
   cellCost: 1 as number | Error,
+  strokeCosts: null as number[] | null,
+  strokeFree: null as boolean[] | null,
+  strokeAvailable: false,
   tunables: { repaint_mid_ns: String(3_600_000_000_000), repaint_base_credits: 1 } as unknown,
   calls: [] as string[],
 };
@@ -17,7 +20,7 @@ vi.mock("../../contract", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../contract")>();
   return {
     ...actual,
-    viewFunction: vi.fn(async (method: string) => {
+    viewFunction: vi.fn(async (method: string, args?: any) => {
       chain.calls.push(method);
       const unwrap = (v: unknown) => {
         if (v instanceof Error) throw v;
@@ -28,6 +31,12 @@ vi.mock("../../contract", async (importOriginal) => {
         return unwrap(next === undefined ? "10" : next);
       }
       if (method === "get_cell_cost") return unwrap(chain.cellCost);
+      if (method === "get_stroke_cost" && chain.strokeAvailable) {
+        const n = Array.isArray(args?.cells) ? args.cells.length : 1;
+        const costs = chain.strokeCosts ?? Array.from({ length: n }, () => chain.cellCost as number);
+        const free = chain.strokeFree ?? costs.map(() => false);
+        return { costs, free, total: costs.reduce((a, b) => a + b, 0) };
+      }
       if (method === "get_cell_costs") return [1, 1];
       if (method === "get_tunables") return unwrap(chain.tunables);
       if (method === "get_payment_config") {
@@ -50,6 +59,9 @@ function setup(options: { schema?: number | null; wallet?: string | null } = {})
   scope.setWallet(options.wallet === undefined ? "alice.testnet" : options.wallet, "testnet");
   let schema: number | null = options.schema === undefined ? 4 : options.schema;
   let drawInFlight = false;
+  let free: { kind: "yes"; remaining: number } | { kind: "no" } | { kind: "unknown" } = {
+    kind: "unknown",
+  };
   const services = createAppServices();
   services.wallet = {
     getSession: () => ({ accountId: "alice.testnet", networkId: "testnet" }),
@@ -73,6 +85,7 @@ function setup(options: { schema?: number | null; wallet?: string | null } = {})
     },
     result: el("result"),
     boardSchema: () => schema,
+    freePaints: () => free,
     cachedPixel: vi.fn(() => undefined),
     drawInFlight: () => drawInFlight,
     syncSubmitEnabled: vi.fn(),
@@ -82,6 +95,7 @@ function setup(options: { schema?: number | null; wallet?: string | null } = {})
     pricing, deps,
     setSchema: (next: number | null) => { schema = next; },
     setDrawInFlight: (v: boolean) => { drawInFlight = v; },
+    setFree: (next: typeof free) => { free = next; },
     dispose: () => { pricing.dispose(); scope.markDisposed(); scope.runCleanups(); },
   };
 }
@@ -91,6 +105,9 @@ const sheet = () => document.querySelector<HTMLElement>(".buy-credits-sheet")!;
 beforeEach(() => {
   chain.credits = [];
   chain.cellCost = 1;
+  chain.strokeCosts = null;
+  chain.strokeFree = null;
+  chain.strokeAvailable = false;
   chain.tunables = { repaint_mid_ns: String(3_600_000_000_000), repaint_base_credits: 1 };
   chain.calls = [];
 });
@@ -255,6 +272,9 @@ it("a recovered price clears the old failure message", async () => {
     chain.cellCost = new Error("429");
     await pricing.ensurePaidQuote([{x:1, y:1}], "alice.testnet");
     chain.cellCost = 1;
+  chain.strokeCosts = null;
+  chain.strokeFree = null;
+  chain.strokeAvailable = false;
     await pricing.ensurePaidQuote([{x:1, y:1}], "alice.testnet");
     expect(deps.result.textContent).not.toContain("Price unavailable");
   } finally { dispose(); }
@@ -267,4 +287,63 @@ it("a balance failure is labelled separately from a price failure", async () => 
     expect(await pricing.ensurePaidQuote([{x:1, y:1}], "alice.testnet")).toBeNull();
     expect(deps.result.querySelector("h3")?.textContent).toBe("Balance unavailable");
   } finally { dispose(); }
+});
+
+describe("free first paints", () => {
+  it("a blank tap on an empty balance is admitted instead of prompting a purchase", async () => {
+    chain.credits = ["0", "0"];
+    const { pricing, deps, setFree, dispose } = setup();
+    pricing.onSchemaChanged();
+    await pricing.refreshCreditsDock();
+    setFree({ kind: "yes", remaining: 25 });
+    expect(pricing.admitTap({ x: 4, y: 4 })).toBeTruthy();
+    expect(sheet().hidden).toBe(true);
+    expect(deps.result.querySelector("h3")).toBeNull();
+    dispose();
+  });
+
+  it("an unknown free state with no credits also defers to the send-time quote", async () => {
+    chain.credits = ["0", "0"];
+    const { pricing, dispose } = setup();
+    pricing.onSchemaChanged();
+    await pricing.refreshCreditsDock();
+    expect(pricing.admitTap({ x: 5, y: 5 })).toBeTruthy();
+    expect(sheet().hidden).toBe(true);
+    dispose();
+  });
+
+  it("still blocks a known-price repaint when the free program has ended", async () => {
+    chain.cellCost = 1;
+  chain.strokeCosts = null;
+  chain.strokeFree = null;
+  chain.strokeAvailable = false;
+    chain.credits = ["0", "0", "0"];
+    const { pricing, deps, setFree, dispose } = setup();
+    pricing.onSchemaChanged();
+    await pricing.refreshCreditsDock();
+    setFree({ kind: "no" });
+    pricing.requestCellPrice({ x: 6, y: 6 });
+    await vi.waitFor(() => expect(pricing.knownCost({ x: 6, y: 6 })).toBe(1));
+    await pricing.refreshCreditsDock();
+    expect(pricing.admitTap({ x: 6, y: 6 })).toBeNull();
+    expect(deps.result.querySelector("h3")?.textContent).toBe("Not enough credits");
+    expect(sheet().hidden).toBe(false);
+    dispose();
+  });
+
+  it("says a free cell is free rather than quoting 0 credits", async () => {
+    chain.cellCost = 1;
+    chain.strokeCosts = [0];
+    chain.strokeFree = [true];
+    chain.strokeAvailable = true;
+    chain.credits = ["0"];
+    const { pricing, deps, setFree, dispose } = setup();
+    pricing.onSchemaChanged();
+    await pricing.refreshCreditsDock();
+    setFree({ kind: "yes", remaining: 3 });
+    pricing.requestCellPrice({ x: 8, y: 8 });
+    await vi.waitFor(() => expect(deps.repaintChrome.badge.textContent).toContain("free for you"));
+    expect(deps.repaintChrome.strokeTotal.textContent).toBe("This cell is free for you");
+    dispose();
+  });
 });
