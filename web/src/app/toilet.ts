@@ -8,6 +8,7 @@
  * Amounts are integer strings in 1e-18 units, handled only as `bigint`.
  */
 
+import { wallTiles } from "@shared/types.ts";
 import { isViewTunables, type ViewTunables } from "../pages/wall/wall-views";
 import {
   formatAmount,
@@ -22,7 +23,8 @@ import {
 /** The hard cap, in whole TOILET. */
 export const TOILET_CAP = 1_000_000_000;
 /** Tiles on the wall. */
-export const WALL_TILES = 128 * 128;
+/** Tiles on the wall at its current size (live: a paid board can grow). */
+export { wallTiles };
 /** The staking pool pays out at most this share of itself per day (spec T5). */
 export const DAILY_RELEASE = 0.1;
 /** Unstaking burns this share of the amount taken out (spec T7). */
@@ -276,7 +278,7 @@ export interface EarnOutcome {
 
 /** What tiles earn when the billion is minted over `years` on a full wall. */
 export function earnOutcome({ years, held, hours, painted }: EarnInput): EarnOutcome {
-  const perTileDay = TOILET_CAP / (years * 365 * WALL_TILES);
+  const perTileDay = TOILET_CAP / (years * 365 * wallTiles());
   const wallDay = perTileDay * painted;
   const mintedPct = (wallDay * 365 / TOILET_CAP) * 100;
   return {
@@ -293,7 +295,7 @@ export function earnOutcome({ years, held, hours, painted }: EarnInput): EarnOut
 export function yearsAtRate(perCellSecond: bigint): number | null {
   if (perCellSecond <= 0n) return null;
   const perTileDay = Number(perCellSecond * 86_400n) / 1e18;
-  return TOILET_CAP / (perTileDay * 365 * WALL_TILES);
+  return TOILET_CAP / (perTileDay * 365 * wallTiles());
 }
 
 export interface WhaleInput {
@@ -306,7 +308,7 @@ export function whaleOutcome({ whaleTiles, players, nearPerCredit, wetCredits, d
   const pokeNear = pokes * dryCredits * nearPerCredit;
   const answerNear = pokes * wetCredits * nearPerCredit;
   return {
-    share: whaleTiles / WALL_TILES,
+    share: whaleTiles / wallTiles(),
     buyNear: whaleTiles * dryCredits * nearPerCredit,
     pokeNear,
     answerNear,

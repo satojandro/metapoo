@@ -17,6 +17,8 @@
  *   report truncation so the caller can tell the user honestly.
  */
 
+import { MAX_BOARD_SIDE } from "@shared/types.ts";
+
 export interface StrokeCell {
   x: number;
   y: number;
@@ -38,8 +40,8 @@ export interface StrokeState {
   truncated: boolean;
 }
 
-/** Cell-key width for de-duplication (board is BOARD_WIDTH wide). */
-const KEY_WIDTH = 128;
+/** Cell-key width for de-duplication: the largest the board can grow to, so a key never collides. */
+const KEY_WIDTH = MAX_BOARD_SIDE;
 
 function same(a: StrokeCell, b: StrokeCell): boolean {
   return a.x === b.x && a.y === b.y;

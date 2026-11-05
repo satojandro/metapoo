@@ -602,7 +602,7 @@ mod tests {
             accounts(3),
             0,
             0,
-            NearToken::from_near(10).as_yoctonear(),
+            NearToken::from_near(2).as_yoctonear(),
             vec![],
         );
         rejected("NothingToDistribute", || board.distribute_near());
@@ -618,7 +618,9 @@ mod tests {
         // The transfers are already debited from the account in this receipt.
         assert_eq!(board.get_withdrawable_near(), U128(0));
         let storage = u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear();
-        let protected = storage + 16_384 * STORAGE_PER_PIXEL + board.tunables.reserve_floor.0;
+        let protected = storage
+            + u128::from(crate::board_cells()) * STORAGE_PER_PIXEL
+            + board.tunables.reserve_floor.0;
         assert_eq!(env::account_balance().as_yoctonear(), protected);
     }
 

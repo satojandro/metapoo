@@ -22,6 +22,28 @@ function validPaidBoard(): ChainBoardView {
   return { ...validFreeBoard(), schema_version: 4 };
 }
 
+describe("validateContractMetadata board size", () => {
+  it("accepts a 64 × 64 paid board and reports its side", () => {
+    const result = validateContractMetadata({ ...validPaidBoard(), width: 64, height: 64 });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.side).toBe(64);
+  });
+
+  it("accepts any square up to 128, the largest a board can grow", () => {
+    for (const side of [1, 96, 128]) {
+      expect(validateContractMetadata({ ...validPaidBoard(), width: side, height: side }).ok).toBe(true);
+    }
+  });
+
+  it("rejects a non-square, oversized or empty board", () => {
+    for (const [width, height] of [[64, 32], [256, 256], [0, 0], [64.5, 64.5]]) {
+      const result = validateContractMetadata({ ...validPaidBoard(), width, height });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.title).toBe("Incompatible board size");
+    }
+  });
+});
+
 describe("validateContractMetadata", () => {
   it("accepts a matching free schema 2 board", () => {
     const result = validateContractMetadata(validFreeBoard());

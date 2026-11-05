@@ -1,6 +1,6 @@
 import board from "@shared/board.json";
 import { PALETTE } from "@shared/palette.ts";
-import { BOARD_HEIGHT, BOARD_WIDTH } from "@shared/types.ts";
+import { isValidBoardSide, MAX_BOARD_SIDE } from "@shared/types.ts";
 import type { ChainBoardView } from "./contract";
 
 /** Free board contract schema (`shared/board.json` schema_version). */
@@ -41,6 +41,8 @@ export type ContractMetaStatus =
       summary: string;
       /** Colours this board accepts (8 or 16); swatches past it would be rejected on chain. */
       paletteLength: number;
+      /** Side of the square board the contract reported; the page draws at this size. */
+      side: number;
     }
   | { ok: false; title: string; message: string };
 
@@ -59,11 +61,13 @@ export function validateContractMetadata(view: ChainBoardView): ContractMetaStat
     };
   }
 
-  if (view.width !== BOARD_WIDTH || view.height !== BOARD_HEIGHT) {
+  // A paid board starts at 64 × 64 and can only grow, up to 128 × 128. Any square
+  // in that range is drawable; the page takes its size from here.
+  if (view.width !== view.height || !isValidBoardSide(view.width)) {
     return {
       ok: false,
       title: "Incompatible board size",
-      message: `This page expects ${BOARD_WIDTH}×${BOARD_HEIGHT}, but the contract reported ${view.width}×${view.height}. Drawing stays disabled.`,
+      message: `This page draws square boards up to ${MAX_BOARD_SIDE}×${MAX_BOARD_SIDE}, but the contract reported ${view.width}×${view.height}. Drawing stays disabled.`,
     };
   }
   if (view.overwrite_rule !== board.overwrite_rule) {
@@ -114,6 +118,7 @@ export function validateContractMetadata(view: ChainBoardView): ContractMetaStat
     ok: true,
     summary: `Contract metadata matches (${modeLabel}): schema ${schema}, ${view.width}×${view.height}, ${view.overwrite_rule}, ${view.palette.length} colors.`,
     paletteLength: view.palette.length,
+    side: view.width,
   };
 }
 

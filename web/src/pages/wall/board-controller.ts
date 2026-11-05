@@ -1,3 +1,4 @@
+import { setBoardSide } from "@shared/types.ts";
 import { PALETTE } from "@shared/palette.ts";
 import type { PixelView } from "@shared/types.ts";
 import {
@@ -65,6 +66,8 @@ export interface BoardControllerDeps {
    * whole shared palette on the local mock board. Not called when metadata fails.
    */
   onPaletteChanged(paletteLength: number): void;
+  /** The contract reported a different board size; refit and redraw at the new size. */
+  onBoardSizeChanged(): void;
 }
 
 export interface BoardController {
@@ -191,6 +194,7 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
       rememberBoardSchema(meta.ok ? board.schema_version : null);
       if (meta.ok) {
         deps.onPaletteChanged(meta.paletteLength);
+        if (setBoardSide(meta.side)) deps.onBoardSizeChanged();
         contractLine.textContent =
           `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
           `Painting a square replaces the colour that was there, and the contract ` +
@@ -246,6 +250,7 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
         return;
       }
       deps.onPaletteChanged(meta.paletteLength);
+      if (setBoardSide(meta.side)) deps.onBoardSizeChanged();
       if (board.sponsorship_enabled && !sponsorship.flagEnabled) {
         sponsorNote.textContent = `${sponsorship.message} (Contract reported sponsorship_enabled=true; this page still does not offer a sponsored submit path.)`;
       }

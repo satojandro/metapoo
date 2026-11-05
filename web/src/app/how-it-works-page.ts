@@ -11,7 +11,7 @@ import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
 import type { PageContext, PageDispose } from "./page-registry";
 import { MPOO_SPLIT, NEAR_SPLIT, createRpcView } from "./revenue-panel";
 import {
-  EMPTY_SNAPSHOT, WALL_TILES, durationText, happyHourClock, loadHowItWorks, minutesText, nearText,
+  EMPTY_SNAPSHOT, wallTiles, durationText, happyHourClock, loadHowItWorks, minutesText, nearText,
   practicePrices, practiceReceipt, practiceTier, spendOutcome, utcClock, weekdayName,
   type HowItWorksSnapshot, type PracticeCell, type PracticePhase,
 } from "./how-it-works";
@@ -151,7 +151,7 @@ const TEMPLATE = `
         <p class="mp-eyebrow">Free paint</p>
         <h3 id="hiw-free-h">Get on the wall <em>before it fills.</em></h3>
         <p data-needs="freeFirst">Every new account gets <span data-hiw="freeFirst">…</span> tiles on the house. No credits needed. Open your account and start painting today.</p>
-        <p>When the last of the ${WALL_TILES.toLocaleString("en-US")} tiles gets its first coat, free paint ends for good. The wall gets made by whoever shows up first. Be one of them.</p>
+        <p>When the last of the ${wallTiles().toLocaleString("en-US")} tiles gets its first coat, free paint ends for good. The wall gets made by whoever shows up first. Be one of them.</p>
         <a class="mp-btn mp-btn-primary hiw-cta" href="/"><span data-needs="freeFirst">Grab your <span data-hiw="freeFirst">…</span> tiles →</span><span data-unless="freeFirst" hidden>Start painting →</span></a>
       </div>
       <div class="hiw-hype-copy" data-fill="done" hidden>
@@ -164,7 +164,7 @@ const TEMPLATE = `
         <strong data-hiw="blank">…</strong>
         <span>tiles still blank</span>
         <div class="hiw-meter" role="img" data-hiw-meter-label><i data-hiw-meter></i></div>
-        <p class="hiw-meter-row"><span><span data-hiw="painted">…</span> / ${WALL_TILES.toLocaleString("en-US")} painted</span><span data-hiw="pct">…</span></p>
+        <p class="hiw-meter-row"><span><span data-hiw="painted">…</span> / ${wallTiles().toLocaleString("en-US")} painted</span><span data-hiw="pct">…</span></p>
       </div>
     </div>
     <div class="hiw-hype-cols" data-needs="happy">
@@ -243,7 +243,7 @@ const TEMPLATE = `
 /** Text for each live key, or null when the board hasn't confirmed it. */
 export function liveValues(s: HowItWorksSnapshot): Record<string, string | null> {
   const t = s.tiers, hh = s.happyHour;
-  const blank = s.painted === null ? null : WALL_TILES - s.painted;
+  const blank = s.painted === null ? null : wallTiles() - s.painted;
   return {
     price: s.nearPerCredit === null ? null : `${nearText(s.nearPerCredit)} NEAR`,
     regFee: s.registrationFee === null ? null : `${nearText(s.registrationFee)} NEAR`,
@@ -256,7 +256,7 @@ export function liveValues(s: HowItWorksSnapshot): Record<string, string | null>
     freeFirst: s.freeFirstPerAccount === null || s.freeFirstPerAccount === 0 ? null : String(s.freeFirstPerAccount),
     painted: s.painted === null ? null : s.painted.toLocaleString("en-US"),
     blank: blank === null ? null : blank.toLocaleString("en-US"),
-    pct: s.painted === null ? null : `${Math.floor((s.painted / WALL_TILES) * 100)}%`,
+    pct: s.painted === null ? null : `${Math.floor((s.painted / wallTiles()) * 100)}%`,
     happy: hh ? "yes" : null,
     hhDay: hh ? weekdayName(hh.weekday) : null,
     hhLength: hh ? durationText(hh.lengthS).replace(/^one /, "an ") : null,
@@ -303,8 +303,8 @@ export function mountHowItWorksPage(root: HTMLElement, _ctx: PageContext, overri
     }
     const painted = snapshot.painted;
     if (painted !== null) {
-      q("[data-hiw-meter]").style.width = `${(painted / WALL_TILES) * 100}%`;
-      q("[data-hiw-meter-label]").setAttribute("aria-label", `${painted.toLocaleString("en-US")} of ${WALL_TILES.toLocaleString("en-US")} tiles painted`);
+      q("[data-hiw-meter]").style.width = `${(painted / wallTiles()) * 100}%`;
+      q("[data-hiw-meter-label]").setAttribute("aria-label", `${painted.toLocaleString("en-US")} of ${wallTiles().toLocaleString("en-US")} tiles painted`);
     }
     const week = q("[data-hiw-week]");
     week.replaceChildren();
