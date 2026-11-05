@@ -39,7 +39,7 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
     buy.href = BUY_NEAR_URL;
     buy.textContent = "Buy NEAR ↗";
     marketNote.textContent =
-      "Credits are bought with NEAR on this board. Opens near.org to get NEAR from other chains.";
+      "Credits are bought with NEAR on this board. Opens near.com to get NEAR from other chains.";
   }
   const status = host.querySelector<HTMLElement>(".paint-wallet-status")!;
   const button = host.querySelector<HTMLButtonElement>(".paint-wallet-refresh")!;

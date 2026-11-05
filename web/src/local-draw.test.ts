@@ -2,17 +2,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ call: vi.fn(), key: vi.fn(), price: vi.fn(), account: vi.fn(), block: vi.fn() }));
 vi.mock("@near-js/accounts", () => ({ Account: class {
   constructor(accountId: string) { mocks.account(accountId); }
-  getAccessKey = mocks.key;
   callFunctionRaw = mocks.call;
 } }));
 vi.mock("@near-js/providers", () => ({ JsonRpcProvider: class { gasPrice = mocks.price; block = mocks.block; } }));
 vi.mock("@near-js/crypto", () => ({ KeyPair: { fromString: vi.fn() } }));
+// Pre-send reads go through the shared read transport, not the signer's provider.
+vi.mock("./read-rpc", () => ({ readRpcFetch: async (_url: string, init: RequestInit) => {
+  const { method } = JSON.parse(String(init.body)) as { method: string };
+  const result = method === "gas_price" ? await mocks.price() : await mocks.key();
+  return new Response(JSON.stringify({ jsonrpc: "2.0", id: "t", result }));
+} }));
 vi.mock("@near-js/signers", () => ({ KeyPairSigner: class {} }));
 vi.mock("./drawing-session", () => ({
   loadDrawingSessionRecord: () => ({ publicKey: "public", secretKey: "ed25519:secret" }),
   describeDrawingSession: () => ({ phase: "active" }),
 }));
-import { signAndSendStrokeLocally } from "./local-draw";
+import { fetchDrawingSessionAllowance, signAndSendStrokeLocally } from "./local-draw";
 import { DRAW_GAS } from "./config";
 const cells = Array.from({ length: 130 }, (_, i) => ({ x: i % 128, y: Math.floor(i / 128) }));
 const args = { accountId: "alice.testnet", networkId: "testnet", cells, color: 3 };
@@ -123,5 +128,24 @@ describe("session stroke submission", () => {
     await signAndSendStrokeLocally({ ...args, maxCredits: [64, 70, 2] });
     expect(mocks.call.mock.calls.map(([call]) => call.args.max_credits)).toEqual([64, 70, 2]);
     expect(Object.keys(mocks.call.mock.calls[0]![0].args)).toEqual(["cells", "max_credits"]);
+  });
+});
+
+describe("drawing-session key reads", () => {
+  it("reports a missing key from the node's UNKNOWN_ACCESS_KEY error", async () => {
+    // Simulate the JSON-RPC error body rather than a thrown transport error.
+    const readRpc = await import("./read-rpc");
+    const spy = vi.spyOn(readRpc, "readRpcFetch").mockResolvedValueOnce(new Response(JSON.stringify({
+      jsonrpc: "2.0", id: "t", error: { name: "HANDLER_ERROR", cause: { name: "UNKNOWN_ACCESS_KEY" } },
+    })));
+    expect(await fetchDrawingSessionAllowance(args)).toMatchObject({ found: false });
+    spy.mockRestore();
+  });
+
+  it("treats a busy network as an RPC failure, never as a missing key", async () => {
+    const readRpc = await import("./read-rpc");
+    const spy = vi.spyOn(readRpc, "readRpcFetch").mockRejectedValueOnce(new Error("Network busy. Please retry shortly."));
+    await expect(fetchDrawingSessionAllowance(args)).rejects.toMatchObject({ code: "rpc", mayHaveBroadcast: false });
+    spy.mockRestore();
   });
 });

@@ -36,7 +36,7 @@ export function createReadTransport(options: {
 
   return async function read(url: string, init: RequestInit, priority = 0): Promise<Response> {
     const body = JSON.parse(String(init.body)) as { method: string; params?: Record<string, unknown> };
-    if (!["query", "block", "EXPERIMENTAL_protocol_config"].includes(body.method)) {
+    if (!["query", "block", "gas_price", "EXPERIMENTAL_protocol_config"].includes(body.method)) {
       throw new Error("Read transport refuses transaction submission.");
     }
     init.signal?.throwIfAborted();

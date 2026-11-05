@@ -6,6 +6,7 @@ import type { FinalExecutionOutcome } from "@near-js/types";
 import { chunkCells, chunkArgs, type StrokeCell } from "./pages/wall/stroke-paint";
 import { parseTxOutcome, hasRecognizedTxSuccess } from "./tx-outcome";
 import { CONTRACT_ID, DRAW_DEPOSIT, DRAW_GAS, RPC_URL } from "./config";
+import { readRpcFetch } from "./read-rpc";
 import {
   describeDrawingSession,
   loadDrawingSessionRecord,
@@ -117,45 +118,102 @@ function signerFromRecord(record: DrawingSessionRecord): KeyPairSigner {
   return new KeyPairSigner(KeyPair.fromString(secret as KeyPairString));
 }
 
+/**
+ * A read through the shared transport (`read-rpc.ts`): throttling-aware, queued,
+ * with the network's fallback endpoint. The drawing key's pre-send checks used to
+ * hit `RPC_URL` alone, so one 429 from the primary made a single paint fall back
+ * to a wallet popup even with a working session key (issue #70).
+ */
+async function readRpc<T>(method: string, params: unknown): Promise<T> {
+  let body: { result?: T; error?: unknown };
+  try {
+    const response = await readRpcFetch(RPC_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: "metapoo-draw", method, params }),
+    });
+    body = (await response.json()) as { result?: T; error?: unknown };
+  } catch (error) {
+    throw new LocalDrawError("rpc", error instanceof Error ? error.message : "Network read failed.");
+  }
+  if (body.error !== undefined) throw new RpcReadFailure(body.error);
+  return body.result as T;
+}
+
+class RpcReadFailure extends Error {
+  constructor(readonly error: unknown) {
+    super(describeRpcError(error));
+  }
+}
+
+function describeRpcError(error: unknown): string {
+  if (error && typeof error === "object") {
+    const e = error as { cause?: { name?: unknown }; data?: unknown; message?: unknown };
+    const parts = [e.cause?.name, typeof e.data === "string" ? e.data : null, e.message]
+      .filter((part): part is string => typeof part === "string" && part !== "");
+    if (parts.length) return parts.join(": ");
+  }
+  return typeof error === "string" ? error : "RPC error";
+}
+
+/** The node's answer for a key that is not on the account (both RPC error shapes). */
+function isMissingKey(detail: string): boolean {
+  return /UNKNOWN_ACCESS_KEY|does not exist|doesn't exist/i.test(detail);
+}
+
+type AccessKeyPermission =
+  | "FullAccess"
+  | { FunctionCall: { allowance?: string | null; receiver_id: string; method_names?: string[] } };
+
 /** Read the on-chain FC key and remaining gas allowance (if limited). */
 export async function fetchDrawingSessionAllowance(input: {
   accountId: string;
   networkId: string;
 }): Promise<AccessKeyAllowanceInfo> {
   const record = requireActiveRecord(input.accountId, input.networkId);
-  const account = new Account(input.accountId, provider());
+  let view: { permission?: AccessKeyPermission; error?: unknown };
   try {
-    const view = await account.getAccessKey(record.publicKey);
-    const permission = view.permission;
-    if (permission === "FullAccess") {
-      return {
-        found: true,
-        remainingYocto: null,
-        permissionSummary: "Full access (unexpected for this experiment)",
-      };
-    }
-    const fn = permission.FunctionCall;
-    const allowance =
-      fn.allowance === undefined || fn.allowance === null
-        ? null
-        : String(fn.allowance);
-    return {
-      found: true,
-      remainingYocto: allowance,
-      permissionSummary: `receiver ${fn.receiver_id}; methods ${(fn.method_names ?? []).join(", ") || "(any)"}`,
-      wildcard: (fn.method_names ?? []).length === 0,
-    };
+    view = await readRpc("query", {
+      request_type: "view_access_key",
+      finality: "optimistic",
+      account_id: input.accountId,
+      public_key: record.publicKey,
+    });
   } catch (error) {
+    if (error instanceof LocalDrawError) throw error;
     const detail = error instanceof Error ? error.message : "Unknown error";
-    if (/does not exist|doesn't exist|not found/i.test(detail)) {
-      return {
-        found: false,
-        remainingYocto: null,
-        permissionSummary: "Key not found on account",
-      };
-    }
+    if (isMissingKey(detail)) return notFound();
     throw new LocalDrawError("rpc", detail);
   }
+  // Older nodes answer a missing key with a result carrying an `error` string.
+  if (typeof view?.error === "string") {
+    if (isMissingKey(view.error)) return notFound();
+    throw new LocalDrawError("rpc", view.error);
+  }
+  const permission = view?.permission;
+  if (permission === "FullAccess") {
+    return {
+      found: true,
+      remainingYocto: null,
+      permissionSummary: "Full access (unexpected for this experiment)",
+    };
+  }
+  if (!permission || typeof permission !== "object" || !permission.FunctionCall) {
+    throw new LocalDrawError("rpc", "Unrecognised access-key response.");
+  }
+  const fn = permission.FunctionCall;
+  const allowance =
+    fn.allowance === undefined || fn.allowance === null ? null : String(fn.allowance);
+  return {
+    found: true,
+    remainingYocto: allowance,
+    permissionSummary: `receiver ${fn.receiver_id}; methods ${(fn.method_names ?? []).join(", ") || "(any)"}`,
+    wildcard: (fn.method_names ?? []).length === 0,
+  };
+}
+
+function notFound(): AccessKeyAllowanceInfo {
+  return { found: false, remainingYocto: null, permissionSummary: "Key not found on account" };
 }
 
 /**
@@ -308,7 +366,7 @@ export async function signAndSendStrokeLocally(args: {
       }
       const rpc = provider();
       if (allowance.remainingYocto !== null) {
-        const price = await rpc.gasPrice(null);
+        const price = await readRpc<{ gas_price: string }>("gas_price", [null]);
         // Reserve prepaid gas at the current RPC price, with headroom for
         // transaction fees and the protocol's gas-price inflation margin.
         const required = BigInt(DRAW_GAS) * BigInt(price.gas_price) * 2n;

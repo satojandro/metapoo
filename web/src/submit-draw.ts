@@ -172,25 +172,28 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
             observedBlockHeight: null,
           };
         }
-        // Definitely never broadcast — safe to offer ordinary wallet fallback.
-        input.onProgress?.({
-          phase: "wallet_prompt",
-          detail: [
-            "Local drawing session could not start this paint.",
-            error.message,
-            walletPromptExplanation(input, sponsorship.message),
-          ].join(" "),
-        });
-      } else {
-        input.onProgress?.({
-          phase: "wallet_prompt",
-          detail: [
-            "Local drawing session could not start this paint.",
-            error instanceof Error ? error.message : "Unknown local-sign error.",
-            walletPromptExplanation(input, sponsorship.message),
-          ].join(" "),
-        });
+        // Never broadcast. With a drawing session active the painter expects no
+        // popup, so a failed pre-send check (usually a throttled RPC) is reported
+        // as a retryable failure rather than silently opening the wallet (#70).
+        return {
+          status: "failed",
+          title: localFailureTitle(error.code),
+          message: localFailureMessage(error),
+          transactionId: null,
+          explorerUrl: null,
+          pixel: null,
+        };
       }
+      return {
+        status: "failed",
+        title: "Paint not sent",
+        message: `Your drawing session could not send this paint. ${
+          error instanceof Error ? error.message : "Unknown local-sign error."
+        } Nothing was painted and nothing was spent. Try again in a moment.`,
+        transactionId: null,
+        explorerUrl: null,
+        pixel: null,
+      };
     }
   }
 
@@ -363,4 +366,17 @@ function walletPromptExplanation(
     "The game adds no application fee. Your wallet may still pay a small network gas fee.",
     sponsorshipMessage,
   ].join(" ");
+}
+
+function localFailureTitle(code: LocalDrawError["code"]): string {
+  if (code === "rpc") return "Network busy — paint not sent";
+  if (code === "key_missing" || code === "missing_secret") return "Drawing session needs renewing";
+  return "Paint not sent";
+}
+
+function localFailureMessage(error: LocalDrawError): string {
+  if (error.code === "rpc") {
+    return `The network did not answer the drawing-session check (${error.message}). Nothing was painted and nothing was spent. Try again in a moment.`;
+  }
+  return `${error.message} Nothing was painted and nothing was spent.`;
 }
