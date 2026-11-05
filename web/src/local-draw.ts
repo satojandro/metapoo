@@ -5,7 +5,7 @@ import { KeyPairSigner } from "@near-js/signers";
 import type { FinalExecutionOutcome } from "@near-js/types";
 import { chunkCells, chunkArgs, type StrokeCell } from "./pages/wall/stroke-paint";
 import { parseTxOutcome, hasRecognizedTxSuccess } from "./tx-outcome";
-import { CONTRACT_ID, DRAW_DEPOSIT, DRAW_GAS, RPC_URL } from "./config";
+import { CONTRACT_ID, DRAW_DEPOSIT, DRAW_GAS, RPC_URL, rpcConnection } from "./config";
 import { readRpcFetch } from "./read-rpc";
 import {
   describeDrawingSession,
@@ -77,7 +77,7 @@ export interface AccessKeyAllowanceInfo {
 }
 
 function provider(): JsonRpcProvider {
-  return new JsonRpcProvider({ url: RPC_URL });
+  return new JsonRpcProvider(rpcConnection(RPC_URL));
 }
 
 function requireActiveRecord(

@@ -1,4 +1,5 @@
 import type { OperationContext } from "../types";
+import { rpcHeaders } from "../../config";
 import {
   atomic,
   HISTORICAL_MPOO_POOL,
@@ -45,7 +46,7 @@ export function createRheaReadClient(
   ): Promise<ChainRead> {
     const response = await fetcher(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: rpcHeaders(url),
       signal,
       body: JSON.stringify({
         jsonrpc: "2.0",

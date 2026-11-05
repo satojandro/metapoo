@@ -13,8 +13,16 @@ export function buildTransaction({ receiverId, actions: descriptors }) {
   };
 }
 
+export function rpcConnection(config) {
+  return config.rpcApiKey
+    ? { url: config.rpcUrl, headers: { Authorization: `Bearer ${config.rpcApiKey}` } }
+    : { url: config.rpcUrl };
+}
+
 export function createNearClient(config) {
-  const provider = new JsonRpcProvider({ url: config.rpcUrl });
+  // `headers` is part of the provider's ConnectionInfo: near-api-js forwards it to fetch.
+  // A paid RPC meters requests by key, and the header keeps the key out of the URL and logs.
+  const provider = new JsonRpcProvider(rpcConnection(config));
   const signer = KeyPairSigner.fromSecretKey(config.privateKey);
   const account = new Account(config.accountId, provider, signer);
   const final = { finality: 'final' };

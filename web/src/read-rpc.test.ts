@@ -68,4 +68,19 @@ describe("read transport", () => {
     expect(await (await other).json()).toEqual({result:1});
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it("attaches the configured key to its own host and never to the fallback", async () => {
+    const fetcher = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockImplementation(async () => reply());
+    const read = createReadTransport({
+      fetcher,
+      fallback: "https://rpc.testnet.near.org",
+      spacingMs: 0,
+      apiKey: "test-key",
+    });
+    await read("https://rpc.testnet.fastnear.com", request());
+    const headersOf = (call: number) => fetcher.mock.calls[call]![1].headers as Headers;
+    expect(headersOf(0).get("authorization")).toBe("Bearer test-key");
+    expect(headersOf(1).get("authorization")).toBeNull();
+  });
 });

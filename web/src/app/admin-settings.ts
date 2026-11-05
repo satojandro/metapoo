@@ -1,6 +1,7 @@
 /** ADM-1: chain reads and edit rules. Token amounts never pass through floating point. */
 import { isMethodNotFound, type View } from "./revenue-panel";
 import { parseChainJson, stringifyChainJson } from "../chain-json";
+import { rpcHeaders } from "../config";
 
 export type ChainValue = string | number | bigint | boolean | null;
 export type ChainRecord = Record<string, ChainValue>;
@@ -155,7 +156,7 @@ export function createAdminView(url: string): View {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
-      const response = await fetch(url, { method: "POST", signal: controller.signal, headers: { "Content-Type": "application/json" },
+      const response = await fetch(url, { method: "POST", signal: controller.signal, headers: rpcHeaders(url),
         body: JSON.stringify({ jsonrpc: "2.0", id: "admin", method: "query", params: {
           request_type: "call_function", finality: "final", account_id: account, method_name: method,
           args_base64: btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(args)))),
@@ -176,7 +177,7 @@ export function createAccountBalanceReader(url: string): (account: string) => Pr
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
-      const response = await fetch(url, { method: "POST", signal: controller.signal, headers: { "Content-Type": "application/json" },
+      const response = await fetch(url, { method: "POST", signal: controller.signal, headers: rpcHeaders(url),
         body: JSON.stringify({ jsonrpc: "2.0", id: "admin", method: "query", params: { request_type: "view_account", finality: "final", account_id: account } }),
       });
       if (!response.ok) throw new Error(`RPC HTTP ${response.status}`);

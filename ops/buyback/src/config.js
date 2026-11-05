@@ -99,6 +99,10 @@ export function loadConfig(env = process.env) {
     }
   }
 
+  // A paid RPC (FastNEAR and similar) meters requests by key. Optional: the public
+  // endpoints need no credential. Sent as an Authorization header, never in the URL.
+  const rpcApiKey = trim('BUYBACK_RPC_API_KEY');
+
   const boardId = trim('BUYBACK_BOARD_CONTRACT_ID');
   const accountId = trim('BUYBACK_ACCOUNT_ID');
   const boardOk = checkAccountId('BUYBACK_BOARD_CONTRACT_ID', boardId, validNetwork, problems);
@@ -158,5 +162,7 @@ export function loadConfig(env = process.env) {
   };
   // Non-enumerable so JSON.stringify(config) or console.log(config) cannot leak it.
   Object.defineProperty(config, 'privateKey', { value: privateKey, enumerable: false });
+  // Same rule as the private key: never in JSON.stringify(config) or a console.log.
+  if (rpcApiKey) Object.defineProperty(config, 'rpcApiKey', { value: rpcApiKey, enumerable: false });
   return Object.freeze(config);
 }

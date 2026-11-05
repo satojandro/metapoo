@@ -59,6 +59,7 @@ audit's order of work. Keep them for the reasoning; do not dispatch from them.
 | topic | document |
 |---|---|
 | running the page, known limits | [`../web/README.md`](../web/README.md) |
+| RPC host, FastNEAR key, what a request costs, where usage is visible | [`ops/fastnear-rpc.md`](ops/fastnear-rpc.md) |
 | free board contract: deploy, storage, gas, frontend handoff | [`../contracts/board/`](../contracts/board/) |
 | what the scaffold protects against | [`threat-sketch.md`](threat-sketch.md) |
 | session lessons, one file per session | [`learning/`](learning/README.md) |

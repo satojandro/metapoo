@@ -1,4 +1,5 @@
 import type { ReadinessRpc } from "./account-readiness";
+import { rpcHeaders } from "../config";
 /** Preserve structured RPC errors: a timeout must not masquerade as an absent account. */
 export function createAcquisitionRpc(url: string): ReadinessRpc {
   return async (method, params) => {
@@ -7,7 +8,7 @@ export function createAcquisitionRpc(url: string): ReadinessRpc {
     try {
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: rpcHeaders(url),
         signal: controller.signal,
         body: JSON.stringify({
           jsonrpc: "2.0",

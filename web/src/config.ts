@@ -9,6 +9,7 @@
  */
 
 import { setBoardSide, type NetworkId } from "@shared/types.ts";
+import { rpcAuthHeaders } from "./rpc-auth";
 
 function envString(name: keyof ImportMetaEnv): string {
   const value = import.meta.env[name];
@@ -59,6 +60,39 @@ export const TOILET_ID = envString("VITE_TOILET_ID");
 /** Public JSON-RPC endpoint for free view calls (reads). */
 export const RPC_URL =
   envString("VITE_NEAR_RPC_URL") || defaultRpcUrl(PAGE_NETWORK);
+
+/**
+ * Optional bearer token for `RPC_URL` (FastNEAR, for one, meters requests by key).
+ *
+ * Empty by default: the public endpoint needs no credential. Vite inlines this
+ * value into the shipped bundle, so a key set here is readable by every visitor
+ * and can be spent against our quota — use a domain-restricted browser key when
+ * the page is deployed, and never a server key.
+ */
+export const RPC_API_KEY = envString("VITE_NEAR_RPC_API_KEY");
+
+/**
+ * JSON-RPC headers for `url`. The bearer token is added only when `url` belongs to
+ * the configured endpoint, so a fallback host never receives our credential.
+ */
+export function rpcHeaders(url: string = RPC_URL): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    ...rpcAuthHeaders(url, RPC_URL, RPC_API_KEY),
+  };
+}
+
+/**
+ * Connection info for `@near-js` providers (`JsonRpcProvider`). Same credential
+ * rule as `rpcHeaders`.
+ */
+export function rpcConnection(url: string = RPC_URL): {
+  url: string;
+  headers?: Record<string, string>;
+} {
+  const headers = rpcAuthHeaders(url, RPC_URL, RPC_API_KEY);
+  return Object.keys(headers).length > 0 ? { url, headers } : { url };
+}
 
 /**
  * Gas sponsorship stays off until custody, limits, and a kill switch exist.

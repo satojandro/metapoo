@@ -139,4 +139,12 @@ describe('loadConfig', () => {
     assert.equal(c.privateKey, FAKE_KEY);
     assert.equal(c.network, 'testnet');
   });
+
+  it('keeps a paid RPC key off the printed config but available to the client', () => {
+    assert.equal(loadConfig(BASE_ENV).rpcApiKey, undefined);
+    const c = loadConfig({ ...BASE_ENV, BUYBACK_RPC_API_KEY: '  test-key  ' });
+    assert.equal(c.rpcApiKey, 'test-key');
+    assert.equal(inspect(c, { depth: null }).includes('test-key'), false);
+    assert.equal(Object.keys(c).includes('rpcApiKey'), false);
+  });
 });
