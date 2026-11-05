@@ -25,12 +25,13 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | what the purchase UI must do and show | [`payments/frontend-handoff.md`](payments/frontend-handoff.md) | current; NEAR checkout built (`55526b9`), mPOO hidden |
 | social login, cross-chain funding and embedded mPOO acquisition | [`implementation/2026-11-03-wallet-funding-integration-spec.md`](implementation/2026-11-03-wallet-funding-integration-spec.md) | specs and task manifest; [disabled implementation verification](learning/2026-11-03-wallet-acquisition.md), live gates open |
 | mainnet cost measurement | [`payments/mainnet-cost-validation.md`](payments/mainnet-cost-validation.md) | **all pending** — reopens on first deploy |
+| the mainnet testing round, and its board-version upgrade, with chain evidence | [`payments/mainnet-test-deployment-2026-11-05.md`](payments/mainnet-test-deployment-2026-11-05.md), [`payments/mainnet-board-version-upgrade-2026-11-06.md`](payments/mainnet-board-version-upgrade-2026-11-06.md) | **live**: board `fcd66acf…` upgraded 2026-11-06 (`2t1cApx…`), page https://metapoo-testnet.vercel.app |
 | first live testnet deployment of board + TOILET, with evidence | [`payments/testnet-deployment-2026-10.md`](payments/testnet-deployment-2026-10.md) | **deployed 2026-10-29** at `board3.metapoo-player1.testnet` (canonical), 50 checks green |
 | every owner-changeable board setting: launch value, limits, timing | [`payments/board-settings-reference.html`](payments/board-settings-reference.html) | reference, 2 Nov |
 | the admin dashboard | [`implementation/2026-11-02-admin-dashboard-spec.md`](implementation/2026-11-02-admin-dashboard-spec.md) | spec, not started |
 | the next paid-board revision (C1, C2, C5, C7, C8, revenue split, 16 colours, free paints, happy hour) | [`payments/2026-11-01-paid-board-revision-spec.md`](payments/2026-11-01-paid-board-revision-spec.md) | **draft for review** |
 | upgrade authority and migration | [`payments/upgrade-policy.md`](payments/upgrade-policy.md) | `upgrade()` exists; migration + pause missing |
-| the contract itself | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | schema 4, testnet only |
+| the contract itself | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | schema 4; on testnet and on the mainnet testing round |
 | pause, treasury withdrawal, bounded price change | [`../contracts/paid-board/README.md`](../contracts/paid-board/README.md) | on main (PR #15) and on testnet |
 
 ## Economy
