@@ -460,7 +460,7 @@ describe("wall behaviour: paid board", () => {
     expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
     expect(root.querySelector("#result h3")?.textContent).toBe("Price unavailable");
     expect(root.querySelector("#result p")?.textContent).toBe(
-      "The repaint price could not be read, so nothing was submitted. Refresh the board and try again.",
+      "The network could not return a fresh paint price. Nothing was submitted. Wait a moment, then try again.",
     );
     expect(text(root, "#cell-price")).toBe("price unavailable");
     expect(text(root, "#stroke-total")).toBe("price unavailable");

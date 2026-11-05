@@ -390,6 +390,7 @@ export function chainRepaintReaders(
   options: ChainRepaintReaderOptions = {},
 ): ChainRepaintReaders {
   let cachedTunables: RepaintTunables | null = null;
+  let pendingTunables: Promise<RepaintTunables> | null = null;
   /** False once the board answered "no such method" (old contract). */
   let strokeCostAvailable = true;
   return {
@@ -437,9 +438,13 @@ export function chainRepaintReaders(
       if (cachedTunables) {
         return cachedTunables;
       }
-      const next = await viewFunction<RepaintTunables>("get_tunables");
-      cachedTunables = next;
-      return next;
+      pendingTunables ??= viewFunction<RepaintTunables>("get_tunables");
+      const current = pendingTunables;
+      try {
+        const next = await current;
+        if (pendingTunables === current) cachedTunables = next;
+        return next;
+      } finally { if (pendingTunables === current) pendingTunables = null; }
     },
     async pixel(cell) {
       // Prefer the wall pixel cache. Never re-fetch get_pixel per cell during a
@@ -460,6 +465,7 @@ export function chainRepaintReaders(
     },
     clearTunablesCache() {
       cachedTunables = null;
+      pendingTunables = null;
       // A manual Refresh may follow an upgrade; look for the view again.
       strokeCostAvailable = true;
     },

@@ -1,3 +1,4 @@
+import { readRpcFetch } from "../read-rpc";
 /**
  * "Where the money goes": reads, formatting and button rules for the revenue page.
  *
@@ -285,7 +286,7 @@ export function createRpcView(rpcUrl: string, timeoutMs = 15_000): View {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(rpcUrl, {
+      const response = await readRpcFetch(rpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
@@ -296,7 +297,7 @@ export function createRpcView(rpcUrl: string, timeoutMs = 15_000): View {
             method_name: method, args_base64: btoa(JSON.stringify(args)),
           },
         }),
-      });
+      }, 1);
       if (!response.ok) throw new Error(`RPC HTTP ${response.status} while calling ${method}`);
       const body = (await response.json()) as {
         result?: { result?: number[]; error?: string };

@@ -1,3 +1,4 @@
+import { readRpcFetch } from "./read-rpc";
 import type { PixelView, PixelsPageView } from "@shared/types.ts";
 import { CONTRACT_ID, RPC_URL } from "./config";
 import { loadAllPaintedPixels } from "./load-board";
@@ -486,7 +487,9 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    const body = JSON.parse(String(init.body));
+    const background = body.method === "block" || body.params?.method_name === "get_pixels";
+    return await readRpcFetch(url, { ...init, signal: controller.signal }, background ? 1 : 0);
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error(`RPC timed out after ${timeoutMs}ms.`);

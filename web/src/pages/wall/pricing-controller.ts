@@ -13,7 +13,7 @@ import {
   type RepaintChrome,
   type RepaintQuote,
 } from "./repaint-price";
-import { fillBlock } from "./wall-view";
+import { clearBlock, fillBlock } from "./wall-view";
 import type { WallScope } from "./wall-scope";
 
 export interface PricingControllerDeps {
@@ -349,7 +349,24 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
     deps.syncSubmitEnabled();
   }
 
+  let previewBusy = false;
+  let queuedPreview: Cell | null = null;
+  let previewTimer: ReturnType<typeof setTimeout> | undefined;
+  scope.onDispose(() => { clearTimeout(previewTimer); queuedPreview = null; });
+
+  // A pointer sweep keeps only the latest tile, never one queued RPC per pixel.
   function requestCellPrice(cell: Cell): void {
+    if (scope.isDisposed() || document.visibilityState === "hidden") return;
+    if (previewBusy) { queuedPreview = cell; return; }
+    runCellPrice(cell);
+  }
+
+  function clearRecoveredPriceError(balanceRecovered = false): void {
+    const heading = result.querySelector("h3")?.textContent;
+    if (heading === "Price unavailable" || (balanceRecovered && heading === "Balance unavailable")) clearBlock(result);
+  }
+
+  function runCellPrice(cell: Cell): void {
     if (!paidBoard() || submitQuoteInFlight || deps.drawInFlight()) {
       return;
     }
@@ -358,6 +375,7 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       return;
     }
     pricedCellKey = key;
+    previewBusy = true;
     const request = ++priceRequest;
     void quoteRepaint({
       readers: repaintReaders,
@@ -369,6 +387,7 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
         return;
       }
       if (!quote.ok) {
+        pricedCellKey = null;
         priceUnavailable = true;
         showPriceUnavailable(repaintChrome);
         deps.syncSubmitEnabled();
@@ -377,7 +396,16 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       priceUnavailable = false;
       rememberCosts(quote);
       showRepaintQuote(repaintChrome, quote);
+      clearRecoveredPriceError();
       deps.syncSubmitEnabled();
+    }).finally(() => {
+      if (scope.isDisposed()) return;
+      previewTimer = setTimeout(() => {
+        previewBusy = false;
+        const next = queuedPreview;
+        queuedPreview = null;
+        if (next && !scope.isDisposed()) requestCellPrice(next);
+      }, 200);
     });
   }
 
@@ -393,10 +421,10 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
     showPriceUnavailable(repaintChrome);
     fillBlock(
       result,
-      "Price unavailable",
+      what === "price" ? "Price unavailable" : "Balance unavailable",
       what === "price"
-        ? "The repaint price could not be read, so nothing was submitted. Refresh the board and try again."
-        : "The credit balance could not be read, so nothing was submitted. Refresh the board and try again.",
+        ? "The network could not return a fresh paint price. Nothing was submitted. Wait a moment, then try again."
+        : "The network could not return your credit balance. Nothing was submitted. Wait a moment, then try again.",
     );
     deps.syncSubmitEnabled();
   }
@@ -461,6 +489,7 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       if (scope.isDisposed() || request !== priceRequest) {
         return null;
       }
+      clearRecoveredPriceError(true);
       // What this paint may spend: the chain balance minus every other paint
       // still holding credits (queued taps, or executed but not yet re-read).
       const have = availableCredits(options.reservation);

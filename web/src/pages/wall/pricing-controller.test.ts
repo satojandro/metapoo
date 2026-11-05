@@ -237,3 +237,34 @@ describe("pricing controller", () => {
     dispose();
   });
 });
+
+
+it("a fast pointer sweep quotes only the first and latest tile", async () => {
+  const { pricing, dispose } = setup();
+  try {
+    for (let x = 0; x < 100; x++) pricing.requestCellPrice({ x, y: 1 });
+    await vi.waitFor(() => expect(pricing.knownCost({ x: 99, y: 1 })).toBe(1));
+    expect(chain.calls.filter(method => method === "get_cell_cost")).toHaveLength(2);
+    expect(pricing.knownCost({ x: 50, y: 1 })).toBeUndefined();
+  } finally { dispose(); }
+});
+
+it("a recovered price clears the old failure message", async () => {
+  const { pricing, deps, dispose } = setup();
+  try {
+    chain.cellCost = new Error("429");
+    await pricing.ensurePaidQuote([{x:1, y:1}], "alice.testnet");
+    chain.cellCost = 1;
+    await pricing.ensurePaidQuote([{x:1, y:1}], "alice.testnet");
+    expect(deps.result.textContent).not.toContain("Price unavailable");
+  } finally { dispose(); }
+});
+
+it("a balance failure is labelled separately from a price failure", async () => {
+  const { pricing, deps, dispose } = setup();
+  try {
+    chain.credits = [new Error("Network busy")];
+    expect(await pricing.ensurePaidQuote([{x:1, y:1}], "alice.testnet")).toBeNull();
+    expect(deps.result.querySelector("h3")?.textContent).toBe("Balance unavailable");
+  } finally { dispose(); }
+});
