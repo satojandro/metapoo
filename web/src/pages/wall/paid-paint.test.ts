@@ -108,6 +108,9 @@ function setup() {
     repaintChrome: { legend: el("legend"), badge: el("badge"), strokeTotal: el("total"), submit: el<HTMLButtonElement>("draw") },
     result: el("result"),
     boardSchema: () => 4,
+    // These scenarios are about balance accounting: the free-first-paint program
+    // is treated as over so a shortfall must block again.
+    freePaints: () => ({ kind: "no" }) as const,
     cachedPixel: (cell) => pixels.get(`${cell.x},${cell.y}`),
     drawInFlight: () => paint?.drawInFlight() ?? false,
     syncSubmitEnabled: () => paint?.syncSubmitEnabled(),

@@ -6,6 +6,7 @@
 
 # Frontend dependencies and build output.
 /web/node_modules
+/node_modules
 /web/dist
 
 # Local secrets. This project should not have any yet.

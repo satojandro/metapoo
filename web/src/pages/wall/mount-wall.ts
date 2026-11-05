@@ -179,6 +179,7 @@ export function mountWall(
     repaintChrome,
     result,
     boardSchema: () => board.boardSchema(),
+    freePaints: () => views?.free() ?? { kind: "unknown" },
     cachedPixel: (cell) => board.cachedPixel(cell),
     drawInFlight: () => paint.drawInFlight(),
     syncSubmitEnabled: () => paint.syncSubmitEnabled(),
