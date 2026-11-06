@@ -152,6 +152,17 @@ confirmed by owner. A testnet token is needed for the first paid rehearsal.
 
 ## Open gates and scoped work
 
+### RPC: treat a JSON-RPC `-429` error body like an HTTP 429 — **open, 2026-11-06 incident**
+The 2026-11-06 rate-limit incident exposed a gap `read-rpc.ts` does not cover: FastNEAR can
+answer a rate-limited read with **HTTP 200 and a JSON-RPC error body** (`{"code":-429,"message":
+"Rate limits exceeded…"}`). The transport's 429 handling (cooldown + `near.drpc.org` fallback)
+only fires on HTTP 429, so the raw error payload propagated to the paint error card
+("Paint not painted. Nothing was stored. {…-429…}") instead of the fallback engaging. Fix:
+in the read transport (and/or `describeRpcError`), detect `error.code === -429` in a 200 body
+and route it through the same cool-down-and-fallback path as an HTTP 429. Add a unit test with
+a 200-wrapped -429 body. Found while diagnosing alejandro.near's "failed txs" (none existed —
+the paints never reached the chain).
+
 ### T1 manual visual gate — **human, open**
 `19e95bd` is tested but not seen. At paint zoom a single painted cell must be a solid square
 with no halo or seam, compared side by side against the previous build. Until that is done, T1

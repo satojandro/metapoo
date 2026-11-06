@@ -74,6 +74,34 @@ anonymous endpoint.
 The trap this replaces: `quoteRepaint` once issued ≈129 RPCs for a single 64-cell stroke
 (`docs/learning/traps.md`). That shape, not the board load, is what would eat the trial.
 
+## Deploy guard (the 2026-11-06 rule)
+
+The rate-limit incident on 6 Nov 2026 was not a code failure: PR #74's mechanism existed, but
+the production deploy shipped without `VITE_NEAR_RPC_API_KEY` set, so every visitor read from
+the anonymous pool and rapid painting hit `-429`. Nothing checked. The standing rule is now:
+
+**No web deploy ships unless the built bundle provably contains the key.**
+
+```sh
+# after `vercel pull --yes --environment=production` and `vercel build --prod`,
+# before `vercel deploy --prebuilt --prod`:
+ops/deploy/check-web-bundle.sh ~/Projects/metapoo-main/web   # exit 0 = may deploy
+```
+
+The script loads the key from Bitwarden, greps the built assets, and refuses (exit 1) with
+the fix spelled out when the bundle would ship anonymous reads. If a future UI change adds
+another keyed surface, extend the check rather than trusting the deployer to remember.
+
+Standing rules for any UI work that touches reads:
+
+1. Every read goes through the shared transport (`read-rpc.ts`) — never a bare `fetch` to an
+   RPC host — so queueing, spacing, the fallback host and cool-down apply automatically.
+2. Every new interactive feature accounts its RPC cost per action before it ships (the
+   measured costs above are the baseline; re-measure when the shape changes). A feature that
+   issues unbounded reads per tap is a rate-limit incident waiting for testers.
+3. A JSON-RPC `-429` inside an HTTP 200 body must be treated like HTTP 429 (backlog entry,
+   2026-11-06) — until that ships, a burst can still surface raw errors to users.
+
 ## Indexed APIs we use, and what they change
 
 One key covers the indexed surfaces too, but they **answer without a key** (verified 2026-11-05):
