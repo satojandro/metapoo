@@ -33,6 +33,8 @@ vi.mock("../../local-draw", async (importOriginal) => {
       totalChunks: 1,
       outcomes: [],
       failingChunk: null,
+      executedBlocks: [],
+      chunks: [{ index: 0, state: "confirmed", message: null, transactionHash: "tx", blockHeight: null }],
     })),
   };
 });

@@ -14,7 +14,6 @@ import {
 import type { Cell } from "../../selection";
 import type { SponsorshipStatus } from "../../sponsorship";
 import { submitDraw, type SubmitDrawResult } from "../../submit-draw";
-import { parseTxOutcome } from "../../tx-outcome";
 import type { BoardController } from "./board-controller";
 import type { CameraStrokeHooks } from "./camera-controller";
 import { createPaintSessionPanel, type PaintSessionDom } from "./paint-session-panel";
@@ -544,13 +543,14 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         maxCredits: priced.chunkMaxCredits,
       });
       // The chain's own PriceRoseAboveMax: that chunk stored and charged nothing.
-      const priceRose = isPriceRoseAboveMax(outcome.failingChunk?.message);
-      spent = outcome.confirmedChunks > 0 || (!!outcome.failingChunk?.mayHaveBroadcast && !priceRose);
+      // Batches are sent together, so read each one's own result: a failure in the
+      // middle does not mean the batches after it were skipped.
+      const chunkStates = outcome.chunks;
+      const stateOf = (cellIndex: number) => chunkStates[Math.floor(cellIndex / MAX_BATCH)];
+      // The chain's own PriceRoseAboveMax: that batch stored and charged nothing.
+      const priceRose = chunkStates.some((c) => c.state === "failed" && isPriceRoseAboveMax(c.message));
+      spent = chunkStates.some((c) => c.state === "confirmed" || c.state === "uncertain");
       if (scope.isDisposed()) return;
-      // Resolve known outcomes through a fresh chain read; uncertain cells keep
-      // a pending marker. Never infer execution from matching pre-existing paint.
-      const uncertain = outcome.failingChunk?.mayHaveBroadcast && !priceRose;
-      const uncertainStart = outcome.confirmedChunks * MAX_BATCH;
 
       // A confirmed chunk's receipt proves the write at a specific block. Stamp
       // those cells now instead of leaving the board stale until the next full
@@ -574,10 +574,13 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         }
       }
 
+      // Uncertain batches keep a pending marker; everything else resolves through
+      // a fresh chain read. Never infer execution from matching pre-existing paint.
       for (const [i, cell] of stroke.state.cells.entries()) {
-        if (uncertain && i >= uncertainStart && i < uncertainStart + MAX_BATCH) {
+        const chunk = stateOf(i);
+        if (chunk?.state === "uncertain") {
           setPendingPaint(pendingPaints, { ...cell, colorIndex: stroke.color,
-            accountId: stroke.accountId, transactionId: null, phase: "confirmation_delayed" });
+            accountId: stroke.accountId, transactionId: chunk.transactionHash, phase: "confirmation_delayed" });
         } else clearPendingPaint(pendingPaints, cell.x, cell.y);
       }
       fillBlock(result, outcome.status === "confirmed" ? "Stroke confirmed" : "Stroke stopped", strokeResultCopy(stroke.state, outcome));
@@ -601,7 +604,10 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         : statusText;
       if (priceRose && !requote) {
         // Ask once for the cells that were not painted.
-        const rest = stroke.state.cells.slice(outcome.confirmedChunks * MAX_BATCH);
+        const rest = stroke.state.cells.filter((_, i) => {
+          const state = stateOf(i)?.state;
+          return state === "failed" || state === "not_sent";
+        });
         const approvedMax = await pricing.confirmRequote(rest, stroke.accountId);
         if (approvedMax !== null) {
           retry = { stroke: { ...stroke, state: { cells: rest, truncated: false } }, approvedMax };
@@ -825,21 +831,23 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         maxCredits: priced.chunkMaxCredits,
       });
       // The chain's own PriceRoseAboveMax: nothing was stored or charged.
-      const priceRose = isPriceRoseAboveMax(outcome.failingChunk?.message);
-      const uncertain = !!outcome.failingChunk?.mayHaveBroadcast && !priceRose;
-      spent = outcome.confirmedChunks > 0 || uncertain;
-      const transactionId = outcome.outcomes[0] ? parseTxOutcome(outcome.outcomes[0]).transactionHash : null;
-      const executedAt = outcome.executedBlocks?.[0]?.blockHeight ?? null;
+      const chunk = outcome.chunks[0];
+      // The chain's own PriceRoseAboveMax: nothing was stored or charged.
+      const priceRose = chunk?.state === "failed" && isPriceRoseAboveMax(chunk.message);
+      const uncertain = chunk?.state === "uncertain";
+      spent = chunk?.state === "confirmed" || uncertain;
+      const transactionId = chunk?.transactionHash ?? null;
+      const executedAt = chunk?.blockHeight ?? null;
       const n = items.length;
       const settled: Pick<SubmitDrawResult, "status" | "message"> & { title: string } =
-        outcome.confirmedChunks > 0
+        chunk?.state === "confirmed"
           ? { status: "confirmed", title: "Taps painted",
               message: `${n} queued taps were sent as one transaction and executed together.` }
           : uncertain
             ? { status: "confirmation_delayed", title: "Taps may have been sent",
-                message: `${n} queued taps were sent as one transaction whose result is unknown. They land together or not at all. No automatic retry. ${outcome.failingChunk?.message ?? ""}`.trim() }
+                message: `${n} queued taps were sent as one transaction whose result is unknown. They land together or not at all. No automatic retry. ${chunk?.message ?? ""}`.trim() }
             : { status: "failed", title: "Taps not painted",
-                message: `${n} queued taps were not painted. Nothing was stored. ${outcome.failingChunk?.message ?? ""}`.trim() };
+                message: `${n} queued taps were not painted. Nothing was stored. ${chunk?.message ?? ""}`.trim() };
       for (const id of outcomeIds) placementOutcomes.settle(id, settled);
       const phase: OperationPhase = settled.status === "confirmed"
         ? "confirmed"
@@ -868,8 +876,8 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       view.setFlow(settled.status === "confirmed" ? "confirmed"
         : settled.status === "confirmation_delayed" ? "confirmation_delayed" : "failed");
       fillBlock(result, settled.title, settled.message);
-      if (settled.status !== "confirmed" && outcome.failingChunk?.message) {
-        console.error("[wall] tap batch failed:", outcome.failingChunk.message);
+      if (settled.status !== "confirmed" && chunk?.message) {
+        console.error("[wall] tap batch failed:", chunk.message);
       }
       if (priceRose && !requote) {
         view.setFlow("editing");

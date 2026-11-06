@@ -19,6 +19,8 @@ vi.mock("../../local-draw", async (importOriginal) => {
     fetchDrawingSessionAllowance: vi.fn(async () => ({ found: true, remainingYocto: null, permissionSummary: "" })),
     signAndSendStrokeLocally: vi.fn(async () => ({
       status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null,
+      executedBlocks: [],
+      chunks: [{ index: 0, state: "confirmed", message: null, transactionHash: "tx", blockHeight: null }],
     })),
   };
 });
@@ -210,6 +212,7 @@ describe("paint controller", () => {
       status: "confirmed", confirmedChunks: 1, totalChunks: 1, failingChunk: null,
       outcomes: [{ status: { SuccessValue: "" }, transaction: { hash: "tx-batch" } } as never],
       executedBlocks: [{ chunkIndex: 0, blockHeight: 900 }],
+      chunks: [{ index: 0, state: "confirmed", message: null, transactionHash: "tx-batch", blockHeight: 900 }],
     });
     const t = setup();
     t.paint.showDrawingSession();
@@ -264,6 +267,7 @@ describe("paint controller", () => {
     vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
       status: "partial", confirmedChunks: 0, totalChunks: 1, outcomes: [], executedBlocks: [],
       failingChunk: { index: 0, mayHaveBroadcast: true, message: "lost response" },
+      chunks: [{ index: 0, state: "uncertain", message: "lost response", transactionHash: "tx-lost", blockHeight: null }],
     });
     const t = setup();
     t.paint.showDrawingSession();
@@ -285,6 +289,7 @@ describe("paint controller", () => {
     vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
       status: "partial", confirmedChunks: 0, totalChunks: 1, outcomes: [], executedBlocks: [],
       failingChunk: { index: 0, mayHaveBroadcast: false, message: "signer exploded" },
+      chunks: [{ index: 0, state: "not_sent", message: "signer exploded", transactionHash: null, blockHeight: null }],
     });
     const t = setup();
     t.paint.showDrawingSession();
@@ -366,6 +371,36 @@ describe("paint controller", () => {
     t.paint.strokes.begin({ x: 1, y: 1 }, false);
     expect(t.paint.strokes.active()).toBe(false);
     expect(document.getElementById("draw-state")!.textContent).not.toBe("");
+    t.dispose();
+  });
+
+  it("a stroke with a gap in the middle resolves each batch on its own", async () => {
+    // Pipelined batches: batch 2 failing (price rose) does not stop batch 3.
+    const chunk = (index: number, state: "confirmed" | "failed" | "uncertain" | "not_sent", message: string | null = null) =>
+      ({ index, state, message, transactionHash: state === "not_sent" ? null : `tx${index}`, blockHeight: state === "confirmed" ? 50 + index : null });
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
+      status: "partial", confirmedChunks: 1, totalChunks: 3, outcomes: [],
+      chunks: [chunk(0, "uncertain", "lost"), chunk(1, "failed", "Smart contract panicked: PriceRoseAboveMax"), chunk(2, "confirmed")],
+      failingChunk: { index: 0, mayHaveBroadcast: true, message: "lost" },
+      executedBlocks: [{ chunkIndex: 2, blockHeight: 52 }],
+    });
+    const t = setup();
+    t.paint.showDrawingSession();
+    t.paint.strokes.begin({ x: 0, y: 0 }, false);
+    // Three batches: the line back across row 1 adds its cells too.
+    t.paint.strokes.extend({ x: 127, y: 0 });
+    t.paint.strokes.extend({ x: 0, y: 1 });
+    t.paint.strokes.finish({ x: 1, y: 1 }, "drag", vi.fn());
+    await vi.waitFor(() => expect(t.result.querySelector("h3")?.textContent).toBe("Stroke stopped"));
+    const sent = vi.mocked(signAndSendStrokeLocally).mock.calls.at(-1)![0].cells;
+    expect(sent.length).toBeGreaterThan(128);
+    expect(sent.length).toBeLessThanOrEqual(192);
+    // Only the uncertain batch stays pending; the confirmed tail is stamped at its block.
+    expect(t.paint.pendingCount()).toBe(64);
+    expect(t.board.rememberPixel).toHaveBeenCalledWith(expect.objectContaining(sent[128]!), 52);
+    // The re-quote covers exactly the batch that was refused, not the confirmed tail.
+    expect(t.pricing.confirmRequote).toHaveBeenCalledWith(sent.slice(64, 128), "alice.testnet");
+    expect(t.result.textContent).toContain("Batch 2 was not painted.");
     t.dispose();
   });
 

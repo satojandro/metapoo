@@ -1,19 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { planStrokeCommit, strokeResultCopy, strokeBlockedReason, type StrokeGate } from "./stroke-commit";
 import { strokeBegin, strokeExtend } from "./stroke-paint";
+import type { LocalChunkResult, LocalStrokeResult } from "../../local-draw";
 const tap = strokeBegin({ x: 0, y: 0 });
 it("selects single draw, chunked draw_many and wallet approval", () => {
   expect(planStrokeCommit(tap, true).kind).toBe("draw");
   expect(planStrokeCommit(strokeExtend(tap, { x: 100, y: 0 }), true)).toMatchObject({ kind: "draw_many", chunks: [expect.any(Array), expect.any(Array)] });
   expect(planStrokeCommit(tap, false).kind).toBe("wallet_approval");
 });
+const chunk = (index: number, state: LocalChunkResult["state"], message: string | null = null): LocalChunkResult =>
+  ({ index, state, message, transactionHash: null, blockHeight: null });
+const partial = (chunks: LocalChunkResult[]): LocalStrokeResult => {
+  const bad = chunks.find((c) => c.state !== "confirmed")!;
+  return {
+    status: "partial", confirmedChunks: chunks.filter((c) => c.state === "confirmed").length,
+    totalChunks: chunks.length, outcomes: [], executedBlocks: [], chunks,
+    failingChunk: { index: bad.index, mayHaveBroadcast: bad.state === "uncertain", message: bad.message ?? "" },
+  };
+};
 it("reports the exact partial and truncation copy honestly", () => {
-  expect(strokeResultCopy({ ...tap, truncated: true }, {
-    status: "partial", confirmedChunks: 1, totalChunks: 4, outcomes: [], executedBlocks: [],
-    failingChunk: { index: 1, mayHaveBroadcast: true, message: "Lost response." },
-  })).toBe("1 of 4 batches confirmed. Batch 2 may already have been broadcast. Remaining batches were not submitted. No automatic retry. Lost response. Stroke limited to 256 cells. The rest of the drag was not submitted.");
-  expect(strokeResultCopy(tap, { status: "partial", confirmedChunks: 0, totalChunks: 1, outcomes: [], executedBlocks: [], failingChunk: { index: 0, mayHaveBroadcast: false, message: "Renew session." } }))
-    .toBe("0 of 1 batches confirmed. Batch 1 was not broadcast. Remaining batches were not submitted. No automatic retry. Renew session.");
+  expect(strokeResultCopy({ ...tap, truncated: true }, partial([
+    chunk(0, "confirmed"), chunk(1, "uncertain", "Lost response."),
+    chunk(2, "not_sent", "Not sent: an earlier batch's send failed."), chunk(3, "not_sent", "Not sent: an earlier batch's send failed."),
+  ]))).toBe("1 of 4 batches confirmed. Batch 2 may already have been broadcast. Lost response. Batches 3, 4 were not sent. Not sent: an earlier batch's send failed. No automatic retry. Stroke limited to 256 cells. The rest of the drag was not submitted.");
+  expect(strokeResultCopy(tap, partial([chunk(0, "not_sent", "Renew session.")])))
+    .toBe("0 of 1 batches confirmed. Batch 1 was not sent. Renew session. No automatic retry.");
+});
+it("names a failed batch in the middle without claiming the later ones were skipped", () => {
+  // Pipelined batches: batch 2 failing does not stop batch 3, which was already sent.
+  expect(strokeResultCopy(tap, partial([chunk(0, "confirmed"), chunk(1, "failed", "PriceRoseAboveMax"), chunk(2, "confirmed")])))
+    .toBe("2 of 3 batches confirmed. Batch 2 was not painted. PriceRoseAboveMax. No automatic retry.");
 });
 
 
