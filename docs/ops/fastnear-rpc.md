@@ -134,3 +134,26 @@ Until the project is on a paid plan:
 
 FastNEAR keys are rate-limit credentials, not NEAR account keys: a leaked one cannot move
 funds. The exposure is quota, bounded by a per-key rate cap and ended by rotation.
+
+## The deployed page needs the key at build time
+
+The anonymous path is not merely slower, it fails outright under load: a tester's paint died on
+`-429 Rate limits exceeded ... get a subscription at https://faslnear.com/` because the shared
+public pool is per client and a visible tab's polling spends it. Meanwhile reads without a key
+report no `x-rate-limit-score` header at all, and the same read with our key reports one — that
+header is the cheapest way to check whether a build carries the credential.
+
+So the hosted build is made with the key in the environment, never in a committed file:
+
+```bash
+export VITE_NEAR_RPC_API_KEY="$(bws secret get 44086ddf-… --output json \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["value"])')"
+vercel build --prod && vercel deploy --prebuilt --prod
+```
+
+**A rebuild without that export silently produces a page on the anonymous pool.** Nothing in the
+build fails; the first symptom is a 429 on someone else's paint. If you deploy, check the header
+before you call it done.
+
+The key is readable in the bundle, by design, for the testing round. Before real users: the
+Vercel-function proxy above, so the key stays server-side and per-IP limits come back.

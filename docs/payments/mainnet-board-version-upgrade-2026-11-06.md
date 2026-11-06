@@ -58,9 +58,37 @@ account now reads `used 2, remaining 23, allowance 25`. Empty cells are free und
 That is the cheap-poll path working against the live board: one `get_board_version` call per poll,
 and the full `get_pixels` walk only when the number moves.
 
+## First real paint attempts (same day) and what they exposed
+
+A tester's hard refresh, one stroke and one single paint both failed, for two unrelated reasons:
+
+| symptom | cause | fix |
+|---|---|---|
+| `-429 Rate limits exceeded … subscription at https://faslnear.com/` on send | the redeployed bundle had **no** `VITE_NEAR_RPC_API_KEY`, so every read and send went to FastNEAR's anonymous shared pool, which one tab's polling exhausts | build with the key in the environment (`docs/ops/fastnear-rpc.md`), redeployed as `dpl_4vTQHfUeeDqhxdiPBmv8UsKQ7Ng1` |
+| `UNKNOWN_BLOCK: DB Not Found Error: BLOCK_HEIGHT: 223258600` — the tip at the time | `near-api-js` signs against `finality: "optimistic"`; the node that took the broadcast had not stored that block, so the send was rejected **after** signing | PR [#77](https://github.com/satojandro/metapoo/pull/77) merged as `f7808f4`: `FinalBlockJsonRpcProvider` signs against a finalized block, and a pinned board walk asks for a final height |
+
+Note the height in that error was **223258600** (the tip), not a future block: the earlier reading
+of `223558600` was a misread of a downscaled screenshot. Nothing was corrupt; it was a one-block
+race.
+
+Verification after both fixes:
+
+| check | result |
+|---|---|
+| deployed page | `dpl_EfqdQBijsnNqYmmLKqcDLJMGyj8y`, both RPC calls carry `Authorization: Bearer …`, no 429 |
+| live page | `Board unchanged at block 223259968 (version 2)` |
+| signed paint, same code path (`callFunctionRaw` through `FinalBlockJsonRpcProvider`) | `AK7gYZwNH48bnZSeenZro574sbpr8LdHJXeDR2GmFtMk` — `SuccessValue`, 2.1 s |
+| `get_board_version` | 0 → 1 (board key) → **2** |
+| `get_pixels` | 6 cells; `(11,10)` colour 2 and `(12,10)` colour 4, both by the board account |
+
+The key is readable in the bundle for this testing round; the durable version is a Vercel function
+that injects the header server-side, as `docs/ops/fastnear-rpc.md` describes. Until then, any rebuild
+must export `VITE_NEAR_RPC_API_KEY` or the page silently returns to the anonymous pool.
+
 ## Not yet proven
 
-- A credit-paying repaint on mainnet. The only paint since the upgrade was a free empty-cell one.
+- A credit-paying repaint on mainnet, and a paint signed by a **wallet or session key** rather than
+  the board's own key. Both paints so far were free empty-cell ones by the board account.
 - `draw_many` moving the counter by exactly one: unit-tested, not exercised on mainnet.
 - The 10-minute idle pause in a tab left alone — needs wall-clock time, not a test.
 - Anything about the keeper or its read paths; this change did not touch them.

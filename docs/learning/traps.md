@@ -249,3 +249,20 @@ trusting a local ref.
 
 **Never route coding through an aggregator/router lane.** One auto-routing lane burned
 ~17.9M tokens in 76 minutes with `cost_status: unknown`. Pin the model explicitly.
+
+---
+
+## Sending a transaction
+
+**`near-api-js` signs against `finality: "optimistic"`.** `Account.signTransaction` takes the
+transaction's `block_hash` from `viewBlock({finality: "optimistic"})`, and a broadcast node that
+has not stored that block answers `UNKNOWN_BLOCK: DB Not Found Error: BLOCK_HEIGHT: <tip>`. The
+failure lands **after** the signature exists, so the UI can only report "possibly broadcast" and
+must not retry. Sign against a finalized block instead — `web/src/final-block-provider.ts`. The
+same rule applies to any read pinned to a block height: an optimistic height can be a block the
+node does not have, and the whole load dies.
+
+**A rate limit on the send path is reported as a contract-adjacent error.** The same tester session
+saw `-429 ... get a subscription at https://faslnear.com/` and `UNKNOWN_BLOCK` from two different
+causes: the first was a build missing `VITE_NEAR_RPC_API_KEY` (anonymous pool), the second was the
+optimistic block. Check the credential before believing a chain explanation.
