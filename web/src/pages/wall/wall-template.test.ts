@@ -76,6 +76,29 @@ describe("wallPageHtml", () => {
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
+  it("keeps the paint panel quiet: key above the palette, the tally in the footer", () => {
+    const root = document.createElement("div");
+    root.innerHTML = wallPageHtml();
+    const legend = root.querySelector("#wall-view-legend")!;
+    const palette = root.querySelector("#palette")!;
+    // The active view's key describes the wall, so it comes before the palette.
+    expect(legend.compareDocumentPosition(palette) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    // What this stroke costs and what you have sit with the button, not the palette.
+    const foot = root.querySelector(".wall-panel-foot")!;
+    for (const selector of ["#stroke-total", "#credits-balance", "#buy-credits-button"]) {
+      expect(foot.querySelector(selector), selector).not.toBeNull();
+    }
+    // Duplicates of the Price key and of the wall's hint chip are spoken, not shown.
+    for (const selector of ["#repaint-legend", "#cell-price", "#tap-to-paint-status"]) {
+      expect(root.querySelector(selector)?.classList.contains("visually-hidden"), selector).toBe(true);
+    }
+    // The tap-to-paint setting is a detail, not a fixture of the dock.
+    expect(root.querySelector("#direct-paint-toggle")?.closest("details.wall-about")).not.toBeNull();
+    expect(root.querySelector(".wall-dock #direct-paint-toggle")).toBeNull();
+  });
+
   it("labels the network it is configured for, and claims no fee", () => {
     const root = document.createElement("div");
     root.innerHTML = wallPageHtml("mainnet");

@@ -776,7 +776,7 @@ describe("mountWall dispose", () => {
     // status line right above it.
     await vi.waitFor(() => expect(place.hidden).toBe(true));
     expect(unlocked.hidden).toBe(false);
-    expect(unlocked.textContent).toMatch(/no wallet popup per pixel/i);
+    expect(unlocked.textContent).toMatch(/no wallet popup per tile/i);
 
     // The one-approval prompt is gone after use, but the state must not be:
     // a vanished prompt with no confirmation reads as "did that work?".
