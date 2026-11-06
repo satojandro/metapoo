@@ -177,6 +177,27 @@ describe("pricing controller", () => {
     dispose();
   });
 
+  it("reads the balance while the quote is in flight, not after it", async () => {
+    // One round trip for a paint's price, not two.
+    let releaseCost!: (cost: number) => void;
+    chain.cellCost = new Promise<number>((resolve) => { releaseCost = resolve; }) as unknown as number;
+    chain.credits = ["5"];
+    const { pricing, dispose } = setup();
+    const quoted = pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet");
+    await vi.waitFor(() => expect(chain.calls).toContain("get_credits"));
+    releaseCost(2);
+    expect(await quoted).toMatchObject({ maxCredits: 2 });
+    dispose();
+  });
+
+  it("a failed balance read still refuses the paint, read alongside the quote", async () => {
+    chain.cellCost = 2;
+    chain.credits = [new Error("balance down")];
+    const { pricing, dispose } = setup();
+    expect(await pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet")).toBeNull();
+    dispose();
+  });
+
   it("a shortfall opens Buy credits with the missing quantity and refuses", async () => {
     chain.cellCost = 4;
     chain.credits = ["1", "1"];
