@@ -1,9 +1,11 @@
 import { Account } from "@near-js/accounts";
 import { KeyPair, type KeyPairString } from "@near-js/crypto";
 import { JsonRpcProvider } from "@near-js/providers";
-import { FinalBlockJsonRpcProvider } from "./final-block-provider";
+import { FinalBlockJsonRpcProvider, PinnedFinalBlockJsonRpcProvider } from "./final-block-provider";
 import { KeyPairSigner } from "@near-js/signers";
+import { actionCreators, createTransaction, type SignedTransaction } from "@near-js/transactions";
 import type { FinalExecutionOutcome } from "@near-js/types";
+import { baseDecode, baseEncode } from "@near-js/utils";
 import { chunkCells, chunkArgs, type StrokeCell } from "./pages/wall/stroke-paint";
 import { parseTxOutcome, hasRecognizedTxSuccess } from "./tx-outcome";
 import { CONTRACT_ID, DRAW_DEPOSIT, DRAW_GAS, RPC_URL, rpcConnection } from "./config";
@@ -75,6 +77,12 @@ export interface AccessKeyAllowanceInfo {
   permissionSummary: string;
   /** True when the wallet added a key with no method filter: any method on the board. */
   wildcard?: boolean;
+  /**
+   * The key's nonce at the read, as a decimal string; absent when the node did not
+   * say. Every transaction the chain includes for this key raises it, executed
+   * successfully or not, which makes it the evidence for "did a send land".
+   */
+  nonce?: string;
 }
 
 function provider(): JsonRpcProvider {
@@ -172,7 +180,7 @@ export async function fetchDrawingSessionAllowance(input: {
   networkId: string;
 }): Promise<AccessKeyAllowanceInfo> {
   const record = requireActiveRecord(input.accountId, input.networkId);
-  let view: { permission?: AccessKeyPermission; error?: unknown };
+  let view: { permission?: AccessKeyPermission; nonce?: unknown; error?: unknown };
   try {
     view = await readRpc("query", {
       request_type: "view_access_key",
@@ -192,11 +200,13 @@ export async function fetchDrawingSessionAllowance(input: {
     throw new LocalDrawError("rpc", view.error);
   }
   const permission = view?.permission;
+  const nonce = readNonce(view?.nonce);
   if (permission === "FullAccess") {
     return {
       found: true,
       remainingYocto: null,
       permissionSummary: "Full access (unexpected for this experiment)",
+      ...(nonce !== null ? { nonce } : {}),
     };
   }
   if (!permission || typeof permission !== "object" || !permission.FunctionCall) {
@@ -210,7 +220,16 @@ export async function fetchDrawingSessionAllowance(input: {
     remainingYocto: allowance,
     permissionSummary: `receiver ${fn.receiver_id}; methods ${(fn.method_names ?? []).join(", ") || "(any)"}`,
     wildcard: (fn.method_names ?? []).length === 0,
+    ...(nonce !== null ? { nonce } : {}),
   };
+}
+
+/** A nonce as a decimal string, or null when the value is not a whole number. */
+function readNonce(raw: unknown): string | null {
+  if (typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0) return String(raw);
+  if (typeof raw === "string" && /^\d+$/.test(raw)) return raw;
+  if (typeof raw === "bigint" && raw >= 0n) return raw.toString();
+  return null;
 }
 
 function notFound(): AccessKeyAllowanceInfo {
@@ -325,11 +344,30 @@ async function resolveExecutedBlockHeight(blockHash: string | null): Promise<num
   }
 }
 
+/**
+ * What happened to one batch. Batches are signed together and sent together, so
+ * one failing no longer stops the ones after it: each carries its own result.
+ * - confirmed: executed; its cells are written (at `blockHeight`, when known).
+ * - failed: the chain or the node said no; nothing was stored or charged.
+ * - uncertain: it may have been broadcast and its result is unknown. Never retry it.
+ * - not_sent: it never left the browser.
+ */
+export interface LocalChunkResult {
+  index: number;
+  state: "confirmed" | "failed" | "uncertain" | "not_sent";
+  message: string | null;
+  transactionHash: string | null;
+  blockHeight: number | null;
+}
+
 export interface LocalStrokeResult {
   status: "confirmed" | "partial";
   confirmedChunks: number;
   totalChunks: number;
   outcomes: FinalExecutionOutcome[];
+  /** One entry per batch, in stroke order. The authority for which cells landed. */
+  chunks: LocalChunkResult[];
+  /** The first batch that did not confirm (a summary for status copy). */
   failingChunk: { index: number; mayHaveBroadcast: boolean; message: string } | null;
   /**
    * Block height each confirmed chunk actually executed in, resolved from the
@@ -341,7 +379,36 @@ export interface LocalStrokeResult {
   executedBlocks: Array<{ chunkIndex: number; blockHeight: number }>;
 }
 
-/** Submit sequential atomic batches. Never retry or switch paths after a failure. */
+const ALLOWANCE_SHORT =
+  "This drawing session has too little gas allowance for the next batch. Authorize a new session to continue.";
+
+/** How long a sent batch is looked for by hash before it is reported as unknown. */
+export interface TxWaitTiming {
+  pollMs: number;
+  deadlineMs: number;
+}
+const DEFAULT_TX_WAIT: TxWaitTiming = { pollMs: 1_000, deadlineMs: 30_000 };
+
+/**
+ * Submit a stroke's atomic batches, pipelined. Never retry or switch paths.
+ *
+ * 1. One read for everything the signatures need, in parallel: the key (allowance
+ *    and nonce), a finalized block, and the gas price.
+ * 2. Sign every batch the allowance covers, with nonces n+1, n+2, ... against
+ *    that one block.
+ * 3. Broadcast in nonce order. Each send waits only for the node's acknowledgement
+ *    before the next leaves, so the chain sees them in order; the last one's send
+ *    waits for execution directly, saving a round trip.
+ * 4. Wait for every batch's result at once, by its hash.
+ *
+ * A stroke of k batches now costs about one execution wait instead of k.
+ *
+ * A send the node refuses (bad nonce, allowance, expired block) stored nothing and
+ * stops any later sends. A send that fails any other way is looked up by its hash;
+ * if it never shows up it is reported as uncertain, never as failed. A batch that
+ * executes and fails does not stop batches already sent, so a stroke can end with
+ * a hole in the middle: callers read `chunks`, never a prefix.
+ */
 export async function signAndSendStrokeLocally(args: {
   accountId: string;
   networkId: string;
@@ -349,79 +416,185 @@ export async function signAndSendStrokeLocally(args: {
   color: number;
   /** Paid board: `max_credits` for each draw_many chunk, in order. */
   maxCredits?: readonly number[] | null;
+  /** Test seam: polling for a sent batch. */
+  timing?: TxWaitTiming;
 }): Promise<LocalStrokeResult> {
+  const timing = args.timing ?? DEFAULT_TX_WAIT;
   const chunks = chunkCells([...args.cells]);
-  const result: LocalStrokeResult = {
-    status: "confirmed", confirmedChunks: 0, totalChunks: chunks.length,
-    outcomes: [], failingChunk: null, executedBlocks: [],
+  const results: LocalChunkResult[] = chunks.map((_, index) => ({
+    index, state: "not_sent", message: null, transactionHash: null, blockHeight: null,
+  }));
+  const outcomes: Array<FinalExecutionOutcome | null> = chunks.map(() => null);
+  if (chunks.length === 0) return summarize(results, outcomes);
+  const rpc = new PinnedFinalBlockJsonRpcProvider(rpcConnection(RPC_URL));
+
+  // 1–2. Read once, sign everything the allowance covers.
+  const signed: Array<{ hash: string; tx: SignedTransaction }> = [];
+  try {
+    const record = requireActiveRecord(args.accountId, args.networkId);
+    const signer = signerFromRecord(record);
+    const gasPrice = readRpc<{ gas_price: string }>("gas_price", [null]).then((p) => BigInt(p.gas_price));
+    gasPrice.catch(() => undefined);
+    const [key, block, publicKey] = await Promise.all([
+      fetchDrawingSessionAllowance(args),
+      rpc.viewBlock({ finality: "final" }),
+      signer.getPublicKey(),
+    ]);
+    if (!key.found) {
+      throw new LocalDrawError("key_missing", "Authorize a new drawing session before continuing.");
+    }
+    if (key.nonce === undefined) {
+      throw new LocalDrawError("rpc", "The node did not report the drawing key's nonce, so no batch was signed.");
+    }
+    let affordable = chunks.length;
+    if (key.remainingYocto !== null) {
+      // Reserve prepaid gas at the current RPC price, with headroom for
+      // transaction fees and the protocol's gas-price inflation margin.
+      const reserve = BigInt(DRAW_GAS) * (await gasPrice) * 2n;
+      const covered = BigInt(key.remainingYocto) / reserve;
+      affordable = covered < BigInt(chunks.length) ? Number(covered) : chunks.length;
+      if (affordable === 0) throw new LocalDrawError("allowance_exhausted", ALLOWANCE_SHORT);
+    }
+    const blockHash = baseDecode(block.header.hash);
+    for (let i = 0; i < affordable; i++) {
+      const tx = createTransaction(
+        args.accountId,
+        publicKey,
+        CONTRACT_ID,
+        BigInt(key.nonce) + BigInt(i + 1),
+        [actionCreators.functionCall(
+          "draw_many",
+          withMaxCredits(chunkArgs(chunks[i]!, args.color), args.maxCredits?.[i]),
+          BigInt(DRAW_GAS),
+          BigInt(DRAW_DEPOSIT),
+        )],
+        blockHash,
+      );
+      const [hash, signedTx] = await signer.signTransaction(tx);
+      signed.push({ hash: baseEncode(hash), tx: signedTx });
+    }
+    for (let i = affordable; i < chunks.length; i++) results[i]!.message = ALLOWANCE_SHORT;
+  } catch (error) {
+    results[0]!.message = error instanceof Error ? error.message : String(error);
+    return summarize(results, outcomes);
+  }
+
+  /** Turn a returned outcome into this batch's result. */
+  const settle = async (index: number, outcome: FinalExecutionOutcome): Promise<void> => {
+    outcomes[index] = outcome;
+    const parsed = parseTxOutcome(outcome);
+    const result = results[index]!;
+    if (hasRecognizedTxSuccess(parsed)) {
+      result.state = "confirmed";
+      result.blockHeight = await resolveExecutedBlockHeight(parsed.blockHash);
+    } else if (parsed.status === "failed") {
+      result.state = "failed";
+      result.message = parsed.failureMessage ?? "The batch failed on chain.";
+    } else {
+      result.state = "uncertain";
+      result.message = "Batch execution is still unconfirmed.";
+    }
   };
-  for (const [index, chunk] of chunks.entries()) {
-    let mayHaveBroadcast = false;
-    let allowanceBefore: string | null = null;
+  /** A send that did not come back with an outcome: refused, or look it up by hash. */
+  const recover = async (index: number, error: unknown): Promise<void> => {
+    const result = results[index]!;
+    const message = error instanceof Error ? error.message : String(error);
+    if (isRefusedTransaction(error)) {
+      result.state = "failed";
+      result.message = message;
+      return;
+    }
     try {
-      const record = requireActiveRecord(args.accountId, args.networkId);
-      const allowance = await fetchDrawingSessionAllowance(args);
-      allowanceBefore = allowance.remainingYocto;
-      if (!allowance.found) {
-        throw new LocalDrawError("key_missing", "Authorize a new drawing session before continuing.");
-      }
-      const rpc = provider();
-      if (allowance.remainingYocto !== null) {
-        const price = await readRpc<{ gas_price: string }>("gas_price", [null]);
-        // Reserve prepaid gas at the current RPC price, with headroom for
-        // transaction fees and the protocol's gas-price inflation margin.
-        const required = BigInt(DRAW_GAS) * BigInt(price.gas_price) * 2n;
-        if (BigInt(allowance.remainingYocto) < required) {
-          throw new LocalDrawError("allowance_exhausted",
-            "This drawing session has too little gas allowance for the next batch. Authorize a new session to continue.");
-        }
-      }
-      const account = new Account(args.accountId, rpc, signerFromRecord(record));
-      mayHaveBroadcast = true;
-      const outcome = await account.callFunctionRaw({
-        contractId: CONTRACT_ID, methodName: "draw_many",
-        args: withMaxCredits(chunkArgs(chunk, args.color), args.maxCredits?.[index]),
-        gas: DRAW_GAS, deposit: DRAW_DEPOSIT,
-        waitUntil: "EXECUTED_OPTIMISTIC",
-      });
-      result.outcomes.push(outcome);
-      const parsed = parseTxOutcome(outcome);
-      if (!hasRecognizedTxSuccess(parsed)) {
-        throw new Error(parsed.failureMessage ?? "Batch execution is still unconfirmed.");
-      }
-      result.confirmedChunks += 1;
-      const executedHeight = await resolveExecutedBlockHeight(parsed.blockHash);
-      if (executedHeight !== null) {
-        result.executedBlocks.push({ chunkIndex: index, blockHeight: executedHeight });
-      }
-    } catch (error) {
-      result.status = "partial";
-      const message = error instanceof Error ? error.message : String(error);
-      result.failingChunk = {
-        index,
-        // `mayHaveBroadcast` was set before the call, so it means "the send was
-        // attempted", not "a transaction may exist". Ask the chain instead: an
-        // executed transaction spends the session key's gas allowance, and a
-        // payload that never left the browser leaves it byte-identical. Without
-        // this check a purely local failure pinned every cell in the batch as
-        // "confirmation delayed" forever, with no transaction on chain.
-        mayHaveBroadcast: mayHaveBroadcast
-          ? await (async () => {
-              try {
-                const after = await fetchDrawingSessionAllowance(args);
-                if (after.remainingYocto === null || allowanceBefore === null) {
-                  return true; // unknown allowance: stay conservative
-                }
-                return BigInt(after.remainingYocto) !== BigInt(allowanceBefore);
-              } catch {
-                return true;
-              }
-            })()
-          : false,
-        message,
-      };
+      await settle(index, await waitForTransaction(rpc, result.transactionHash!, args.accountId, timing));
+    } catch {
+      result.state = "uncertain";
+      result.message = message;
+    }
+  };
+
+  // 3. Broadcast in nonce order.
+  const waits: Array<Promise<void>> = [];
+  for (const [index, { hash, tx }] of signed.entries()) {
+    results[index]!.transactionHash = hash;
+    // From here a transaction may exist: never report this batch as not sent.
+    results[index]!.state = "uncertain";
+    if (index === signed.length - 1) {
+      waits.push(
+        (rpc.sendTransactionUntil(tx, "EXECUTED_OPTIMISTIC") as Promise<FinalExecutionOutcome>)
+          .then((outcome) => settle(index, outcome), (error) => recover(index, error)),
+      );
       break;
     }
+    try {
+      await rpc.sendTransactionUntil(tx, "NONE");
+    } catch (error) {
+      waits.push(recover(index, error));
+      for (let later = index + 1; later < signed.length; later++) {
+        results[later]!.message = "Not sent: an earlier batch's send failed.";
+      }
+      break;
+    }
+    waits.push(
+      waitForTransaction(rpc, hash, args.accountId, timing)
+        .then((outcome) => settle(index, outcome), (error) => recover(index, error)),
+    );
   }
-  return result;
+  // 4. Every result at once.
+  await Promise.all(waits);
+  return summarize(results, outcomes);
+}
+
+function summarize(
+  results: LocalChunkResult[],
+  outcomes: Array<FinalExecutionOutcome | null>,
+): LocalStrokeResult {
+  const firstBad = results.find((r) => r.state !== "confirmed") ?? null;
+  return {
+    status: firstBad ? "partial" : "confirmed",
+    confirmedChunks: results.filter((r) => r.state === "confirmed").length,
+    totalChunks: results.length,
+    outcomes: outcomes.filter((o): o is FinalExecutionOutcome => o !== null),
+    chunks: results,
+    failingChunk: firstBad
+      ? { index: firstBad.index, mayHaveBroadcast: firstBad.state === "uncertain", message: firstBad.message ?? "" }
+      : null,
+    executedBlocks: results
+      .filter((r) => r.state === "confirmed" && r.blockHeight !== null)
+      .map((r) => ({ chunkIndex: r.index, blockHeight: r.blockHeight! })),
+  };
+}
+
+/**
+ * The node rejected the transaction at validation, so it was never included and
+ * nothing it carried can land. Anything not recognised here stays uncertain.
+ */
+function isRefusedTransaction(error: unknown): boolean {
+  const e = error as { type?: unknown; message?: unknown } | null;
+  const text = `${typeof e?.type === "string" ? e.type : ""} ${typeof e?.message === "string" ? e.message : ""}`;
+  return /InvalidTxError|INVALID_TRANSACTION|InvalidNonce|NonceTooLarge|\bExpired\b|NotEnoughAllowance|NotEnoughBalance|InvalidSignature|AccessKeyNotFound|InvalidAccessKey|MethodNameMismatch|ReceiverMismatch/.test(text);
+}
+
+/** "Not seen yet" and "still waiting" answers: ask again until the deadline. */
+function isNotYetKnown(error: unknown): boolean {
+  const e = error as { type?: unknown; message?: unknown } | null;
+  const text = `${typeof e?.type === "string" ? e.type : ""} ${typeof e?.message === "string" ? e.message : ""}`;
+  return /UNKNOWN_TRANSACTION|doesn't exist|does not exist|TIMEOUT|Timeout|timed out/i.test(text);
+}
+
+/** A sent transaction's outcome by hash, looked for until the deadline. */
+async function waitForTransaction(
+  rpc: JsonRpcProvider,
+  hash: string,
+  accountId: string,
+  timing: TxWaitTiming,
+): Promise<FinalExecutionOutcome> {
+  const deadline = Date.now() + timing.deadlineMs;
+  for (;;) {
+    try {
+      return (await rpc.txStatus(hash, accountId, "EXECUTED_OPTIMISTIC")) as FinalExecutionOutcome;
+    } catch (error) {
+      if (!isNotYetKnown(error) || Date.now() + timing.pollMs > deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, timing.pollMs));
+    }
+  }
 }

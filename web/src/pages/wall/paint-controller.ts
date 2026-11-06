@@ -13,7 +13,7 @@ import {
 } from "../../pending-paint";
 import type { Cell } from "../../selection";
 import type { SponsorshipStatus } from "../../sponsorship";
-import { submitDraw } from "../../submit-draw";
+import { submitDraw, type SubmitDrawResult } from "../../submit-draw";
 import type { BoardController } from "./board-controller";
 import type { CameraStrokeHooks } from "./camera-controller";
 import { createPaintSessionPanel, type PaintSessionDom } from "./paint-session-panel";
@@ -543,13 +543,14 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         maxCredits: priced.chunkMaxCredits,
       });
       // The chain's own PriceRoseAboveMax: that chunk stored and charged nothing.
-      const priceRose = isPriceRoseAboveMax(outcome.failingChunk?.message);
-      spent = outcome.confirmedChunks > 0 || (!!outcome.failingChunk?.mayHaveBroadcast && !priceRose);
+      // Batches are sent together, so read each one's own result: a failure in the
+      // middle does not mean the batches after it were skipped.
+      const chunkStates = outcome.chunks;
+      const stateOf = (cellIndex: number) => chunkStates[Math.floor(cellIndex / MAX_BATCH)];
+      // The chain's own PriceRoseAboveMax: that batch stored and charged nothing.
+      const priceRose = chunkStates.some((c) => c.state === "failed" && isPriceRoseAboveMax(c.message));
+      spent = chunkStates.some((c) => c.state === "confirmed" || c.state === "uncertain");
       if (scope.isDisposed()) return;
-      // Resolve known outcomes through a fresh chain read; uncertain cells keep
-      // a pending marker. Never infer execution from matching pre-existing paint.
-      const uncertain = outcome.failingChunk?.mayHaveBroadcast && !priceRose;
-      const uncertainStart = outcome.confirmedChunks * MAX_BATCH;
 
       // A confirmed chunk's receipt proves the write at a specific block. Stamp
       // those cells now instead of leaving the board stale until the next full
@@ -573,10 +574,13 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         }
       }
 
+      // Uncertain batches keep a pending marker; everything else resolves through
+      // a fresh chain read. Never infer execution from matching pre-existing paint.
       for (const [i, cell] of stroke.state.cells.entries()) {
-        if (uncertain && i >= uncertainStart && i < uncertainStart + MAX_BATCH) {
+        const chunk = stateOf(i);
+        if (chunk?.state === "uncertain") {
           setPendingPaint(pendingPaints, { ...cell, colorIndex: stroke.color,
-            accountId: stroke.accountId, transactionId: null, phase: "confirmation_delayed" });
+            accountId: stroke.accountId, transactionId: chunk.transactionHash, phase: "confirmation_delayed" });
         } else clearPendingPaint(pendingPaints, cell.x, cell.y);
       }
       fillBlock(result, outcome.status === "confirmed" ? "Stroke confirmed" : "Stroke stopped", strokeResultCopy(stroke.state, outcome));
@@ -600,7 +604,10 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         : statusText;
       if (priceRose && !requote) {
         // Ask once for the cells that were not painted.
-        const rest = stroke.state.cells.slice(outcome.confirmedChunks * MAX_BATCH);
+        const rest = stroke.state.cells.filter((_, i) => {
+          const state = stateOf(i)?.state;
+          return state === "failed" || state === "not_sent";
+        });
         const approvedMax = await pricing.confirmRequote(rest, stroke.accountId);
         if (approvedMax !== null) {
           retry = { stroke: { ...stroke, state: { cells: rest, truncated: false } }, approvedMax };
@@ -716,6 +723,180 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
     fillBlock(result, "Queued paints cancelled", reason);
   }
 
+  /**
+   * The taps waiting behind `head` that can share its transaction: same account,
+   * network and colour, in queue order, up to one `draw_many` (MAX_BATCH cells).
+   *
+   * No timer: the first tap is sent the moment it arrives, alone. Only taps that
+   * queued up while an earlier paint was in flight are grouped, so a lone tap is
+   * never delayed and a burst of taps costs one transaction instead of one each.
+   * Grouping needs the drawing session (`draw_many` signed in the browser); the
+   * wallet path keeps one paint per approval.
+   */
+  function takeTapBatch(head: DrawRequest): DrawRequest[] {
+    const batch = [head];
+    if (!canUseLocalDrawingSession(scope.walletAccount(), scope.walletNetwork())) return batch;
+    while (batch.length < MAX_BATCH) {
+      const candidate = paintQueue.items[0];
+      if (
+        !candidate ||
+        candidate.colorIndex !== head.colorIndex ||
+        candidate.accountId !== head.accountId ||
+        candidate.networkId !== head.networkId ||
+        !drawRequestMatchesSession(candidate, scope.walletAccount(), scope.walletNetworkId())
+      ) break;
+      batch.push(shiftPaint(paintQueue)!);
+    }
+    return batch;
+  }
+
+  /**
+   * Queued taps sent as one atomic `draw_many`. All of them land or none do,
+   * so they share one result: confirmed, possibly broadcast, or not painted.
+   */
+  async function commitTapBatch(
+    items: DrawRequest[],
+    requote?: { approvedMax: number },
+  ): Promise<void> {
+    const first = items[0]!;
+    const cells = items.map((item) => ({ x: item.x, y: item.y }));
+    const outcomeIds = items.map((item) =>
+      queuedPlacementOutcomes.get(item) ??
+      placementOutcomes.submit({ x: item.x, y: item.y, colorIndex: item.colorIndex }));
+    // One reservation for the batch: keep the first tap's (the quote re-sizes it)
+    // and give the others back, or the balance check would count them twice.
+    const held = queuedReservations.get(first);
+    for (const item of items) {
+      if (item !== first) pricing.release(queuedReservations.get(item));
+      queuedReservations.delete(item);
+      queuedPlacementOutcomes.delete(item);
+    }
+    const abandon = (): void => {
+      for (const [i, item] of items.entries()) {
+        clearPendingPaint(pendingPaints, item.x, item.y);
+        placementOutcomes.discard(outcomeIds[i]!);
+      }
+    };
+    const stillMatches = () =>
+      drawRequestMatchesSession(first, scope.walletAccount(), scope.walletNetworkId());
+    if (scope.isDisposed() || drawInFlight || !stillMatches()) {
+      pricing.release(held);
+      abandon();
+      return;
+    }
+    drawInFlight = true;
+    drawButton.disabled = true;
+    const priced = await pricing.ensurePaidQuote(cells, first.accountId, {
+      reservation: held,
+      approvedMax: requote?.approvedMax,
+    });
+    if (!priced || scope.isDisposed() || !stillMatches()) {
+      pricing.release(priced?.reservation ?? held);
+      drawInFlight = false;
+      abandon();
+      if (!scope.isDisposed()) {
+        deps.render();
+        syncSubmitEnabled();
+      }
+      return;
+    }
+    const reservation = priced.reservation ?? held;
+    const recordOps = (phase: OperationPhase, transactionId: string | null, title: string, detail: string): void => {
+      for (const item of items) {
+        services.operations.upsert({
+          id: paintOperationId({ accountId: item.accountId, x: item.x, y: item.y, colorIndex: item.colorIndex }),
+          kind: "paint",
+          phase,
+          accountId: item.accountId,
+          networkId: item.networkId,
+          transactionId,
+          title,
+          detail,
+          meta: { x: item.x, y: item.y, colorIndex: item.colorIndex },
+        });
+      }
+    };
+    for (const item of items) markPending(item, null, "submitted");
+    recordOps("submitted", null, "Paint", `Sent with ${items.length - 1} other queued taps as one transaction`);
+    view.setFlow("submitted");
+    deps.render();
+
+    let retryMax: number | null = null;
+    // Until the outcome says otherwise, assume credits may have been spent.
+    let spent = true;
+    try {
+      const outcome = await signAndSendStrokeLocally({
+        accountId: first.accountId, networkId: first.networkId,
+        cells, color: first.colorIndex,
+        maxCredits: priced.chunkMaxCredits,
+      });
+      // The chain's own PriceRoseAboveMax: nothing was stored or charged.
+      const chunk = outcome.chunks[0];
+      // The chain's own PriceRoseAboveMax: nothing was stored or charged.
+      const priceRose = chunk?.state === "failed" && isPriceRoseAboveMax(chunk.message);
+      const uncertain = chunk?.state === "uncertain";
+      spent = chunk?.state === "confirmed" || uncertain;
+      const transactionId = chunk?.transactionHash ?? null;
+      const executedAt = chunk?.blockHeight ?? null;
+      const n = items.length;
+      const settled: Pick<SubmitDrawResult, "status" | "message"> & { title: string } =
+        chunk?.state === "confirmed"
+          ? { status: "confirmed", title: "Taps painted",
+              message: `${n} queued taps were sent as one transaction and executed together.` }
+          : uncertain
+            ? { status: "confirmation_delayed", title: "Taps may have been sent",
+                message: `${n} queued taps were sent as one transaction whose result is unknown. They land together or not at all. No automatic retry. ${chunk?.message ?? ""}`.trim() }
+            : { status: "failed", title: "Taps not painted",
+                message: `${n} queued taps were not painted. Nothing was stored. ${chunk?.message ?? ""}`.trim() };
+      for (const id of outcomeIds) placementOutcomes.settle(id, settled);
+      const phase: OperationPhase = settled.status === "confirmed"
+        ? "confirmed"
+        : settled.status === "confirmation_delayed" ? "confirmation_delayed" : "failed";
+      recordOps(phase, transactionId, settled.title, settled.message);
+      if (scope.isDisposed()) return;
+
+      for (const item of items) {
+        if (settled.status === "confirmed") {
+          // The receipt proves the write at this block; stamp it like a stroke does.
+          if (executedAt !== null) {
+            board.rememberPixel(
+              { x: item.x, y: item.y, colorIndex: item.colorIndex,
+                artistAccountId: item.accountId, lastWriteTimestampNs: null },
+              executedAt,
+            );
+          }
+          clearPendingPaint(pendingPaints, item.x, item.y);
+        } else if (settled.status === "confirmation_delayed") {
+          markPending(item, transactionId, "confirmation_delayed");
+        } else {
+          clearPendingPaint(pendingPaints, item.x, item.y);
+        }
+      }
+      deps.render();
+      view.setFlow(settled.status === "confirmed" ? "confirmed"
+        : settled.status === "confirmation_delayed" ? "confirmation_delayed" : "failed");
+      fillBlock(result, settled.title, settled.message);
+      if (settled.status !== "confirmed" && chunk?.message) {
+        console.error("[wall] tap batch failed:", chunk.message);
+      }
+      if (priceRose && !requote) {
+        view.setFlow("editing");
+        retryMax = await pricing.confirmRequote(cells, first.accountId);
+      }
+      void board.refreshBoardFromContract({ reason: "after_draw" });
+    } finally {
+      if (spent) pricing.settle(reservation);
+      else pricing.release(reservation);
+      drawInFlight = false;
+      if (!scope.isDisposed()) {
+        syncSubmitEnabled();
+        session.showDrawingSession();
+        afterPaintSettled();
+        if (retryMax !== null) await commitTapBatch(items, { approvedMax: retryMax });
+      }
+    }
+  }
+
   async function drainPaintQueue(): Promise<void> {
     if (scope.isDisposed() || paintQueue.inFlight) {
       return;
@@ -742,9 +923,11 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       });
       return;
     }
+    const batch = takeTapBatch(next);
     paintQueue.inFlight = true;
     try {
-      await attemptDraw(next, queuedPlacementOutcomes.get(next));
+      if (batch.length > 1) await commitTapBatch(batch);
+      else await attemptDraw(next, queuedPlacementOutcomes.get(next));
     } finally {
       paintQueue.inFlight = false;
       if (scope.isDisposed()) {

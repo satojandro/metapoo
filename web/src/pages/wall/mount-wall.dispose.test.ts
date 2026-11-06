@@ -29,7 +29,8 @@ vi.mock("../../local-draw", async (importOriginal) => {
     canUseLocalDrawingSession: vi.fn(() => false),
     fetchDrawingSessionAllowance: vi.fn(async () => ({ found: true, remainingYocto: null, permissionSummary: "" })),
     // Stroke submission is asserted; it must never really sign in unit tests.
-    signAndSendStrokeLocally: vi.fn(async () => ({ status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null })),
+    signAndSendStrokeLocally: vi.fn(async () => ({ status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null, executedBlocks: [],
+      chunks: [{ index: 0, state: "confirmed", message: null, transactionHash: "tx", blockHeight: null }] })),
   };
 });
 
@@ -880,6 +881,7 @@ describe("mountWall dispose", () => {
     vi.mocked(signAndSendStrokeLocally).mockResolvedValue({
       status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [],
       failingChunk: null, executedBlocks: [{ chunkIndex: 0, blockHeight: 4321 }],
+      chunks: [{ index: 0, state: "confirmed", message: null, transactionHash: "tx", blockHeight: 4321 }],
     });
 
     let api: WallMountTestApi | null = null;

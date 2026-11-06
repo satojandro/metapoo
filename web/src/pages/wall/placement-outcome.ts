@@ -22,7 +22,8 @@ export interface PlacementOutcome {
 export interface PlacementOutcomeController {
   submit: (placement: Pick<PlacementOutcome, "x" | "y" | "colorIndex">) => string;
   discard: (id: string) => void;
-  settle: (id: string, result: SubmitDrawResult) => void;
+  /** Only the status and message are read, so a batched tap can settle without a per-cell read. */
+  settle: (id: string, result: Pick<SubmitDrawResult, "status" | "message">) => void;
   list: () => readonly PlacementOutcome[];
   subscribe: (listener: () => void) => () => void;
 }

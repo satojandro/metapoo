@@ -35,6 +35,9 @@ vi.mock("../../local-draw", async (importOriginal) => {
     fetchDrawingSessionAllowance: vi.fn(async () => ({ found: true, remainingYocto: null, permissionSummary: "" })),
     signAndSendStrokeLocally: vi.fn(async () => ({
       status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null, executedBlocks: [],
+      // Per-batch state is what the controller reads; a result without it would
+      // throw mid-commit (and vitest reports that as an unhandled rejection).
+      chunks: [{ index: 0, state: "confirmed" as const, message: null, transactionHash: null, blockHeight: null }],
     })),
   };
 });

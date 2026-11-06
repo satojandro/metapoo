@@ -58,9 +58,41 @@ export function strokeBlockedReason(gate: StrokeGate): string | null {
   return null;
 }
 
+/**
+ * What happened to a stroke, batch by batch. Batches are sent together, so a
+ * failure in the middle does not stop the ones after it: name each one that did
+ * not confirm instead of assuming everything after it was skipped.
+ */
 export function strokeResultCopy(stroke: StrokeState, result: LocalStrokeResult): string {
-  const text = result.status === "confirmed"
-    ? `${result.confirmedChunks} of ${result.totalChunks} batches confirmed. Each batch records one artist and one timestamp for its cells.`
-    : `${result.confirmedChunks} of ${result.totalChunks} batches confirmed. Batch ${(result.failingChunk?.index ?? result.confirmedChunks) + 1} ${result.failingChunk?.mayHaveBroadcast ? "may already have been broadcast" : "was not broadcast"}. Remaining batches were not submitted. No automatic retry. ${result.failingChunk?.message ?? ""}`;
+  let text: string;
+  if (result.status === "confirmed") {
+    text = `${result.confirmedChunks} of ${result.totalChunks} batches confirmed. Each batch records one artist and one timestamp for its cells.`;
+  } else {
+    const parts = [`${result.confirmedChunks} of ${result.totalChunks} batches confirmed.`];
+    const notSent: number[] = [];
+    let notSentReason: string | null = null;
+    for (const chunk of result.chunks) {
+      const label = `Batch ${chunk.index + 1}`;
+      const detail = chunk.message ? ` ${sentence(chunk.message)}` : "";
+      if (chunk.state === "failed") parts.push(`${label} was not painted.${detail}`);
+      else if (chunk.state === "uncertain") parts.push(`${label} may already have been broadcast.${detail}`);
+      else if (chunk.state === "not_sent") {
+        notSent.push(chunk.index + 1);
+        notSentReason ??= chunk.message;
+      }
+    }
+    if (notSent.length) {
+      const which = notSent.length === 1 ? `Batch ${notSent[0]} was` : `Batches ${notSent.join(", ")} were`;
+      parts.push(`${which} not sent.${notSentReason ? ` ${sentence(notSentReason)}` : ""}`);
+    }
+    parts.push("No automatic retry.");
+    text = parts.join(" ");
+  }
   return stroke.truncated ? `${text} ${TRUNCATED_STROKE_COPY}` : text;
+}
+
+/** A chain or node message as one sentence, so the copy after it does not run on. */
+function sentence(message: string): string {
+  const trimmed = message.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
