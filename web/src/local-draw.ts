@@ -1,6 +1,7 @@
 import { Account } from "@near-js/accounts";
 import { KeyPair, type KeyPairString } from "@near-js/crypto";
 import { JsonRpcProvider } from "@near-js/providers";
+import { FinalBlockJsonRpcProvider } from "./final-block-provider";
 import { KeyPairSigner } from "@near-js/signers";
 import type { FinalExecutionOutcome } from "@near-js/types";
 import { chunkCells, chunkArgs, type StrokeCell } from "./pages/wall/stroke-paint";
@@ -77,7 +78,7 @@ export interface AccessKeyAllowanceInfo {
 }
 
 function provider(): JsonRpcProvider {
-  return new JsonRpcProvider(rpcConnection(RPC_URL));
+  return new FinalBlockJsonRpcProvider(rpcConnection(RPC_URL));
 }
 
 function requireActiveRecord(
