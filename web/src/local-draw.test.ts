@@ -94,6 +94,10 @@ describe("pipelined stroke submission", () => {
     expect(mocks.key).toHaveBeenCalledTimes(1);
     expect(mocks.viewBlock).toHaveBeenCalledTimes(1);
     expect(mocks.price).toHaveBeenCalledTimes(1);
+    // The #77 guarantee, still pinned: signatures are anchored to a finalized block.
+    // near-api-js's own default is "optimistic", and a node that has not stored that
+    // block rejects the send after signing (UNKNOWN_BLOCK, see traps.md).
+    expect(mocks.viewBlock).toHaveBeenCalledWith({ finality: "final" });
   });
 
   it("a lone tap costs one parallel read set and one send, and nothing else on its path", async () => {
