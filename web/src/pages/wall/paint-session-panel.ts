@@ -23,6 +23,8 @@ export interface PaintSessionDom {
   paintUnlock: HTMLElement;
   paintUnlocked: HTMLElement;
   unlockPaintButton: HTMLButtonElement;
+  paintRenew: HTMLElement;
+  renewPaintButton: HTMLButtonElement;
   authorizeSessionButton: HTMLButtonElement;
   forgetSessionButton: HTMLButtonElement;
   revokeSessionButton: HTMLButtonElement;
@@ -43,6 +45,8 @@ export interface PaintSessionPanel {
   tapToPaintEnabled(): boolean;
   showDrawingSession(): void;
   updateDirectPaintAvailability(): void;
+  /** The chain refused the current key for its allowance: offer a new key in the dock. */
+  promptKeyRenewal(): void;
 }
 
 /**
@@ -62,6 +66,8 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
     paintUnlock,
     paintUnlocked,
     unlockPaintButton,
+    paintRenew,
+    renewPaintButton,
     authorizeSessionButton,
     forgetSessionButton,
     revokeSessionButton,
@@ -74,6 +80,11 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
   // session exists, clicking a square should just paint (Berry Club flow).
   // `null` = follow the session; a boolean = the user has decided.
   let tapToPaintUserChoice: boolean | null = null;
+  // Which key ran low, not a flag: any new key, a forgotten key or another account
+  // ends the prompt with nothing to reset.
+  let lowKey: string | null = null;
+  const renewalNeeded = (): boolean =>
+    lowKey !== null && loadDrawingSessionRecord()?.publicKey === lowKey;
 
   scope.listen(authorizeSessionButton, "click", () => {
     void onAuthorizeSessionClick();
@@ -94,6 +105,10 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
   });
 
   scope.listen(unlockPaintButton, "click", () => {
+    void onAuthorizeSessionClick();
+  });
+
+  scope.listen(renewPaintButton, "click", () => {
     void onAuthorizeSessionClick();
   });
 
@@ -122,11 +137,13 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
     }
     authorizeSessionButton.disabled = true;
     unlockPaintButton.disabled = true;
+    renewPaintButton.disabled = true;
+    const renewing = renewalNeeded();
     try {
       if (!scope.walletAccount()) await services.wallet.connect();
       const authorize = services.wallet.authorizeDrawingSession;
       if (!authorize) throw new Error("Drawing sessions are not available in this build.");
-      const authorization = await authorize();
+      const authorization = await authorize(renewing ? { replacePublicKey: lowKey } : undefined);
       deps.setFlow(deps.selected() ? "editing" : "connected");
       if (!authorization.confirmed) {
         fillBlock(
@@ -142,11 +159,12 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
         fillDismissibleBlock(
           walletError,
           "Drawing session was not authorized",
-          `Ordinary wallet approval still works for each draw. ${detail} (build ${__BUILD_ID__})`,
+          `${renewing ? "Your current key is still low, so painting stays paused until a new one is approved." : "Ordinary wallet approval still works for each draw."} ${detail} (build ${__BUILD_ID__})`,
         );
       }
     } finally {
       unlockPaintButton.disabled = false;
+      renewPaintButton.disabled = false;
       showDrawingSession();
     }
   }
@@ -209,6 +227,8 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
       deps.contractMetaOk() &&
       isContractConfigured()
     );
+    const renew = allowed && renewalNeeded();
+    paintRenew.hidden = !renew;
     tapToPaintAffordance.hidden = !allowed;
     tapToPaintAnnouncement.hidden = !allowed;
 
@@ -221,8 +241,8 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
 
     // A one-approval unlock that vanishes after use reads as "did it work?".
     // Keep a quiet, permanent line while the session is live.
-    paintUnlocked.hidden = !allowed;
-    paintUnlocked.textContent = allowed
+    paintUnlocked.hidden = !allowed || renew;
+    paintUnlocked.textContent = allowed && !renew
       ? "Painting unlocked this browser. No wallet popup per pixel. Revoke it any time under About / details."
       : "";
 
@@ -248,14 +268,14 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
     drawingSessionStatus.textContent = `${status.title}. ${status.message}`;
     drawingSessionNote.textContent = [
       `Configured allowance for a new session: ${status.allowanceLabel}.`,
-      "Renewal: authorize again to request a new limited key (old on-chain keys are not auto-removed).",
+      "Renewal: when the key runs low, the dock replaces it with a new limited key in one approval.",
       "Forget clears this browser only. Revoke on-chain asks the wallet to DeleteKey.",
       `Build ${__BUILD_ID__}.`,
     ].join(" ");
 
     const canUseContract = isContractConfigured();
     const sessionActive = status.phase === "active";
-    authorizeSessionButton.disabled = !canUseContract || sessionActive;
+    authorizeSessionButton.disabled = !canUseContract || (sessionActive && !renewalNeeded());
     forgetSessionButton.disabled =
       status.record === null || status.phase === "forgotten_locally";
     revokeSessionButton.disabled = !sessionActive || !walletAccount;
@@ -302,5 +322,9 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
     tapToPaintEnabled: () => tapToPaintEnabled,
     showDrawingSession,
     updateDirectPaintAvailability,
+    promptKeyRenewal() {
+      lowKey = loadDrawingSessionRecord()?.publicKey ?? null;
+      showDrawingSession();
+    },
   };
 }

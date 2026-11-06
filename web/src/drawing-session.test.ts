@@ -12,6 +12,7 @@ import {
   makeAuthorizedSessionRecord,
   saveDrawingSessionRecord,
   type DrawingSessionRecord,
+  isDrawingKeyLow,
 } from "./drawing-session";
 
 /** Tiny in-memory Storage stand-in for unit tests (no browser required). */
@@ -257,5 +258,26 @@ describe("classifyDrawingKeyAccessKey", () => {
 
   it("treats the exact requested allowance as acceptable", () => {
     expect(classifyDrawingKeyAccessKey(fc({ allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO }), board)).toBe("scoped");
+  });
+});
+
+describe("isDrawingKeyLow", () => {
+  it("recognises the chain's NotEnoughAllowance, as the user saw it", () => {
+    expect(isDrawingKeyLow(
+      "Access Key {account_id}:{public_key} does not have enough balance 0.0308734581660761 for transaction costing 0.0309213099526195",
+    )).toBe(true);
+    expect(isDrawingKeyLow("Access Key alice.testnet:ed25519:abc does not have enough balance 1 for transaction costing 2")).toBe(true);
+    expect(isDrawingKeyLow('{"InvalidTxError":{"InvalidAccessKeyError":{"NotEnoughAllowance":{}}}}')).toBe(true);
+  });
+
+  it("recognises this app's own pre-send refusals", () => {
+    expect(isDrawingKeyLow("This drawing session has too little gas allowance for the next batch.")).toBe(true);
+    expect(isDrawingKeyLow("The drawing-session gas allowance is exhausted.")).toBe(true);
+  });
+
+  it("does not blame the key when the account itself is short: a new key would not help", () => {
+    expect(isDrawingKeyLow("Sender alice.testnet does not have enough balance 1 for transaction costing 2")).toBe(false);
+    expect(isDrawingKeyLow("Price rose above max")).toBe(false);
+    expect(isDrawingKeyLow(null)).toBe(false);
   });
 });

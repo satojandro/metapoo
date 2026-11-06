@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppServices } from "../../app/services";
 import { createDrawRequest } from "../../draw-request";
+import { makeAuthorizedSessionRecord, saveDrawingSessionRecord } from "../../drawing-session";
 import type { Cell } from "../../selection";
 import { createPaintController } from "./paint-controller";
 import type { CreditReservation, PaidQuote } from "./pricing-controller";
@@ -53,6 +54,7 @@ function setup(options: { metaOk?: boolean } = {}) {
     <div id="viewport"></div><button id="draw"></button><div id="result"></div><p id="draw-state"></p><p id="flow"></p>
     <label><input type="checkbox" id="toggle"></label><p id="tap-status"></p>
     <div id="unlock"></div><p id="unlocked"></p><button id="unlock-btn"></button>
+    <div id="renew" hidden></div><button id="renew-btn"></button>
     <button id="auth"></button><button id="forget"></button><button id="revoke"></button>
     <p id="session-status"></p><p id="session-note"></p>
   `;
@@ -108,6 +110,8 @@ function setup(options: { metaOk?: boolean } = {}) {
     paintUnlock: el("unlock"),
     paintUnlocked: el("unlocked"),
     unlockPaintButton: el<HTMLButtonElement>("unlock-btn"),
+    paintRenew: el("renew"),
+    renewPaintButton: el<HTMLButtonElement>("renew-btn"),
     authorizeSessionButton: el<HTMLButtonElement>("auth"),
     forgetSessionButton: el<HTMLButtonElement>("forget"),
     revokeSessionButton: el<HTMLButtonElement>("revoke"),
@@ -211,6 +215,86 @@ describe("paint controller", () => {
     vi.mocked(signAndSendStrokeLocally).mockImplementationOnce(() => new Promise((r) => { release = r; }));
     return (r: StrokeResult) => release(r);
   };
+
+  describe("when the chain refuses the drawing key for its allowance", () => {
+    const refusal = "Access Key {account_id}:{public_key} does not have enough balance 0.0308734581660761 for transaction costing 0.0309213099526195";
+    const refused = (): StrokeResult => ({
+      status: "partial", confirmedChunks: 0, totalChunks: 1, outcomes: [], executedBlocks: [],
+      failingChunk: { index: 0, mayHaveBroadcast: false, message: refusal },
+      chunks: [{ index: 0, state: "failed", message: refusal, transactionHash: "tx-refused", blockHeight: null }],
+    });
+    const storeKey = (publicKey: string) => saveDrawingSessionRecord(makeAuthorizedSessionRecord({
+      accountId: "alice.testnet", networkId: "testnet", contractId: "board.paint.testnet",
+      publicKey, secretKey: "ed25519:fixture",
+    }));
+    const renewPrompt = () => document.getElementById("renew")!;
+
+    beforeEach(() => {
+      const stored = new Map<string, string>();
+      vi.stubGlobal("localStorage", {
+        getItem: (key: string) => stored.get(key) ?? null,
+        setItem: (key: string, value: string) => void stored.set(key, value),
+        removeItem: (key: string) => void stored.delete(key),
+      });
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("offers one approval in the dock, then clears the prompt once the new key is stored", async () => {
+      storeKey("ed25519:spent");
+      vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce(refused());
+      const t = setup();
+      const authorize = vi.fn(async (_options?: { replacePublicKey?: string | null }) => {
+        storeKey("ed25519:fresh");
+        return { accountId: "alice.testnet", publicKey: "ed25519:fresh", transactionHash: "h", confirmed: true };
+      });
+      t.services.wallet.authorizeDrawingSession = authorize;
+      t.paint.showDrawingSession();
+      expect(renewPrompt().hidden).toBe(true);
+
+      t.paint.maybeEnqueueDirectPaint({ x: 4, y: 5 });
+      await vi.waitFor(() => expect(renewPrompt().hidden).toBe(false));
+      expect(t.result.textContent).toContain("Your painting key is low");
+      expect(t.result.textContent).not.toMatch(/account_id|public_key/);
+      // Renewing is the painter's click: the refused paint is never resent.
+      expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1);
+      expect(authorize).not.toHaveBeenCalled();
+
+      document.getElementById("renew-btn")!.click();
+      await vi.waitFor(() => expect(authorize).toHaveBeenCalledTimes(1));
+      expect(authorize).toHaveBeenCalledWith({ replacePublicKey: "ed25519:spent" });
+      await vi.waitFor(() => expect(renewPrompt().hidden).toBe(true));
+      expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1);
+      t.dispose();
+    });
+
+    it("keeps the prompt when the painter closes the wallet window", async () => {
+      storeKey("ed25519:spent");
+      vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce(refused());
+      const t = setup();
+      t.services.wallet.authorizeDrawingSession = vi.fn(async () => { throw new Error("User closed"); });
+      t.paint.showDrawingSession();
+      t.paint.maybeEnqueueDirectPaint({ x: 4, y: 5 });
+      await vi.waitFor(() => expect(renewPrompt().hidden).toBe(false));
+      document.getElementById("renew-btn")!.click();
+      await vi.waitFor(() => expect(t.services.wallet.authorizeDrawingSession).toHaveBeenCalled());
+      await vi.waitFor(() => expect(document.getElementById("renew-btn")).toHaveProperty("disabled", false));
+      expect(renewPrompt().hidden).toBe(false);
+      t.dispose();
+    });
+
+    it("does not offer a new key for any other failure", async () => {
+      storeKey("ed25519:spent");
+      const other = refused();
+      other.chunks[0]!.message = "Sender alice.testnet does not have enough balance 1 for transaction costing 2";
+      vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce(other);
+      const t = setup();
+      t.paint.showDrawingSession();
+      t.paint.maybeEnqueueDirectPaint({ x: 4, y: 5 });
+      await vi.waitFor(() => expect(t.result.textContent).toContain("Sender alice.testnet"));
+      expect(renewPrompt().hidden).toBe(true);
+      t.dispose();
+    });
+  });
 
   it("a lone tap with a drawing session takes the pipelined path, not the single-draw path", async () => {
     vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce(strokeOutcome("confirmed", "tx-lone", { height: 812 }));

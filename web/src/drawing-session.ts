@@ -31,6 +31,35 @@ export const DRAWING_SESSION_METHOD = "draw_many";
 
 const YOCTO_PER_NEAR = 10n ** 24n;
 
+/** The one sentence a painter sees in place of the chain's raw allowance error. */
+export const KEY_LOW_COPY =
+  "Your painting key is low on its network-fee limit. Renew it in the dock, then paint again.";
+
+/**
+ * True when a paint stopped because the drawing key's allowance cannot cover the
+ * transaction, which only a new key fixes.
+ *
+ * Matches the chain's NotEnoughAllowance ("Access Key ... does not have enough
+ * balance ...") and this app's own pre-send refusals. It deliberately does not match
+ * "Sender ... does not have enough balance": that is the account itself being short,
+ * and a new key would not help. The chain's check is the one that counts: the
+ * pre-send reserve in local-draw.ts is an estimate and has been seen to pass a
+ * transaction the chain then refused.
+ */
+export function isDrawingKeyLow(message: string | null | undefined): boolean {
+  return (
+    !!message &&
+    /Access Key\b.*does not have enough balance|NotEnoughAllowance|too little gas allowance|gas allowance is exhausted/is.test(
+      message,
+    )
+  );
+}
+
+/** Painter-facing wording for a failure message; raw chain text stays in the console. */
+export function paintFailureCopy(message: string): string {
+  return isDrawingKeyLow(message) ? KEY_LOW_COPY : message;
+}
+
 export type DrawingSessionPhase =
   | "inactive"
   | "active"

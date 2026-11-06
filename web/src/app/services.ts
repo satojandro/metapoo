@@ -24,7 +24,10 @@ export interface WalletService {
    * Add the draw-only key with one wallet transaction (see `authorizeDrawingSession`).
    * Optional so test doubles that never paint do not have to stub it.
    */
-  authorizeDrawingSession?(): Promise<DrawingSessionAuthorization>;
+  authorizeDrawingSession?(options?: {
+    /** A renewal: delete this key in the same transaction that adds the new one. */
+    replacePublicKey?: string | null;
+  }): Promise<DrawingSessionAuthorization>;
   /** Resolves after the boot-time wallet restore attempt finishes. */
   whenReady: Promise<WalletSession>;
 }
@@ -59,8 +62,8 @@ export function createAppServices(): AppServices {
     subscribe(listener) {
       return onWalletSession(listener);
     },
-    authorizeDrawingSession() {
-      return authorizeDrawingSession();
+    authorizeDrawingSession(options) {
+      return authorizeDrawingSession(options);
     },
     whenReady,
   };

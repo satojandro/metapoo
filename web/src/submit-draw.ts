@@ -11,6 +11,7 @@ import {
   LocalDrawError,
   signAndSendDrawLocally,
 } from "./local-draw";
+import { isDrawingKeyLow, KEY_LOW_COPY } from "./drawing-session";
 import { describeSponsorship } from "./sponsorship";
 import {
   hasRecognizedTxSuccess,
@@ -148,7 +149,9 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
           return {
             status: "failed",
             title: "Drawing session allowance exhausted",
-            message: `${error.message} Nothing was auto-resubmitted. Renew the session or use ordinary wallet approval.`,
+            message: isDrawingKeyLow(error.message)
+              ? `Nothing was painted. ${KEY_LOW_COPY}`
+              : `${error.message} Nothing was auto-resubmitted. Renew the session or use ordinary wallet approval.`,
             transactionId: null,
             explorerUrl: null,
             pixel: null,

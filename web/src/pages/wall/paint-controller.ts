@@ -6,6 +6,7 @@ import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
 import { contractMetaBlockCopy } from "../../contract-meta";
 import { createDrawRequest, drawRequestMatchesSession, type DrawRequest } from "../../draw-request";
 import { prepareDraw } from "../../draw-policy";
+import { isDrawingKeyLow, paintFailureCopy } from "../../drawing-session";
 import { canUseLocalDrawingSession, prefetchSigningContext, signAndSendStrokeLocally } from "../../local-draw";
 import { clearPaintQueue, createPaintQueue, enqueuePaint, paintQueueLength, shiftPaint } from "../../paint-queue";
 import {
@@ -473,6 +474,9 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       recordResult("failed");
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       deps.render();
+      if (submitResult.status === "failed" && isDrawingKeyLow(submitResult.message)) {
+        session.promptKeyRenewal();
+      }
       if (submitResult.status === "failed" && isPriceRoseAboveMax(submitResult.message) && !requote) {
         // Nothing was stored or charged. Re-quote and ask once; never retry silently.
         view.setFlow("editing");
@@ -555,6 +559,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       const stateOf = (cellIndex: number) => chunkStates[Math.floor(cellIndex / MAX_BATCH)];
       // The chain's own PriceRoseAboveMax: that batch stored and charged nothing.
       const priceRose = chunkStates.some((c) => c.state === "failed" && isPriceRoseAboveMax(c.message));
+      const keyLow = chunkStates.some((c) => isDrawingKeyLow(c.message));
       spent = chunkStates.some((c) => c.state === "confirmed" || c.state === "uncertain");
       if (scope.isDisposed()) return;
 
@@ -606,8 +611,9 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       }
       flowState.textContent = statusText;
       drawState.textContent = failureReason
-        ? `${statusText} Reason: ${failureReason}`
+        ? `${statusText} Reason: ${paintFailureCopy(failureReason)}`
         : statusText;
+      if (keyLow) session.promptKeyRenewal();
       if (priceRose && !requote) {
         // Ask once for the cells that were not painted.
         const rest = stroke.state.cells.filter((_, i) => {
@@ -870,7 +876,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
             ? { status: "confirmation_delayed", title: "Paint may have been sent",
                 message: `Its result is unknown, so it keeps a pending marker. No automatic retry. ${chunk?.message ?? ""}`.trim() }
             : { status: "failed", title: "Paint not painted",
-                message: `Nothing was stored. ${chunk?.message ?? ""}`.trim() })
+                message: `Nothing was stored. ${paintFailureCopy(chunk?.message ?? "")}`.trim() })
         : chunk?.state === "confirmed"
           ? { status: "confirmed", title: "Taps painted",
               message: `${n} queued taps were sent as one transaction and executed together.` }
@@ -878,7 +884,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
             ? { status: "confirmation_delayed", title: "Taps may have been sent",
                 message: `${n} queued taps were sent as one transaction whose result is unknown. They land together or not at all. No automatic retry. ${chunk?.message ?? ""}`.trim() }
             : { status: "failed", title: "Taps not painted",
-                message: `${n} queued taps were not painted. Nothing was stored. ${chunk?.message ?? ""}`.trim() };
+                message: `${n} queued taps were not painted. Nothing was stored. ${paintFailureCopy(chunk?.message ?? "")}`.trim() };
       for (const id of outcomeIds) placementOutcomes.settle(id, settled);
       const phase: OperationPhase = settled.status === "confirmed"
         ? "confirmed"
@@ -913,6 +919,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       if (settled.status !== "confirmed" && chunk?.message) {
         console.error("[wall] tap batch failed:", chunk.message);
       }
+      if (isDrawingKeyLow(chunk?.message)) session.promptKeyRenewal();
       if (settled.status === "confirmed") {
         // The receipt proves the write at its block; stamp it like a stroke does,
         // as soon as the height is known. Nothing waits on this.

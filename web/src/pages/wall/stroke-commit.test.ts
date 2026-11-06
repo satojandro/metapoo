@@ -3,6 +3,12 @@ import { planStrokeCommit, strokeResultCopy, strokeBlockedReason, type StrokeGat
 import { strokeBegin, strokeExtend } from "./stroke-paint";
 import type { LocalChunkResult, LocalStrokeResult } from "../../local-draw";
 const tap = strokeBegin({ x: 0, y: 0 });
+it("replaces the chain's raw allowance error with one the painter can act on", () => {
+  const raw = "Access Key {account_id}:{public_key} does not have enough balance 0.0308734581660761 for transaction costing 0.0309213099526195";
+  const copy = strokeResultCopy(tap, partial([chunk(0, "failed", raw)]));
+  expect(copy).toContain("Batch 1 was not painted. Your painting key is low");
+  expect(copy).not.toMatch(/account_id|public_key/);
+});
 it("selects single draw, chunked draw_many and wallet approval", () => {
   expect(planStrokeCommit(tap, true).kind).toBe("draw");
   expect(planStrokeCommit(strokeExtend(tap, { x: 100, y: 0 }), true)).toMatchObject({ kind: "draw_many", chunks: [expect.any(Array), expect.any(Array)] });

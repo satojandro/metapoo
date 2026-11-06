@@ -281,3 +281,9 @@ implicit account** as the painter: 64 cells = 10,441 B, 100 cells = 16,273 B, 12
 log budget, and the real ceiling with the current format is **~100 cells**. Raising it needs the
 per-cell `artist` dropped from the event (or one summary event per call) first — not more gas.
 Gas is not the constraint: 64 cells already runs inside `DRAW_GAS`.
+
+**A drawing key stops long before its allowance is spent.** On 2026-11-06 a 30 Tgas `draw_many` was
+refused with 0.0308 NEAR left because the chain wanted 0.0309 available, while the account's recent
+paints cost about 0.00033 NEAR each. So a 0.05 NEAR key has only about 0.019 NEAR of usable fees. The
+figure is measured, not explained, and it is about 5x the reserve `signAndSendStrokeLocally` holds
+back, so that pre-send check does not predict the refusal. Act on the chain's error.

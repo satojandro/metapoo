@@ -1,4 +1,5 @@
 import { chunkCells, MAX_STROKE_CELLS, type StrokeState } from "./stroke-paint";
+import { paintFailureCopy } from "../../drawing-session";
 import type { LocalStrokeResult } from "../../local-draw";
 
 export function planStrokeCommit(stroke: StrokeState, sessionActive: boolean) {
@@ -93,6 +94,6 @@ export function strokeResultCopy(stroke: StrokeState, result: LocalStrokeResult)
 
 /** A chain or node message as one sentence, so the copy after it does not run on. */
 function sentence(message: string): string {
-  const trimmed = message.trim();
+  const trimmed = paintFailureCopy(message).trim();
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }

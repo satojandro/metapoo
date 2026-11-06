@@ -372,7 +372,9 @@ export interface DrawingSessionAuthorization {
  * The secret is saved before the chain check, so a slow RPC can never cost the user
  * another approval.
  */
-export async function authorizeDrawingSession(): Promise<DrawingSessionAuthorization> {
+export async function authorizeDrawingSession(
+  options: { replacePublicKey?: string | null } = {},
+): Promise<DrawingSessionAuthorization> {
   const current = ensureConnector();
   await connectorReady.catch(() => undefined);
   const wallet = await current.wallet().catch(() => null);
@@ -384,6 +386,9 @@ export async function authorizeDrawingSession(): Promise<DrawingSessionAuthoriza
     throw new Error("Could not read the connected account. Reconnect the wallet and try again.");
   }
 
+  const replacing = options.replacePublicKey ?? null;
+  const retireOldKey =
+    replacing !== null && (await isRetirableDrawingKey(accountId, replacing));
   const keypair = await createDrawingSessionKeypair();
   const outcome = await wallet.signAndSendTransaction({
     receiverId: accountId,
@@ -402,6 +407,9 @@ export async function authorizeDrawingSession(): Promise<DrawingSessionAuthoriza
           },
         },
       },
+      // Same transaction, so a renewal is one approval and never leaves the account
+      // with neither key: both actions land or neither does.
+      ...(retireOldKey ? [{ type: "DeleteKey" as const, params: { publicKey: replacing } }] : []),
     ],
   });
   const parsed = parseTxOutcome(outcome);
@@ -429,6 +437,25 @@ export async function authorizeDrawingSession(): Promise<DrawingSessionAuthoriza
     transactionHash: parsed.transactionHash,
     confirmed,
   };
+}
+
+/**
+ * True only for a key this app can safely delete while renewing.
+ *
+ * A failed DeleteKey fails its whole transaction, new key included, so a key that is
+ * already gone must not be named. And this must never reach a full-access key or
+ * another app's key. Any doubt, a failed read included, leaves the old key in place:
+ * an orphan key is harmless, a blocked renewal is not.
+ */
+async function isRetirableDrawingKey(accountId: string, publicKey: string): Promise<boolean> {
+  try {
+    const account = new NearAccount(accountId, new JsonRpcProvider(rpcConnection(RPC_URL)));
+    const access = await account.getAccessKey(publicKey);
+    const scope = classifyDrawingKeyAccessKey(access.permission, CONTRACT_ID);
+    return scope === "scoped" || scope === "wildcard";
+  } catch {
+    return false;
+  }
 }
 
 /**

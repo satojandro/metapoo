@@ -139,6 +139,8 @@ export function mountWall(
   const paintUnlock = el("#paint-unlock");
   const paintUnlocked = el("#paint-unlocked");
   const unlockPaintButton = el<HTMLButtonElement>("#unlock-paint-button");
+  const paintRenew = el("#paint-renew");
+  const renewPaintButton = el<HTMLButtonElement>("#renew-paint-button");
   const creditsDock = el("#credits-dock");
   const creditsBalance = el("#credits-balance");
   const buyCreditsButton = el<HTMLButtonElement>("#buy-credits-button");
@@ -340,6 +342,8 @@ export function mountWall(
     paintUnlock,
     paintUnlocked,
     unlockPaintButton,
+    paintRenew,
+    renewPaintButton,
     authorizeSessionButton,
     forgetSessionButton,
     revokeSessionButton,
