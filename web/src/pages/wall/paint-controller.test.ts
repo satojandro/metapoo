@@ -17,6 +17,8 @@ vi.mock("../../local-draw", async (importOriginal) => {
     ...actual,
     canUseLocalDrawingSession: vi.fn(() => true),
     fetchDrawingSessionAllowance: vi.fn(async () => ({ found: true, remainingYocto: null, permissionSummary: "" })),
+    // Signing reads must never really hit the network in unit tests.
+    prefetchSigningContext: vi.fn(() => new Promise(() => undefined)),
     signAndSendStrokeLocally: vi.fn(async () => ({
       status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null,
       executedBlocks: [],
@@ -33,7 +35,7 @@ vi.mock("../../contract", async (importOriginal) => {
   return { ...actual, isContractConfigured: () => true };
 });
 import { submitDraw } from "../../submit-draw";
-import { canUseLocalDrawingSession, signAndSendStrokeLocally } from "../../local-draw";
+import { canUseLocalDrawingSession, prefetchSigningContext, signAndSendStrokeLocally } from "../../local-draw";
 
 type DrawResult = Awaited<ReturnType<typeof submitDraw>>;
 const confirmed = (x: number, y: number, colorIndex: number): DrawResult => ({
@@ -130,6 +132,7 @@ function setup(options: { metaOk?: boolean } = {}) {
 beforeEach(() => {
   vi.mocked(submitDraw).mockReset();
   vi.mocked(signAndSendStrokeLocally).mockClear();
+  vi.mocked(prefetchSigningContext).mockClear();
   vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
 });
 
@@ -186,47 +189,102 @@ describe("paint controller", () => {
     t.dispose();
   });
 
-  it("direct taps queue and drain one at a time", async () => {
-    let release!: (r: DrawResult) => void;
-    vi.mocked(submitDraw)
-      .mockImplementationOnce(() => new Promise((r) => { release = r; }))
-      .mockImplementation(async (input) => confirmed(input.x, input.y, input.colorIndex));
+  type StrokeResult = Awaited<ReturnType<typeof signAndSendStrokeLocally>>;
+  type ChunkState = "confirmed" | "failed" | "uncertain" | "not_sent";
+  /** One batch's result, as the pipelined sender reports it. */
+  const strokeOutcome = (state: ChunkState, tx: string | null, options: { height?: number | null; message?: string | null } = {}): StrokeResult => {
+    const height = options.height ?? null;
+    const chunk = { index: 0, state, message: options.message ?? null, transactionHash: tx, blockHeight: null };
+    return {
+      status: state === "confirmed" ? "confirmed" : "partial",
+      confirmedChunks: state === "confirmed" ? 1 : 0, totalChunks: 1, outcomes: [], chunks: [chunk],
+      failingChunk: state === "confirmed" ? null
+        : { index: 0, mayHaveBroadcast: state === "uncertain", message: options.message ?? "" },
+      // Deferred heights: the result returns on the receipt; the height follows.
+      executedBlocks: [],
+      executedBlocksLater: Promise.resolve(state === "confirmed" && height !== null ? [{ chunkIndex: 0, blockHeight: height }] : []),
+    };
+  };
+  /** Hold the next session send open until the test releases it. */
+  const holdNextSend = () => {
+    let release!: (r: StrokeResult) => void;
+    vi.mocked(signAndSendStrokeLocally).mockImplementationOnce(() => new Promise((r) => { release = r; }));
+    return (r: StrokeResult) => release(r);
+  };
+
+  it("a lone tap with a drawing session takes the pipelined path, not the single-draw path", async () => {
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce(strokeOutcome("confirmed", "tx-lone", { height: 812 }));
     const t = setup();
     t.paint.showDrawingSession();
-    expect(t.toggle.checked).toBe(true);
+    t.paint.maybeEnqueueDirectPaint({ x: 4, y: 5 });
+    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1));
+    expect(submitDraw).not.toHaveBeenCalled();
+    expect(vi.mocked(signAndSendStrokeLocally).mock.calls[0]![0]).toMatchObject({
+      cells: [{ x: 4, y: 5 }], color: 2, deferBlockHeights: true, prepared: expect.any(Promise),
+    });
+    // The signing reads started before the quote was asked for, so they overlap it.
+    expect(vi.mocked(prefetchSigningContext).mock.invocationCallOrder[0])
+      .toBeLessThan(t.pricing.ensurePaidQuote.mock.invocationCallOrder[0]!);
+    // Settled on the receipt, stamped at the executed block, no confirming re-read.
+    await vi.waitFor(() => expect(t.paint.pendingCount()).toBe(0));
+    expect(t.board.rememberPixel).toHaveBeenCalledWith(expect.objectContaining({ x: 4, y: 5, colorIndex: 2 }), 812);
+    expect(t.result.querySelector("h3")?.textContent).toBe("Pixel painted");
+    expect(t.services.operations.list().find((op) => op.transactionId === "tx-lone")?.phase).toBe("confirmed");
+    t.dispose();
+  });
+
+  it("each tap keeps one operation record from submitted to its outcome", async () => {
+    // paintOperationId stamps the clock into the id. Recomputing it per phase left
+    // a "submitted" record behind for every tap, listed as recoverable forever.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.mocked(signAndSendStrokeLocally).mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.now() + 5_000);
+      return strokeOutcome("confirmed", "tx-one");
+    });
+    const t = setup();
+    t.paint.showDrawingSession();
+    t.paint.maybeEnqueueDirectPaint({ x: 6, y: 6 });
+    await vi.waitFor(() => expect(t.result.querySelector("h3")?.textContent).toBe("Pixel painted"));
+    expect(t.services.operations.list().filter((op) => op.kind === "paint")).toHaveLength(1);
+    expect(t.services.operations.listRecoverable()).toEqual([]);
+    vi.useRealTimers();
+    t.dispose();
+  });
+
+  it("a confirmed tap keeps its marker until the stamp lands, and never clears a newer paint's marker", async () => {
+    let heights!: (blocks: Array<{ chunkIndex: number; blockHeight: number }>) => void;
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
+      ...strokeOutcome("confirmed", "tx-a"),
+      executedBlocksLater: new Promise((r) => { heights = r; }),
+    });
+    const t = setup();
+    t.paint.showDrawingSession();
     t.paint.maybeEnqueueDirectPaint({ x: 1, y: 1 });
-    t.paint.maybeEnqueueDirectPaint({ x: 2, y: 2 });
-    await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(1));
-    expect(t.paint.queueLength()).toBe(1);
-    expect(t.paint.pendingCount()).toBe(2);
-    release(confirmed(1, 1, 2));
-    await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(submitDraw).mock.calls[1]![0]).toMatchObject({ x: 2, y: 2 });
+    await vi.waitFor(() => expect(t.result.querySelector("h3")?.textContent).toBe("Pixel painted"));
+    // Settled (the next paint may go), but the cell keeps its colour via the marker.
+    expect(t.paint.drawInFlight()).toBe(false);
+    expect(t.paint.pendingCount()).toBe(1);
+    heights([{ chunkIndex: 0, blockHeight: 900 }]);
+    await vi.waitFor(() => expect(t.paint.pendingCount()).toBe(0));
+    expect(t.board.rememberPixel).toHaveBeenCalledWith(expect.objectContaining({ x: 1, y: 1 }), 900);
     t.dispose();
   });
 
   it("taps that queue behind an in-flight paint go out together as one draw_many", async () => {
-    let release!: (r: DrawResult) => void;
-    vi.mocked(submitDraw).mockImplementationOnce(() => new Promise((r) => { release = r; }));
-    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
-      status: "confirmed", confirmedChunks: 1, totalChunks: 1, failingChunk: null,
-      outcomes: [{ status: { SuccessValue: "" }, transaction: { hash: "tx-batch" } } as never],
-      executedBlocks: [{ chunkIndex: 0, blockHeight: 900 }],
-      chunks: [{ index: 0, state: "confirmed", message: null, transactionHash: "tx-batch", blockHeight: 900 }],
-    });
+    const release = holdNextSend();
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce(strokeOutcome("confirmed", "tx-batch", { height: 900 }));
     const t = setup();
     t.paint.showDrawingSession();
     // The first tap is sent the moment it arrives, alone: no batching delay.
     t.paint.maybeEnqueueDirectPaint({ x: 1, y: 1 });
-    await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1));
     t.paint.maybeEnqueueDirectPaint({ x: 2, y: 2 });
     t.paint.maybeEnqueueDirectPaint({ x: 3, y: 3 });
     t.paint.maybeEnqueueDirectPaint({ x: 4, y: 4 });
     expect(t.paint.queueLength()).toBe(3);
-    release(confirmed(1, 1, 2));
-    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1));
-    expect(submitDraw).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(signAndSendStrokeLocally).mock.calls[0]![0]).toMatchObject({
+    release(strokeOutcome("confirmed", "tx-first", { height: 899 }));
+    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(signAndSendStrokeLocally).mock.calls[1]![0]).toMatchObject({
       accountId: "alice.testnet", color: 2,
       cells: [{ x: 2, y: 2 }, { x: 3, y: 3 }, { x: 4, y: 4 }],
     });
@@ -235,75 +293,65 @@ describe("paint controller", () => {
     expect(t.board.rememberPixel).toHaveBeenCalledWith(expect.objectContaining({ x: 3, y: 3, colorIndex: 2 }), 900);
     const ops = t.services.operations.list().filter((op) => op.transactionId === "tx-batch");
     expect(ops.map((op) => op.phase)).toEqual(["confirmed", "confirmed", "confirmed"]);
+    expect(t.result.querySelector("h3")?.textContent).toBe("Taps painted");
     t.dispose();
   });
 
   it("a batch only groups taps of the same colour, in order", async () => {
-    let release!: (r: DrawResult) => void;
-    vi.mocked(submitDraw)
-      .mockImplementationOnce(() => new Promise((r) => { release = r; }))
-      .mockImplementation(async (input) => confirmed(input.x, input.y, input.colorIndex));
+    const release = holdNextSend();
+    vi.mocked(signAndSendStrokeLocally)
+      .mockResolvedValueOnce(strokeOutcome("confirmed", "tx-pair"))
+      .mockResolvedValueOnce(strokeOutcome("confirmed", "tx-five"));
     const t = setup();
     t.paint.showDrawingSession();
     t.paint.maybeEnqueueDirectPaint({ x: 1, y: 1 });
-    await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1));
     t.paint.maybeEnqueueDirectPaint({ x: 2, y: 2 });
     t.paint.maybeEnqueueDirectPaint({ x: 3, y: 3 });
     t.setColor(5);
     t.paint.maybeEnqueueDirectPaint({ x: 4, y: 4 });
-    release(confirmed(1, 1, 2));
-    // Colour 2 pair as one batch, then the colour-5 tap alone on the ordinary path.
-    await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(signAndSendStrokeLocally).mock.calls[0]![0]).toMatchObject({
-      color: 2, cells: [{ x: 2, y: 2 }, { x: 3, y: 3 }],
-    });
-    expect(vi.mocked(submitDraw).mock.calls[1]![0]).toMatchObject({ x: 4, y: 4, colorIndex: 5 });
+    release(strokeOutcome("confirmed", "tx-first"));
+    // Colour 2 pair as one batch, then the colour-5 tap on its own.
+    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(3));
+    const calls = vi.mocked(signAndSendStrokeLocally).mock.calls.map(([a]) => a);
+    expect(calls[1]).toMatchObject({ color: 2, cells: [{ x: 2, y: 2 }, { x: 3, y: 3 }] });
+    expect(calls[2]).toMatchObject({ color: 5, cells: [{ x: 4, y: 4 }] });
     t.dispose();
   });
 
   it("a batch whose transaction may have landed keeps every tap pending, and never retries", async () => {
-    let release!: (r: DrawResult) => void;
-    vi.mocked(submitDraw).mockImplementationOnce(() => new Promise((r) => { release = r; }));
-    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
-      status: "partial", confirmedChunks: 0, totalChunks: 1, outcomes: [], executedBlocks: [],
-      failingChunk: { index: 0, mayHaveBroadcast: true, message: "lost response" },
-      chunks: [{ index: 0, state: "uncertain", message: "lost response", transactionHash: "tx-lost", blockHeight: null }],
-    });
+    const release = holdNextSend();
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce(strokeOutcome("uncertain", "tx-lost", { message: "lost response" }));
     const t = setup();
     t.paint.showDrawingSession();
     t.paint.maybeEnqueueDirectPaint({ x: 1, y: 1 });
-    await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1));
     t.paint.maybeEnqueueDirectPaint({ x: 2, y: 2 });
     t.paint.maybeEnqueueDirectPaint({ x: 3, y: 3 });
-    release(confirmed(1, 1, 2));
+    release(strokeOutcome("confirmed", "tx-first"));
     await vi.waitFor(() => expect(t.result.textContent).toContain("Taps may have been sent"));
     expect(t.paint.pendingCount()).toBe(2);
-    expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1);
+    expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(2);
     expect(t.pricing.settle).toHaveBeenCalled();
     t.dispose();
   });
 
   it("a batch that was never broadcast clears its marks and gives the credits back", async () => {
-    let release!: (r: DrawResult) => void;
-    vi.mocked(submitDraw).mockImplementationOnce(() => new Promise((r) => { release = r; }));
-    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
-      status: "partial", confirmedChunks: 0, totalChunks: 1, outcomes: [], executedBlocks: [],
-      failingChunk: { index: 0, mayHaveBroadcast: false, message: "signer exploded" },
-      chunks: [{ index: 0, state: "not_sent", message: "signer exploded", transactionHash: null, blockHeight: null }],
-    });
+    const release = holdNextSend();
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce(strokeOutcome("not_sent", null, { message: "signer exploded" }));
     const t = setup();
     t.paint.showDrawingSession();
     t.paint.maybeEnqueueDirectPaint({ x: 1, y: 1 });
-    await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1));
     t.pricing.admitTap.mockReturnValueOnce({ id: 7 }).mockReturnValueOnce({ id: 8 });
     t.paint.maybeEnqueueDirectPaint({ x: 2, y: 2 });
     t.paint.maybeEnqueueDirectPaint({ x: 3, y: 3 });
     t.pricing.ensurePaidQuote.mockImplementationOnce(async (_cells, _account, options) => ({
       maxCredits: 2, chunkMaxCredits: [2], reservation: options?.reservation ?? null,
     }));
-    release(confirmed(1, 1, 2));
+    release(strokeOutcome("confirmed", "tx-first"));
     await vi.waitFor(() => expect(t.result.textContent).toContain("Taps not painted"));
-    expect(t.paint.pendingCount()).toBe(0);
+    await vi.waitFor(() => expect(t.paint.pendingCount()).toBe(0));
     // The second tap's hold is returned up front; the first one carries the batch.
     expect(t.pricing.ensurePaidQuote).toHaveBeenLastCalledWith(
       [{ x: 2, y: 2 }, { x: 3, y: 3 }], "alice.testnet", expect.objectContaining({ reservation: { id: 7 } }));
@@ -313,18 +361,19 @@ describe("paint controller", () => {
     t.dispose();
   });
 
-  it("without a drawing session, queued taps stay one paint per approval", async () => {
+  it("without a drawing session, taps stay one wallet paint per approval", async () => {
+    vi.mocked(canUseLocalDrawingSession).mockReturnValue(false);
     let release!: (r: DrawResult) => void;
     vi.mocked(submitDraw)
       .mockImplementationOnce(() => new Promise((r) => { release = r; }))
       .mockImplementation(async (input) => confirmed(input.x, input.y, input.colorIndex));
     const t = setup();
-    t.paint.showDrawingSession();
-    t.paint.maybeEnqueueDirectPaint({ x: 1, y: 1 });
+    t.paint.enqueueUnsent(createDrawRequest({ x: 1, y: 1, colorIndex: 2, accountId: "alice.testnet", networkId: "testnet" }));
+    t.paint.enqueueUnsent(createDrawRequest({ x: 2, y: 2, colorIndex: 2, accountId: "alice.testnet", networkId: "testnet" }));
+    t.paint.enqueueUnsent(createDrawRequest({ x: 3, y: 3, colorIndex: 2, accountId: "alice.testnet", networkId: "testnet" }));
+    void t.paint.drainPaintQueue();
     await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(1));
-    t.paint.maybeEnqueueDirectPaint({ x: 2, y: 2 });
-    t.paint.maybeEnqueueDirectPaint({ x: 3, y: 3 });
-    vi.mocked(canUseLocalDrawingSession).mockReturnValue(false);
+    expect(t.paint.queueLength()).toBe(2);
     release(confirmed(1, 1, 2));
     await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(3));
     expect(signAndSendStrokeLocally).not.toHaveBeenCalled();

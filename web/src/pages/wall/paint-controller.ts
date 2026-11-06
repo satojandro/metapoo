@@ -1,3 +1,4 @@
+import { explorerUrl } from "@shared/board-rules.ts";
 import type { PixelView } from "@shared/types.ts";
 import { paintOperationId, type OperationPhase } from "../../app/operations";
 import type { AppServices } from "../../app/services";
@@ -5,10 +6,10 @@ import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
 import { contractMetaBlockCopy } from "../../contract-meta";
 import { createDrawRequest, drawRequestMatchesSession, type DrawRequest } from "../../draw-request";
 import { prepareDraw } from "../../draw-policy";
-import { canUseLocalDrawingSession, signAndSendStrokeLocally } from "../../local-draw";
+import { canUseLocalDrawingSession, prefetchSigningContext, signAndSendStrokeLocally } from "../../local-draw";
 import { clearPaintQueue, createPaintQueue, enqueuePaint, paintQueueLength, shiftPaint } from "../../paint-queue";
 import {
-  clearPendingPaint, createPendingPaintMap, listPendingPaints, reconcilePendingWithConfirmed, setPendingPaint,
+  clearPendingPaint, createPendingPaintMap, getPendingPaint, listPendingPaints, reconcilePendingWithConfirmed, setPendingPaint,
   type PendingPaint, type PendingPaintPhase,
 } from "../../pending-paint";
 import type { Cell } from "../../selection";
@@ -506,6 +507,10 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
     if (scope.isDisposed() || drawInFlight || !stillArmed()) return;
     drawInFlight = true;
     drawButton.disabled = true;
+    // Read the key, block and gas price while the stroke is being priced.
+    const prepared = canUseLocalDrawingSession(scope.walletAccount(), scope.walletNetwork())
+      ? prefetchSigningContext({ accountId: stroke.accountId, networkId: stroke.networkId })
+      : undefined;
     const priced = await pricing.ensurePaidQuote(stroke.state.cells, stroke.accountId, {
       approvedMax: requote?.approvedMax,
     });
@@ -541,6 +546,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         accountId: stroke.accountId, networkId: stroke.networkId,
         cells: stroke.state.cells, color: stroke.color,
         maxCredits: priced.chunkMaxCredits,
+        prepared,
       });
       // The chain's own PriceRoseAboveMax: that chunk stored and charged nothing.
       // Batches are sent together, so read each one's own result: a failure in the
@@ -732,10 +738,16 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
    * never delayed and a burst of taps costs one transaction instead of one each.
    * Grouping needs the drawing session (`draw_many` signed in the browser); the
    * wallet path keeps one paint per approval.
+   *
+   * With a session even a lone tap takes this path: one parallel read set, one
+   * send, settled on the receipt. The single-`draw` path it used to take read the
+   * key, block and price one after another and then re-read the pixel.
    */
-  function takeTapBatch(head: DrawRequest): DrawRequest[] {
+  function takeTapBatch(head: DrawRequest): { items: DrawRequest[]; viaSession: boolean } {
     const batch = [head];
-    if (!canUseLocalDrawingSession(scope.walletAccount(), scope.walletNetwork())) return batch;
+    if (!canUseLocalDrawingSession(scope.walletAccount(), scope.walletNetwork())) {
+      return { items: batch, viaSession: false };
+    }
     while (batch.length < MAX_BATCH) {
       const candidate = paintQueue.items[0];
       if (
@@ -747,7 +759,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       ) break;
       batch.push(shiftPaint(paintQueue)!);
     }
-    return batch;
+    return { items: batch, viaSession: true };
   }
 
   /**
@@ -786,6 +798,9 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
     }
     drawInFlight = true;
     drawButton.disabled = true;
+    // The key, block and gas price do not depend on the price: read them while
+    // the quote is in flight, so the quote and the signature cost one round trip.
+    const prepared = prefetchSigningContext({ accountId: first.accountId, networkId: first.networkId });
     const priced = await pricing.ensurePaidQuote(cells, first.accountId, {
       reservation: held,
       approvedMax: requote?.approvedMax,
@@ -801,10 +816,15 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       return;
     }
     const reservation = priced.reservation ?? held;
+    // One id per tap for the whole batch. `paintOperationId` stamps the current
+    // time into the id, so computing it per update made every phase a new record
+    // and left "submitted" behind, listed as recoverable forever.
+    const opIds = items.map((item) =>
+      paintOperationId({ accountId: item.accountId, x: item.x, y: item.y, colorIndex: item.colorIndex }));
     const recordOps = (phase: OperationPhase, transactionId: string | null, title: string, detail: string): void => {
-      for (const item of items) {
+      for (const [i, item] of items.entries()) {
         services.operations.upsert({
-          id: paintOperationId({ accountId: item.accountId, x: item.x, y: item.y, colorIndex: item.colorIndex }),
+          id: opIds[i]!,
           kind: "paint",
           phase,
           accountId: item.accountId,
@@ -829,6 +849,9 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         accountId: first.accountId, networkId: first.networkId,
         cells, color: first.colorIndex,
         maxCredits: priced.chunkMaxCredits,
+        prepared,
+        // Settle on the receipt; the block height for the stamp follows.
+        deferBlockHeights: true,
       });
       // The chain's own PriceRoseAboveMax: nothing was stored or charged.
       const chunk = outcome.chunks[0];
@@ -839,8 +862,16 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       const transactionId = chunk?.transactionHash ?? null;
       const executedAt = chunk?.blockHeight ?? null;
       const n = items.length;
-      const settled: Pick<SubmitDrawResult, "status" | "message"> & { title: string } =
-        chunk?.state === "confirmed"
+      const settled: Pick<SubmitDrawResult, "status" | "message"> & { title: string } = n === 1
+        ? (chunk?.state === "confirmed"
+          ? { status: "confirmed", title: "Pixel painted",
+              message: "Your paint executed on chain. The board refresh that follows shows anyone who painted over it since." }
+          : uncertain
+            ? { status: "confirmation_delayed", title: "Paint may have been sent",
+                message: `Its result is unknown, so it keeps a pending marker. No automatic retry. ${chunk?.message ?? ""}`.trim() }
+            : { status: "failed", title: "Paint not painted",
+                message: `Nothing was stored. ${chunk?.message ?? ""}`.trim() })
+        : chunk?.state === "confirmed"
           ? { status: "confirmed", title: "Taps painted",
               message: `${n} queued taps were sent as one transaction and executed together.` }
           : uncertain
@@ -857,15 +888,9 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
 
       for (const item of items) {
         if (settled.status === "confirmed") {
-          // The receipt proves the write at this block; stamp it like a stroke does.
-          if (executedAt !== null) {
-            board.rememberPixel(
-              { x: item.x, y: item.y, colorIndex: item.colorIndex,
-                artistAccountId: item.accountId, lastWriteTimestampNs: null },
-              executedAt,
-            );
-          }
-          clearPendingPaint(pendingPaints, item.x, item.y);
+          // Executed. The marker stays, tagged with this transaction, until the
+          // stamp below replaces it, so the cell never flashes its old colour.
+          markPending(item, transactionId, "submitted");
         } else if (settled.status === "confirmation_delayed") {
           markPending(item, transactionId, "confirmation_delayed");
         } else {
@@ -875,15 +900,48 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       deps.render();
       view.setFlow(settled.status === "confirmed" ? "confirmed"
         : settled.status === "confirmation_delayed" ? "confirmation_delayed" : "failed");
-      fillBlock(result, settled.title, settled.message);
+      if (n === 1) {
+        // A lone tap reads like the single paint it is: its transaction link, and
+        // the square stays selected, as the single-draw path showed.
+        fillResultWithLink(result, settled.title, settled.message, transactionId,
+          explorerUrl(first.networkId, transactionId));
+        view.setSelected({ x: first.x, y: first.y });
+        if (settled.status !== "failed") view.showSelection();
+      } else {
+        fillBlock(result, settled.title, settled.message);
+      }
       if (settled.status !== "confirmed" && chunk?.message) {
         console.error("[wall] tap batch failed:", chunk.message);
+      }
+      if (settled.status === "confirmed") {
+        // The receipt proves the write at its block; stamp it like a stroke does,
+        // as soon as the height is known. Nothing waits on this.
+        void (outcome.executedBlocksLater ?? Promise.resolve(outcome.executedBlocks)).then((blocks) => {
+          if (scope.isDisposed()) return;
+          const height = blocks[0]?.blockHeight ?? executedAt;
+          for (const item of items) {
+            if (height !== null) {
+              board.rememberPixel(
+                { x: item.x, y: item.y, colorIndex: item.colorIndex,
+                  artistAccountId: item.accountId, lastWriteTimestampNs: null },
+                height,
+              );
+            }
+            // A later paint on this cell owns its marker now: leave that one alone.
+            if (getPendingPaint(pendingPaints, item.x, item.y)?.transactionId === transactionId) {
+              clearPendingPaint(pendingPaints, item.x, item.y);
+            }
+          }
+          deps.render();
+          void board.refreshBoardFromContract({ reason: "after_draw" });
+        });
+      } else {
+        void board.refreshBoardFromContract({ reason: "after_draw" });
       }
       if (priceRose && !requote) {
         view.setFlow("editing");
         retryMax = await pricing.confirmRequote(cells, first.accountId);
       }
-      void board.refreshBoardFromContract({ reason: "after_draw" });
     } finally {
       if (spent) pricing.settle(reservation);
       else pricing.release(reservation);
@@ -926,7 +984,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
     const batch = takeTapBatch(next);
     paintQueue.inFlight = true;
     try {
-      if (batch.length > 1) await commitTapBatch(batch);
+      if (batch.viaSession) await commitTapBatch(batch.items);
       else await attemptDraw(next, queuedPlacementOutcomes.get(next));
     } finally {
       paintQueue.inFlight = false;

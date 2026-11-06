@@ -26,6 +26,24 @@ export function createNearClient(config) {
   const account = new Account(config.accountId, provider, signer);
   const client = {
     call: (method, gasTgas) => account.signAndSendTransaction(buildCall(config.contractId, method, gasTgas)),
+    // Free read of the board's revenue state. Lets the run skip a distribute call the
+    // contract would only panic on (`NothingToDistribute`), which at an hourly cadence
+    // spends real fee money to learn nothing. A failed read returns undefined and the
+    // run falls back to signing as before.
+    revenueState: async () => {
+      try {
+        const res = await provider.query({
+          request_type: 'call_function',
+          account_id: config.contractId,
+          method_name: 'get_revenue_state',
+          args_base64: 'e30=',
+          finality: 'final',
+        });
+        return JSON.parse(Buffer.from(res.result).toString());
+      } catch {
+        return undefined;
+      }
+    },
   };
   if (config.staking) {
     // Same keeper account, its second function-call key (receiver: the staking contract).

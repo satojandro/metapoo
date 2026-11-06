@@ -24,6 +24,8 @@ vi.mock("../../local-draw", async (importOriginal) => {
       remainingYocto: null,
       permissionSummary: "",
     })),
+    // Signing reads must never really hit the network in unit tests.
+    prefetchSigningContext: vi.fn(() => new Promise(() => undefined)),
     signAndSendStrokeLocally: vi.fn(async () => ({
       status: "confirmed",
       confirmedChunks: 1,

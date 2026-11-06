@@ -77,6 +77,7 @@ Latest full runs on `0b03bef` (after #58/#59/#61/#62), 3 Nov, Node 22.23.4: web 
 | — | Pending pixels expire after 90 s instead of sticking forever (#70.1) | `9101794`. `PENDING_PAINT_MAX_AGE_MS`; overlay only, nothing resubmitted, a late execution still lands via the board poll |
 | — | Board/price/balance reads share one paced transport: 2 in flight, in-flight dedupe, price priority, per-endpoint cooldown, network-matched backup, reads only | `5b61530`. Fallback re-probed 2026-11-05: `rpc.testnet.near.org` and `rpc.mainnet.near.org` both answer browser `query`/`call_function` with 200 + `access-control-allow-origin: *` in ~3.4 s, so the "deprecated on every call" note was stale |
 | — | Stroke latency: one read set per stroke (allowance+nonce, finalized block, gas price in parallel), every batch signed with nonces `n+1…n+k` against one pinned final block, `wait_until: NONE` sends with a single execution wait, and a per-batch result (`confirmed` / `failed` / `uncertain` / `not_sent`). Taps that queue behind an in-flight paint now go as one `draw_many` | `ae0b95c` (PR #78); web live as `dpl_DDqreV6hd7ucjd6nhajRGBR82nhX`. **Open:** not yet exercised on mainnet; `MAX_DRAW_BATCH` stays 64 because the per-receipt event log reaches 16 KB at ~100 cells (measured: 64 cells = 10,441 B with a 64-char painter, 128 = 20,837 B) |
+| — | Lone-tap latency: a session tap takes the same pipeline (`draw_many` of one cell), with the key, finalized block and gas price prefetched *while the price is quoted* and the credit balance read alongside it. Settles on the receipt — no confirming `get_pixel` (which retried up to 5 times, 400 ms apart); the stamp's block height is looked up in the background, and the pending marker survives until the stamp replaces it. Also fixes `paintOperationId` recomputing per phase, which left a `submitted` record listed as recoverable forever for every grouped tap | `08499a1` (PR #79); web live as `dpl_H3NTNtMxhRyDJSXH4XfScnEsEewL`. Request counts, not timings, are tested (1 key + 1 block + 1 gas-price read, 1 send, no status poll). **Open:** the **Place paint** button still uses the single-`draw` path; a tap now emits a `draw_many` event with one cell; the queue releases one round trip earlier, so a stale-nonce refusal is more likely after a lagging read — client-side nonce tracking is the follow-up |
 
 ## Open — verified not done
 
@@ -150,6 +151,17 @@ confirmed by owner. A testnet token is needed for the first paid rehearsal.
 | ECONOMY-LATER | Longevity rewards beyond emission, swaps, inventory shop | Still deferred. **Staking, emission rules and the buyback moved to the TOILET round** (TR-B, TR-S, TR-K, 2 Nov). |
 
 ## Open gates and scoped work
+
+### RPC: treat a JSON-RPC `-429` error body like an HTTP 429 — **open, 2026-11-06 incident**
+The 2026-11-06 rate-limit incident exposed a gap `read-rpc.ts` does not cover: FastNEAR can
+answer a rate-limited read with **HTTP 200 and a JSON-RPC error body** (`{"code":-429,"message":
+"Rate limits exceeded…"}`). The transport's 429 handling (cooldown + `near.drpc.org` fallback)
+only fires on HTTP 429, so the raw error payload propagated to the paint error card
+("Paint not painted. Nothing was stored. {…-429…}") instead of the fallback engaging. Fix:
+in the read transport (and/or `describeRpcError`), detect `error.code === -429` in a 200 body
+and route it through the same cool-down-and-fallback path as an HTTP 429. Add a unit test with
+a 200-wrapped -429 body. Found while diagnosing alejandro.near's "failed txs" (none existed —
+the paints never reached the chain).
 
 ### T1 manual visual gate — **human, open**
 `19e95bd` is tested but not seen. At paint zoom a single painted cell must be a solid square

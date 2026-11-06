@@ -92,6 +92,57 @@ describe('runKeeper', () => {
   });
 });
 
+describe('runKeeper preflight skip', () => {
+  function statefulClient(answers, state) {
+    const client = mockClient(answers);
+    client.revenueState = async () => state;
+    return client;
+  }
+
+  it('skips both distributes when the board has nothing to send', async () => {
+    const state = { withdrawable_near: '0', mpoo_undistributed: '0', mpoo_staker_reserve: '0' };
+    const lines = [];
+    const client = statefulClient({}, state);
+    const out = await runKeeper({ config, client, log: (l) => lines.push(l), now: () => new Date('2026-11-02T10:00:00Z') });
+    assert.equal(client.calls.length, 0);
+    assert.equal(out.exitCode, 0);
+    const parsed = lines.map((l) => JSON.parse(l));
+    assert.deepEqual(parsed.map((p) => p.outcome), ['skipped', 'skipped']);
+    assert.equal(parsed[0].reason, 'withdrawable_near_is_0');
+    assert.equal(parsed[1].reason, 'no_mpoo_waiting');
+  });
+
+  it('signs distribute_near as soon as withdrawable is non-zero', async () => {
+    const state = { withdrawable_near: '900000000000000000000000', mpoo_undistributed: '0', mpoo_staker_reserve: '0' };
+    const client = statefulClient({ distribute_near: ok('h1'), distribute_mpoo: ok('h2') }, state);
+    const out = await runKeeper({ config, client, log: () => {} });
+    assert.deepEqual(client.calls.map((c) => c.method), ['distribute_near']);
+    assert.equal(out.exitCode, 0);
+  });
+
+  it('signs distribute_mpoo when only the staker reserve is waiting', async () => {
+    const state = { withdrawable_near: '0', mpoo_undistributed: '0', mpoo_staker_reserve: '5' };
+    const client = statefulClient({ distribute_near: ok('h1'), distribute_mpoo: ok('h2') }, state);
+    await runKeeper({ config, client, log: () => {} });
+    assert.deepEqual(client.calls.map((c) => c.method), ['distribute_mpoo']);
+  });
+
+  it('a failed pre-read signs as before (fail open)', async () => {
+    const client = mockClient({ distribute_near: ok('h1'), distribute_mpoo: ok('h2') });
+    client.revenueState = async () => undefined;
+    const out = await runKeeper({ config, client, log: () => {} });
+    assert.equal(client.calls.length, 2);
+    assert.equal(out.exitCode, 0);
+  });
+
+  it('a client without revenueState signs as before', async () => {
+    const client = mockClient({ distribute_near: ok('h1'), distribute_mpoo: ok('h2') });
+    const out = await runKeeper({ config, client, log: () => {} });
+    assert.equal(client.calls.length, 2);
+    assert.equal(out.exitCode, 0);
+  });
+});
+
 describe('runKeeper with a staking contract (TR-S)', () => {
   const STAKING_KEY = `ed25519:${'2'.repeat(64)}`;
   const stakingConfig = loadConfig({

@@ -94,6 +94,59 @@ describe("pipelined stroke submission", () => {
     expect(mocks.key).toHaveBeenCalledTimes(1);
     expect(mocks.viewBlock).toHaveBeenCalledTimes(1);
     expect(mocks.price).toHaveBeenCalledTimes(1);
+    // The #77 guarantee, still pinned: signatures are anchored to a finalized block.
+    // near-api-js's own default is "optimistic", and a node that has not stored that
+    // block rejects the send after signing (UNKNOWN_BLOCK, see traps.md).
+    expect(mocks.viewBlock).toHaveBeenCalledWith({ finality: "final" });
+  });
+
+  it("a lone tap costs one parallel read set and one send, and nothing else on its path", async () => {
+    // The property this path exists for. Count requests, not milliseconds:
+    // timing drifts with the network, a new serial read is a regression.
+    const lone = { ...args, cells: [{ x: 4, y: 5 }], deferBlockHeights: true };
+    let releaseHeight!: (block: unknown) => void;
+    mocks.block.mockReturnValueOnce(new Promise((resolve) => { releaseHeight = resolve; }));
+    const result = await signAndSendStrokeLocally(lone);
+    expect(result.chunks.map((c) => c.state)).toEqual(["confirmed"]);
+    expect(mocks.key).toHaveBeenCalledTimes(1);
+    expect(mocks.viewBlock).toHaveBeenCalledTimes(1);
+    expect(mocks.price).toHaveBeenCalledTimes(1);
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(sentModes()).toEqual(["EXECUTED_OPTIMISTIC"]);
+    expect(mocks.status).not.toHaveBeenCalled();
+    // Returned on the receipt: the height lookup is still open and nothing waited for it.
+    expect(result.executedBlocks).toEqual([]);
+    releaseHeight({ header: { height: 901 } });
+    expect(await result.executedBlocksLater).toEqual([{ chunkIndex: 0, blockHeight: 901 }]);
+  });
+
+  it("uses reads started earlier instead of reading again", async () => {
+    const { prefetchSigningContext } = await import("./local-draw");
+    const prepared = prefetchSigningContext(args);
+    await prepared;
+    mocks.key.mockClear(); mocks.viewBlock.mockClear(); mocks.price.mockClear();
+    const result = await signAndSendStrokeLocally({ ...args, cells: [{ x: 1, y: 1 }], prepared });
+    expect(result.status).toBe("confirmed");
+    expect(mocks.key).not.toHaveBeenCalled();
+    expect(mocks.viewBlock).not.toHaveBeenCalled();
+    expect(mocks.price).not.toHaveBeenCalled();
+    expect(sentNonces()).toEqual([11]);
+  });
+
+  it("an unused prefetch that fails is not an unhandled rejection", async () => {
+    const { prefetchSigningContext } = await import("./local-draw");
+    mocks.key.mockRejectedValueOnce(new Error("busy"));
+    prefetchSigningContext(args);
+    // Let the rejection settle; vitest fails the run on an unhandled one.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  });
+
+  it("reports a failed prefetch as a batch that was not sent", async () => {
+    const { prefetchSigningContext } = await import("./local-draw");
+    mocks.viewBlock.mockRejectedValueOnce(new Error("block read down"));
+    const result = await signAndSendStrokeLocally({ ...args, prepared: prefetchSigningContext(args) });
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(result.failingChunk).toEqual({ index: 0, mayHaveBroadcast: false, message: "block read down" });
   });
 
   it("sends every batch before waiting for any result", async () => {

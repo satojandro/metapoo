@@ -69,9 +69,15 @@ distributes, so a thinner balance reports 0 rather than under-funding paint.
 
    `mpoo_token` is the live mainnet mPOO account (`mpoo.nearlytrade.near`, recorded in
    `docs/00-shared-decisions.md`). `mpoo_per_credit` 1e18 is a plumbing fixture, not a price.
-4. `new()` sets `payments.owner` to the deployer — the board account itself if you sign as it.
-   If the owner should be a different account, call `set_*`-style transfers or redeploy with the
-   owner as predecessor instead; check `get_owner` before handing out the address.
+4. `new()` sets `payments.owner` to the account that **signs** the call (`predecessor_account_id`)
+   — not a constructor argument. There is **no owner-transfer method**: the owner is fixed for the
+   board's life, so decide before deploying. For a launch board, sign `new` from a **named admin
+   account** (its wallet then sees the `/admin` owner console: tunables, pause, prices). After
+   `deploy` + `new` succeed, **delete the board's full-access key** — the contract's outgoing
+   transfers (distributions, mPOO legs) are promise calls and need no key; the FA key is only
+   ever needed again for `upgrade`/`delete_account`, which are owner or balance-holder actions.
+   Check `get_owner` before handing out the address. (Testing round 2026-11-05 kept the board
+   self-owned with its FA key on the Mini — a deliberate testing-round custody arrangement.)
 5. Set the launch rate: `set_toilet_rate` (1 yocto, owner only) — it starts at **0** and a board
    at 0 accrues nothing and reports no error. 64² makes the per-tile rate ~4× the 128² figure, so
    pick deliberately (testnet used `1000000000000000`).

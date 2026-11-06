@@ -45,38 +45,3 @@ describe("signing and pinning use a finalized block", () => {
     expect(body).toMatchObject({ method: "block", params: { finality: "final" } });
   });
 });
-
-describe("one stroke signs against one finalized block", () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  it("reads the final block once and reuses it for every chunk", async () => {
-    const { PinnedFinalBlockJsonRpcProvider } = await import("./final-block-provider");
-    const provider = new PinnedFinalBlockJsonRpcProvider({ url: "https://rpc.example" });
-    const send = vi
-      .spyOn(provider, "sendJsonRpc")
-      .mockResolvedValue({ header: { height: 1, hash: "h" } } as never);
-
-    await provider.viewBlock({ finality: "optimistic" });
-    await provider.viewBlock({ finality: "optimistic" });
-    await provider.viewBlock({ finality: "final" });
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenLastCalledWith("block", { block_id: undefined, finality: "final" });
-
-    // A lookup by hash is a different question and is never served from the pin.
-    await provider.viewBlock({ blockId: "abc" });
-    expect(send).toHaveBeenCalledTimes(2);
-  });
-
-  it("does not remember a failed read", async () => {
-    const { PinnedFinalBlockJsonRpcProvider } = await import("./final-block-provider");
-    const provider = new PinnedFinalBlockJsonRpcProvider({ url: "https://rpc.example" });
-    const send = vi
-      .spyOn(provider, "sendJsonRpc")
-      .mockRejectedValueOnce(new Error("busy"))
-      .mockResolvedValue({ header: { height: 2, hash: "h2" } } as never);
-
-    await expect(provider.viewBlock({ finality: "optimistic" })).rejects.toThrow("busy");
-    await expect(provider.viewBlock({ finality: "optimistic" })).resolves.toMatchObject({ header: { height: 2 } });
-    expect(send).toHaveBeenCalledTimes(2);
-  });
-});

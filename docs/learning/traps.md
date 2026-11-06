@@ -240,6 +240,13 @@ containers). GitHub's hosted runners allow it. Locally, either raise the hard li
 contract ids. The real checkout is `~/Projects/metapoo`. Confirm with
 `git remote -v` and the contract id in `web/.env` before believing any state.
 
+**`vercel pull` in a fresh worktree wipes the project settings and Vercel then guesses
+Next.js.** It reports `No Next.js version detected` even though `vercel build` worked in
+another worktree minutes earlier. `web/.vercel/project.json` must carry
+`settings.framework: null`; copying that file (and `.vercel/.env.production.local`) from a
+worktree that already built is the fast fix. `vercel link` alone is not enough — the
+settings arrive with `pull`.
+
 **`web/.env` is gitignored**, so a fresh clone or a new machine silently runs in mock mode
 with no chain at all. If the board is empty and draw does nothing, check it first.
 
