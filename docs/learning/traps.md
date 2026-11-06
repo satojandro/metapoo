@@ -266,3 +266,11 @@ node does not have, and the whole load dies.
 saw `-429 ... get a subscription at https://faslnear.com/` and `UNKNOWN_BLOCK` from two different
 causes: the first was a build missing `VITE_NEAR_RPC_API_KEY` (anonymous pool), the second was the
 optimistic block. Check the credential before believing a chain explanation.
+
+**A bigger `draw_many` batch is limited by the event log, not by gas.** `paint` emits one event
+entry per cell, each repeating the painter's account id. Multiplied out, with a **64-character
+implicit account** as the painter: 64 cells = 10,441 B, 100 cells = 16,273 B, 128 cells = 20,837 B,
+256 cells = 41,591 B, against NEAR's **16 KB per-receipt log limit**. So `MAX_DRAW_BATCH = 64` is a
+log budget, and the real ceiling with the current format is **~100 cells**. Raising it needs the
+per-cell `artist` dropped from the event (or one summary event per call) first — not more gas.
+Gas is not the constraint: 64 cells already runs inside `DRAW_GAS`.
