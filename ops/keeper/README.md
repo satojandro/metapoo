@@ -12,8 +12,12 @@ success.
 If the keeper stops, nothing is lost. Revenue waits on the board and the next call (from the keeper
 or anyone else) sends all of it.
 
-**Status:** code written against the spec. The methods don't exist yet (REV-D). Nothing here has
-run against a chain.
+**Status:** running hourly on mainnet against the 2026-11-05 testing board (launchd,
+`org.metapoo.keeper`). Each run first reads `get_revenue_state` for free and **skips** a
+distribute call whose input is still zero (`withdrawable_near_is_0`, `no_mpoo_waiting`) — an
+idle hour costs no fees. A failed pre-read signs as before (fail-open). `distribute_near` /
+`distribute_mpoo` exist on the board (schema 4); when nothing is waiting the contract would
+panic `NothingToDistribute`, which is what the pre-read avoids.
 
 ## What it does
 
