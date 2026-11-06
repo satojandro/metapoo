@@ -1,7 +1,7 @@
 import { Account } from "@near-js/accounts";
 import { KeyPair, type KeyPairString } from "@near-js/crypto";
 import { JsonRpcProvider } from "@near-js/providers";
-import { FinalBlockJsonRpcProvider } from "./final-block-provider";
+import { FinalBlockJsonRpcProvider, PinnedFinalBlockJsonRpcProvider } from "./final-block-provider";
 import { KeyPairSigner } from "@near-js/signers";
 import type { FinalExecutionOutcome } from "@near-js/types";
 import { chunkCells, chunkArgs, type StrokeCell } from "./pages/wall/stroke-paint";
@@ -75,6 +75,12 @@ export interface AccessKeyAllowanceInfo {
   permissionSummary: string;
   /** True when the wallet added a key with no method filter: any method on the board. */
   wildcard?: boolean;
+  /**
+   * The key's nonce at the read, as a decimal string; absent when the node did not
+   * say. Every transaction the chain includes for this key raises it, executed
+   * successfully or not, which makes it the evidence for "did a send land".
+   */
+  nonce?: string;
 }
 
 function provider(): JsonRpcProvider {
@@ -172,7 +178,7 @@ export async function fetchDrawingSessionAllowance(input: {
   networkId: string;
 }): Promise<AccessKeyAllowanceInfo> {
   const record = requireActiveRecord(input.accountId, input.networkId);
-  let view: { permission?: AccessKeyPermission; error?: unknown };
+  let view: { permission?: AccessKeyPermission; nonce?: unknown; error?: unknown };
   try {
     view = await readRpc("query", {
       request_type: "view_access_key",
@@ -192,11 +198,13 @@ export async function fetchDrawingSessionAllowance(input: {
     throw new LocalDrawError("rpc", view.error);
   }
   const permission = view?.permission;
+  const nonce = readNonce(view?.nonce);
   if (permission === "FullAccess") {
     return {
       found: true,
       remainingYocto: null,
       permissionSummary: "Full access (unexpected for this experiment)",
+      ...(nonce !== null ? { nonce } : {}),
     };
   }
   if (!permission || typeof permission !== "object" || !permission.FunctionCall) {
@@ -210,7 +218,16 @@ export async function fetchDrawingSessionAllowance(input: {
     remainingYocto: allowance,
     permissionSummary: `receiver ${fn.receiver_id}; methods ${(fn.method_names ?? []).join(", ") || "(any)"}`,
     wildcard: (fn.method_names ?? []).length === 0,
+    ...(nonce !== null ? { nonce } : {}),
   };
+}
+
+/** A nonce as a decimal string, or null when the value is not a whole number. */
+function readNonce(raw: unknown): string | null {
+  if (typeof raw === "number" && Number.isSafeInteger(raw) && raw >= 0) return String(raw);
+  if (typeof raw === "string" && /^\d+$/.test(raw)) return raw;
+  if (typeof raw === "bigint" && raw >= 0n) return raw.toString();
+  return null;
 }
 
 function notFound(): AccessKeyAllowanceInfo {
@@ -341,7 +358,17 @@ export interface LocalStrokeResult {
   executedBlocks: Array<{ chunkIndex: number; blockHeight: number }>;
 }
 
-/** Submit sequential atomic batches. Never retry or switch paths after a failure. */
+/**
+ * Submit sequential atomic batches. Never retry or switch paths after a failure.
+ *
+ * Reads are per stroke, not per chunk (each one is a ~250 ms round trip, and they
+ * used to run serially in front of every chunk):
+ * - the key's allowance and nonce, and the gas price, are read once, in parallel;
+ *   later chunks check a running estimate and read again only when it runs low;
+ * - every chunk signs against one pinned finalized block;
+ * - each chunk's executed-block lookup runs beside the next chunk instead of
+ *   in front of it.
+ */
 export async function signAndSendStrokeLocally(args: {
   accountId: string;
   networkId: string;
@@ -355,28 +382,50 @@ export async function signAndSendStrokeLocally(args: {
     status: "confirmed", confirmedChunks: 0, totalChunks: chunks.length,
     outcomes: [], failingChunk: null, executedBlocks: [],
   };
+  const heightLookups: Array<Promise<{ chunkIndex: number; blockHeight: number } | null>> = [];
+  const rpc = new PinnedFinalBlockJsonRpcProvider(rpcConnection(RPC_URL));
+  let account: Account | null = null;
+  // Started now, awaited only if the allowance is limited (it normally is).
+  let gasPrice: Promise<bigint> | null = null;
+  const readGasPrice = (): Promise<bigint> =>
+    (gasPrice ??= readRpc<{ gas_price: string }>("gas_price", [null]).then((p) => BigInt(p.gas_price)));
+  /** Allowance still available, as far as this stroke can tell without a read. */
+  let estimatedRemaining: bigint | null = null;
+  /** The key's nonce before the current chunk's send; null when unknown. */
+  let nonceBefore: bigint | null = null;
+
+  /** A fresh key read: found or throw, and reset both estimates from the chain. */
+  const readKey = async (): Promise<void> => {
+    const allowance = await fetchDrawingSessionAllowance(args);
+    if (!allowance.found) {
+      throw new LocalDrawError("key_missing", "Authorize a new drawing session before continuing.");
+    }
+    estimatedRemaining = allowance.remainingYocto === null ? null : BigInt(allowance.remainingYocto);
+    nonceBefore = allowance.nonce === undefined ? null : BigInt(allowance.nonce);
+  };
+
   for (const [index, chunk] of chunks.entries()) {
     let mayHaveBroadcast = false;
-    let allowanceBefore: string | null = null;
     try {
       const record = requireActiveRecord(args.accountId, args.networkId);
-      const allowance = await fetchDrawingSessionAllowance(args);
-      allowanceBefore = allowance.remainingYocto;
-      if (!allowance.found) {
-        throw new LocalDrawError("key_missing", "Authorize a new drawing session before continuing.");
+      if (index === 0) {
+        void readGasPrice().catch(() => undefined);
+        await readKey();
       }
-      const rpc = provider();
-      if (allowance.remainingYocto !== null) {
-        const price = await readRpc<{ gas_price: string }>("gas_price", [null]);
+      if (estimatedRemaining !== null) {
         // Reserve prepaid gas at the current RPC price, with headroom for
         // transaction fees and the protocol's gas-price inflation margin.
-        const required = BigInt(DRAW_GAS) * BigInt(price.gas_price) * 2n;
-        if (BigInt(allowance.remainingYocto) < required) {
+        const required = BigInt(DRAW_GAS) * (await readGasPrice()) * 2n;
+        if (estimatedRemaining < required && index > 0) {
+          // The estimate is deliberately pessimistic; ask the chain before refusing.
+          await readKey();
+        }
+        if (estimatedRemaining !== null && estimatedRemaining < required) {
           throw new LocalDrawError("allowance_exhausted",
             "This drawing session has too little gas allowance for the next batch. Authorize a new session to continue.");
         }
       }
-      const account = new Account(args.accountId, rpc, signerFromRecord(record));
+      account ??= new Account(args.accountId, rpc, signerFromRecord(record));
       mayHaveBroadcast = true;
       const outcome = await account.callFunctionRaw({
         contractId: CONTRACT_ID, methodName: "draw_many",
@@ -385,43 +434,68 @@ export async function signAndSendStrokeLocally(args: {
         waitUntil: "EXECUTED_OPTIMISTIC",
       });
       result.outcomes.push(outcome);
+      if (estimatedRemaining !== null) {
+        // Charge the estimate the same reserve the check above requires, so it
+        // only ever errs low; running low triggers a real read, not a refusal.
+        const charged = BigInt(DRAW_GAS) * (await readGasPrice()) * 2n;
+        estimatedRemaining = estimatedRemaining > charged ? estimatedRemaining - charged : 0n;
+      }
       const parsed = parseTxOutcome(outcome);
       if (!hasRecognizedTxSuccess(parsed)) {
         throw new Error(parsed.failureMessage ?? "Batch execution is still unconfirmed.");
       }
       result.confirmedChunks += 1;
-      const executedHeight = await resolveExecutedBlockHeight(parsed.blockHash);
-      if (executedHeight !== null) {
-        result.executedBlocks.push({ chunkIndex: index, blockHeight: executedHeight });
-      }
+      // Only after success: a returned failure must keep the pre-send nonce as its
+      // baseline, so the check in `catch` sees it move and reports "may have
+      // broadcast". This chunk's own nonce is the next chunk's baseline.
+      nonceBefore = transactionNonce(outcome);
+      heightLookups.push(
+        resolveExecutedBlockHeight(parsed.blockHash).then((blockHeight) =>
+          blockHeight === null ? null : { chunkIndex: index, blockHeight }),
+      );
     } catch (error) {
       result.status = "partial";
       const message = error instanceof Error ? error.message : String(error);
       result.failingChunk = {
         index,
         // `mayHaveBroadcast` was set before the call, so it means "the send was
-        // attempted", not "a transaction may exist". Ask the chain instead: an
-        // executed transaction spends the session key's gas allowance, and a
-        // payload that never left the browser leaves it byte-identical. Without
-        // this check a purely local failure pinned every cell in the batch as
-        // "confirmation delayed" forever, with no transaction on chain.
-        mayHaveBroadcast: mayHaveBroadcast
-          ? await (async () => {
-              try {
-                const after = await fetchDrawingSessionAllowance(args);
-                if (after.remainingYocto === null || allowanceBefore === null) {
-                  return true; // unknown allowance: stay conservative
-                }
-                return BigInt(after.remainingYocto) !== BigInt(allowanceBefore);
-              } catch {
-                return true;
-              }
-            })()
-          : false,
+        // attempted", not "a transaction may exist". Ask the chain instead: every
+        // transaction included for this key raises its nonce, and a payload that
+        // never left the browser leaves it unchanged. Without this check a purely
+        // local failure pinned every cell in the batch as "confirmation delayed"
+        // forever, with no transaction on chain.
+        mayHaveBroadcast: mayHaveBroadcast ? await nonceMoved(args, nonceBefore) : false,
         message,
       };
       break;
     }
   }
+  for (const found of await Promise.all(heightLookups)) {
+    if (found) result.executedBlocks.push(found);
+  }
   return result;
+}
+
+/** The nonce a transaction outcome reports, or null when it does not say. */
+function transactionNonce(outcome: FinalExecutionOutcome): bigint | null {
+  const raw = readNonce((outcome as { transaction?: { nonce?: unknown } }).transaction?.nonce);
+  return raw === null ? null : BigInt(raw);
+}
+
+/**
+ * True unless the chain shows the key's nonce exactly where it was before the send.
+ * Any doubt (no baseline, a failed read, a missing key) stays conservative: true.
+ */
+async function nonceMoved(
+  input: { accountId: string; networkId: string },
+  before: bigint | null,
+): Promise<boolean> {
+  if (before === null) return true;
+  try {
+    const after = await fetchDrawingSessionAllowance(input);
+    if (!after.found || after.nonce === undefined) return true;
+    return BigInt(after.nonce) !== before;
+  } catch {
+    return true;
+  }
 }

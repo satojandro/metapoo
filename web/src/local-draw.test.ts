@@ -22,9 +22,15 @@ import { DRAW_GAS } from "./config";
 const cells = Array.from({ length: 130 }, (_, i) => ({ x: i % 128, y: Math.floor(i / 128) }));
 const args = { accountId: "alice.testnet", networkId: "testnet", cells, color: 3 };
 const success = { status: { SuccessValue: "" }, transaction: { hash: "tx" } };
+const FULL = "1000000000000000000000000";
+const key = (nonce: number, allowance = FULL) => ({ nonce, permission: { FunctionCall: { allowance } } });
+/** A confirmed chunk whose transaction used `nonce`. */
+const sent = (nonce: number) => ({ status: { SuccessValue: "" }, transaction: { hash: `tx${nonce}`, nonce } });
+/** What the check reserves per chunk: 30 Tgas × 0.1 Ggas price × 2. */
+const RESERVE = 30_000_000_000_000n * 100_000_000n * 2n;
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.key.mockResolvedValue({ permission: { FunctionCall: { allowance: "1000000000000000000000000" } } });
+  mocks.key.mockReset().mockResolvedValue(key(10));
   mocks.price.mockResolvedValue({ gas_price: "100000000" });
   mocks.block.mockResolvedValue({ header: { height: 777 } });
   mocks.call.mockReset().mockResolvedValue(success);
@@ -36,8 +42,7 @@ describe("session stroke submission", () => {
     expect(mocks.call.mock.calls.map(([call]) => call.args.cells.length)).toEqual([64, 64, 2]);
     expect(mocks.call.mock.calls.flatMap(([call]) => call.args.cells)).toEqual(cells.map(cell => ({ ...cell, color: 3 })));
     for (const [call] of mocks.call.mock.calls) expect(call).toMatchObject({ methodName: "draw_many", gas: DRAW_GAS, deposit: "0" });
-    expect(mocks.key).toHaveBeenCalledTimes(3);
-    // One signer account per call; no per-cell artist or timestamp overrides.
+    // One signer account for the stroke; no per-cell artist or timestamp overrides.
     // The deployed contract assigns predecessor + block timestamp atomically.
     expect(mocks.account.mock.calls.every(([id]) => id === args.accountId)).toBe(true);
     for (const [call] of mocks.call.mock.calls) {
@@ -45,53 +50,84 @@ describe("session stroke submission", () => {
       for (const cell of call.args.cells) expect(Object.keys(cell).sort()).toEqual(["color", "x", "y"]);
     }
   });
+
+  it("reads the key and the gas price once per stroke, not once per chunk", async () => {
+    // Each read is a ~250 ms round trip that used to sit in front of every chunk.
+    await signAndSendStrokeLocally(args);
+    expect(mocks.call).toHaveBeenCalledTimes(3);
+    expect(mocks.key).toHaveBeenCalledTimes(1);
+    expect(mocks.price).toHaveBeenCalledTimes(1);
+    expect(mocks.account).toHaveBeenCalledTimes(1);
+  });
+
   it("stops at the first lost response without retry or fallback", async () => {
-    // "lost response" means the transaction may exist. The allowance moving is
-    // the evidence for that: chunk 1 read it before the call and again after
-    // the failure, and it dropped, so gas was spent by a real transaction.
-    mocks.key
-      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "1000000000000000000000000" } } })
-      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "1000000000000000000000000" } } })
-      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "900000000000000000000000" } } });
-    mocks.call.mockResolvedValueOnce(success).mockRejectedValueOnce(new Error("lost response"));
+    // "lost response" means the transaction may exist. The key's nonce moving is
+    // the evidence: chunk 0 landed at nonce 11, and after chunk 1's failure the
+    // key reads 12, so a second transaction was included.
+    mocks.key.mockResolvedValueOnce(key(10)).mockResolvedValueOnce(key(12));
+    mocks.call.mockResolvedValueOnce(sent(11)).mockRejectedValueOnce(new Error("lost response"));
     expect(await signAndSendStrokeLocally(args)).toMatchObject({ status: "partial", confirmedChunks: 1, totalChunks: 3,
       failingChunk: { index: 1, mayHaveBroadcast: true, message: "lost response" } });
     expect(mocks.call).toHaveBeenCalledTimes(2);
   });
 
-  it("does not claim a possible broadcast when the session key never spent gas", async () => {
+  it("does not claim a possible broadcast when the session key's nonce never moved", async () => {
     // A payload that never left the browser (serialisation, signer, or a
-    // rejected RPC call) leaves the allowance byte-identical. Reporting
-    // "may have been broadcast" there pinned every cell of the batch as
-    // confirmation-delayed forever, on a chain with no such transaction.
+    // rejected RPC call) leaves the nonce unchanged. Reporting "may have been
+    // broadcast" there pinned every cell of the batch as confirmation-delayed
+    // forever, on a chain with no such transaction.
     mocks.call.mockRejectedValueOnce(new Error("Expected Array-like not bigint"));
     const result = await signAndSendStrokeLocally(args);
     expect(result).toMatchObject({ status: "partial", confirmedChunks: 0, failingChunk: {
       index: 0, mayHaveBroadcast: false, message: "Expected Array-like not bigint",
     } });
   });
+
+  it("measures a later chunk's failure against the previous chunk's nonce", async () => {
+    // Chunk 0 landed at 11; chunk 1 never left the browser, so the key still reads 11.
+    mocks.key.mockResolvedValueOnce(key(10)).mockResolvedValueOnce(key(11));
+    mocks.call.mockResolvedValueOnce(sent(11)).mockRejectedValueOnce(new Error("signer exploded"));
+    expect(await signAndSendStrokeLocally(args)).toMatchObject({ confirmedChunks: 1,
+      failingChunk: { index: 1, mayHaveBroadcast: false } });
+  });
+
+  it("stays conservative when there is no nonce to compare against", async () => {
+    mocks.key.mockResolvedValue({ permission: { FunctionCall: { allowance: FULL } } });
+    mocks.call.mockRejectedValueOnce(new Error("timeout"));
+    expect(await signAndSendStrokeLocally(args)).toMatchObject({ failingChunk: { index: 0, mayHaveBroadcast: true } });
+  });
+
   it("stops on a returned failed or unknown execution", async () => {
-    // Executed-but-failed still spends gas, so the allowance moves: uncertain.
-    mocks.key
-      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "1000000000000000000000000" } } })
-      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "899000000000000000000000" } } });
-    mocks.call.mockResolvedValueOnce({ status: { Failure: "failed" } });
+    // Executed-but-failed was included, so the nonce moves: uncertain. The
+    // returned outcome's own nonce must not become the baseline for this check.
+    mocks.key.mockResolvedValueOnce(key(10)).mockResolvedValueOnce(key(11));
+    mocks.call.mockResolvedValueOnce({ status: { Failure: "failed" }, transaction: { hash: "tx", nonce: 11 } });
     expect(await signAndSendStrokeLocally(args)).toMatchObject({ status: "partial", confirmedChunks: 0, failingChunk: { mayHaveBroadcast: true } });
     expect(mocks.call).toHaveBeenCalledTimes(1);
   });
-  it("refuses a short allowance before broadcasting the next chunk", async () => {
-    mocks.key.mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "1" } } });
+
+  it("refuses a short allowance before broadcasting the first chunk", async () => {
+    mocks.key.mockResolvedValueOnce(key(10, "1"));
     expect(await signAndSendStrokeLocally(args)).toMatchObject({ status: "partial", confirmedChunks: 0, failingChunk: {
       index: 0, mayHaveBroadcast: false,
       message: "This drawing session has too little gas allowance for the next batch. Authorize a new session to continue.",
     } });
     expect(mocks.call).not.toHaveBeenCalled();
   });
-  it("rechecks allowance between confirmed chunks", async () => {
-    mocks.key.mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "1000000000000000000000000" } } })
-      .mockResolvedValueOnce({ permission: { FunctionCall: { allowance: "0" } } });
-    expect(await signAndSendStrokeLocally(args)).toMatchObject({ confirmedChunks: 1, failingChunk: { index: 1, mayHaveBroadcast: false } });
-    expect(mocks.call).toHaveBeenCalledTimes(1);
+
+  it("re-reads the key when the running estimate runs low, and refuses only on the chain's word", async () => {
+    // Enough for two chunks' reserve: chunk 2 finds the estimate low and asks the chain.
+    mocks.key.mockResolvedValueOnce(key(10, String(RESERVE * 2n + 1n))).mockResolvedValueOnce(key(12, "0"));
+    mocks.call.mockResolvedValueOnce(sent(11)).mockResolvedValueOnce(sent(12));
+    expect(await signAndSendStrokeLocally(args)).toMatchObject({ confirmedChunks: 2, failingChunk: { index: 2, mayHaveBroadcast: false } });
+    expect(mocks.call).toHaveBeenCalledTimes(2);
+    expect(mocks.key).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps going when the estimate is low but the chain still has allowance", async () => {
+    mocks.key.mockResolvedValueOnce(key(10, String(RESERVE))).mockResolvedValueOnce(key(11));
+    mocks.call.mockResolvedValueOnce(sent(11));
+    expect(await signAndSendStrokeLocally(args)).toMatchObject({ status: "confirmed", confirmedChunks: 3 });
   });
 
   it("resolves the executed block for every confirmed chunk", async () => {
@@ -109,6 +145,20 @@ describe("session stroke submission", () => {
       { chunkIndex: 2, blockHeight: 777 },
     ]);
     expect(mocks.block).toHaveBeenCalledWith({ blockId: "BH1" });
+  });
+
+  it("sends the next chunk without waiting for the previous chunk's block lookup", async () => {
+    mocks.call.mockResolvedValue({
+      status: { SuccessValue: "" },
+      transaction: { hash: "tx" },
+      transaction_outcome: { block_hash: "BH1" },
+    });
+    let release!: (value: unknown) => void;
+    mocks.block.mockReturnValueOnce(new Promise((resolve) => { release = resolve; }));
+    const pending = signAndSendStrokeLocally(args);
+    await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(3));
+    release({ header: { height: 776 } });
+    expect((await pending).executedBlocks[0]).toEqual({ chunkIndex: 0, blockHeight: 776 });
   });
 
   it("stays confirmed when the executed block cannot be resolved", async () => {
