@@ -448,6 +448,11 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
     }
     submitQuoteInFlight = true;
     const request = ++priceRequest;
+    // The balance does not depend on the price: read both at once, so a paint
+    // waits one round trip for its quote instead of two.
+    const balanceRead: Promise<{ ok: true } | { ok: false }> | null = accountId
+      ? readCredits(accountId).then(() => ({ ok: true as const }), () => ({ ok: false as const }))
+      : null;
     try {
       const quote = await quoteRepaint({
         readers: repaintReaders,
@@ -484,9 +489,7 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       if (!accountId) {
         return priced(null);
       }
-      try {
-        await readCredits(accountId);
-      } catch {
+      if (!(await balanceRead!).ok) {
         showQuoteUnavailable("balance");
         return null;
       }

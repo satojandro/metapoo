@@ -27,6 +27,8 @@ vi.mock("../../local-draw", async (importOriginal) => {
       remainingYocto: null,
       permissionSummary: "",
     })),
+    // Signing reads must never really hit the network in unit tests.
+    prefetchSigningContext: vi.fn(() => new Promise(() => undefined)),
     signAndSendStrokeLocally: vi.fn(async () => ({
       status: "confirmed",
       confirmedChunks: 1,
@@ -278,11 +280,13 @@ afterEach(() => {
 });
 
 describe("wall behaviour: free board", () => {
-  it("tap paint on the free board submits one draw and reports the confirmed outcome", async () => {
+  it("tap paint on the free board sends one pipelined paint and reports the confirmed outcome", async () => {
     vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
-    vi.mocked(submitDraw).mockImplementation(async (input) =>
-      CONFIRMED_AT(input.x, input.y, input.colorIndex),
-    );
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
+      status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null,
+      executedBlocks: [], executedBlocksLater: Promise.resolve([{ chunkIndex: 0, blockHeight: 9_000 }]),
+      chunks: [{ index: 0, state: "confirmed", message: null, transactionHash: "tx-64-64", blockHeight: null }],
+    });
     const services = createAppServices();
     controllableWallet(services, ALICE);
     const { root, api, dispose, viewport } = mount(services);
@@ -297,28 +301,25 @@ describe("wall behaviour: free board", () => {
     touch(viewport, "pointerdown", 1, 260, 260);
     touch(viewport, "pointerup", 1, 260, 260);
 
-    await vi.waitFor(() => expect(text(root, "#result")).toContain("Paint confirmed"));
-    expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(submitDraw).mock.calls[0]![0]).toMatchObject({
-      x: 64,
-      y: 64,
-      colorIndex: 2,
+    await vi.waitFor(() => expect(text(root, "#result")).toContain("Pixel painted"));
+    // With a drawing session a lone tap takes the pipelined path, not the single draw.
+    expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
+    expect(vi.mocked(signAndSendStrokeLocally)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(signAndSendStrokeLocally).mock.calls[0]![0]).toMatchObject({
+      cells: [{ x: 64, y: 64 }],
+      color: 2,
       accountId: "alice.testnet",
       networkId: "testnet",
     });
     expect(text(root, "#result")).toContain("Transaction id: tx-64-64");
-    expect(root.querySelector<HTMLAnchorElement>("#result a")?.href).toBe(
-      "https://explorer.test/tx-64-64",
-    );
+    expect(root.querySelector<HTMLAnchorElement>("#result a")?.href).toContain("tx-64-64");
     expect(text(document.body, "#flow-state")).toBe(
-      "Painted. Your square is on the wall.",
-    );
-    expect(text(root, "#draw-state")).toBe(
       "Painted. Your square is on the wall.",
     );
     const op = services.operations.list().find((o) => o.kind === "paint");
     expect(op).toMatchObject({ phase: "confirmed", transactionId: "tx-64-64" });
-    expect(api.pendingPaintCount()).toBe(0);
+    // Stamped from the receipt at its executed block; the marker clears with the stamp.
+    await vi.waitFor(() => expect(api.pendingPaintCount()).toBe(0));
     expect(api.cachedPixelColor({ x: 64, y: 64 })).toBe(2);
     expect(text(root, "#selection-summary")).toContain("Selected square x=64, y=64");
     // A confirmed paint re-reads the board ("after_draw").

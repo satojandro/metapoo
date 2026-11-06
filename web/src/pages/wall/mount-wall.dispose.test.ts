@@ -29,6 +29,8 @@ vi.mock("../../local-draw", async (importOriginal) => {
     canUseLocalDrawingSession: vi.fn(() => false),
     fetchDrawingSessionAllowance: vi.fn(async () => ({ found: true, remainingYocto: null, permissionSummary: "" })),
     // Stroke submission is asserted; it must never really sign in unit tests.
+    // Signing reads must never really hit the network in unit tests.
+    prefetchSigningContext: vi.fn(() => new Promise(() => undefined)),
     signAndSendStrokeLocally: vi.fn(async () => ({ status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null, executedBlocks: [],
       chunks: [{ index: 0, state: "confirmed", message: null, transactionHash: "tx", blockHeight: null }] })),
   };
@@ -199,16 +201,12 @@ describe("mountWall dispose", () => {
     dispose();
   });
 
-  it("routes one stationary touch tap through the existing draw path, without a touch preview", async () => {
+  it("routes one stationary touch tap to a single paint, without a touch preview", async () => {
     vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
-    vi.mocked(submitDraw).mockResolvedValue({
-      status: "confirmation_delayed",
-      title: "Delayed",
-      message: "Still confirming",
-      transactionId: "tx-touch-1",
-      explorerUrl: null,
-      pixel: null,
-      observedBlockHeight: null,
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
+      status: "partial", confirmedChunks: 0, totalChunks: 1, outcomes: [], executedBlocks: [],
+      failingChunk: { index: 0, mayHaveBroadcast: true, message: "Still confirming" },
+      chunks: [{ index: 0, state: "uncertain", message: "Still confirming", transactionHash: "tx-touch-1", blockHeight: null }],
     });
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
@@ -235,7 +233,8 @@ describe("mountWall dispose", () => {
     touchPointer(viewport, "pointerdown", 1, 40, 40);
     touchPointer(viewport, "pointerup", 1, 40, 40);
 
-    await vi.waitFor(() => expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(vi.mocked(signAndSendStrokeLocally)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(signAndSendStrokeLocally).mock.calls[0]![0].cells).toHaveLength(1);
     expect(root.querySelector<HTMLElement>(".pointer-preview")?.hidden).toBe(true);
     expect(root.querySelector("[data-placement-outcomes]")?.textContent).toMatch(/confirmation delayed/i);
     dispose();
@@ -803,22 +802,18 @@ describe("mountWall dispose", () => {
       },
     );
     vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
-    const pixel = (x: number, y: number) => ({
-      x, y, colorIndex: 0, artistAccountId: "alice.testnet", lastWriteTimestampNs: "1",
-    });
-    const settled = {
-      status: "confirmed" as const, title: "Placed", message: "Placed",
-      transactionId: "tx", explorerUrl: null, validated_deposit: undefined,
-      pixel: pixel(1, 1), observedBlockHeight: 9,
+    const executed = {
+      status: "confirmed" as const, confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null,
+      executedBlocks: [], chunks: [{ index: 0, state: "confirmed" as const, message: null, transactionHash: "tx", blockHeight: 9 }],
     };
-    let releaseFirst: (value: unknown) => void = () => undefined;
-    const firstInFlight = new Promise((resolve) => {
+    let releaseFirst: (value: typeof executed) => void = () => undefined;
+    const firstInFlight = new Promise<typeof executed>((resolve) => {
       releaseFirst = resolve;
     });
-    vi.mocked(submitDraw)
+    vi.mocked(signAndSendStrokeLocally)
       .mockReset()
-      .mockReturnValueOnce(firstInFlight as never)
-      .mockResolvedValue(settled as never);
+      .mockReturnValueOnce(firstInFlight)
+      .mockResolvedValue(executed);
 
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
@@ -845,15 +840,15 @@ describe("mountWall dispose", () => {
     };
 
     tap(60, 200);
-    await vi.waitFor(() => expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(vi.mocked(signAndSendStrokeLocally)).toHaveBeenCalledTimes(1));
     // Second deliberate tap arrives while the first transaction is unresolved.
     // It must be queued, not dropped: dropping it made the board feel dead
     // until the previous paint landed.
     tap(90, 200);
-    expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(signAndSendStrokeLocally)).toHaveBeenCalledTimes(1);
 
-    releaseFirst(settled);
-    await vi.waitFor(() => expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(2));
+    releaseFirst(executed);
+    await vi.waitFor(() => expect(vi.mocked(signAndSendStrokeLocally)).toHaveBeenCalledTimes(2));
     dispose();
   });
   it("stamps a confirmed stroke from its receipt, without waiting for a board read", async () => {
@@ -1281,8 +1276,10 @@ describe("mounted paint strokes", () => {
       });
       expect(submitDraw).not.toHaveBeenCalled();
     } else if (kind === "tap") {
-      expect(submitDraw).toHaveBeenCalledTimes(1);
-      expect(signAndSendStrokeLocally).not.toHaveBeenCalled();
+      // One paint of one cell, through the session's pipelined path.
+      expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(signAndSendStrokeLocally).mock.calls[0][0].cells).toHaveLength(1);
+      expect(submitDraw).not.toHaveBeenCalled();
     } else {
       expect(submitDraw).not.toHaveBeenCalled();
       expect(signAndSendStrokeLocally).not.toHaveBeenCalled();

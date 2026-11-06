@@ -24,32 +24,3 @@ export class FinalBlockJsonRpcProvider extends JsonRpcProvider {
   }
 }
 
-/**
- * A final-block provider that reads the signing block once and reuses it.
- *
- * One stroke signs up to four transactions in a row. Each one used to fetch a fresh
- * final block (~430 ms on FastNEAR) only to take its hash. A finalized hash stays
- * inside a transaction's validity window for many hours, so every chunk of one
- * stroke can share it. Make one instance per stroke and let it go afterwards: the
- * pin must never outlive the gesture it was made for.
- *
- * A failed read is not remembered, so the next chunk asks again.
- */
-export class PinnedFinalBlockJsonRpcProvider extends FinalBlockJsonRpcProvider {
-  private pinned: Promise<BlockResult> | null = null;
-
-  override async viewBlock(blockQuery: BlockReference): Promise<BlockResult> {
-    const asked = blockQuery as { finality?: string } | null;
-    if (!asked || (asked.finality !== "optimistic" && asked.finality !== "final")) {
-      return super.viewBlock(blockQuery);
-    }
-    if (!this.pinned) {
-      const read = super.viewBlock({ finality: "final" });
-      this.pinned = read;
-      read.catch(() => {
-        if (this.pinned === read) this.pinned = null;
-      });
-    }
-    return this.pinned;
-  }
-}

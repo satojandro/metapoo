@@ -1,7 +1,7 @@
 import { Account } from "@near-js/accounts";
 import { KeyPair, type KeyPairString } from "@near-js/crypto";
 import { JsonRpcProvider } from "@near-js/providers";
-import { FinalBlockJsonRpcProvider, PinnedFinalBlockJsonRpcProvider } from "./final-block-provider";
+import { FinalBlockJsonRpcProvider } from "./final-block-provider";
 import { KeyPairSigner } from "@near-js/signers";
 import { actionCreators, createTransaction, type SignedTransaction } from "@near-js/transactions";
 import type { FinalExecutionOutcome } from "@near-js/types";
@@ -377,6 +377,40 @@ export interface LocalStrokeResult {
    * full read remains the reconciler either way.
    */
   executedBlocks: Array<{ chunkIndex: number; blockHeight: number }>;
+  /**
+   * The same list once every lookup has finished. With `deferBlockHeights` the
+   * result returns on the receipts alone (`executedBlocks` is then empty) and the
+   * heights arrive here; otherwise this resolves to `executedBlocks` at once.
+   */
+  executedBlocksLater?: Promise<Array<{ chunkIndex: number; blockHeight: number }>>;
+}
+
+/**
+ * Everything a signature needs that can be read before the price is known: the
+ * key (allowance and nonce), a finalized block to sign against, the gas price.
+ * Start it alongside the price quote and hand it to `signAndSendStrokeLocally`,
+ * so the quote and these reads cost one round trip together instead of two.
+ */
+export interface SigningContext {
+  key: AccessKeyAllowanceInfo;
+  blockHash: string;
+  /** Read in parallel; awaited only when the allowance is limited. */
+  gasPrice: Promise<bigint>;
+}
+
+export function prefetchSigningContext(input: {
+  accountId: string;
+  networkId: string;
+}): Promise<SigningContext> {
+  const gasPrice = readRpc<{ gas_price: string }>("gas_price", [null]).then((p) => BigInt(p.gas_price));
+  gasPrice.catch(() => undefined);
+  const context = Promise.all([
+    fetchDrawingSessionAllowance(input),
+    provider().viewBlock({ finality: "final" }),
+  ]).then(([key, block]) => ({ key, blockHash: block.header.hash, gasPrice }));
+  // A prefetch whose paint is then refused (price, balance) is never awaited.
+  context.catch(() => undefined);
+  return context;
 }
 
 const ALLOWANCE_SHORT =
@@ -416,28 +450,34 @@ export async function signAndSendStrokeLocally(args: {
   color: number;
   /** Paid board: `max_credits` for each draw_many chunk, in order. */
   maxCredits?: readonly number[] | null;
+  /** Reads started earlier (alongside the quote); read now when absent. */
+  prepared?: Promise<SigningContext>;
+  /**
+   * Return as soon as every receipt is known and resolve block heights in the
+   * background (`executedBlocksLater`). A lone tap uses this: its UI settles on
+   * the receipt instead of one more round trip.
+   */
+  deferBlockHeights?: boolean;
   /** Test seam: polling for a sent batch. */
   timing?: TxWaitTiming;
 }): Promise<LocalStrokeResult> {
   const timing = args.timing ?? DEFAULT_TX_WAIT;
+  const heightLookups: Array<Promise<void>> = [];
   const chunks = chunkCells([...args.cells]);
   const results: LocalChunkResult[] = chunks.map((_, index) => ({
     index, state: "not_sent", message: null, transactionHash: null, blockHeight: null,
   }));
   const outcomes: Array<FinalExecutionOutcome | null> = chunks.map(() => null);
-  if (chunks.length === 0) return summarize(results, outcomes);
-  const rpc = new PinnedFinalBlockJsonRpcProvider(rpcConnection(RPC_URL));
+  if (chunks.length === 0) return summarize(results, outcomes, heightLookups);
+  const rpc = provider();
 
   // 1–2. Read once, sign everything the allowance covers.
   const signed: Array<{ hash: string; tx: SignedTransaction }> = [];
   try {
     const record = requireActiveRecord(args.accountId, args.networkId);
     const signer = signerFromRecord(record);
-    const gasPrice = readRpc<{ gas_price: string }>("gas_price", [null]).then((p) => BigInt(p.gas_price));
-    gasPrice.catch(() => undefined);
-    const [key, block, publicKey] = await Promise.all([
-      fetchDrawingSessionAllowance(args),
-      rpc.viewBlock({ finality: "final" }),
+    const [{ key, blockHash: signingBlock, gasPrice }, publicKey] = await Promise.all([
+      args.prepared ?? prefetchSigningContext(args),
       signer.getPublicKey(),
     ]);
     if (!key.found) {
@@ -455,7 +495,7 @@ export async function signAndSendStrokeLocally(args: {
       affordable = covered < BigInt(chunks.length) ? Number(covered) : chunks.length;
       if (affordable === 0) throw new LocalDrawError("allowance_exhausted", ALLOWANCE_SHORT);
     }
-    const blockHash = baseDecode(block.header.hash);
+    const blockHash = baseDecode(signingBlock);
     for (let i = 0; i < affordable; i++) {
       const tx = createTransaction(
         args.accountId,
@@ -476,7 +516,7 @@ export async function signAndSendStrokeLocally(args: {
     for (let i = affordable; i < chunks.length; i++) results[i]!.message = ALLOWANCE_SHORT;
   } catch (error) {
     results[0]!.message = error instanceof Error ? error.message : String(error);
-    return summarize(results, outcomes);
+    return summarize(results, outcomes, heightLookups);
   }
 
   /** Turn a returned outcome into this batch's result. */
@@ -486,7 +526,11 @@ export async function signAndSendStrokeLocally(args: {
     const result = results[index]!;
     if (hasRecognizedTxSuccess(parsed)) {
       result.state = "confirmed";
-      result.blockHeight = await resolveExecutedBlockHeight(parsed.blockHash);
+      const lookup = resolveExecutedBlockHeight(parsed.blockHash).then((height) => {
+        result.blockHeight = height;
+      });
+      heightLookups.push(lookup);
+      if (!args.deferBlockHeights) await lookup;
     } else if (parsed.status === "failed") {
       result.state = "failed";
       result.message = parsed.failureMessage ?? "The batch failed on chain.";
@@ -541,12 +585,19 @@ export async function signAndSendStrokeLocally(args: {
   }
   // 4. Every result at once.
   await Promise.all(waits);
-  return summarize(results, outcomes);
+  return summarize(results, outcomes, heightLookups);
+}
+
+function executedBlocksOf(results: LocalChunkResult[]): Array<{ chunkIndex: number; blockHeight: number }> {
+  return results
+    .filter((r) => r.state === "confirmed" && r.blockHeight !== null)
+    .map((r) => ({ chunkIndex: r.index, blockHeight: r.blockHeight! }));
 }
 
 function summarize(
   results: LocalChunkResult[],
   outcomes: Array<FinalExecutionOutcome | null>,
+  heightLookups: Array<Promise<void>>,
 ): LocalStrokeResult {
   const firstBad = results.find((r) => r.state !== "confirmed") ?? null;
   return {
@@ -558,9 +609,9 @@ function summarize(
     failingChunk: firstBad
       ? { index: firstBad.index, mayHaveBroadcast: firstBad.state === "uncertain", message: firstBad.message ?? "" }
       : null,
-    executedBlocks: results
-      .filter((r) => r.state === "confirmed" && r.blockHeight !== null)
-      .map((r) => ({ chunkIndex: r.index, blockHeight: r.blockHeight! })),
+    executedBlocks: executedBlocksOf(results),
+    // Lookups never reject (a failed one resolves to no height).
+    executedBlocksLater: Promise.all(heightLookups).then(() => executedBlocksOf(results)),
   };
 }
 

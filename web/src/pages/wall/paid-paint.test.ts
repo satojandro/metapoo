@@ -33,6 +33,8 @@ vi.mock("../../local-draw", async (importOriginal) => {
     ...actual,
     canUseLocalDrawingSession: vi.fn(() => true),
     fetchDrawingSessionAllowance: vi.fn(async () => ({ found: true, remainingYocto: null, permissionSummary: "" })),
+    // Signing reads must never really hit the network in unit tests.
+    prefetchSigningContext: vi.fn(() => new Promise(() => undefined)),
     signAndSendStrokeLocally: vi.fn(async () => ({
       status: "confirmed", confirmedChunks: 1, totalChunks: 1, outcomes: [], failingChunk: null, executedBlocks: [],
       // Per-batch state is what the controller reads; a result without it would
@@ -176,30 +178,33 @@ afterEach(() => {
 describe("paid paint: one balance, max_credits, re-quote", () => {
   it("five queued taps with 2 credits: only two are queued and sent", async () => {
     // The chain balance lags the spends (the reported bug): it reads 2 throughout.
-    vi.mocked(submitDraw).mockImplementation(async (input) => confirmed(input.x, input.y, input.colorIndex));
     const t = setup();
     await t.pricing.refreshCreditsDock();
     t.paint.showDrawingSession();
     for (let x = 0; x < 5; x++) t.paint.maybeEnqueueDirectPaint({ x, y: 0 });
     expect(t.paint.pendingCount()).toBe(2);
     expect(t.result.querySelector("h3")?.textContent).toBe("Not enough credits");
-    await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(2));
+    // With a drawing session each tap takes the pipelined path.
+    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(t.paint.queueLength()).toBe(0));
-    expect(vi.mocked(submitDraw).mock.calls.map((c) => c[0].x)).toEqual([0, 1]);
+    expect(vi.mocked(signAndSendStrokeLocally).mock.calls.map((c) => c[0].cells)).toEqual([[{ x: 0, y: 0 }], [{ x: 1, y: 0 }]]);
+    expect(submitDraw).not.toHaveBeenCalled();
     t.dispose();
   });
 
   it("a failed queued paint releases its credits for the next tap", async () => {
     chain.credits = "1";
-    vi.mocked(submitDraw).mockResolvedValueOnce({
-      status: "failed", title: "Wallet prompt closed", message: "closed", transactionId: null, explorerUrl: null, pixel: null,
+    vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce({
+      status: "partial", confirmedChunks: 0, totalChunks: 1, outcomes: [], executedBlocks: [],
+      failingChunk: { index: 0, mayHaveBroadcast: false, message: "signer exploded" },
+      chunks: [{ index: 0, state: "not_sent", message: "signer exploded", transactionHash: null, blockHeight: null }],
     });
     const t = setup();
     await t.pricing.refreshCreditsDock();
     t.paint.showDrawingSession();
     t.paint.maybeEnqueueDirectPaint({ x: 0, y: 0 });
     expect(t.pricing.availableCredits()).toBe(0n);
-    await vi.waitFor(() => expect(submitDraw).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(signAndSendStrokeLocally).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(t.pricing.availableCredits()).toBe(1n));
     t.dispose();
   });
