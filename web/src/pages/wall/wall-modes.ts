@@ -1,10 +1,14 @@
 /**
- * Look / Paint, and Move (Phase 1 step 1).
+ * Look / Paint, and Move.
  *
  * Two modes of one wall. They only decide what a pointer gesture means; they never
  * change camera maths, pricing or submission:
- * - Look (default): drag moves the wall, a tap shows a tile. Taps never paint.
+ * - Look (default, signed out): drag moves the wall, a tap shows a tile. Taps never paint.
  * - Paint: the existing paint behaviour (tap chooses or paints, drag paints a stroke).
+ *
+ * There is no Look / Paint toggle (owner, 6 Nov). Signing in switches to Paint and
+ * signing out back to Look (mount-wall drives that); signed out, Start painting
+ * opens Paint with Connect as its action, and Just looking returns to Look.
  * - Move (Paint only): drag moves the wall instead of painting, for touch users who
  *   can't hold space or use a middle button. Two fingers also move the wall.
  */
@@ -17,8 +21,6 @@ export interface WallModesDeps {
   scope: WallScope;
   /** `.wall-page` root: carries `data-mode` / `data-moving` for CSS. */
   page: HTMLElement;
-  lookButton: HTMLButtonElement;
-  paintButton: HTMLButtonElement;
   moveButton: HTMLButtonElement;
   /** Look-mode call to action that switches to Paint. */
   startPainting?: HTMLButtonElement | null;
@@ -39,15 +41,13 @@ export interface WallModes {
 }
 
 export function createWallModes(deps: WallModesDeps): WallModes {
-  const { scope, page, lookButton, paintButton, moveButton } = deps;
+  const { scope, page, moveButton } = deps;
   let mode: WallMode = "look";
   let moving = false;
 
   function sync(): void {
     page.dataset.mode = mode;
     page.dataset.moving = String(moving);
-    lookButton.setAttribute("aria-pressed", String(mode === "look"));
-    paintButton.setAttribute("aria-pressed", String(mode === "paint"));
     moveButton.hidden = mode !== "paint";
     moveButton.setAttribute("aria-pressed", String(moving));
     moveButton.textContent = moving ? "Moving" : "Move";
@@ -69,8 +69,6 @@ export function createWallModes(deps: WallModesDeps): WallModes {
     sync();
   }
 
-  scope.listen(lookButton, "click", () => setMode("look"));
-  scope.listen(paintButton, "click", () => setMode("paint"));
   scope.listen(moveButton, "click", () => setMoving(!moving));
   if (deps.startPainting) scope.listen(deps.startPainting, "click", () => setMode("paint"));
   if (deps.backToLook) scope.listen(deps.backToLook, "click", () => setMode("look"));

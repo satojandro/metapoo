@@ -214,8 +214,9 @@ describe("mountWall dispose", () => {
     const root = document.querySelector<HTMLElement>("#root")!;
     let paintApi: WallMountTestApi | null = null;
     const dispose = mountWall(root, services, { attachTestApi: (a) => { paintApi = a; } });
-    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
-    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
+    // Painting gestures are Paint mode. Signed in the wall opens in Paint; Start
+    // painting covers a mount that is signed out.
+    root.querySelector<HTMLButtonElement>("#start-painting")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -703,8 +704,9 @@ describe("mountWall dispose", () => {
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
-    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
-    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
+    // Painting gestures are Paint mode. Signed in the wall opens in Paint; Start
+    // painting covers a mount that is signed out.
+    root.querySelector<HTMLButtonElement>("#start-painting")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     // 200 / 128 = ~1.56 px per cell: far below PAINT_MIN_CELL_PX (16). Drag used
@@ -823,8 +825,9 @@ describe("mountWall dispose", () => {
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
-    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
-    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
+    // Painting gestures are Paint mode. Signed in the wall opens in Paint; Start
+    // painting covers a mount that is signed out.
+    root.querySelector<HTMLButtonElement>("#start-painting")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -892,8 +895,9 @@ describe("mountWall dispose", () => {
         api = testApi;
       },
     });
-    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
-    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
+    // Painting gestures are Paint mode. Signed in the wall opens in Paint; Start
+    // painting covers a mount that is signed out.
+    root.querySelector<HTMLButtonElement>("#start-painting")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -964,8 +968,9 @@ describe("mountWall dispose", () => {
     const { services } = connectedWallServices();
     const root = document.querySelector<HTMLElement>("#root")!;
     const dispose = mountWall(root, services);
-    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
-    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
+    // Painting gestures are Paint mode. Signed in the wall opens in Paint; Start
+    // painting covers a mount that is signed out.
+    root.querySelector<HTMLButtonElement>("#start-painting")!.click();
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });
     vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -1244,8 +1249,9 @@ describe("mounted paint strokes", () => {
     const root = document.querySelector<HTMLElement>("#root")!;
     let paintApi: WallMountTestApi | null = null;
     const dispose = mountWall(root, services, { attachTestApi: (a) => { paintApi = a; } });
-    // Painting gestures are Paint mode (Look is the default; Phase 1 step 1).
-    root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
+    // Painting gestures are Paint mode. Signed in the wall opens in Paint; Start
+    // painting covers a mount that is signed out.
+    root.querySelector<HTMLButtonElement>("#start-painting")!.click();
     await vi.waitFor(() => expect(root.querySelector("#board-load-status")?.textContent).toContain("painted cell"));
     const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
     Object.assign(viewport, { setPointerCapture: vi.fn() });

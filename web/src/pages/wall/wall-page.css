@@ -6,9 +6,17 @@
  */
 
 .wall-page {
-  --wall-size: min(100%, max(280px, calc(100dvh - 230px)));
+  /* The wall is a square sized by the window: the height left under the header,
+     or the width left beside the panel, whichever is smaller. The panel matches
+     its height, so the whole composition fits one screen and sits centred. */
+  --wall-panel-w: 380px;
+  --wall-gap: var(--mp-space-6);
+  --wall-size: max(320px, min(
+    calc(100dvh - 140px),
+    calc(min(100vw, 1600px) - 72px - var(--wall-panel-w) - var(--wall-gap) - 16px)
+  ));
+  --wall-overlay: color-mix(in srgb, var(--mp-bg) 90%, transparent);
   display: block;
-  max-width: 1400px;
   margin: 0 auto;
   padding-block: var(--mp-space-4) var(--mp-space-6);
   color: var(--mp-fg);
@@ -17,35 +25,17 @@
 
 .wall-page > .wall-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: var(--mp-space-6);
+  grid-template-columns: var(--wall-size) var(--wall-panel-w);
+  justify-content: center;
+  gap: var(--wall-gap);
   align-items: start;
 }
 
-/* ——— The stage: bar, framed wall, foot line ——— */
+/* ——— The stage: the framed wall, with its controls floating over the corners ——— */
 .wall-page .wall-stage {
-  display: grid;
-  /* One column the stage's width: a wide view bar must never widen the wall. */
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  justify-items: center;
-  min-width: 0;
-}
-
-.wall-page .wall-bar,
-.wall-page .wall-frame,
-.wall-page .wall-foot {
+  display: block;
   width: var(--wall-size);
-}
-
-.wall-page .wall-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--mp-space-2);
   min-width: 0;
-  max-width: 100%;
-  margin: 0;
 }
 
 .wall-page .mp-seg {
@@ -58,7 +48,7 @@
 }
 
 .wall-page .mp-seg button {
-  min-height: 36px;
+  min-height: 34px;
   padding: 7px 14px;
   border: 0;
   border-radius: var(--mp-radius-md);
@@ -68,67 +58,18 @@
   cursor: pointer;
 }
 
-.wall-page .wall-mode button { min-width: 84px; }
-.wall-page .mp-seg button[aria-pressed="true"] { background: var(--mp-tag); color: var(--mp-on-tag); }
 .wall-page .mp-seg button:disabled { opacity: .45; cursor: not-allowed; }
 .wall-page .mp-seg button:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
 
-.wall-page .mp-seg-small button { padding: 6px 11px; font: 600 var(--mp-text-md) var(--mp-font); }
-.wall-page .mp-seg-small button[aria-pressed="true"] {
-  background: var(--mp-card-2);
-  color: var(--mp-fg);
-  box-shadow: inset 0 0 0 1px var(--mp-muted);
-}
-
-.wall-page .wall-move {
-  min-height: 42px;
-  padding: 6px 14px;
-  border: 1px solid var(--mp-line);
-  border-radius: var(--mp-radius-lg);
-  background: var(--mp-card);
-  color: var(--mp-soft);
-  font: 700 var(--mp-text-body) var(--mp-font);
-  cursor: pointer;
-}
-.wall-page .wall-move[aria-pressed="true"] { border-color: var(--mp-tag); color: var(--mp-tag); }
-.wall-page .wall-move:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
-
-.wall-page .wall-views { margin-left: auto; }
-
-/* The camera mounts −, +, Fit and the zoom readout into this bar. */
-.wall-page .wall-bar .wall-zoom-controls { order: 5; display: inline-flex; gap: var(--mp-space-1); }
-.wall-page .wall-bar .wall-zoom-control {
-  min-width: 40px;
-  min-height: 40px;
-  padding: 0 10px;
-  border: 1px solid var(--mp-line);
-  border-radius: var(--mp-radius-md);
-  background: var(--mp-card);
-  color: var(--mp-fg);
-  font: 700 var(--mp-text-md) var(--mp-font);
-  transform: none;
-}
-.wall-page .wall-bar .wall-zoom-control:hover:not(:disabled) { background: var(--mp-card-2); transform: none; }
-.wall-page .wall-bar .wall-zoom-control:disabled { opacity: .45; }
-.wall-page .wall-bar #zoom-in,
-.wall-page .wall-bar #zoom-out { font-size: 18px; }
-.wall-page .wall-bar .position-readout {
-  order: 6;
-  flex: 1 1 100%;
-  width: auto;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--mp-muted);
-  font: 600 var(--mp-text-xs) var(--mp-mono);
-  text-align: right;
-}
+.wall-page .mp-seg-small button { padding: 6px 11px; font: 700 var(--mp-text-md) var(--mp-font); }
+.wall-page .mp-seg-small button[aria-pressed="true"] { background: var(--mp-fg); color: var(--mp-on-tag); }
 
 /* The frame: a thin tiled stall border, not a picture competing with the wall. */
 .wall-page .wall-frame {
-  padding: 10px;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px;
   border: 1px solid var(--mp-line);
   border-radius: 10px;
   background:
@@ -158,20 +99,116 @@
 .wall-page[data-moving="true"] .board-viewport { cursor: grab; }
 .wall-page .board-viewport.is-panning { cursor: grabbing; }
 
-.wall-page .wall-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--mp-space-1) var(--mp-space-4);
-  color: var(--mp-muted);
-  font: 600 var(--mp-text-sm)/1.4 var(--mp-mono);
-}
-.wall-page .wall-foot p { margin: 0; }
-.wall-page .board-freshness { text-align: left; font: inherit; color: inherit; letter-spacing: 0; text-transform: none; }
-.wall-page .wall-runtime-status { margin: 0; padding: 0; border: 0; background: none; color: var(--mp-muted); font: inherit; letter-spacing: 0; text-transform: none; }
-.wall-page .hover-summary {
+/* The control layer covers the wall but only its controls take the pointer. */
+.wall-page .wall-bar {
+  position: absolute;
+  inset: 18px;
+  display: block;
   margin: 0;
+  pointer-events: none;
+}
+.wall-page .wall-bar > * { position: absolute; pointer-events: auto; }
+.wall-page .wall-bar .mp-seg { background: var(--wall-overlay); }
+
+.wall-page .wall-chip {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  background: var(--wall-overlay);
+  color: var(--mp-muted);
+  font: var(--mp-text-md)/1.3 var(--mp-font);
+}
+.wall-page .wall-gesture-hint { top: 0; left: 0; max-width: calc(100% - 260px); }
+.wall-page[data-mode="look"] .wall-gesture-hint[data-for-mode="paint"],
+.wall-page[data-mode="paint"] .wall-gesture-hint[data-for-mode="look"] { display: none; }
+
+.wall-page .wall-views { top: 0; right: 0; }
+
+/* Move is for touch screens; a mouse has space, middle and right drag. */
+.wall-page .wall-move {
+  top: 0;
+  left: 0;
+  min-height: 42px;
+  padding: 6px 14px;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  background: var(--wall-overlay);
+  color: var(--mp-soft);
+  font: 700 var(--mp-text-body) var(--mp-font);
+  cursor: pointer;
+}
+.wall-page .wall-move[hidden] { display: none; }
+.wall-page .wall-move[aria-pressed="true"] { border-color: var(--mp-tag); color: var(--mp-tag); }
+.wall-page .wall-move:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
+@media (pointer: fine) {
+  .wall-page .wall-move { display: none; }
+}
+@media (pointer: coarse) {
+  .wall-page .wall-gesture-hint { display: none; }
+}
+
+/* The camera mounts −, +, Fit and the zoom readout into the bar. */
+.wall-page .wall-bar .wall-zoom-controls {
+  right: 0;
+  bottom: 0;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  background: var(--wall-overlay);
+}
+.wall-page .wall-bar .wall-zoom-control {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--mp-radius-md);
+  background: transparent;
+  color: var(--mp-fg);
+  font: 700 var(--mp-text-md) var(--mp-font);
+  transform: none;
+}
+.wall-page .wall-bar .wall-zoom-control:hover:not(:disabled) { background: var(--mp-card-2); transform: none; }
+.wall-page .wall-bar .wall-zoom-control:disabled { opacity: .45; }
+.wall-page .wall-bar #zoom-in,
+.wall-page .wall-bar #zoom-out { font-size: 18px; }
+/* Zoom and cell coordinates stay for screen readers; the hover line shows the cell. */
+.wall-page .wall-bar .position-readout {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Freshness, refresh, the hovered tile and the network: one chip, bottom left. */
+.wall-page .wall-foot {
+  position: absolute;
+  left: 26px;
+  bottom: 26px;
+  max-width: calc(100% - 210px);
+  display: flex;
+  align-items: center;
+  gap: var(--mp-space-2);
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  background: var(--wall-overlay);
+  color: var(--mp-muted);
+  font: 600 var(--mp-text-sm)/1.3 var(--mp-mono);
+}
+.wall-page .wall-foot p { margin: 0; white-space: nowrap; }
+.wall-page .board-freshness { font: inherit; color: inherit; letter-spacing: 0; text-transform: none; }
+.wall-page .wall-runtime-status { order: 4; padding: 0 8px; border-left: 1px solid var(--mp-line); border: 0; background: none; color: var(--mp-muted); font: inherit; letter-spacing: .06em; text-transform: uppercase; }
+.wall-page .hover-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0;
   border: 0;
   background: none;
@@ -179,17 +216,67 @@
   font: inherit;
 }
 .wall-page .hover-summary:empty { display: none; }
+.wall-page .wall-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mp-radius-md);
+  background: transparent;
+  color: var(--mp-soft);
+  cursor: pointer;
+}
+.wall-page .wall-refresh:hover:not(:disabled) { background: var(--mp-card-2); color: var(--mp-fg); }
+.wall-page .wall-refresh:disabled { opacity: .45; cursor: not-allowed; }
+.wall-page .wall-refresh:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
 
 /* ——— The panel: Look shows the invite and the tile; Paint shows the dock ——— */
+/* The panel is as tall as the wall: a body that scrolls on its own, and a pinned
+   footer with the one primary action and what just happened. Nothing a click
+   produces lands below the fold. */
 .wall-page .wall-panel {
-  display: grid;
-  gap: 14px;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mp-space-3);
+  height: var(--wall-size);
   min-width: 0;
 }
+.wall-page .wall-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: var(--mp-space-3);
+  align-content: start;
+  scrollbar-width: thin;
+}
+.wall-page .wall-panel-foot {
+  flex: none;
+  max-height: 55%;
+  overflow-y: auto;
+  display: grid;
+  gap: var(--mp-space-2);
+  padding: var(--mp-space-4);
+  border: 1px solid var(--mp-line);
+  border-top: 3px solid var(--mp-tag);
+  border-radius: 10px;
+  background: var(--mp-card);
+}
+.wall-page .wall-foot-look,
+.wall-page .wall-dock-foot { display: grid; gap: var(--mp-space-2); min-width: 0; }
+/* Just looking only means something before you sign in. */
+.wall-page[data-signed-in="true"] #wall-back-to-look { display: none; }
+.wall-page #wall-back-to-look { justify-self: center; }
 
 .wall-page .wall-card {
   display: grid;
+  /* minmax(0, …): a long account name must truncate, never widen the card. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--mp-space-3);
   min-width: 0;
   margin: 0;
@@ -203,15 +290,16 @@
 }
 .wall-page .wall-card p { margin: 0; color: var(--mp-soft); font-size: var(--mp-text-body); }
 
-.wall-page .wall-invite { border-top: 3px solid var(--mp-tag); }
 .wall-page .wall-invite h3 {
   margin: 0;
   color: var(--mp-fg);
-  font: 900 22px/1.1 var(--mp-font);
+  font: 900 19px/1.15 var(--mp-font);
   letter-spacing: -.5px;
   text-wrap: balance;
 }
 .wall-page .wall-invite h3 em { display: block; font-style: normal; color: var(--mp-tag); }
+/* Once a tile is chosen, the invite shrinks to its headline and counts. */
+.wall-page:has(.wall-inspect[data-filled="true"]) .wall-invite-body { display: none; }
 
 .wall-page[data-mode="look"] [data-wall-card="paint"],
 .wall-page[data-mode="paint"] [data-wall-card="look"] { display: none; }
@@ -231,18 +319,17 @@
   gap: var(--mp-space-3);
   max-width: none;
   margin: 0;
-  border-top: 3px solid var(--mp-tag);
 }
 
-.wall-page .wall-dock .palette,
-.wall-page .wall-dock .palette[data-count="16"] {
+.wall-page .wall-panel .palette,
+.wall-page .wall-panel .palette[data-count="16"] {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 6px;
   flex: none;
 }
-.wall-page .wall-dock .swatch,
-.wall-page .wall-dock .palette[data-count="16"] .swatch {
+.wall-page .wall-panel .swatch,
+.wall-page .wall-panel .palette[data-count="16"] .swatch {
   width: auto;
   min-width: 0;
   max-width: none;
@@ -254,11 +341,11 @@
   border-radius: 5px;
   background: transparent;
 }
-.wall-page .wall-dock .swatch .chip { border: 1px solid var(--mp-line); border-radius: 3px; }
-.wall-page .wall-dock .swatch[aria-pressed="true"] { outline: 0; border-color: var(--mp-fg); background: transparent; }
-.wall-page .wall-dock .swatch:hover { border-color: var(--mp-muted); }
+.wall-page .wall-panel .swatch .chip { border: 1px solid var(--mp-line); border-radius: 3px; }
+.wall-page .wall-panel .swatch[aria-pressed="true"] { outline: 0; border-color: var(--mp-fg); background: transparent; }
+.wall-page .wall-panel .swatch:hover { border-color: var(--mp-muted); }
 
-.wall-page .wall-dock .selection-preview {
+.wall-page .wall-panel .selection-preview {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -268,23 +355,23 @@
   font: 600 var(--mp-text-sm) var(--mp-mono);
   white-space: normal;
 }
-.wall-page .wall-dock .selection-preview .chip { width: 14px; height: 14px; border-radius: 2px; border: 1px solid var(--mp-line); }
-.wall-page .wall-dock .selection-preview .preview-label { font-size: var(--mp-text-sm); }
+.wall-page .wall-panel .selection-preview .chip { width: 14px; height: 14px; border-radius: 2px; border: 1px solid var(--mp-line); }
+.wall-page .wall-panel .selection-preview .preview-label { font-size: var(--mp-text-sm); }
 
 .wall-page .wall-cost { display: grid; gap: var(--mp-space-1); padding-top: var(--mp-space-1); border-top: 1px solid var(--mp-line); }
-.wall-page .wall-dock .repaint-legend,
-.wall-page .wall-dock .cell-price,
-.wall-page .wall-dock .stroke-total { margin: 0; color: var(--mp-soft); font-size: var(--mp-text-md); line-height: 1.45; }
-.wall-page .wall-dock .stroke-total { color: var(--mp-fg); font-weight: 700; }
-.wall-page .wall-dock .cell-price[data-state="unavailable"],
-.wall-page .wall-dock .stroke-total[data-state="unavailable"] { color: var(--mp-bad); }
+.wall-page .wall-panel .repaint-legend,
+.wall-page .wall-panel .cell-price,
+.wall-page .wall-panel .stroke-total { margin: 0; color: var(--mp-soft); font-size: var(--mp-text-md); line-height: 1.45; }
+.wall-page .wall-panel .stroke-total { color: var(--mp-fg); font-weight: 700; }
+.wall-page .wall-panel .cell-price[data-state="unavailable"],
+.wall-page .wall-panel .stroke-total[data-state="unavailable"] { color: var(--mp-bad); }
 
-.wall-page .wall-dock .credits-dock { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--mp-space-2); }
-.wall-page .wall-dock .credits-dock[hidden] { display: none; }
-.wall-page .wall-dock .credits-balance { margin: 0; color: var(--mp-fg); font: 700 var(--mp-text-md) var(--mp-mono); }
+.wall-page .wall-panel .credits-dock { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--mp-space-2); }
+.wall-page .wall-panel .credits-dock[hidden] { display: none; }
+.wall-page .wall-panel .credits-balance { margin: 0; color: var(--mp-fg); font: 700 var(--mp-text-md) var(--mp-mono); }
 .wall-page .wall-dock #buy-credits-button { min-height: 40px; }
 
-.wall-page .wall-dock .paint-unlock {
+.wall-page .wall-panel .paint-unlock {
   display: grid;
   gap: var(--mp-space-2);
   padding: var(--mp-space-3);
@@ -292,10 +379,10 @@
   border-radius: var(--mp-radius-md);
   background: var(--mp-card-2);
 }
-.wall-page .wall-dock .paint-unlock[hidden] { display: none; }
-.wall-page .wall-dock .paint-unlock-title { color: var(--mp-fg); font-weight: 700; }
-.wall-page .wall-dock .paint-unlock-body { font-size: var(--mp-text-md); }
-.wall-page .wall-dock .paint-unlock .action.unlock {
+.wall-page .wall-panel .paint-unlock[hidden] { display: none; }
+.wall-page .wall-panel .paint-unlock-title { color: var(--mp-fg); font-weight: 700; }
+.wall-page .wall-panel .paint-unlock-body { font-size: var(--mp-text-md); }
+.wall-page .wall-panel .paint-unlock .action.unlock {
   min-height: var(--mp-hit);
   padding: var(--mp-space-2) var(--mp-space-3);
   border: 1px solid var(--mp-tag);
@@ -306,24 +393,24 @@
   transform: none;
 }
 
-.wall-page .wall-dock .direct-paint-toggle {
+.wall-page .wall-panel .direct-paint-toggle {
   display: flex;
   align-items: center;
   gap: var(--mp-space-2);
   color: var(--mp-soft);
   font-size: var(--mp-text-md);
 }
-.wall-page .wall-dock .direct-paint-toggle[hidden] { display: none; }
-.wall-page .wall-dock .direct-paint-toggle input { accent-color: var(--mp-tag); width: 18px; height: 18px; }
-.wall-page .wall-dock .tap-to-paint-status,
-.wall-page .wall-dock .paint-unlocked { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-sm); line-height: 1.4; }
-.wall-page .wall-dock .paint-unlocked { color: var(--mp-good); }
+.wall-page .wall-panel .direct-paint-toggle[hidden] { display: none; }
+.wall-page .wall-panel .direct-paint-toggle input { accent-color: var(--mp-tag); width: 18px; height: 18px; }
+.wall-page .wall-panel .tap-to-paint-status,
+.wall-page .wall-panel .paint-unlocked { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-sm); line-height: 1.4; }
+.wall-page .wall-panel .paint-unlocked { color: var(--mp-good); }
 
 /* One primary action: #dock-primary, or Paint this tile when a paint can be sent. */
 .wall-page .wall-action { display: grid; gap: 6px; }
 .wall-page .wall-action:not([data-primary="place"]) #draw-button { display: none; }
 .wall-page .wall-primary,
-.wall-page .wall-dock .action.place {
+.wall-page .wall-panel .action.place {
   width: 100%;
   min-height: 48px;
   padding: 10px 14px;
@@ -336,7 +423,7 @@
   transform: none;
 }
 .wall-page .wall-primary:disabled,
-.wall-page .wall-dock .action.place:disabled {
+.wall-page .wall-panel .action.place:disabled {
   border-color: var(--mp-line);
   background: var(--mp-card-2);
   color: var(--mp-muted);
@@ -344,10 +431,10 @@
   cursor: not-allowed;
 }
 .wall-page .wall-primary:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
-.wall-page .wall-dock .place-reason { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-sm); }
-.wall-page .wall-dock .place-reason:empty { display: none; }
+.wall-page .wall-panel .place-reason { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-sm); }
+.wall-page .wall-panel .place-reason:empty { display: none; }
 
-.wall-page .wall-dock .draw-state {
+.wall-page .wall-panel .draw-state {
   margin: 0;
   padding: var(--mp-space-2) 10px;
   border-left: 3px solid var(--mp-line);
@@ -356,15 +443,15 @@
   color: var(--mp-soft);
   font: var(--mp-text-md)/1.4 var(--mp-font);
 }
-.wall-page .wall-dock .draw-state:empty { display: none; }
-.wall-page .wall-dock .draw-state[data-phase="confirmed"] { border-left-color: var(--mp-good); }
-.wall-page .wall-dock .draw-state[data-phase="wallet_prompt"],
-.wall-page .wall-dock .draw-state[data-phase="submitted"],
-.wall-page .wall-dock .draw-state[data-phase="confirmation_delayed"] { border-left-color: var(--mp-near); }
-.wall-page .wall-dock .draw-state[data-phase="overwritten"] { border-left-color: var(--mp-warn); }
-.wall-page .wall-dock .draw-state[data-phase="failed"] { border-left-color: var(--mp-bad); }
+.wall-page .wall-panel .draw-state:empty { display: none; }
+.wall-page .wall-panel .draw-state[data-phase="confirmed"] { border-left-color: var(--mp-good); }
+.wall-page .wall-panel .draw-state[data-phase="wallet_prompt"],
+.wall-page .wall-panel .draw-state[data-phase="submitted"],
+.wall-page .wall-panel .draw-state[data-phase="confirmation_delayed"] { border-left-color: var(--mp-near); }
+.wall-page .wall-panel .draw-state[data-phase="overwritten"] { border-left-color: var(--mp-warn); }
+.wall-page .wall-panel .draw-state[data-phase="failed"] { border-left-color: var(--mp-bad); }
 
-.wall-page .wall-dock .result {
+.wall-page .wall-panel .result {
   margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--mp-line);
@@ -373,28 +460,54 @@
   background: var(--mp-card-2);
   color: var(--mp-soft);
 }
-.wall-page .wall-dock .result:empty { display: none; }
-.wall-page .wall-dock .result h3 { margin: 0 0 4px; color: var(--mp-fg); font-size: var(--mp-text-body); }
-.wall-page .wall-dock .result p { margin: 0; font-size: var(--mp-text-md); }
+.wall-page .wall-panel .result:empty { display: none; }
+.wall-page .wall-panel .result h3 { margin: 0 0 4px; color: var(--mp-fg); font-size: var(--mp-text-body); }
+.wall-page .wall-panel .result p { margin: 0; font-size: var(--mp-text-md); }
 
 /* First-use hint: one dismissible line in the dock. */
-.wall-page .wall-dock .wall-hint {
+.wall-page .wall-panel .wall-hint {
   border: 1px solid var(--mp-line);
   background: var(--mp-card-2);
   color: var(--mp-soft);
   font-size: var(--mp-text-md);
 }
-.wall-page .wall-dock .wall-hint-dismiss { color: var(--mp-soft); }
+.wall-page .wall-panel .wall-hint-dismiss { color: var(--mp-soft); }
 
-/* Buy-credits sheet inside the dark dock. */
-.wall-page .wall-dock .buy-credits-panel { background: var(--mp-card-2); border-color: var(--mp-line); color: var(--mp-soft); }
-.wall-page .wall-dock .buy-credits-panel h2,
-.wall-page .wall-dock .buy-credits-panel p,
-.wall-page .wall-dock .buy-credits-panel label,
-.wall-page .wall-dock .buy-credits-panel legend,
-.wall-page .wall-dock .buy-credits-lines { color: var(--mp-soft); }
-.wall-page .wall-dock .buy-credits-split { background: var(--mp-card); border-color: var(--mp-line); }
-.wall-page .wall-dock .buy-credits-qty { background: var(--mp-bg); border-color: var(--mp-line); color: var(--mp-fg); }
+/* Buy credits is a modal over the page, not a block that pushes the dock down.
+   The sheet is already a dialog (aria-modal, Escape closes, focus moves in). */
+.wall-page .buy-credits-sheet:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: var(--mp-space-4);
+  background: color-mix(in srgb, var(--mp-bg) 78%, transparent);
+}
+/* On phone the panel is its own stacking layer under the sticky wall; lift it. */
+.wall-page:has(.buy-credits-sheet:not([hidden])) .wall-panel { z-index: 60; }
+.wall-page .wall-panel .buy-credits-panel {
+  box-sizing: border-box;
+  width: min(440px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--mp-space-5);
+  border: 1px solid var(--mp-line);
+  border-top: 3px solid var(--mp-tag);
+  border-radius: 10px;
+  background: var(--mp-card);
+  color: var(--mp-soft);
+  box-shadow: 0 24px 60px var(--mp-shadow);
+}
+.wall-page .wall-panel .buy-credits-header h2 { font-size: var(--mp-text-h3); color: var(--mp-fg); }
+.wall-page .wall-panel .buy-credits-panel h2,
+.wall-page .wall-panel .buy-credits-panel p,
+.wall-page .wall-panel .buy-credits-panel label,
+.wall-page .wall-panel .buy-credits-panel legend,
+.wall-page .wall-panel .buy-credits-lines { color: var(--mp-soft); }
+.wall-page .wall-panel .buy-credits-split { background: var(--mp-card); border-color: var(--mp-line); }
+.wall-page .wall-panel .buy-credits-qty { background: var(--mp-bg); border-color: var(--mp-line); color: var(--mp-fg); }
 
 .wall-page .wall-link {
   justify-self: start;
@@ -409,14 +522,13 @@
   cursor: pointer;
 }
 .wall-page .wall-link:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
-.wall-page .wall-refresh { margin: 0; }
 
 /* About / details keeps its own styles; give it room under the composition. */
 .wall-page > .wall-about { margin-top: var(--mp-space-6); }
 
 /* ——— Phone: the wall on top at full width, the panel as a bottom sheet ——— */
 @media (max-width: 760px) {
-  .wall-page { --wall-size: 100%; padding-block: var(--mp-space-2) var(--mp-space-4); }
+  .wall-page { --wall-size: 100%; padding-block: var(--mp-space-2) 0; }
   .wall-page > .wall-main { grid-template-columns: minmax(0, 1fr); gap: 0; }
 
   /* The wall stays in view; the sheet scrolls up to it, never over it. */
@@ -424,54 +536,64 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    gap: 6px;
+    width: 100%;
     padding-bottom: var(--mp-space-2);
     background: var(--mp-bg);
   }
   .wall-page .wall-frame { padding: 5px; border-radius: var(--mp-radius-lg); }
-  .wall-page .wall-bar { flex-wrap: nowrap; gap: 6px; }
-  .wall-page .wall-mode button { min-width: 0; padding: 7px 12px; }
-  .wall-page .mp-seg-small button { padding: 6px 8px; }
-  .wall-page .wall-move { padding: 6px 10px; min-height: 40px; }
+  .wall-page .wall-bar { inset: 12px 12px auto; height: calc(100% - 52px); }
+  .wall-page .mp-seg-small button { padding: 6px 9px; }
+  .wall-page .wall-move { padding: 6px 12px; min-height: 40px; }
   .wall-page .wall-bar #zoom-in,
-  .wall-page .wall-bar #zoom-out,
-  .wall-page .wall-bar .position-readout,
+  .wall-page .wall-bar #zoom-out { display: none; }
+  /* On a small wall the status line sits under it instead of over it. */
+  .wall-page .wall-foot {
+    position: static;
+    max-width: none;
+    min-height: 0;
+    margin-top: 5px;
+    padding: 0 2px;
+    border: 0;
+    background: none;
+    font-size: var(--mp-text-xs);
+  }
+  .wall-page .wall-foot .wall-runtime-status { margin-left: auto; }
   .wall-page .hover-summary { display: none; }
-  .wall-page .wall-foot { font-size: var(--mp-text-xs); }
 
   .wall-page .wall-panel {
     position: relative;
     z-index: 1;
-    gap: var(--mp-space-3);
+    height: auto;
     margin-inline: calc(-1 * max(12px, env(safe-area-inset-left, 0px)));
-    padding: var(--mp-space-3) max(12px, env(safe-area-inset-left, 0px)) calc(var(--mp-space-4) + env(safe-area-inset-bottom, 0px));
+    padding: var(--mp-space-3) max(12px, env(safe-area-inset-left, 0px)) 0;
     border-top: 1px solid var(--mp-line);
     border-radius: 14px 14px 0 0;
     background: var(--mp-card);
   }
   .wall-page .wall-panel::before {
     content: "";
-    justify-self: center;
+    align-self: center;
     width: 40px;
     height: 4px;
     border-radius: 4px;
     background: var(--mp-line);
   }
+  .wall-page .wall-panel-body { overflow: visible; }
+  /* The primary action stays under the thumb at the bottom of the screen. */
+  .wall-page .wall-panel-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    max-height: none;
+    margin-inline: calc(-1 * max(12px, env(safe-area-inset-left, 0px)));
+    padding: var(--mp-space-2) max(12px, env(safe-area-inset-left, 0px)) calc(var(--mp-space-2) + env(safe-area-inset-bottom, 0px));
+    border-width: 1px 0 0;
+    border-radius: 0;
+  }
+  .wall-page .wall-panel-foot .wall-primary { min-height: var(--mp-hit); }
+  .wall-page .wall-panel-foot #wall-back-to-look { min-height: 28px; }
   .wall-page .wall-card { padding: var(--mp-space-3); background: var(--mp-bg); }
   .wall-page[data-mode="paint"] .wall-inspect { order: 2; }
-}
-
-@media (max-width: 760px) {
-  /* Four views fit in their own scroller; the page never scrolls sideways. */
-  .wall-page .wall-views {
-    flex: 1 1 auto;
-    min-width: 0;
-    max-width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .wall-page .wall-views::-webkit-scrollbar { display: none; }
-  .wall-page .wall-views button { flex: 0 0 auto; padding: 6px 8px; }
 }
 
 /* ——— View legend (Price / Age / Turf) ——— */
@@ -501,6 +623,7 @@
 }
 .wall-page .wall-turf-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
   margin: 0;
   padding: 0;
@@ -520,8 +643,8 @@
 .wall-page .wall-legend-note { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-md); }
 
 /* Disconnected, the primary action already says "Connect wallet to paint". */
-.wall-page .wall-dock:has(.wall-action[data-primary="connect"]) .credits-dock,
-.wall-page .wall-dock:has(.wall-action[data-primary="connect"]) .draw-state { display: none; }
+.wall-page:has(.wall-action[data-primary="connect"]) .credits-dock,
+.wall-page:has(.wall-action[data-primary="connect"]) .draw-state { display: none; }
 
 /* ——— Tile card (Phase 1 step 3) ——— */
 /* With the card filled, the plain summary steps back for sighted users; screen readers keep it. */
@@ -616,7 +739,7 @@
 /* The drawing-key opt-in, borrowed from the wallet panel. It only matters before
    connecting, so it shows only while the primary action is Connect. */
 .wall-page .wall-optin:empty { display: none; }
-.wall-page .wall-dock:not(:has(.wall-action[data-primary="connect"])) .wall-optin { display: none; }
+.wall-page:not(:has(.wall-action[data-primary="connect"])) .wall-optin { display: none; }
 .wall-page .wall-optin .drawing-session-opt-in {
   display: flex;
   align-items: center;

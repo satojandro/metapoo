@@ -223,9 +223,9 @@ function mount(
       api = testApi;
     },
   });
-  // These behaviours are about painting, so they run in Paint mode. Look, the
-  // page's default, is covered in wall-modes.test.ts.
-  if (mode === "paint") root.querySelector<HTMLButtonElement>("#wall-mode-paint")!.click();
+  // These behaviours are about painting, so they run in Paint mode. Signed in the
+  // wall opens in Paint by itself; Start painting covers a signed-out mount.
+  if (mode === "paint") root.querySelector<HTMLButtonElement>("#start-painting")!.click();
   const viewport = root.querySelector<HTMLElement>("#board-viewport")!;
   Object.assign(viewport, { setPointerCapture: vi.fn() });
   vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
@@ -804,17 +804,13 @@ describe("wall modes and the dock's primary action (Phase 1 step 1)", () => {
     return root.querySelector<HTMLElement>("#board-stage")!.style.transform;
   }
 
-  it("opens in Look: a tap shows the tile and never paints, even with painting armed", async () => {
-    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+  it("signed out it opens in Look: a tap shows the tile and never paints", async () => {
     const services = createAppServices();
-    controllableWallet(services, ALICE);
+    controllableWallet(services, SIGNED_OUT);
     const { root, dispose, viewport } = mount(services, undefined, "look");
     await booted(root);
     expect(root.querySelector<HTMLElement>(".wall-page")!.dataset.mode).toBe("look");
-    root.querySelectorAll<HTMLButtonElement>(".swatch")[2]!.click();
-    await vi.waitFor(() =>
-      expect(root.querySelector<HTMLInputElement>("#direct-paint-toggle")!.checked).toBe(true),
-    );
+    expect(root.querySelector<HTMLElement>(".wall-page")!.dataset.signedIn).toBe("false");
 
     touch(viewport, "pointerdown", 1, 260, 260);
     touch(viewport, "pointerup", 1, 260, 260);
@@ -826,13 +822,56 @@ describe("wall modes and the dock's primary action (Phase 1 step 1)", () => {
     dispose();
   });
 
-  it("in Look a one-finger drag moves the wall and paints nothing", async () => {
-    vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
+  it("has no Look / Paint toggle: signing in opens Paint, signing out returns to Look", async () => {
     const services = createAppServices();
-    controllableWallet(services, ALICE);
+    const wallet = controllableWallet(services, SIGNED_OUT);
+    const { root, dispose } = mount(services, undefined, "look");
+    await booted(root);
+    const page = root.querySelector<HTMLElement>(".wall-page")!;
+    expect(root.querySelector("#wall-mode-look")).toBeNull();
+    expect(root.querySelector("#wall-mode-paint")).toBeNull();
+    expect(page.dataset.mode).toBe("look");
+
+    wallet.emit(ALICE);
+    expect(page.dataset.mode).toBe("paint");
+    expect(page.dataset.signedIn).toBe("true");
+
+    // A repeated session for the same account keeps Paint.
+    wallet.emit(ALICE);
+    expect(page.dataset.mode).toBe("paint");
+
+    wallet.emit(SIGNED_OUT);
+    expect(page.dataset.mode).toBe("look");
+    expect(page.dataset.signedIn).toBe("false");
+    dispose();
+  });
+
+  it("signed out, Start painting opens Paint with Connect, and Just looking goes back", async () => {
+    const services = createAppServices();
+    const wallet = controllableWallet(services, SIGNED_OUT);
+    const { root, dispose } = mount(services, undefined, "look");
+    await booted(root);
+    const page = root.querySelector<HTMLElement>(".wall-page")!;
+    root.querySelector<HTMLButtonElement>("#start-painting")!.click();
+    expect(page.dataset.mode).toBe("paint");
+    await vi.waitFor(() =>
+      expect(root.querySelector<HTMLButtonElement>("#dock-primary")!.textContent).toBe(
+        "Connect wallet to paint",
+      ),
+    );
+    // A signed-out session repeating must not throw them out of Paint.
+    wallet.emit(SIGNED_OUT);
+    expect(page.dataset.mode).toBe("paint");
+    root.querySelector<HTMLButtonElement>("#wall-back-to-look")!.click();
+    expect(page.dataset.mode).toBe("look");
+    dispose();
+  });
+
+  it("in Look a one-finger drag moves the wall and paints nothing", async () => {
+    const services = createAppServices();
+    controllableWallet(services, SIGNED_OUT);
     const { root, dispose, viewport } = mount(services, undefined, "look");
     await booted(root);
-    root.querySelectorAll<HTMLButtonElement>(".swatch")[4]!.click();
     root.querySelector<HTMLButtonElement>("#zoom-in")!.click();
     root.querySelector<HTMLButtonElement>("#zoom-in")!.click();
     const before = stageTransform(root);
@@ -851,7 +890,7 @@ describe("wall modes and the dock's primary action (Phase 1 step 1)", () => {
   it("Move turns a Paint drag into a pan, and a tap with Move on never paints", async () => {
     vi.mocked(canUseLocalDrawingSession).mockReturnValue(true);
     const services = createAppServices();
-    controllableWallet(services, ALICE);
+    const wallet = controllableWallet(services, ALICE);
     const { root, dispose, viewport } = mount(services);
     await booted(root);
     const move = root.querySelector<HTMLButtonElement>("#wall-move")!;
@@ -878,8 +917,8 @@ describe("wall modes and the dock's primary action (Phase 1 step 1)", () => {
     expect(vi.mocked(signAndSendStrokeLocally)).not.toHaveBeenCalled();
     expect(vi.mocked(submitDraw)).not.toHaveBeenCalled();
 
-    // Back to Look: Move switches off and hides.
-    root.querySelector<HTMLButtonElement>("#wall-mode-look")!.click();
+    // Signing out returns to Look: Move switches off and hides.
+    wallet.emit(SIGNED_OUT);
     expect(move.hidden).toBe(true);
     expect(root.querySelector<HTMLElement>(".wall-page")!.dataset.moving).toBe("false");
     dispose();
@@ -887,7 +926,7 @@ describe("wall modes and the dock's primary action (Phase 1 step 1)", () => {
 
   it("Enter in Look opens Paint instead of sending anything", async () => {
     const services = createAppServices();
-    controllableWallet(services, ALICE);
+    controllableWallet(services, SIGNED_OUT);
     const { root, dispose } = mount(services, undefined, "look");
     await booted(root);
     root.querySelectorAll<HTMLButtonElement>(".swatch")[1]!.click();

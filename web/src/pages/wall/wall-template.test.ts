@@ -41,11 +41,20 @@ describe("wallPageHtml", () => {
     expect(root.querySelector("#focus-canvas")).toBeNull();
     expect(root.querySelector("#zoom-paint")).toBeNull();
     expect(root.querySelector(".wall-frame")?.contains(board)).toBe(true);
-    // Look is the default mode; the dock is the Paint-mode card in the side panel.
+    // Look is the default mode and there is no Look / Paint toggle: signing in
+    // opens Paint. The dock is the Paint-mode card in the side panel.
     expect(root.querySelector<HTMLElement>(".wall-page")?.dataset.mode).toBe("look");
-    expect(root.querySelector("#wall-mode-look")?.getAttribute("aria-pressed")).toBe("true");
-    expect(root.querySelector("#wall-mode-paint")?.getAttribute("aria-pressed")).toBe("false");
+    expect(root.querySelector("#wall-mode-look")).toBeNull();
+    expect(root.querySelector("#wall-mode-paint")).toBeNull();
     expect(root.querySelector(".wall-dock")?.closest(".wall-panel")).not.toBeNull();
+    // The wall's controls float over it, inside the frame.
+    expect(root.querySelector(".wall-frame .wall-bar [data-wall-view]")).not.toBeNull();
+    expect(root.querySelector(".wall-frame #refresh-board")).not.toBeNull();
+    // The primary action, its status and its result sit in the pinned footer.
+    const foot = root.querySelector(".wall-panel-foot");
+    for (const selector of ["#start-painting", "#dock-primary", "#draw-button", "#draw-state", "#result"]) {
+      expect(foot?.querySelector(selector), selector).not.toBeNull();
+    }
     for (const view of ["art", "price", "age", "turf"]) {
       expect(root.querySelector(`[data-wall-view="${view}"]`), view).not.toBeNull();
     }

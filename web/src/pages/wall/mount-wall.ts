@@ -153,13 +153,13 @@ export function mountWall(
   let invitePrimed = false;
 
   // Look / Paint and Move decide what a gesture means; they never change the camera
-  // maths or the paint path. Look is the default (owner, 2 Nov).
+  // maths or the paint path. Look is the default (owner, 2 Nov); there is no toggle,
+  // signing in opens Paint and signing out returns to Look (owner, 6 Nov).
   const wallPage = el<HTMLElement>(".wall-page");
+  const tileCard = el<HTMLElement>(".wall-inspect");
   const modes = createWallModes({
     scope,
     page: wallPage,
-    lookButton: el<HTMLButtonElement>("#wall-mode-look"),
-    paintButton: el<HTMLButtonElement>("#wall-mode-paint"),
     moveButton: el<HTMLButtonElement>("#wall-move"),
     startPainting: el<HTMLButtonElement>("#start-painting"),
     backToLook: el<HTMLButtonElement>("#wall-back-to-look"),
@@ -199,7 +199,16 @@ export function mountWall(
     selection: {
       selected: () => view.selected(),
       selectedColor: () => view.selectedColor(),
-      select: (cell) => view.select(cell),
+      select: (cell) => {
+        view.select(cell);
+        // In Look a tap is a question about that tile: bring its card into view
+        // in the panel. Never while painting, where the palette must stay put.
+        if (modes.mode() === "look") {
+          requestAnimationFrame(() => {
+            if (!scope.isDisposed()) tileCard.scrollIntoView?.({ block: "nearest" });
+          });
+        }
+      },
       showSelection: () => view.showSelection(),
       refreshSelectedPixel: () => {
         void board.refreshSelectedPixel();
@@ -412,7 +421,9 @@ export function mountWall(
 
   const dockPrimary = mountDockPrimary({
     scope,
-    dock: el<HTMLElement>(".wall-dock"),
+    // The panel, not just the dock: the action row, status and result sit in its
+    // pinned footer while the palette and credits sit in its scrolling body.
+    dock: el<HTMLElement>(".wall-panel"),
     actionRow: el<HTMLElement>(".wall-action"),
     primary: el<HTMLButtonElement>("#dock-primary"),
     drawButton,
@@ -474,6 +485,9 @@ export function mountWall(
     ) {
       paint.onWalletChanged();
     }
+    wallPage.dataset.signedIn = String(session.accountId !== null);
+    if (!previousAccount && session.accountId) modes.setMode("paint");
+    else if (previousAccount && !session.accountId) modes.setMode("look");
     if (!session.accountId) {
       view.setFlow("disconnected");
     } else if (view.uiPhase() === "disconnected" || view.uiPhase() === "failed") {
