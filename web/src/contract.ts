@@ -293,8 +293,12 @@ export async function viewFunctionWithMeta<T>(
 }
 
 /**
- * Latest optimistic block height from the configured RPC.
+ * Latest finalized block height from the configured RPC.
  * Used so every page of a full board load shares one block_id.
+ *
+ * `final`, not `optimistic`: an optimistic height can be a block the answering node
+ * has not stored, and pinning `get_pixels` to it fails `UNKNOWN_BLOCK` (2026-11-06).
+ * One block of extra staleness costs nothing; a missing block costs the whole load.
  */
 export async function fetchLatestBlockHeight(): Promise<number> {
   const response = await fetchWithTimeout(RPC_URL, {
@@ -304,7 +308,7 @@ export async function fetchLatestBlockHeight(): Promise<number> {
       jsonrpc: "2.0",
       id: "metapoo-block",
       method: "block",
-      params: { finality: "optimistic" },
+      params: { finality: "final" },
     }),
   });
 
