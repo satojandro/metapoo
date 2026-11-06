@@ -2,6 +2,7 @@
  * App shell: brand, top nav, global wallet chrome, page outlet.
  */
 
+import { createBetaBanner } from "./beta-banner";
 import { mountPaintWalletPanel } from "./paint-wallet-panel";
 import { mountToiletClaim, toiletConfigured } from "./toilet-claim";
 import type { ParsedRoute } from "./routes";
@@ -117,6 +118,9 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   outlet.className = "page-outlet";
 
   header.append(chromeRow);
+  const betaBanner = createBetaBanner();
+  host.classList.toggle("has-beta-banner", betaBanner !== null);
+  if (betaBanner) host.append(betaBanner);
   host.append(header, outlet);
 
   const walletDispose: WalletChromeDispose = mountWalletChrome(
@@ -166,6 +170,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
       toiletDispose();
       detailsClose.dispose();
       walletDispose();
+      host.classList.remove("has-beta-banner");
       host.replaceChildren();
     },
   };

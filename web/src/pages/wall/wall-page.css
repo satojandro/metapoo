@@ -6,7 +6,7 @@
  */
 
 .wall-page {
-  --wall-size: min(100%, max(280px, calc(100dvh - 230px)));
+  --wall-size: min(100%, max(280px, calc(100dvh - 230px - var(--beta-banner-h, 0px))));
   display: block;
   max-width: 1400px;
   margin: 0 auto;

@@ -71,4 +71,15 @@ describe("app shell", () => {
     expect(host.querySelector("details.wallet-details")!.contains(optIn)).toBe(true);
     shell.dispose();
   });
+
+  it("puts the beta notice above the header on every route", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shell = mountShell(host, createAppServices());
+    const banner = host.firstElementChild!;
+    expect(banner.classList.contains("beta-banner")).toBe(true);
+    expect(banner.nextElementSibling?.classList.contains("app-shell-top")).toBe(true);
+    expect(host.classList.contains("has-beta-banner")).toBe(true);
+    shell.dispose();
+  });
 });
