@@ -147,3 +147,14 @@ export const ACQUISITION_PLAY_RESERVE_YOCTO = envString("VITE_ACQUISITION_PLAY_R
  */
 const INITIAL_BOARD_SIDE = Number(envString("VITE_BOARD_SIDE") || "0");
 if (INITIAL_BOARD_SIDE) setBoardSide(INITIAL_BOARD_SIDE);
+
+/**
+ * Beta-round notice at the top of every page (see `app/beta-banner.ts`).
+ * On unless `VITE_BETA_BANNER=false`: forgetting the variable must keep the
+ * warning up, never take it down. Turn it off for the launch board only.
+ */
+export const BETA_BANNER_ENABLED = envString("VITE_BETA_BANNER") !== "false";
+/** Public tester guide (Notion). Empty hides the link. */
+export const BETA_GUIDE_URL = envString("VITE_BETA_GUIDE_URL");
+/** Public issue-report form (Notion). Empty hides the link. */
+export const BETA_REPORT_URL = envString("VITE_BETA_REPORT_URL");
