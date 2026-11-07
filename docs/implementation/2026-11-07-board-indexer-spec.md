@@ -18,6 +18,7 @@ the latest paint on each tile:
 | Tile card | painter and age now | full history of the tile: who held it, for how long |
 | Freshness | poll `get_board_version` every 4 s, walk `get_pixels` on change (R2.2) | changes pushed to the page as they happen |
 | Leaderboards over time | none | "most tiles covered this week", longest-held tile, and the like |
+| RPC bill | grows with visitors × time on page × activity (§7.3) | flat: the server reads the chain once for everyone |
 
 The backlog row R2.2 already names this as the follow-up for a busy board: a changed board still
 walks every painted cell once per change.
@@ -114,13 +115,15 @@ document** (house rule, roadmap R4):
 
 | option | notes |
 |---|---|
-| FastNEAR block data API (`neardata`) | final blocks as JSON, with receipts and execution outcomes including logs. The project already holds a FastNEAR key (`docs/ops/fastnear-rpc.md`). First choice. |
+| FastNEAR transaction index (`POST /v0/account` for the board, `from_tx_block_height`, `is_success`; then `/v0/transactions` for the new hashes) | already used by `/money` (`buyback-ledger.ts`). Polled every few seconds it is the cheapest option (§7.3). Check that the transaction call returns the receipts' logs, and keep the index's 2.4–3.4 s lag in mind. **Try first.** |
+| FastNEAR block data API (`neardata`) | final blocks as JSON, with receipts and execution outcomes including logs. Simple and complete, but one request per block. |
 | NEAR Lake (S3 buckets) | the reference indexer data source; requester-pays S3 reads, an AWS account needed |
 | JSON-RPC `block` + `chunk` + `EXPERIMENTAL_tx_status` | no new provider, but several calls per block; fine for a test run, wasteful for production |
 
-The indexer only needs blocks containing receipts to the board. Every block still has to be
-scanned, because a skipped block can't be told apart from an empty one. At about one block a
-second that is ~86,400 blocks a day. Count that against the FastNEAR plan before choosing.
+Following blocks means reading every one, because a skipped block can't be told apart from an
+empty one: at about one a second that is ~86,400 a day. The transaction index avoids that by asking
+only about the board's own transactions, which is why it is tried first. Whichever is chosen, the
+replay test (§8) and the hourly reconcile (§7.2) are what prove it misses nothing.
 
 ## 5. What the server stores and serves
 
@@ -148,6 +151,7 @@ Every response carries `{"block": <height>, "board_version": <n>}`: what it is c
 | endpoint | returns | wall feature |
 |---|---|---|
 | `GET /v1/status` | cursor block, board version, lag in seconds, source | health; the wall's trust check |
+| `GET /v1/wall` | every painted tile `{x, y, color, artist, written_at_ns}`, the side, at the cursor block | the page's first load, instead of walking `get_pixels` |
 | `GET /v1/strokes?limit=20&before=<block>` | latest strokes, each with `covered: [{account, tiles}]` | Right now |
 | `GET /v1/accounts/{id}/since?block=<n>` | the account's tiles covered since block `n`, by whom, and tiles won back | Since you last looked |
 | `GET /v1/accounts/{id}` | tiles held, first paint, strokes, tiles covered by them / of theirs | Your tiles, a profile later |
@@ -172,17 +176,20 @@ current behaviour when the indexer is off, unreachable, or behind.
   "this browser remembers" note goes away, and won-back tiles are counted.
 - **Tile card history** (`tile-inspector.ts`): a "History" row with the last few holders. It's a
   new read on hover, so throttle it as the price quote already is.
-- **Live updates**: on each SSE message, apply the stroke's cells to the pixel cache, as a confirmed
-  stroke's receipt already does (`c547bcd`). Then skip the next `get_pixels` walk if
-  `get_board_version` matches the indexer's.
+- **First load and live updates replace the poll.** Load the wall from `/v1/wall`, then apply each
+  SSE stroke to the pixel cache, as a confirmed stroke's receipt already does (`c547bcd`). While the
+  stream is healthy the page does **not** run the 4 s `get_board_version` poll or the `get_pixels`
+  walks (R2.2). Only the trust check (§6.3) still reads the chain, once a minute. When the stream
+  drops or falls behind, the page goes back to today's poll until it recovers. This is where the
+  savings come from (§7.3); an indexer that only adds features costs more than it saves.
 
 ### 6.2 What does not change
 Paint, prices, credits, quotes, `max_credits`, claims, the drawing key, the price and age views, and
 `get_earning_cells` for holder earnings.
 
 ### 6.3 The trust check
-On each `get_board_version` poll the wall already makes, compare the indexer's `board_version`
-(from `/v1/status` or the last SSE message). If the indexer is behind by more than a few versions
+Once a minute while the stream is healthy (instead of the 4 s poll), read `get_board_version`
+from the chain and compare it with the indexer's (from `/v1/status` or the last SSE message). If the indexer is behind by more than a few versions
 or 30 s, hide indexer-only features until it catches up. If its version is *ahead* of the chain's,
 the RPC node is lagging; trust neither until the next poll.
 
@@ -201,10 +208,39 @@ for testing (launchd today); a small always-on host with HTTPS for the public pa
 - **After `state_migrated`** (a board upgrade), reconcile at once.
 - **Gaps:** if the data source skips a height, stop and alert. Never jump the cursor.
 
-### 7.3 Cost
-One FastNEAR request per block for the block feed (~2.6M a month), plus the hourly reconcile
-(~65 pages at the board's maximum × 720 ≈ 47k a month). This fits a Pro-sized plan by the estimate
-in `docs/ops/fastnear-rpc.md`; confirm on the dashboard before committing.
+### 7.3 Cost: the server only pays for itself if it replaces the browsers' polling
+
+The live page reads through the keyed FastNEAR endpoint (the deploy guard in
+`docs/ops/fastnear-rpc.md` refuses a bundle without the key), so **every visitor's reads are billed
+to the project.** Estimates below count one JSON-RPC request as one credit, per that document;
+only the FastNEAR dashboard is a real meter.
+
+**Today, per open wall tab** (stops 10 min after the last touch, `BOARD_IDLE_PAUSE_MS`):
+
+| board state | requests an hour |
+|---|---|
+| quiet: `get_board_version` every 4 s | ~900 |
+| changing, 665 painted (3 `get_pixels` pages per change) | up to ~3,600 |
+| changing, full 128 × 128 (65 pages per change) | up to ~59,000 |
+
+**With the indexer, per open tab:** 0 for the first load (`/v1/wall`), 0 for updates (SSE), and
+~60 an hour for the once-a-minute trust check. The indexer's own reads are flat, whatever the
+number of visitors:
+
+| how the server follows the board | requests a month |
+|---|---|
+| every block (§4, any source) | ~2.6M |
+| FastNEAR's per-account transaction index for the board, every 2 s / 5 s | ~1.3M / ~0.5M, plus one `/v0/transactions` call per batch of up to 20 new paints |
+| hourly reconcile (§7.2), full board | ~47k |
+
+**Break-even:** ~2.6M a month is about 2,900 tab-hours of today's quiet-board polling, roughly
+four tabs open around the clock. A busy, full wall breaks even with less than one. Above that the
+indexer saves money, and the saving grows with traffic: a launch day with a few hundred painters
+costs the browsers far more than the server.
+
+**Check at build time (§4):** whether the transaction index returns the event logs (or one more
+call per batch does), its lag (2.4–3.4 s measured on 5 Nov), and whether FastNEAR's block data is
+billed per request at all. The cheapest source that passes the replay test (§8) wins.
 
 ## 8. Acceptance
 
@@ -218,13 +254,16 @@ in `docs/ops/fastnear-rpc.md`; confirm on the dashboard before committing.
    `VITE_INDEXER_URL`.
 4. **Lag test:** pause the follower for 2 minutes; the wall hides indexer-only features, then shows
    them again after catch-up without a reload.
+5. **Cost test:** with the stream healthy, an open, touched wall tab makes at most ~60 chain
+   requests an hour (count them in the page's read transport). With the stream stopped, it returns
+   to today's numbers.
 
 ## 9. Decisions for the owner
 
 | # | question | recommendation |
 |---|---|---|
-| I1 | build it now, or after the beta round? | after the round's signed-in feedback on PR #87; the wall already works without it |
-| I2 | data source | FastNEAR block data, if its plan covers ~2.6M requests a month |
+| I1 | build it now, or after the beta round? | before any public launch push: that is when browser polling gets expensive (§7.3). After the beta round's signed-in feedback on PR #87 |
+| I2 | data source | the cheapest that passes the replay test: try FastNEAR's transaction index first, block data second (§7.3) |
 | I3 | host | the same machine as the keeper for testnet; a small managed host with HTTPS for mainnet |
 | I4 | how much history to keep | all of it: about 120 MB per million paints |
 | I5 | public API, or for the wall only? | public and read-only: it is all chain data, and others can build on it |
