@@ -502,16 +502,10 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       const have = availableCredits(options.reservation);
       const shortfall = creditShortfall(have, quote.totalCredits);
       if (shortfall) {
-        repaintChrome.strokeTotal.textContent = `${quote.strokeText}. ${shortfall}`;
+        // Say it once (owner, 7 Nov). The tally keeps the stroke's size and cost; the
+        // block says why nothing was sent and can be closed; the buy sheet opens, and
+        // the dock's Buy stays. No second Buy credits button inside the block.
         fillBlock(result, "Not enough credits", shortfall);
-        const buyMore = document.createElement("button");
-        buyMore.type = "button";
-        buyMore.className = "action place";
-        buyMore.textContent = "Buy credits";
-        buyMore.addEventListener("click", () => {
-          openBuyCredits(quote.totalCredits, have);
-        });
-        result.append(buyMore);
         openBuyCredits(quote.totalCredits, have);
         void refreshCreditsDock();
         return null;

@@ -105,17 +105,19 @@ describe("inspector content", () => {
 });
 
 describe("Tile card", () => {
-  function setup(selected: { x: number; y: number } | null, copy = vi.fn(async () => {})) {
+  function setup(selected: { x: number; y: number } | null, hovered: () => { x: number; y: number } | null = () => null) {
     document.body.innerHTML = `<section class="wall-inspect"><p class="summary"></p><div id="host" hidden></div></section>`;
     const scope = createWallScope();
     const paintOver = vi.fn();
     const prime = vi.fn();
+    const cachedPixel = vi.fn((cell: { x: number; y: number }) => (cell.x === 9 ? null : painted(30)));
     const inspector = createTileInspector({
       scope,
       card: document.querySelector<HTMLElement>(".wall-inspect")!,
       host: document.querySelector<HTMLElement>("#host")!,
       selected: () => selected,
-      cachedPixel: () => painted(30),
+      hovered,
+      cachedPixel,
       viewer: () => null,
       tunables: () => tunables,
       free: () => ({ kind: "unknown" }),
@@ -125,10 +127,9 @@ describe("Tile card", () => {
       paintOver,
       pageUrl: () => "https://meta.poo/",
       now: () => Number(NOW / 1_000_000n),
-      copy,
     });
     inspector.render();
-    return { scope, paintOver, prime, copy };
+    return { scope, paintOver, prime, inspector, cachedPixel };
   }
 
   it("stays empty with nothing selected", () => {
@@ -137,8 +138,8 @@ describe("Tile card", () => {
     expect(document.querySelector<HTMLElement>(".wall-inspect")!.dataset.filled).toBe("false");
   });
 
-  it("shows the tile and wires Paint over this and Copy link", async () => {
-    const { paintOver, prime, copy } = setup({ x: 3, y: 4 });
+  it("shows the tile and wires Paint over this, with no Copy link", () => {
+    const { paintOver, prime } = setup({ x: 3, y: 4 });
     const host = document.querySelector<HTMLElement>("#host")!;
     expect(host.hidden).toBe(false);
     expect(host.textContent).toMatch(/alice\.testnet/);
@@ -148,17 +149,22 @@ describe("Tile card", () => {
     expect(prime).toHaveBeenCalledTimes(1);
     host.querySelector<HTMLButtonElement>(".tile-paint-over")!.click();
     expect(paintOver).toHaveBeenCalledWith({ x: 3, y: 4 });
-    host.querySelector<HTMLButtonElement>(".tile-copy")!.click();
-    expect(copy).toHaveBeenCalledWith("https://meta.poo/#tile-3-4");
-    await vi.waitFor(() => expect(host.textContent).toMatch(/Link copied/));
+    // Owner, 7 Nov: inviting people to one tile made no sense and cost panel space.
+    expect(host.querySelector(".tile-copy")).toBeNull();
+    expect(host.textContent).not.toMatch(/Copy link/);
   });
 
-  it("falls back to a selected text field when the clipboard refuses", async () => {
-    setup({ x: 3, y: 4 }, vi.fn(async () => {
-      throw new Error("denied");
-    }));
+  it("describes the hovered tile without a tap, then falls back to the selection", () => {
+    let hover: { x: number; y: number } | null = { x: 9, y: 9 };
+    const { inspector, paintOver } = setup(null, () => hover);
     const host = document.querySelector<HTMLElement>("#host")!;
-    host.querySelector<HTMLButtonElement>(".tile-copy")!.click();
-    await vi.waitFor(() => expect(host.querySelector<HTMLInputElement>(".tile-link-field")?.value).toBe("https://meta.poo/#tile-3-4"));
+    // Nothing is selected, yet the hovered tile is described: no click, so no paint.
+    expect(host.hidden).toBe(false);
+    expect(host.textContent).toMatch(/Blank\. Nobody has painted it yet\./);
+    host.querySelector<HTMLButtonElement>(".tile-paint-over")!.click();
+    expect(paintOver).toHaveBeenCalledWith({ x: 9, y: 9 });
+    hover = null;
+    inspector.render();
+    expect(host.hidden).toBe(true);
   });
 });

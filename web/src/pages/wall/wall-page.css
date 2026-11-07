@@ -120,16 +120,28 @@
   color: var(--mp-muted);
   font: var(--mp-text-md)/1.3 var(--mp-font);
 }
-.wall-page .wall-gesture-hint { top: 0; left: 0; max-width: calc(100% - 260px); }
+.wall-page .wall-bar-lead {
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--mp-space-2, 8px);
+  max-width: calc(100% - 260px);
+  pointer-events: none;
+}
+.wall-page .wall-bar-lead > * { pointer-events: auto; min-width: 0; }
+.wall-page .wall-gesture-hint[data-for-mode="moving"],
 .wall-page[data-mode="look"] .wall-gesture-hint[data-for-mode="paint"],
-.wall-page[data-mode="paint"] .wall-gesture-hint[data-for-mode="look"] { display: none; }
+.wall-page[data-mode="paint"] .wall-gesture-hint[data-for-mode="look"],
+.wall-page[data-moving="true"] .wall-gesture-hint[data-for-mode="paint"] { display: none; }
+.wall-page[data-moving="true"] .wall-gesture-hint[data-for-mode="moving"] { display: block; }
 
 .wall-page .wall-views { top: 0; right: 0; }
 
-/* Move is for touch screens; a mouse has space, middle and right drag. */
+/* Move on every pointer: a mouse has space-drag too, but Move is the visible way to
+   browse and inspect tiles in Paint mode without a tap painting them. */
 .wall-page .wall-move {
-  top: 0;
-  left: 0;
+  flex: none;
   min-height: 42px;
   padding: 6px 14px;
   border: 1px solid var(--mp-line);
@@ -142,9 +154,6 @@
 .wall-page .wall-move[hidden] { display: none; }
 .wall-page .wall-move[aria-pressed="true"] { border-color: var(--mp-tag); color: var(--mp-tag); }
 .wall-page .wall-move:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
-@media (pointer: fine) {
-  .wall-page .wall-move { display: none; }
-}
 @media (pointer: coarse) {
   .wall-page .wall-gesture-hint { display: none; }
 }
@@ -462,6 +471,7 @@
   color: var(--mp-soft);
 }
 .wall-page .wall-panel .result:empty { display: none; }
+.wall-page .wall-panel .result { position: relative; padding-right: 32px; }
 .wall-page .wall-panel .result h3 { margin: 0 0 4px; color: var(--mp-fg); font-size: var(--mp-text-body); }
 .wall-page .wall-panel .result p { margin: 0; font-size: var(--mp-text-md); }
 

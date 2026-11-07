@@ -1,6 +1,8 @@
 /**
  * The Tile card (Phase 1 step 3): who painted a tile, how long ago, what covering
- * it costs now, "Paint over this" and a shareable `#tile-x-y` link.
+ * it costs now and "Paint over this". It describes the hovered tile while a mouse is
+ * over the wall, and the selected tile otherwise. `#tile-x-y` deep links still open
+ * the wall on a tile; the card no longer offers a Copy link button (owner, 7 Nov).
  *
  * Read-only. Every fact comes from data the page already has: the wall's pixel
  * cache (colour, painter, write time), the pricing controller's last quote for
@@ -115,6 +117,12 @@ export interface TileInspectorDeps {
   card: HTMLElement;
   host: HTMLElement;
   selected(): Cell | null;
+  /**
+   * The tile under a fine pointer, if any. While set, the card describes it instead
+   * of the selection, so a tile can be inspected without tapping (which may paint).
+   * Read from the pixel cache only: hovering costs no RPC.
+   */
+  hovered?(): Cell | null;
   cachedPixel(cell: Cell): PixelView | null | undefined;
   viewer(): string | null;
   tunables(): ViewTunables | null;
@@ -128,7 +136,6 @@ export interface TileInspectorDeps {
   paintOver(cell: Cell): void;
   pageUrl?: () => string;
   now?: () => number;
-  copy?: (text: string) => Promise<void>;
   tickMs?: number;
 }
 
@@ -140,7 +147,6 @@ export function createTileInspector(deps: TileInspectorDeps): TileInspector {
   const { scope, card, host } = deps;
   const pageUrl = deps.pageUrl ?? (() => window.location.href);
   const now = deps.now ?? Date.now;
-  const copy = deps.copy ?? ((text: string) => navigator.clipboard.writeText(text));
   let lastPrimed: string | null = null;
   /** The model last drawn: board polls re-render only when something changed. */
   let lastDrawn: string | null = null;
@@ -163,7 +169,7 @@ export function createTileInspector(deps: TileInspectorDeps): TileInspector {
 
   function render(): void {
     if (scope.isDisposed()) return;
-    const cell = deps.selected();
+    const cell = deps.hovered?.() ?? deps.selected();
     if (!cell) {
       host.hidden = true;
       host.replaceChildren();
@@ -243,38 +249,16 @@ export function createTileInspector(deps: TileInspectorDeps): TileInspector {
     const paintOver = el("button", "mp-btn mp-btn-primary tile-paint-over", model.colour ? "Paint over this" : "Paint this tile");
     paintOver.type = "button";
     scope.listen(paintOver, "click", () => deps.paintOver(cell));
-    const copyButton = el("button", "mp-btn tile-copy", "Copy link");
-    copyButton.type = "button";
-    const copied = el("p", "tile-copied");
-    copied.setAttribute("role", "status");
-    scope.listen(copyButton, "click", () => {
-      copy(model.link).then(
-        () => {
-          copied.textContent = "Link copied.";
-        },
-        () => {
-          // Clipboard refused: show the link selected so it can be copied by hand.
-          const field = el("input", "tile-link-field");
-          field.type = "text";
-          field.readOnly = true;
-          field.value = model.link;
-          field.setAttribute("aria-label", "Link to this tile");
-          copied.replaceChildren(field);
-          field.focus();
-          field.select();
-        },
-      );
-    });
-    actions.append(paintOver, copyButton);
+    actions.append(paintOver);
 
-    host.replaceChildren(list, actions, copied);
+    host.replaceChildren(list, actions);
     host.hidden = false;
     card.dataset.filled = "true";
   }
 
   // Wet paint dries while the card is open.
   const timer = window.setInterval(() => {
-    if (!scope.isDisposed() && deps.selected() && document.visibilityState !== "hidden") render();
+    if (!scope.isDisposed() && (deps.hovered?.() ?? deps.selected()) && document.visibilityState !== "hidden") render();
   }, deps.tickMs ?? 15_000);
   scope.onDispose(() => window.clearInterval(timer));
 
