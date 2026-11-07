@@ -95,7 +95,7 @@ function setup() {
     <p id="legend"></p><span id="badge"></span><span id="total"></span>
     <div id="viewport"></div><button id="draw"></button><div id="result"></div><p id="draw-state"></p><p id="flow"></p>
     <label><input type="checkbox" id="toggle"></label><p id="tap-status"></p>
-    <div id="unlock"></div><p id="unlocked"></p><button id="unlock-btn"></button>
+    <div id="unlock"></div><p id="unlocked"></p><button id="unlock-btn"></button><div id="renew" hidden></div><button id="renew-btn"></button>
     <button id="auth"></button><button id="forget"></button><button id="revoke"></button>
     <p id="session-status"></p><p id="session-note"></p>
   `;
@@ -128,7 +128,8 @@ function setup() {
     drawButton: el<HTMLButtonElement>("draw"), result: el("result"),
     directPaintToggle: toggle, tapToPaintAffordance: toggle.closest("label")!,
     tapToPaintAnnouncement: el("tap-status"), paintUnlock: el("unlock"), paintUnlocked: el("unlocked"),
-    unlockPaintButton: el<HTMLButtonElement>("unlock-btn"), authorizeSessionButton: el<HTMLButtonElement>("auth"),
+    unlockPaintButton: el<HTMLButtonElement>("unlock-btn"), paintRenew: el("renew"),
+    renewPaintButton: el<HTMLButtonElement>("renew-btn"), authorizeSessionButton: el<HTMLButtonElement>("auth"),
     forgetSessionButton: el<HTMLButtonElement>("forget"), revokeSessionButton: el<HTMLButtonElement>("revoke"),
     drawingSessionStatus: el("session-status"), drawingSessionNote: el("session-note"),
     board: {

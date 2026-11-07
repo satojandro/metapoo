@@ -281,3 +281,17 @@ implicit account** as the painter: 64 cells = 10,441 B, 100 cells = 16,273 B, 12
 log budget, and the real ceiling with the current format is **~100 cells**. Raising it needs the
 per-cell `artist` dropped from the event (or one summary event per call) first — not more gas.
 Gas is not the constraint: 64 cells already runs inside `DRAW_GAS`.
+
+**A drawing key's refusal has not been reconciled with its gas.** On 2026-11-06 the chain refused a
+drawing key with 0.0308 NEAR of allowance left, quoting a cost of 0.0309 NEAR. Every path in this repo
+attaches 30 Tgas (`DRAW_GAS`), and live `draw_many` transactions do too, yet at the 1e8 gas price
+0.0309 NEAR prices about 309 Tgas. So either the gas price at the refusal was about 10x base, or that
+transaction attached about 300 Tgas through a path nobody has found, or something else is going on.
+An invalid transaction never lands, so no hash can settle it: the console line `[wall] drawing key
+refused:` records the gas attached, the gas price, and the chain's quoted cost as a multiple of what
+that gas should cost at that price (`quotedOverExpected`). About 1 means the gas limit is not the
+explanation and the next suspect is the allowance arithmetic; about 10 means the chain priced ten
+times the attached gas. Until one is captured, do not use this event to size the allowance. Add up a
+fee from every receipt: the transaction outcome alone reads about 10x low (0.000032 NEAR for a paint
+that burned 0.00068 in total). Either way, act on the chain's refusal: the reserve in
+`signAndSendStrokeLocally` did not predict it.

@@ -31,6 +31,92 @@ export const DRAWING_SESSION_METHOD = "draw_many";
 
 const YOCTO_PER_NEAR = 10n ** 24n;
 
+/** The one sentence a painter sees in place of the chain's raw allowance error. */
+export const KEY_LOW_COPY =
+  "Your painting key is low on its network-fee limit. Renew it in the dock, then paint again.";
+
+/**
+ * True when a paint stopped because the drawing key's allowance cannot cover the
+ * transaction, which only a new key fixes.
+ *
+ * Matches the chain's NotEnoughAllowance ("Access Key ... does not have enough
+ * balance ...") and this app's own pre-send refusals. It deliberately does not match
+ * "Sender ... does not have enough balance": that is the account itself being short,
+ * and a new key would not help. The chain's check is the one that counts: the
+ * pre-send reserve in local-draw.ts is an estimate and has been seen to pass a
+ * transaction the chain then refused.
+ */
+export function isDrawingKeyLow(message: string | null | undefined): boolean {
+  return (
+    !!message &&
+    /Access Key\b.*does not have enough balance|NotEnoughAllowance|too little gas allowance|gas allowance is exhausted/is.test(
+      message,
+    )
+  );
+}
+
+/** Painter-facing wording for a failure message; raw chain text stays in the console. */
+export function paintFailureCopy(message: string): string {
+  return isDrawingKeyLow(message) ? KEY_LOW_COPY : message;
+}
+
+/**
+ * The cost the chain quoted in a NotEnoughAllowance refusal, in yoctoNEAR.
+ *
+ * The chain writes it as an integer ("… for transaction costing
+ * 30921309952619500000000"). A message carrying a decimal point is
+ * human-formatted copy, whose unit cannot be recovered here, so it answers
+ * null rather than a number in the wrong unit.
+ */
+export function quotedRefusalCostYocto(
+  message: string | null | undefined,
+): string | null {
+  if (!message) return null;
+  const match = /for transaction costing (\d+)(?![\d.])/.exec(message);
+  return match?.[1] ?? null;
+}
+
+/**
+ * The refusal's quoted cost as a multiple of what `gasAttached` should have
+ * cost at `gasPrice`. This is the open question in docs/learning/traps.md:
+ * ~1 means the gas limit is not the explanation, ~10 means the chain priced
+ * ten times the attached gas. Null when either input is unusable.
+ */
+export function refusalCostRatio(
+  quotedYocto: string | null,
+  gasAttached: string,
+  gasPrice: string | null,
+): number | null {
+  if (!quotedYocto || !gasPrice) return null;
+  try {
+    const expected = BigInt(gasAttached) * BigInt(gasPrice);
+    if (expected === 0n) return null;
+    // Two decimals are enough to tell 1x from 10x.
+    return Number((BigInt(quotedYocto) * 100n) / expected) / 100;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The gas price the chain must have used to quote `quotedYocto` for
+ * `gasAttached`. Needs no network read, so it survives a throttled RPC — the
+ * refusal arrives with everything needed to compute it.
+ */
+export function impliedGasPriceYocto(
+  quotedYocto: string | null,
+  gasAttached: string,
+): string | null {
+  if (!quotedYocto) return null;
+  try {
+    const gas = BigInt(gasAttached);
+    if (gas === 0n) return null;
+    return (BigInt(quotedYocto) / gas).toString();
+  } catch {
+    return null;
+  }
+}
+
 export type DrawingSessionPhase =
   | "inactive"
   | "active"

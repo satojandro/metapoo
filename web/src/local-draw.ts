@@ -12,7 +12,11 @@ import { CONTRACT_ID, DRAW_DEPOSIT, DRAW_GAS, RPC_URL, rpcConnection } from "./c
 import { readRpcFetch } from "./read-rpc";
 import {
   describeDrawingSession,
+  impliedGasPriceYocto,
+  isDrawingKeyLow,
   loadDrawingSessionRecord,
+  quotedRefusalCostYocto,
+  refusalCostRatio,
   type DrawingSessionRecord,
 } from "./drawing-session";
 
@@ -290,6 +294,7 @@ export async function signAndSendDrawLocally(
     });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Unknown error";
+    if (isDrawingKeyLow(detail)) logAllowanceRefusal(detail);
     if (/allowance|not enough balance|LackBalanceForState/i.test(detail)) {
       throw new LocalDrawError(
         "allowance_exhausted",
@@ -546,6 +551,7 @@ export async function signAndSendStrokeLocally(args: {
     if (isRefusedTransaction(error)) {
       result.state = "failed";
       result.message = message;
+      if (isDrawingKeyLow(message)) logAllowanceRefusal(message);
       return;
     }
     try {
@@ -619,6 +625,37 @@ function summarize(
  * The node rejected the transaction at validation, so it was never included and
  * nothing it carried can land. Anything not recognised here stays uncertain.
  */
+/**
+ * Record the gas behind a refusal. The chain's quoted cost has not
+ * been reconciled with `DRAW_GAS` (docs/learning/traps.md), and an invalid transaction
+ * never lands, so this console line is the only evidence one leaves. Best-effort: a
+ * failed price read must not change what the painter sees.
+ */
+function logAllowanceRefusal(message: string): void {
+  const quotedCostYocto = quotedRefusalCostYocto(message);
+  void readRpc<{ gas_price: string }>("gas_price", [null])
+    .then((price) => price.gas_price, () => null)
+    .then((gasPrice) => {
+      // `attachedGas` is what this code asked for, not proof of what went on the
+      // wire, so also log what that gas should have cost against the chain's
+      // quote. The ratio settles the open question: ~1 blames something other
+      // than the gas limit, ~10 means the chain priced ten times the attached gas.
+      const expectedCostYocto =
+        gasPrice === null ? null : (BigInt(DRAW_GAS) * BigInt(gasPrice)).toString();
+      console.error("[wall] drawing key refused:", {
+        attachedGas: DRAW_GAS,
+        gasPrice,
+        // Decisive without any RPC read: the refusal alone says which price
+        // the chain used, so a throttled gas_price cannot blind this line.
+        impliedGasPriceYocto: impliedGasPriceYocto(quotedCostYocto, DRAW_GAS),
+        expectedCostYocto,
+        quotedCostYocto,
+        quotedOverExpected: refusalCostRatio(quotedCostYocto, DRAW_GAS, gasPrice),
+        message,
+      });
+    });
+}
+
 function isRefusedTransaction(error: unknown): boolean {
   const e = error as { type?: unknown; message?: unknown } | null;
   const text = `${typeof e?.type === "string" ? e.type : ""} ${typeof e?.message === "string" ? e.message : ""}`;

@@ -12,6 +12,10 @@ import {
   makeAuthorizedSessionRecord,
   saveDrawingSessionRecord,
   type DrawingSessionRecord,
+  isDrawingKeyLow,
+  impliedGasPriceYocto,
+  quotedRefusalCostYocto,
+  refusalCostRatio,
 } from "./drawing-session";
 
 /** Tiny in-memory Storage stand-in for unit tests (no browser required). */
@@ -257,5 +261,74 @@ describe("classifyDrawingKeyAccessKey", () => {
 
   it("treats the exact requested allowance as acceptable", () => {
     expect(classifyDrawingKeyAccessKey(fc({ allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO }), board)).toBe("scoped");
+  });
+});
+
+describe("isDrawingKeyLow", () => {
+  it("recognises the chain's NotEnoughAllowance, as the user saw it", () => {
+    expect(isDrawingKeyLow(
+      "Access Key {account_id}:{public_key} does not have enough balance 0.0308734581660761 for transaction costing 0.0309213099526195",
+    )).toBe(true);
+    expect(isDrawingKeyLow("Access Key alice.testnet:ed25519:abc does not have enough balance 1 for transaction costing 2")).toBe(true);
+    expect(isDrawingKeyLow('{"InvalidTxError":{"InvalidAccessKeyError":{"NotEnoughAllowance":{}}}}')).toBe(true);
+  });
+
+  it("recognises this app's own pre-send refusals", () => {
+    expect(isDrawingKeyLow("This drawing session has too little gas allowance for the next batch.")).toBe(true);
+    expect(isDrawingKeyLow("The drawing-session gas allowance is exhausted.")).toBe(true);
+  });
+
+  it("does not blame the key when the account itself is short: a new key would not help", () => {
+    expect(isDrawingKeyLow("Sender alice.testnet does not have enough balance 1 for transaction costing 2")).toBe(false);
+    expect(isDrawingKeyLow("Price rose above max")).toBe(false);
+    expect(isDrawingKeyLow(null)).toBe(false);
+  });
+});
+
+describe("quotedRefusalCostYocto", () => {
+  it("reads the chain's integer yoctoNEAR quote", () => {
+    expect(quotedRefusalCostYocto(
+      "Access Key alice.testnet:ed25519:abc does not have enough balance 30873458166076100000000 for transaction costing 30921309952619500000000",
+    )).toBe("30921309952619500000000");
+  });
+
+  it("refuses to guess a unit from human-formatted copy", () => {
+    expect(quotedRefusalCostYocto(
+      "Access Key alice.testnet:public does not have enough balance 0.0308 for transaction costing 0.0309",
+    )).toBeNull();
+  });
+
+  it("answers null when there is no quote at all", () => {
+    expect(quotedRefusalCostYocto("The drawing-session gas allowance is exhausted.")).toBeNull();
+    expect(quotedRefusalCostYocto(null)).toBeNull();
+  });
+});
+
+describe("refusalCostRatio", () => {
+  it("puts the refusal's quote against what the attached gas should cost", () => {
+    // 30 Tgas at 1.00e8 = 0.003 NEAR; the chain quoted 0.0309 NEAR.
+    expect(refusalCostRatio("30921309952619500000000", "30000000000000", "100000000")).toBe(10.3);
+    // Same quote, a price that makes it match: 3 Tgas worth.
+    expect(refusalCostRatio("3000000000000000000000", "30000000000000", "100000000")).toBe(1);
+  });
+
+  it("answers null rather than a wrong number when an input is unusable", () => {
+    expect(refusalCostRatio(null, "30000000000000", "100000000")).toBeNull();
+    expect(refusalCostRatio("1", "30000000000000", null)).toBeNull();
+    expect(refusalCostRatio("1", "30000000000000", "not-a-number")).toBeNull();
+    expect(refusalCostRatio("1", "0", "100000000")).toBeNull();
+  });
+});
+
+describe("impliedGasPriceYocto", () => {
+  it("derives the price the chain used from the refusal alone, with no RPC read", () => {
+    // 0.0309 NEAR over 30 Tgas = 1.0307e9 yocto/gas, about 10x the reported 1e8.
+    expect(impliedGasPriceYocto("30921309952619500000000", "30000000000000")).toBe("1030710331");
+  });
+
+  it("answers null when the quote or the gas is unusable", () => {
+    expect(impliedGasPriceYocto(null, "30000000000000")).toBeNull();
+    expect(impliedGasPriceYocto("1", "0")).toBeNull();
+    expect(impliedGasPriceYocto("abc", "30000000000000")).toBeNull();
   });
 });

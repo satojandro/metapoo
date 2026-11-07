@@ -65,6 +65,51 @@ describe("authorizeDrawingSession", () => {
     });
   });
 
+  describe("renewing", () => {
+    const drawingKey = {
+      permission: {
+        FunctionCall: {
+          receiver_id: "board.testnet",
+          method_names: ["draw", "draw_many"],
+          allowance: "30000000000000000000000",
+        },
+      },
+    };
+    beforeEach(() => {
+      signAndSend.mockReset();
+      signAndSend.mockResolvedValue({ transaction: { hash: "h" }, status: { SuccessValue: "" } });
+      getAccessKey.mockReset();
+    });
+    const actionTypes = () => signAndSend.mock.calls[0][0].actions.map((a: { type: string }) => a.type);
+
+    it("adds the new key and deletes the old one in a single transaction", async () => {
+      getAccessKey.mockResolvedValue(drawingKey);
+      await authorizeDrawingSession({ replacePublicKey: "ed25519:spent" });
+      expect(signAndSend).toHaveBeenCalledTimes(1);
+      expect(actionTypes()).toEqual(["AddKey", "DeleteKey"]);
+      expect(signAndSend.mock.calls[0][0].actions[1].params).toEqual({ publicKey: "ed25519:spent" });
+    });
+
+    it("still adds the new key when the old one is gone: DeleteKey would fail the whole transaction", async () => {
+      getAccessKey.mockRejectedValue(new Error("does not exist while viewing"));
+      await authorizeDrawingSession({ replacePublicKey: "ed25519:gone" });
+      expect(actionTypes()).toEqual(["AddKey"]);
+    });
+
+    it("never deletes a full-access key or another contract's key", async () => {
+      getAccessKey.mockResolvedValue({ permission: "FullAccess" });
+      await authorizeDrawingSession({ replacePublicKey: "ed25519:owner" });
+      expect(actionTypes()).toEqual(["AddKey"]);
+
+      signAndSend.mockClear();
+      getAccessKey.mockResolvedValue({
+        permission: { FunctionCall: { ...drawingKey.permission.FunctionCall, receiver_id: "other.testnet" } },
+      });
+      await authorizeDrawingSession({ replacePublicKey: "ed25519:other" });
+      expect(actionTypes()).toEqual(["AddKey"]);
+    });
+  });
+
   it("keeps the secret when the chain read lags, and reports not-confirmed", async () => {
     signAndSend.mockReset();
     signAndSend.mockResolvedValue({ transaction: { hash: "h" }, status: { SuccessValue: "" } });

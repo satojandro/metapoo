@@ -133,6 +133,10 @@ with `@near-js` first; ordinary wallet approval remains the fallback.
 - Local draw path via `Account.callFunctionRaw` when the session is active.
 - Live remaining-allowance query; exhaustion returns a clear failed status
   without auto-resubmit.
+- When the chain refuses the key for its allowance, the dock offers **Renew
+  painting key**: one wallet approval that adds a new key and deletes the old one
+  in the same transaction, with no automatic repaint. The
+  chain's refusal is the signal, because the pre-send reserve is only an estimate.
 - **Revoke on-chain** asks the wallet for `DeleteKey` (still a wallet prompt).
 - **Direct paint** (session-gated): taps enqueue cells; queue is serialized.
 - Contract `get_board` must match shared schema/size/rule/palette or drawing

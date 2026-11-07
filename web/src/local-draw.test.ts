@@ -33,7 +33,11 @@ vi.mock("@near-js/signers", () => ({ KeyPairSigner: class {
   async getPublicKey() { return "ed25519:public"; }
   signTransaction = mocks.sign;
 } }));
-vi.mock("./drawing-session", () => ({
+vi.mock("./drawing-session", async (importOriginal) => ({
+  isDrawingKeyLow: (await importOriginal<typeof import("./drawing-session")>()).isDrawingKeyLow,
+  quotedRefusalCostYocto: (await importOriginal<typeof import("./drawing-session")>()).quotedRefusalCostYocto,
+  refusalCostRatio: (await importOriginal<typeof import("./drawing-session")>()).refusalCostRatio,
+  impliedGasPriceYocto: (await importOriginal<typeof import("./drawing-session")>()).impliedGasPriceYocto,
   loadDrawingSessionRecord: () => ({ publicKey: "public", secretKey: "ed25519:secret" }),
   describeDrawingSession: () => ({ phase: "active" }),
 }));
@@ -181,6 +185,42 @@ describe("pipelined stroke submission", () => {
     expect(mocks.send).toHaveBeenCalledTimes(2);
     expect(result.chunks.map((c) => c.state)).toEqual(["confirmed", "failed", "not_sent"]);
     expect(result.chunks[2]!.message).toBe("Not sent: an earlier batch's send failed.");
+  });
+
+  it("logs the gas and gas price when the chain refuses the key, the only trace a refusal leaves", async () => {
+    // The chain's own shape: integers in yoctoNEAR.
+    const refusal =
+      "Access Key alice.testnet:public does not have enough balance 30873458166076100000000 for transaction costing 30921309952619500000000";
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.send.mockRejectedValueOnce(typed("NotEnoughAllowance", refusal));
+    const result = await signAndSendStrokeLocally(args);
+    expect(result.chunks[0]).toMatchObject({ state: "failed", message: refusal });
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith("[wall] drawing key refused:", {
+      attachedGas: DRAW_GAS,
+      gasPrice: "100000000",
+      // Computed from the refusal alone: 0.0309 / 30 Tgas = 1.0307e9 yocto/gas,
+      // i.e. the chain priced ~10x the price it reports.
+      impliedGasPriceYocto: "1030710331",
+      expectedCostYocto: "3000000000000000000000",
+      quotedCostYocto: "30921309952619500000000",
+      // 30 Tgas at 1.00e8 should cost 0.003 NEAR; the chain quoted 0.0309.
+      // The exact number is the open question this line exists to answer.
+      quotedOverExpected: 10.3,
+      message: refusal,
+    }));
+    log.mockRestore();
+  });
+
+  it("leaves the ratio unknown when the refusal is human-formatted copy, not yoctoNEAR", async () => {
+    // Formatted copy (decimals) has no recoverable unit: the line must not invent one.
+    const refusal = "Access Key alice.testnet:public does not have enough balance 0.0308 for transaction costing 0.0309";
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.send.mockRejectedValueOnce(typed("NotEnoughAllowance", refusal));
+    await signAndSendStrokeLocally(args);
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith("[wall] drawing key refused:", expect.objectContaining({
+      quotedCostYocto: null, quotedOverExpected: null,
+    })));
+    log.mockRestore();
   });
 
   it("looks up a send whose response was lost, and confirms it by hash", async () => {

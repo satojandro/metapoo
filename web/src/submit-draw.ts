@@ -11,6 +11,7 @@ import {
   LocalDrawError,
   signAndSendDrawLocally,
 } from "./local-draw";
+import { isDrawingKeyLow, KEY_LOW_COPY } from "./drawing-session";
 import { describeSponsorship } from "./sponsorship";
 import {
   hasRecognizedTxSuccess,
@@ -92,6 +93,8 @@ export type SubmitDrawResult =
       transactionId: string | null;
       explorerUrl: string | null;
       pixel: null;
+      /** The drawing key's allowance stopped this paint: only a new key fixes it. */
+      keyLow?: boolean;
     };
 
 export interface SubmitDrawInput {
@@ -145,13 +148,17 @@ export async function submitDraw(input: SubmitDrawInput): Promise<SubmitDrawResu
     } catch (error) {
       if (error instanceof LocalDrawError) {
         if (error.code === "allowance_exhausted") {
+          const keyLow = isDrawingKeyLow(error.message);
           return {
             status: "failed",
             title: "Drawing session allowance exhausted",
-            message: `${error.message} Nothing was auto-resubmitted. Renew the session or use ordinary wallet approval.`,
+            message: keyLow
+              ? `Nothing was painted. ${KEY_LOW_COPY}`
+              : `${error.message} Nothing was auto-resubmitted. Renew the session or use ordinary wallet approval.`,
             transactionId: null,
             explorerUrl: null,
             pixel: null,
+            keyLow,
           };
         }
         // If the signed tx may already be on the network, never open a second

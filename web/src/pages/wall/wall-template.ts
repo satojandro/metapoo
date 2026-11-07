@@ -6,6 +6,7 @@
  * Wallet chrome lives on the app shell so it survives navigation.
  */
 
+import { DRAWING_SESSION_GAS_ALLOWANCE_YOCTO, formatAllowanceNear } from "../../drawing-session";
 import { PAGE_NETWORK } from "../../config";
 import type { NetworkId } from "@shared/types.ts";
 
@@ -106,6 +107,20 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                 </p>
                 <button id="unlock-paint-button" class="mp-btn action unlock" type="button">
                   Unlock painting — one approval
+                </button>
+              </div>
+              <div id="paint-renew" class="paint-unlock" role="group" aria-labelledby="paint-renew-title" hidden>
+                <p id="paint-renew-title" class="paint-unlock-title">Your painting key needs renewing.</p>
+                <p class="paint-unlock-body">
+                  Nothing is wrong with your wallet. The key that lets this browser
+                  paint without a popup has a limit for network fees, and it has run
+                  low. Approve one transaction to replace it with a new key with a fresh
+                  ${formatAllowanceNear(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO)} limit,
+                  spent from your wallet only as you paint. Your wallet may show the
+                  old key being removed.
+                </p>
+                <button id="renew-paint-button" class="mp-btn action unlock" type="button">
+                  Renew painting key — one approval
                 </button>
               </div>
               <p id="paint-unlocked" class="paint-unlocked" role="status" aria-live="polite" hidden></p>
