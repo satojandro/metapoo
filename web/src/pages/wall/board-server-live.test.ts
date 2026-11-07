@@ -71,6 +71,8 @@ function stubWorld() {
     /** The consumer's own liveness, as the server derives it. */
     healthStatus: "ok" as "ok" | "degraded" | "stalled",
     chainCalls: [] as Rpc[],
+    /** Every get_pixels call: when (fake ms since start) and the wall's status line, which names the load's reason. */
+    walks: [] as Array<{ atMs: number; status: string }>,
     serverPaths: [] as string[],
     height: () => 10_000 + Math.floor((Date.now() - start) / 1000),
     applied: () => 10_000 + Math.floor((Date.now() - start) / 1000) - (world.appliedLagBlocks ?? world.serverLagBlocks),
@@ -106,6 +108,7 @@ function stubWorld() {
     if (method === "get_board") return Response.json({ result: { result: bytes(BOARD), block_height } });
     if (method === "get_board_version") return Response.json({ result: { result: bytes(world.version), block_height } });
     if (method === "get_pixels") {
+      world.walks.push({ atMs: Date.now() - start, status: document.getElementById("status")?.textContent ?? "" });
       const page = { pixels: [{ x: 1, y: 2, color: 3, artist: "a.testnet", written_at_ns: "5" }], from_index: 0, limit: 256, total: 1, next_from_index: null };
       return Response.json({ result: { result: bytes(page), block_height } });
     }
@@ -238,7 +241,7 @@ describe("board server: chain polling while the socket is open", () => {
     const spent = chainRequestCount() - before;
     expect(spent).toBeLessThanOrEqual(61);
     expect(spent).toBeGreaterThanOrEqual(55); // the trust check really runs
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
     expect(wall.controller.serverLive()).toBe(true);
   });
 
