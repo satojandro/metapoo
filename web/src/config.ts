@@ -110,6 +110,16 @@ export function fastnearHeaders(url: string, withBody = true): Record<string, st
 }
 
 /**
+ * Board server (`ops/board-server/`, a port of Berry Fast), no trailing slash.
+ *
+ * Empty (the default) keeps today's behaviour exactly: the wall polls the chain and
+ * makes no request to any server. Set, the wall loads the board from it and takes live
+ * draws over its WebSocket, and stops polling the chain while that socket is open and
+ * the server keeps up. Prices, credits, quotes and claims are still chain reads.
+ */
+export const BOARD_SERVER_URL = envString("VITE_BOARD_SERVER_URL").replace(/\/+$/, "");
+
+/**
  * Gas sponsorship stays off until custody, limits, and a kill switch exist.
  * When this flag is false, the UI must not claim a sponsored path exists.
  * When true but sponsorship is unavailable, the ordinary wallet path is used.

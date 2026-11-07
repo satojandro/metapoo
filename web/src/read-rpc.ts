@@ -6,6 +6,16 @@ export class RpcBusyError extends Error {
 }
 type Job = { priority: number; run: () => Promise<void> };
 
+/**
+ * Chain requests this page has sent through every read transport: each HTTP attempt,
+ * fallbacks included; a de-duplicated read that shared another's request is not counted.
+ * The board server's cost target is measured with it (≤ ~60 an hour with the socket open).
+ */
+let chainRequests = 0;
+export function chainRequestCount(): number {
+  return chainRequests;
+}
+
 export function createReadTransport(options: {
   fetcher?: typeof fetch;
   fallback?: string;
@@ -65,6 +75,7 @@ export function createReadTransport(options: {
                 for (const [name, value] of Object.entries(rpcAuthHeaders(endpoint, url, apiKey()))) {
                   headers.set(name, value);
                 }
+                chainRequests += 1;
                 const response = await (options.fetcher ?? fetch)(endpoint, { ...init, headers, signal: controller.signal });
                 if (response.status === 429 || response.status >= 500) {
                   const retry = response.headers.get("Retry-After");
