@@ -207,6 +207,7 @@ transaction rather than a redeploy plus a migration:
   `MAX_DRAW_BATCH`. Use it instead of `get_cell_cost` per cell: a 64-cell drag priced cell by cell
   is ~129 round-trips (each cell also needs `get_pixel`) before the wallet prompt.
 - `get_cells_owned(account_id)` — cells an account holds, free or paid; the input to the quota.
+- `get_earning_cells(account_id)` — the subset of those cells whose latest paint was paid with credits: the cells that earn TOILET. A holder earns `per_cell_second × this` (wall page, "Who holds the wall").
   Not every owned cell earns TOILET: see "TOILET accrual and claims".
 - `get_outstanding_credits()` — credits sold and not yet spent. Prepaid service, never profit.
 - `upgrade(code, migrate_args)` — owner-only, one yocto. Deploys `code` and calls its

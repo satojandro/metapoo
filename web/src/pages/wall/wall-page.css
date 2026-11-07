@@ -12,8 +12,11 @@
      fits one screen and sits centred. */
   --wall-panel-w: 380px;
   --wall-gap: var(--mp-space-6);
+  /* The pulse strip under the wall takes its height out of the wall's (owner, 7 Nov:
+     removing the beta banner later gives it back). */
+  --wall-pulse-h: 46px;
   --wall-size: max(320px, min(
-    calc(100dvh - 140px - var(--beta-banner-h, 0px)),
+    calc(100dvh - 140px - var(--beta-banner-h, 0px) - var(--wall-pulse-h)),
     calc(min(100vw, 1600px) - 72px - var(--wall-panel-w) - var(--wall-gap) - 16px)
   ));
   --wall-overlay: color-mix(in srgb, var(--mp-bg) 90%, transparent);
@@ -252,7 +255,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--mp-space-3);
-  height: var(--wall-size);
+  /* As tall as the wall and its pulse strip, so the two columns end together. */
+  height: calc(var(--wall-size) + var(--wall-pulse-h));
   min-width: 0;
 }
 .wall-page .wall-panel-body {
@@ -953,8 +957,18 @@
 .wall-page[data-mode="paint"] .tile-paint-over { display: none; }
 
 /* ——— The wall's story (owner, 7 Nov): fill, happy hour, earnings, holders, rules ——— */
-/* The invite card's fill meter: the How it works meter, smaller. */
-.wall-page .wall-meter-wrap { display: grid; gap: 6px; }
+/* The pulse strip under the wall: the How it works fill meter, and the wall's state
+   in one line. Its height is --wall-pulse-h, which the wall gives up. */
+.wall-page .wall-pulse {
+  box-sizing: border-box;
+  height: calc(var(--wall-pulse-h) - var(--mp-space-2));
+  margin-top: var(--mp-space-2);
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 0 var(--mp-space-1);
+}
+.wall-page .wall-pulse[hidden] { display: none; }
 .wall-page .wall-meter {
   height: 6px;
   overflow: hidden;
@@ -962,23 +976,44 @@
   background: var(--mp-card-2);
   box-shadow: inset 0 0 0 1px var(--mp-line);
 }
-.wall-page .wall-meter[hidden] { display: none; }
 .wall-page .wall-meter i { display: block; height: 100%; width: 0; background: var(--mp-stake); }
-.wall-page .wall-card .wall-meter-label { color: var(--mp-muted); font: 600 var(--mp-text-sm) var(--mp-mono); font-variant-numeric: tabular-nums; }
-.wall-page .wall-card .wall-meter-label:empty { display: none; }
+.wall-page .wall-pulse-line {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  gap: var(--mp-space-4);
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--mp-muted);
+  font: 600 var(--mp-text-sm)/1.2 var(--mp-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.wall-page .wall-pulse-line > span:empty { display: none; }
+.wall-page .wall-pulse-fill { color: var(--mp-fg); }
+.wall-page .wall-pulse-wet { color: var(--mp-turf-2); }
+.wall-page .wall-pulse-happy { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--mp-tag); }
+.wall-page .wall-pulse-happy[hidden] { display: none; }
 .wall-page .wall-card .wall-earn {
   color: var(--mp-fg);
   font-size: var(--mp-text-body);
   line-height: 1.45;
 }
 .wall-page .wall-card .wall-earn b { color: var(--mp-stake); }
-.wall-page .wall-card .wall-happy { color: var(--mp-tag); font: 600 var(--mp-text-sm)/1.4 var(--mp-mono); }
-.wall-page .wall-earn[hidden],
-.wall-page .wall-happy[hidden] { display: none; }
+.wall-page .wall-earn[hidden] { display: none; }
 
 /* Who holds the wall: the Turf list, plus TOILET a day. The Turf view's legend shows
    the same ranking, so the card steps aside while that view is on. */
 .wall-page .wall-holders[hidden] { display: none; }
+.wall-page .wall-holder-day {
+  min-width: 4.5ch;
+  color: var(--mp-stake);
+  font: 600 var(--mp-text-sm) var(--mp-mono);
+  text-align: right;
+  white-space: nowrap;
+}
+.wall-page .wall-turf-list li[data-you="true"] .wall-holder-day { color: var(--mp-tag); }
 .wall-page:has(.wall-legend:not([hidden]) .wall-turf-list) .wall-holders { display: none; }
 
 /* An empty Tile card is a placeholder: it appears when you point at or choose a
@@ -1100,4 +1135,15 @@
 .wall-page .wall-yours-claim:empty { display: none; }
 @media (max-width: 760px) {
   .wall-page > .wall-yours { grid-template-columns: minmax(0, 1fr); margin: var(--mp-space-6) 0 0; padding: var(--mp-space-4); }
+}
+
+/* Phone: the pulse rides under the wall in the sticky stage; one tight line. */
+@media (max-width: 760px) {
+  .wall-page { --wall-pulse-h: 34px; }
+  .wall-page .wall-pulse { height: auto; gap: 4px; margin-top: 4px; padding-bottom: 2px; }
+  .wall-page .wall-meter { height: 4px; }
+  /* The panel's height is free on phone, so the strip may take a second line. */
+  .wall-page .wall-pulse-line { flex-wrap: wrap; row-gap: 2px; gap: 2px var(--mp-space-3); font-size: var(--mp-text-xs); white-space: normal; }
+  .wall-page .wall-pulse-happy { margin-left: 0; flex-basis: 100%; }
+  .wall-page .wall-panel { height: auto; }
 }

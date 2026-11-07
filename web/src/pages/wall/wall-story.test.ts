@@ -99,12 +99,12 @@ describe("happy hour", () => {
   const blank = wallStats([px(0, "a.near")], 0n, null);
 
   it("before the first fill, says it starts once the wall is full", () => {
-    expect(happyHourLine({ ...sunday, enabled: false }, blank, SATURDAY_NOON)).toBe("Happy hour starts once the wall is full.");
+    expect(happyHourLine({ ...sunday, enabled: false }, blank, SATURDAY_NOON)).toBe("Happy hour starts when the wall is full");
   });
 
   it("names the next one, and says when one is open", () => {
-    expect(happyHourLine(sunday, blank, SATURDAY_NOON)).toBe("Next happy hour: Sunday 20:00 UTC.");
-    expect(happyHourLine(sunday, blank, SUNDAY_2015)).toBe("Happy hour is on: dry tiles are free for 45 more minutes.");
+    expect(happyHourLine(sunday, blank, SATURDAY_NOON)).toBe("Next happy hour: Sunday 20:00 UTC");
+    expect(happyHourLine(sunday, blank, SUNDAY_2015)).toBe("Happy hour on · dry tiles free · 45 min left");
   });
 
   it("stays quiet without a schedule, or when switched off on a full wall", () => {
@@ -117,14 +117,25 @@ describe("happy hour", () => {
 describe("who holds the wall", () => {
   const pixels = [px(0, "b.near"), px(1, "b.near"), px(2, "a.near"), px(3, "me.near"), px(4, null)];
 
-  it("ranks holders by tiles, the viewer marked, with no TOILET figure", () => {
+  it("ranks holders by tiles, the viewer marked", () => {
     const rows = holderRows(pixels, "me.near");
-    expect(rows.map((r) => [r.account, r.tiles, r.you])).toEqual([
-      ["b.near", 2, false],
-      ["a.near", 1, false],
-      ["me.near", 1, true],
+    expect(rows.map((r) => [r.account, r.tiles, r.you, r.perDay])).toEqual([
+      ["b.near", 2, false, null],
+      ["a.near", 1, false, null],
+      ["me.near", 1, true, null],
     ]);
-    expect(rows.some((r) => "perDay" in r)).toBe(false);
+  });
+
+  it("TOILET a day comes from the board's earning cells, never tiles × rate", () => {
+    // b.near holds 2 tiles but only 1 was paid with credits; a.near's tile was free.
+    const earning = (account: string) => ({ "b.near": 1, "a.near": 0 } as Record<string, number>)[account] ?? null;
+    const rows = holderRows(pixels, "me.near", PER_DAY, earning);
+    expect(rows.map((r) => [r.account, r.perDay])).toEqual([
+      ["b.near", "86.4"],
+      ["a.near", "0"],
+      ["me.near", null],
+    ]);
+    expect(holderRows(pixels, null, null, earning).every((r) => r.perDay === null)).toBe(true);
   });
 });
 
@@ -175,14 +186,18 @@ describe("rule cards", () => {
 describe("the story on the page", () => {
   afterEach(() => vi.useRealTimers());
 
-  function setup(opts: { emission: () => Promise<unknown>; loaded?: boolean; pixels?: PixelView[] }) {
+  function setup(opts: {
+    emission: () => Promise<unknown>;
+    loaded?: boolean;
+    pixels?: PixelView[];
+    earning?: (account: string) => Promise<unknown>;
+  }) {
     document.body.innerHTML = `
-      <section class="wall-invite">
-        <div class="wall-meter" data-wall-meter hidden><i></i></div>
-        <p data-wall-meter-label></p>
-        <p data-wall-earn hidden></p>
-        <p data-wall-happy hidden></p>
-      </section>
+      <section class="wall-invite"><p data-wall-earn hidden></p></section>
+      <div data-wall-pulse hidden>
+        <div data-wall-meter><i></i></div>
+        <p><span data-wall-meter-label></span><span data-pulse-blank></span><span data-pulse-wet></span><span data-wall-happy hidden></span></p>
+      </div>
       <section class="wall-holders" hidden><ol data-wall-holders></ol><p data-wall-holders-note></p></section>
       <section class="wall-recent" hidden><ol data-wall-recent></ol></section>
       <div data-wall-rules></div>
@@ -193,6 +208,7 @@ describe("the story on the page", () => {
     const story = createWallStory({
       scope: createWallScope(),
       invite: document.querySelector<HTMLElement>(".wall-invite")!,
+      pulse: document.querySelector<HTMLElement>("[data-wall-pulse]")!,
       holders: document.querySelector<HTMLElement>(".wall-holders")!,
       recent: document.querySelector<HTMLElement>(".wall-recent")!,
       strokeEarn: document.querySelector<HTMLElement>("#stroke-earn")!,
@@ -204,6 +220,7 @@ describe("the story on the page", () => {
       tunables: () => tunables,
       colorOf: () => "#73d7ee",
       readEmission: opts.emission,
+      readEarningCells: opts.earning ?? (async () => { throw new Error("MethodNotFound"); }),
       now: () => SATURDAY_NOON,
     });
     return { story, flown, q: <T extends HTMLElement>(s: string) => document.querySelector<T>(s)! };
@@ -213,20 +230,49 @@ describe("the story on the page", () => {
     const { q } = setup({ emission: async () => EMISSION });
     await Promise.resolve();
     await Promise.resolve();
+    expect(q("[data-wall-pulse]").hidden).toBe(false);
     const meter = q("[data-wall-meter]");
-    expect(meter.hidden).toBe(false);
     expect(meter.getAttribute("aria-label")).toBe(`3 of ${wallTiles().toLocaleString("en-US")} tiles painted`);
     expect(q("[data-wall-earn]").hidden).toBe(false);
     expect(q("[data-wall-earn]").textContent).toBe(
       "Every tile you paint with credits earns 86.4 TOILET a day until someone paints over it. Free tiles earn nothing.",
     );
     expect(q("[data-wall-earn] b").textContent).toBe("86.4 TOILET a day");
-    expect(q("[data-wall-happy]").textContent).toBe("Happy hour starts once the wall is full.");
+    expect(q("[data-wall-happy]").textContent).toBe("Happy hour starts when the wall is full");
+    expect(q("[data-pulse-blank]").textContent).toBe(`${(wallTiles() - 3).toLocaleString("en-US")} blank`);
+    expect(q("[data-pulse-wet]").textContent).toBe("3 wet");
     expect(q(".wall-holders").hidden).toBe(false);
     expect(q("[data-wall-holders]").textContent).toBe("1.b.near,2 tiles2.a.near,1 tile");
     // A screen reader hears punctuation, not a CSS gap: the rows read as sentences.
     expect(q("[data-wall-holders] li").getAttribute("aria-label")).toBe("1. b.near, 2 tiles");
     expect(document.querySelectorAll(".wall-rule a").length).toBe(3);
+  });
+
+  it("shows each holder's TOILET a day once the board says how many of their tiles earn", async () => {
+    const asked: string[] = [];
+    const { q } = setup({
+      emission: async () => EMISSION,
+      earning: async (account) => { asked.push(account); return account === "b.near" ? 1 : 0; },
+    });
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    expect(asked.sort()).toEqual(["a.near", "b.near"]);
+    expect(q("[data-wall-holders]").textContent).toBe("1.b.near,2 tiles86.4/day2.a.near,1 tile0/day");
+    expect(q("[data-wall-holders-note]").textContent).toBe(
+      "TOILET a day from tiles painted with credits. Free tiles hold but don’t earn.",
+    );
+  });
+
+  it("a board without get_earning_cells: tiles only, and it stops asking", async () => {
+    let calls = 0;
+    const { story, q } = setup({
+      emission: async () => EMISSION,
+      earning: async () => { calls += 1; throw new Error("wasm execution failed with error: MethodResolveError(MethodNotFound)"); },
+    });
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    const after = calls;
+    story.render();
+    expect(calls).toBe(after);
+    expect(q("[data-wall-holders]").textContent).toBe("1.b.near,2 tiles2.a.near,1 tile");
   });
 
   it("a failed emission read leaves the earning line out, and the rest stands", async () => {
@@ -245,6 +291,9 @@ describe("the story on the page", () => {
     expect(q(".wall-recent").hidden).toBe(false);
     const item = q<HTMLButtonElement>(".wall-recent-item");
     expect(item.textContent).toContain("b.near painted 2 tiles");
+    // The punctuation is for screen readers only: on screen the gap separates them.
+    expect(item.querySelector("time .visually-hidden")?.textContent).toBe(", ");
+    expect(q(".wall-turf-rank .visually-hidden").textContent).toBe(".");
     // Comma before the age: without it a screen reader reads "2 tiles2 h ago".
     expect(item.textContent).toMatch(/2 tiles, (just now|.+ ago)$/);
     expect(item.getAttribute("aria-label")).toMatch(/^b\.near painted 2 tiles, (just now|.+ ago)$/);
@@ -269,7 +318,7 @@ describe("the story on the page", () => {
 
   it("before the wall is read, shows no meter and no holders", () => {
     const { q } = setup({ emission: () => new Promise(() => undefined), loaded: false });
-    expect(q("[data-wall-meter]").hidden).toBe(true);
+    expect(q("[data-wall-pulse]").hidden).toBe(true);
     expect(q(".wall-holders").hidden).toBe(true);
     expect(q(".wall-recent").hidden).toBe(true);
   });

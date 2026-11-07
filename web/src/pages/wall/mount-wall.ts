@@ -413,6 +413,7 @@ export function mountWall(
   story = createWallStory({
     scope,
     invite: el<HTMLElement>(".wall-invite"),
+    pulse: el<HTMLElement>("[data-wall-pulse]"),
     holders: el<HTMLElement>(".wall-holders"),
     recent: el<HTMLElement>(".wall-recent"),
     rules: el<HTMLElement>("[data-wall-rules]"),
@@ -426,6 +427,7 @@ export function mountWall(
     tunables: () => views?.tunables() ?? null,
     colorOf: (account, you) => views?.colorOf(account, you) ?? "",
     readEmission: () => viewFunction("get_toilet_emission"),
+    readEarningCells: (account) => viewFunction("get_earning_cells", { account_id: account }),
     flyTo: (cell) => flyTo(cell),
   });
 

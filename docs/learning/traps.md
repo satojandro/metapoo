@@ -177,6 +177,17 @@ drag-to-paint, which made drag silently pan for anyone who had not found the but
 
 ---
 
+**A held tile is not an earning tile.** Free paint (free first paints, happy hour) holds a tile but
+earns no TOILET until someone repaints it with credits. Never show tiles × rate as earnings: use
+`get_earning_cells(account_id)` for a holder, and count only the credit-paid entries of a stroke.
+(PR #87 shipped tiles × rate in its first commit and corrected it in the second.)
+
+**Punctuation added for screen readers goes in a visually hidden span.** A comma typed into the
+visible text to separate parts for assistive tech shows on screen (", just now"). Use
+`.visually-hidden` for the separator, or an `aria-label` on an element that takes one (a button).
+
+---
+
 ## Board reads
 
 **A poll's cost is per open tab, and it grows with the board.** Before `get_board_version`, every
@@ -253,6 +264,12 @@ with no chain at all. If the board is empty and draw does nothing, check it firs
 **A local `main` ref can lag `origin/main` by several merges** and nothing warns you. Fetch
 before branching, and verify with `git ls-remote origin refs/heads/main` rather than
 trusting a local ref.
+
+**Read `docs/learning/` and the research it cites before designing anything.** On 7 Nov a board
+server was designed from scratch, and costed wrong, when the 5 Nov polling record had already named
+Berry Fast as the model and cited its source commit. Port a working reference; don't reinvent it.
+Before stating what the repo already does, read the record of it: "we already fetch only changed rows"
+was wrong (R2.2 is one board-wide counter).
 
 **Never route coding through an aggregator/router lane.** One auto-routing lane burned
 ~17.9M tokens in 76 minutes with `cost_status: unknown`. Pin the model explicitly.
