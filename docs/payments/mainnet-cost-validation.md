@@ -43,7 +43,7 @@ outcomes, balance deltas and costs rather than checking it merely because it ran
 | C12 | Batches of 1, 10 and 64 entries | Empty / existing / mixed cells; total gas, gas per entry, storage, correct debit | Pending |
 | C13 | Repeated coordinates in a batch | Debit per entry, final last-write behavior; ensure UI does not accidentally duplicate entries | Pending |
 | C14 | Failed single/batched paint | Insufficient credits, invalid cell/color, over-limit batch: unchanged pixels/credits, actual gas paid | Pending |
-| C15 | Drawing-session key | Setup/revoke cost, allowance/nonce changes, paid draw authorization, budget exhaustion behavior | Pending |
+| C15 | Drawing-session key | Setup/revoke cost, allowance/nonce changes, paid draw authorization, budget exhaustion behavior | **Partially measured 2026-11-08** — draw fee from 82 single-cell `draw_many` txs on the mainnet board `fcd66acf…76f59e`: median 3.56 Tgas ≈ 0.000356 NEAR (small batches ~4.6 Tgas, max 13.5 Tgas ≈ 0.00135 NEAR, all at the web's 30 Tgas attach; gas price 1e8 yocto). Allowance default raised 0.05 → 0.25 NEAR ≈ 700 single taps. AddKey/DeleteKey fee, nonce/allowance deltas and real exhaustion still pending |
 | C16 | Owner price update | Authorization, gas, unchanged purchased balances, stale checkout rejection/refund | Pending |
 | C17 | Reconciliation and recovery | Wallet cancel, disconnect, RPC timeout, reload after broadcast; no automatic double-payment, final balance refresh | Pending |
 | C18 | Larger populated board | Repeat reads/writes as occupancy grows; bounded batch gas; use bounded sampling plus conservative storage projection, not automatic full-board filling | Pending |

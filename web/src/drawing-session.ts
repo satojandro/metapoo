@@ -17,11 +17,17 @@ export const DRAWING_SESSION_STORAGE_KEY =
 
 /**
  * Lifetime gas allowance for the experimental FC key, in yoctoNEAR.
- * 0.05 NEAR — small and explicit (connector default is 0.25 NEAR).
+ * 0.25 NEAR — the connector's own default (near-connect uses 0.25 NEAR).
  * This is spent on network fees when the key is used, not an app fee.
+ *
+ * Measured on the mainnet board (fcd66acf…76f59e, 82 single-cell draws):
+ * one draw_many costs ~3.56 Tgas ≈ 0.000356 NEAR, small batches ~4.6 Tgas.
+ * So 0.25 NEAR is ~700 single taps / ~550 short strokes. Gas is a small
+ * fraction of the credits a paint spends (1 credit = 0.0025 NEAR), so an
+ * allowance that runs dry first is the wrong bottleneck.
  */
 export const DRAWING_SESSION_GAS_ALLOWANCE_YOCTO =
-  "50000000000000000000000";
+  "250000000000000000000000";
 
 /** Methods the drawing-session key may call on the board contract. */
 export const DRAWING_SESSION_METHODS = ["draw", "draw_many"] as const;
@@ -221,7 +227,7 @@ export function encodeBase58(bytes: Uint8Array): string {
 
 /**
  * Format a yoctoNEAR allowance string for beginners.
- * Example: "50000000000000000000000" → "0.05 NEAR".
+ * Example: "250000000000000000000000" → "0.25 NEAR".
  */
 export function formatAllowanceNear(yocto: string): string {
   const trimmed = yocto.trim();

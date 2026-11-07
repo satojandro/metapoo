@@ -67,9 +67,9 @@ describe("formatAllowanceNear", () => {
     expect(formatAllowanceNear("0")).toBe("0 NEAR");
   });
 
-  it("formats the experimental 0.05 NEAR allowance", () => {
+  it("formats the configured 0.25 NEAR allowance", () => {
     expect(formatAllowanceNear(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO)).toBe(
-      "0.05 NEAR",
+      "0.25 NEAR",
     );
   });
 
@@ -169,7 +169,7 @@ describe("describeDrawingSession state machine", () => {
     expect(status.title).toMatch(/experimental/i);
     expect(status.message).toMatch(/local signing/i);
     expect(status.message).toMatch(/Revoke on chain/i);
-    expect(status.allowanceLabel).toBe("0.05 NEAR");
+    expect(status.allowanceLabel).toBe("0.25 NEAR");
   });
 
   it("says forgotten locally without claiming on-chain revoke", () => {

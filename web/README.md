@@ -122,7 +122,7 @@ import { registerPageMount } from "./app/page-registry";
 ### Experimental drawing session (function-call key)
 
 Opt-in connect can request `addFunctionCallKey` for this board’s `draw` method
-only (0.05 NEAR lifetime allowance). Place paint then **tries local signing**
+only (0.25 NEAR lifetime allowance). Place paint then **tries local signing**
 with `@near-js` first; ordinary wallet approval remains the fallback.
 
 **What works in code today**
