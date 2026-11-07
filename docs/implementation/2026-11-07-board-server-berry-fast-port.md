@@ -143,12 +143,27 @@ Behind `VITE_BOARD_SERVER_URL`; empty means today's behaviour.
 
 | # | question | recommendation |
 |---|---|---|
-| B1 | port Berry Fast's Rust backend, or rewrite it in TypeScript like `ops/keeper`? | port the Rust: about 1,200 lines (indexer, server, common), runs in production, and the neardata fetcher crate is Rust |
+| B1 | port Berry Fast's Rust backend, or rewrite it in TypeScript like `ops/keeper`? | **Decided (owner, 7 Nov): port the Rust.** About 1,200 lines (indexer, server, common), runs in production, and the neardata fetcher crate is Rust |
 | B2 | which additions from §4 | previous holder and 30-day history; earning count when the per-holder figure ships |
 | B3 | NEAR Data access and billing | ask FastNEAR first (§6) |
 | B4 | when | before any public launch push; after the beta round's signed-in feedback on PR #87 |
 
-## 9. What this draft corrects in the first one
+## 9. Per-row reads (the open half of R2.2): not planned
+
+R2.2's open item proposed per-row or per-region versions, Berry Club's approach, as an alternative
+to this server. With the server, browsers stop reading board state from the chain, so per-row reads
+would only help the fallback path (server down or behind). That would need:
+
+- a contract change: per-row counters, plus a row-read view, because `get_pixels` pages in storage
+  order;
+- a board upgrade;
+- a new client loader.
+
+All of that for a path that should rarely run. Per-row stays shelved **unless** the server slips
+past a public launch push. In that case, ship per-row counters and the row view in the same upgrade
+as `get_earning_cells`, so the board is upgraded once.
+
+## 10. What this draft corrects in the first one
 
 - It invented a server instead of porting Berry Fast.
 - It priced NEAR Data block streaming as JSON-RPC requests.
