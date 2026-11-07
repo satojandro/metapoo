@@ -2,11 +2,13 @@
 //! event is applied. A port of `fastnear/berry-fast` `backend/common`, changed only where the
 //! Meta Poo contract forces it (spec §3).
 pub mod apply;
+pub mod catchup;
 pub mod event;
 pub mod keys;
 pub mod palette;
 pub mod region;
 
 pub use apply::*;
+pub use catchup::*;
 pub use event::*;
 pub use region::*;

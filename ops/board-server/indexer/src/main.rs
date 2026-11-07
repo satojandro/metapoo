@@ -33,8 +33,9 @@ async fn main() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("CHAIN_ID: {e:?}"))?;
     let valkey_url =
         std::env::var("VALKEY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
+    // Reconnects in the background: the retry loop below must survive a Valkey restart.
     let mut con = redis::Client::open(valkey_url)?
-        .get_multiplexed_async_connection()
+        .get_connection_manager()
         .await?;
 
     let resume: Option<u64> = con.get(keys::LAST_PROCESSED_BLOCK).await?;

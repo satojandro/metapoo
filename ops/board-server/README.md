@@ -22,6 +22,9 @@ NEAR Data (final blocks) ──► indexer ──LPUSH──► Valkey draw_queu
   - An event at or below `last_applied_position` is dropped, so a re-delivered block cannot
     double-count.
   - On start, an event stranded in `processing_queue` goes back to the head of the queue.
+  - A failed apply is **retried** with backoff, on a reconnecting connection, rather than
+    ending the consumer: skipping would leave a permanent gap, and exiting would freeze the
+    mirror. `/api/health` reports the consumer's liveness, so a stuck one is visible.
 
 ## Differences from Berry Fast (spec §3–§4)
 
@@ -34,7 +37,8 @@ NEAR Data (final blocks) ──► indexer ──LPUSH──► Valkey draw_queu
 | `account_pixel_count` | the same, plus `account_earning_count` from each entry's `free` flag. Both mirror `paint()`'s holder bookkeeping, so they equal `get_cells_owned` / `get_earning_cells` |
 | broadcast `{x,y,color,owner_id}` | also `previous_owner_id`, both account names, `free`, `credits`, `written_at_ns`, `receipt_id` |
 | — | `GET /api/region/0/0/written-at`: u64 LE `written_at_ns` per tile (131,072 B) |
-| processing queue never recovered; apply not atomic | recovered on start; apply is one transaction with a position guard |
+| processing queue never recovered; apply not atomic | recovered on start; apply is one transaction with a position guard; a failed apply retries instead of ending the consumer |
+| catch-up history ordered by score only | member prefixed with the event position, so draws in one block still replay in applied order |
 
 ## API
 
@@ -46,7 +50,7 @@ NEAR Data (final blocks) ──► indexer ──LPUSH──► Valkey draw_queu
 | `GET /api/region/0/0/timestamps` | `[[x, y, ms], …]` for tiles written in the last hour |
 | `GET /api/account/{owner_id}` | the account name (immutable, cached for a year) |
 | `GET /api/stats/accounts` | `[{account_id, pixel_count, earning_count}]`, largest first |
-| `GET /api/health` | `last_processed_block`, `last_applied_block`, `queue_length`, `side`, `painted_tiles` |
+| `GET /api/health` | `status` (`ok` / `degraded` while retrying / `stalled` when the consumer has not ticked for a minute), `last_processed_block`, `last_applied_block`, `queue_length`, `side`, `painted_tiles`, `consumer_last_tick_ms`, `consumer_failures` |
 | `GET /ws` | pushes `{"type":"draw",…}` and `{"type":"board_expanded",…}`. Send `{"type":"catch_up","since_timestamp_ms":n}` after a reconnect |
 
 ## Run
@@ -85,6 +89,9 @@ Spec §7.1, a replay that matches the chain tile for tile:
 ```bash
 scripts/replay-check.py http://127.0.0.1:3000 <board> <last_processed_block>
 ```
+
+It exits **2** without comparing when the mirror's `x-last-block` is not the block you named: a
+mirror ahead of it holds paint the chain did not have yet, which would read as false differences.
 
 The script compares colour, artist and `written_at_ns` for every tile against `get_pixels`
 pinned to that block. It also compares each holder's tiles against `get_cells_owned`, and

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { boardServerSocketUrl, createBoardServerClient, parseServerMessage, type ServerDraw } from "./client";
+import { decodeRegionBlob } from "./region-blob";
 import { memoryRegionStore } from "./region-store";
 import { buildRegion, fakeSockets } from "./test-support";
 
@@ -120,6 +121,41 @@ describe("board server client: socket", () => {
     sockets.last().push(draw("r1", 50));
     sockets.last().push(draw("r2", 51));
     expect(draws.map((d) => d.receiptId)).toEqual(["r1", "r2"]);
+    client.close();
+  });
+
+  it("a replay never lets an older write overwrite a newer tile", async () => {
+    const store = memoryRegionStore();
+    const server = stubServer({
+      lastUpdated: 10,
+      tiles: [{ x: 1, y: 2, colorIndex: 3, ownerId: 9, writtenAtNs: "1762500000200000000" }],
+      accounts: { 9: "alice.near" },
+    });
+    const sockets = fakeSockets();
+    const client = createBoardServerClient({
+      baseUrl: BASE, fetcher: server.fetcher, store, socketFactory: sockets.factory,
+    });
+    await client.loadRegion();
+    client.connect({});
+    sockets.last().accept();
+    const tile = async () => {
+      const stored = await store.getRegion(`${BASE}|region|0,0`);
+      return decodeRegionBlob(stored!.bytes).find((p) => p.x === 1 && p.y === 2);
+    };
+    const pushed = (receipt: string, color: number, ns: string) =>
+      `{"type":"draw","signer":"bob.near","block_height":700,"block_timestamp_ms":9000,"receipt_id":"${receipt}",` +
+      `"pixels":[{"x":1,"y":2,"color":${color},"rgb":"000000","owner_id":9,"account_id":"alice.near",` +
+      `"previous_owner_id":0,"previous_account_id":null,"free":false,"credits":1,"written_at_ns":${ns}}]}`;
+
+    // An out-of-order catch-up replay of a write older than the tile's: dropped.
+    sockets.last().push(pushed("older", 4, "1762500000100000000"));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect((await tile())?.colorIndex).toBe(3);
+
+    // A write newer than the tile's: applied.
+    sockets.last().push(pushed("newer", 5, "1762500000300000000"));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect((await tile())?.colorIndex).toBe(5);
     client.close();
   });
 

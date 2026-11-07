@@ -50,7 +50,7 @@ pub async fn handle_socket(socket: WebSocket, state: AppState) {
 
 async fn handle_client_message(
     text: &str,
-    mut valkey: redis::aio::MultiplexedConnection,
+    mut valkey: redis::aio::ConnectionManager,
     sender: &mpsc::Sender<String>,
 ) {
     let Ok(msg) = serde_json::from_str::<serde_json::Value>(text) else {
@@ -73,7 +73,13 @@ async fn handle_client_message(
         .await
         .unwrap_or_default();
     for event in events {
-        if sender.send(event).await.is_err() {
+        // The member carries the position prefix that keeps same-millisecond draws in applied
+        // order; the client gets the message itself.
+        if sender
+            .send(common::catchup_payload(&event).to_owned())
+            .await
+            .is_err()
+        {
             break;
         }
     }

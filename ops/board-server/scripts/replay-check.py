@@ -45,6 +45,14 @@ while start is not None:
 
 blob, headers = http(f"{SERVER}/api/region/0/0")
 written, _ = http(f"{SERVER}/api/region/0/0/written-at")
+# The comparison only means something at one block. A mirror *ahead* of BLOCK holds tiles the
+# chain did not have yet — this script would report them as differences — and one behind is
+# missing paint, which is a real failure but of the queue, not of the replay.
+mirrored_block = int(headers.get("x-last-block") or 0)
+if mirrored_block != BLOCK:
+    print(f"mirror last applied block is {mirrored_block}, not {BLOCK}: "
+          f"let the queue drain to BLOCK, or replay at {mirrored_block}")
+    sys.exit(2)
 names = {}
 
 

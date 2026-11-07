@@ -9,7 +9,7 @@ use common::{
     BoardEvent, BoardState, QueuedEvent, FREE_BITMAP_SIZE, MAX_OWNER_ID, REGION_BLOB_SIZE,
     WRITTEN_AT_SIZE,
 };
-use redis::aio::MultiplexedConnection;
+use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 /// What applying one event produced: the message to broadcast (if any) and the new state.
@@ -20,7 +20,7 @@ pub struct Applied {
 }
 
 pub async fn load(
-    con: &mut MultiplexedConnection,
+    con: &mut ConnectionManager,
     initial_side: u32,
 ) -> redis::RedisResult<BoardState> {
     let mut state = BoardState::empty(initial_side);
@@ -43,10 +43,7 @@ pub async fn load(
 
 /// Owner id for `account`, assigning the next one if it has none. Ids start at 1 (0 = undrawn).
 /// Safe to repeat: `HSETNX` keeps the first id if two calls race or a crash repeats one.
-pub async fn resolve_owner_id(
-    con: &mut MultiplexedConnection,
-    account: &str,
-) -> anyhow::Result<u32> {
+pub async fn resolve_owner_id(con: &mut ConnectionManager, account: &str) -> anyhow::Result<u32> {
     if let Some(id) = con
         .hget::<_, _, Option<u32>>(keys::ACCOUNT_TO_ID, account)
         .await?
@@ -70,7 +67,7 @@ pub async fn resolve_owner_id(
 /// Apply `event` to a copy of `state` and build the transaction that persists it. Nothing in
 /// memory changes until the transaction succeeds: the caller swaps in `Applied::state` after.
 pub async fn apply(
-    con: &mut MultiplexedConnection,
+    con: &mut ConnectionManager,
     state: &BoardState,
     event: &QueuedEvent,
     catchup_retention_ms: u64,
@@ -210,9 +207,11 @@ pub async fn apply(
             .ignore();
     }
     if let Some(message) = &message {
+        // Scored by block time, prefixed by position: a client that asks for everything since a
+        // timestamp gets it in applied order even when two draws share a millisecond.
         pipe.zadd(
             keys::DRAW_EVENTS_ZSET,
-            message.to_string(),
+            common::catchup_member(event.position(), &message.to_string()),
             event.block_timestamp_ms as f64,
         )
         .ignore();

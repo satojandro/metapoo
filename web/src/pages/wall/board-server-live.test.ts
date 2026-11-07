@@ -65,9 +65,15 @@ function stubWorld() {
   const world = {
     version: 3,
     serverLagBlocks: 2,
+    /** How far the consumer's applied watermark trails the chain. Null: the same as the indexer. */
+    appliedLagBlocks: null as number | null,
+    queueLength: 0,
+    /** The consumer's own liveness, as the server derives it. */
+    healthStatus: "ok" as "ok" | "degraded" | "stalled",
     chainCalls: [] as Rpc[],
     serverPaths: [] as string[],
     height: () => 10_000 + Math.floor((Date.now() - start) / 1000),
+    applied: () => 10_000 + Math.floor((Date.now() - start) / 1000) - (world.appliedLagBlocks ?? world.serverLagBlocks),
   };
   const region = buildRegion([{ x: 1, y: 2, colorIndex: 3, ownerId: 1, writtenAtNs: "1762500000000000000" }]);
   const bytes = (value: unknown) => Array.from(new TextEncoder().encode(JSON.stringify(value)));
@@ -83,8 +89,11 @@ function stubWorld() {
       if (path === "/api/account/1") return new Response("alice.testnet");
       if (path === "/api/health") {
         return Response.json({
-          status: "ok", last_processed_block: world.height() - world.serverLagBlocks,
-          last_applied_block: 9990, queue_length: 0, side: 128,
+          status: world.healthStatus,
+          last_processed_block: world.height() - world.serverLagBlocks,
+          last_applied_block: world.applied(),
+          queue_length: world.queueLength,
+          side: 128,
         });
       }
       return new Response("not found", { status: 404 });
@@ -310,5 +319,34 @@ describe("board server: chain polling while the socket is open", () => {
     await vi.advanceTimersByTimeAsync(2 * 60_000);
     expect(wall.controller.serverLive()).toBe(true);
     expect(wall.named("get_pixels")).toBe(0);
+  });
+
+  it("measures lag from the applied watermark, so a dead consumer is not live", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    // The indexer stays current; only the consumer has stopped applying. A check that reads
+    // last_processed_block alone would call this server healthy and freeze the wall.
+    wall.world.appliedLagBlocks = SERVER_MAX_LAG_BLOCKS + 200;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(wall.controller.serverLive()).toBe(false);
+    const behind = wall.named("get_board_version");
+    await vi.advanceTimersByTimeAsync(10 * BOARD_POLL_BASE_MS);
+    expect(wall.named("get_board_version") - behind).toBeGreaterThanOrEqual(8);
+  });
+
+  it("stops trusting a server whose consumer reports degraded or stalled", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    wall.world.healthStatus = "stalled";
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(wall.controller.serverLive()).toBe(false);
+    // Back to today's path: the copy came from the server, so the fallback walks the chain.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wall.named("get_pixels")).toBe(1);
+
+    // The server recovers: a passing check makes it live again.
+    wall.world.healthStatus = "ok";
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(wall.controller.serverLive()).toBe(true);
   });
 });

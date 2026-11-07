@@ -9,11 +9,11 @@ use common::{keys, BoardEvent, BoardState, DrawEntry, QueuedEvent};
 use redis::AsyncCommands;
 use tokio::sync::{broadcast, RwLock};
 
-async fn connect() -> Option<redis::aio::MultiplexedConnection> {
+async fn connect() -> Option<redis::aio::ConnectionManager> {
     let url = std::env::var("TEST_VALKEY_URL").ok()?;
     let mut con = redis::Client::open(url)
         .ok()?
-        .get_multiplexed_async_connection()
+        .get_connection_manager()
         .await
         .ok()?;
     let _: () = redis::cmd("FLUSHDB").query_async(&mut con).await.ok()?;
@@ -47,7 +47,7 @@ fn draw(block_height: u64, seq: u32, artist: &str, cells: &[(u32, u32, u32, bool
 
 /// Queue `event` and move it to processing, as the consumer loop does, then apply it.
 async fn deliver(
-    con: &mut redis::aio::MultiplexedConnection,
+    con: &mut redis::aio::ConnectionManager,
     state: &Arc<RwLock<BoardState>>,
     tx: &broadcast::Sender<String>,
     event: &QueuedEvent,
@@ -59,7 +59,7 @@ async fn deliver(
         .unwrap();
 }
 
-async fn counts(con: &mut redis::aio::MultiplexedConnection, key: &str) -> HashMap<String, i64> {
+async fn counts(con: &mut redis::aio::ConnectionManager, key: &str) -> HashMap<String, i64> {
     let by_id: HashMap<u32, i64> = con.hgetall(key).await.unwrap();
     let names: HashMap<u32, String> = con.hgetall(keys::ID_TO_ACCOUNT).await.unwrap();
     by_id
@@ -111,6 +111,42 @@ async fn a_redelivered_event_is_applied_once_and_state_survives_a_restart() {
     assert_eq!(reloaded.free_bits, memory.free_bits);
     assert_eq!(reloaded.written_at, memory.written_at);
     assert_eq!(reloaded.written_at_ns(1, 1), Some(101_000_000_000));
+}
+
+/// Two draws in one block: the catch-up history must still replay them in applied order, even
+/// though they share a score (block time) and a zset would otherwise order ties by member text.
+#[tokio::test]
+async fn two_draws_in_one_block_catch_up_in_applied_order() {
+    let Some(mut con) = connect().await else {
+        return;
+    };
+    let state = Arc::new(RwLock::new(BoardState::empty(64)));
+    let (tx, _rx) = broadcast::channel(16);
+
+    let mut first = draw(300, 0, "alice.near", &[(1, 1, 2, false)]);
+    let mut second = draw(300, 1, "bob.near", &[(1, 1, 5, false)]);
+    first.block_timestamp_ms = 1_700_000_000_000;
+    second.block_timestamp_ms = 1_700_000_000_000;
+    deliver(&mut con, &state, &tx, &first).await;
+    deliver(&mut con, &state, &tx, &second).await;
+
+    let members: Vec<String> = con
+        .zrangebyscore_limit(keys::DRAW_EVENTS_ZSET, 0u64, "+inf", 0, -1)
+        .await
+        .unwrap();
+    let payloads: Vec<String> = members
+        .iter()
+        .map(|m| common::catchup_payload(m).to_owned())
+        .collect();
+    assert_eq!(payloads.len(), 2, "both draws are in the catch-up history");
+    let first_json: serde_json::Value = serde_json::from_str(&payloads[0]).unwrap();
+    let second_json: serde_json::Value = serde_json::from_str(&payloads[1]).unwrap();
+    assert_eq!(first_json["signer"], "alice.near", "seq 0 first");
+    assert_eq!(second_json["signer"], "bob.near", "then the cover");
+    assert_eq!(
+        second_json["pixels"][0]["previous_account_id"],
+        "alice.near"
+    );
 }
 
 #[tokio::test]

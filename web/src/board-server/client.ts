@@ -357,8 +357,15 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
     for (const pixel of draw.pixels) {
       accounts.set(pixel.ownerId, pixel.artistAccountId!);
       if (region) {
-        writeBlobPixel(region.bytes, pixel.x, pixel.y, pixel.colorIndex, pixel.ownerId);
-        writeWrittenAtNs(region.writtenAt, pixel.x, pixel.y, pixel.lastWriteTimestampNs);
+        // Two draws in one block can be replayed out of order; never let an older write
+        // overwrite a newer tile (unknown times still apply: there is nothing to compare).
+        const existing = readWrittenAtNs(region.writtenAt, pixel.x, pixel.y);
+        const incoming = pixel.lastWriteTimestampNs;
+        const stale = existing !== null && incoming !== null && BigInt(incoming) < BigInt(existing);
+        if (!stale) {
+          writeBlobPixel(region.bytes, pixel.x, pixel.y, pixel.colorIndex, pixel.ownerId);
+          writeWrittenAtNs(region.writtenAt, pixel.x, pixel.y, incoming);
+        }
       }
     }
     if (region && draw.blockTimestampMs >= region.lastUpdatedMs) {

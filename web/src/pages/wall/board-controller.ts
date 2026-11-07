@@ -611,7 +611,12 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     try {
       const [chain, health] = await Promise.all([readBoardVersion(), server.health()]);
       if (scope.isDisposed() || !socketOpen) return;
-      const lag = health.lastProcessedBlock === null ? Infinity : chain.blockHeight - health.lastProcessedBlock;
+      // Lag is measured from the **applied** watermark, not the indexer's: the two are the same
+      // block count apart only while the consumer is working, and a dead consumer leaves
+      // `last_processed_block` climbing while the board stops. `status` is the server's own
+      // consumer liveness (`ok` / `degraded` / `stalled`).
+      const applied = health.lastAppliedBlock ?? health.lastProcessedBlock;
+      const lag = applied === null ? Infinity : chain.blockHeight - applied;
       serverHealthy = health.status === "ok" && lag <= SERVER_MAX_LAG_BLOCKS;
       if (chain.version !== null) {
         if (suspectSinceMs !== null) {

@@ -14,13 +14,15 @@ use redis::AsyncCommands;
 use serde::Deserialize;
 use tokio::sync::{broadcast, RwLock};
 
-use crate::ws;
+use crate::{consumer, ws};
 
 #[derive(Clone)]
 pub struct AppState {
     pub board: Arc<RwLock<BoardState>>,
-    pub valkey: redis::aio::MultiplexedConnection,
+    pub valkey: redis::aio::ConnectionManager,
     pub broadcast_tx: broadcast::Sender<String>,
+    /// Consumer liveness, so `/api/health` can tell a working mirror from a frozen one.
+    pub consumer: consumer::Health,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -217,24 +219,125 @@ async fn get_account_by_id(State(state): State<AppState>, Path(owner_id): Path<u
     }
 }
 
-async fn health(State(state): State<AppState>) -> Response {
-    let mut con = state.valkey.clone();
-    let processed: Option<u64> = con.get(keys::LAST_PROCESSED_BLOCK).await.unwrap_or(None);
-    let applied: Option<u64> = con.get(keys::LAST_APPLIED_BLOCK).await.unwrap_or(None);
-    let queue: u64 = con.llen(keys::DRAW_QUEUE).await.unwrap_or(0);
-    let painted: Option<i64> = con.get(keys::PAINTED_TILES).await.unwrap_or(None);
-    let side = state.board.read().await.side;
-    axum::Json(serde_json::json!({
-        "status": "ok",
+/// The `/api/health` body. Pure, so the status rules are testable without a server.
+///
+/// `status` is derived, never asserted: `ok` needs a consumer that is still ticking and not
+/// retrying. It used to be the literal string "ok", so a mirror whose consumer had exited
+/// reported perfect health while every later draw sat in the queue.
+pub fn health_body(
+    processed: Option<u64>,
+    applied: Option<u64>,
+    queue_length: u64,
+    painted_tiles: i64,
+    side: u32,
+    now_ms: u64,
+    consumer: consumer::HealthSnapshot,
+) -> serde_json::Value {
+    serde_json::json!({
+        "status": consumer::status(now_ms, consumer),
         "last_processed_block": processed,
         "last_applied_block": applied,
-        "queue_length": queue,
+        "queue_length": queue_length,
         "side": side,
-        "painted_tiles": painted.unwrap_or(0),
-    }))
+        "painted_tiles": painted_tiles,
+        "consumer_last_tick_ms": consumer.last_tick_ms,
+        "consumer_failures": consumer.failures,
+    })
+}
+
+/// How long `/api/health` waits for Valkey. A `ConnectionManager` *blocks* while it reconnects,
+/// so without a bound this endpoint would hang during an outage instead of reporting one — and
+/// a hung endpoint looks like a dead server to whatever is watching it.
+const HEALTH_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// One health read, or `None` if Valkey does not answer in time.
+async fn health_get<T: redis::FromRedisValue>(
+    con: redis::aio::ConnectionManager,
+    key: &str,
+) -> Option<T> {
+    let mut con = con;
+    tokio::time::timeout(HEALTH_READ_TIMEOUT, con.get(key))
+        .await
+        .ok()?
+        .ok()
+}
+
+async fn health_len(con: redis::aio::ConnectionManager, key: &str) -> Option<u64> {
+    let mut con = con;
+    tokio::time::timeout(HEALTH_READ_TIMEOUT, con.llen(key))
+        .await
+        .ok()?
+        .ok()
+}
+
+async fn health(State(state): State<AppState>) -> Response {
+    let con = state.valkey.clone();
+    let processed: Option<u64> = health_get(con.clone(), keys::LAST_PROCESSED_BLOCK).await;
+    let applied: Option<u64> = health_get(con.clone(), keys::LAST_APPLIED_BLOCK).await;
+    let queue: u64 = health_len(con.clone(), keys::DRAW_QUEUE).await.unwrap_or(0);
+    let painted: Option<i64> = health_get(con, keys::PAINTED_TILES).await;
+    let side = state.board.read().await.side;
+    axum::Json(health_body(
+        processed,
+        applied,
+        queue,
+        painted.unwrap_or(0),
+        side,
+        consumer::now_ms(),
+        state.consumer.snapshot(),
+    ))
     .into_response()
 }
 
 async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| ws::handle_socket(socket, state))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(last_tick_ms: u64, failures: u64) -> consumer::HealthSnapshot {
+        consumer::HealthSnapshot {
+            last_tick_ms,
+            failures,
+        }
+    }
+
+    #[test]
+    fn a_working_consumer_reports_ok_and_the_watermarks() {
+        let now = 1_000_000;
+        let body = health_body(Some(500), Some(499), 0, 7, 64, now, snapshot(now - 50, 0));
+        assert_eq!(body["status"], "ok");
+        assert_eq!(body["last_processed_block"], 500);
+        assert_eq!(body["last_applied_block"], 499);
+        assert_eq!(body["queue_length"], 0);
+        assert_eq!(body["painted_tiles"], 7);
+    }
+
+    #[test]
+    fn a_frozen_consumer_is_not_reported_as_ok() {
+        let now = 1_000_000;
+        let body = health_body(
+            Some(500),
+            Some(300),
+            42,
+            0,
+            64,
+            now,
+            snapshot(now - consumer::STALL_AFTER_MS - 1, 0),
+        );
+        // The whole point: the backlog is visible AND the status says the mirror is not moving.
+        assert_eq!(body["status"], "stalled");
+        assert_eq!(body["queue_length"], 42);
+        assert_eq!(body["last_applied_block"], 300);
+    }
+
+    #[test]
+    fn a_consumer_that_is_retrying_reports_degraded() {
+        let now = 1_000_000;
+        let body = health_body(Some(500), Some(499), 1, 0, 64, now, snapshot(now - 50, 3));
+        assert_eq!(body["status"], "degraded");
+        assert_eq!(body["consumer_failures"], 3);
+    }
 }
