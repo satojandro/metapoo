@@ -389,6 +389,22 @@ function setVisibility(state: "visible" | "hidden"): void {
 
 const HOUR = 60 * 60_000;
 
+describe("disposing the wall mid-walk", () => {
+  it("stops the walk: no page is read after the wall is gone", async () => {
+    // Seen on CI for PR #90: a walk still in flight when its test disposed the wall went on to
+    // read get_pixels during the next test. In the browser it is the same leak: leave the
+    // wall and the walk kept reading pages for nobody.
+    const { named } = stubWorld();
+    const wall = mount(false);
+    await settle(wall.controller.bootstrap());
+    const pagesBefore = named("get_pixels");
+    void wall.controller.refreshBoardFromContract({ reason: "manual" });
+    wall.dispose();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(named("get_pixels")).toBe(pagesBefore);
+  });
+});
+
 describe("board server: paint hint", () => {
   it("a confirmed paint hints the server once per stroke, so its indexer looks now", async () => {
     const wall = await liveWall();

@@ -24,6 +24,7 @@ import {
 import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
 import {
   fetchAllPaintedPixels,
+  WalkCancelled,
   getBoard,
   getPixelWithBlock,
   isContractConfigured,
@@ -407,6 +408,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     try {
       const snapshot = await fetchAllPaintedPixels({
         knownVersion: VERSION_CHECKED.has(reason) ? cachedVersion : null,
+        // A disposed wall (the visitor left) stops reading instead of finishing the walk.
+        isCancelled: () => scope.isDisposed(),
       });
       if (!shouldApplyBoardLoad(boardSync, loadId, snapshot.blockHeight)) {
         boardLoadStatus.textContent = `Board load skipped stale snapshot (block ${snapshot.blockHeight}). ${formatFreshness(boardSync, Date.now())}`;
@@ -435,6 +438,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
         snapshot.pixels.length === 1 ? "" : "s"
       } at block ${snapshot.blockHeight}. ${formatFreshness(boardSync, Date.now())}`;
     } catch (error) {
+      // Cancelled because the wall was disposed: not a failure, and nobody is reading it.
+      if (error instanceof WalkCancelled) return;
       markBoardLoadFailed(boardSync);
       showBoardFreshness();
       const detail = error instanceof Error ? error.message : "Unknown read error";
