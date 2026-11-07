@@ -206,7 +206,8 @@ describe("pricing controller", () => {
     await pricing.refreshCreditsDock();
     expect(await pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet")).toBeNull();
     expect(deps.result.querySelector("h3")?.textContent).toBe("Not enough credits");
-    expect(deps.result.querySelector("button")?.textContent).toBe("Buy credits");
+    // The sheet is the buy action; the block only explains and can be closed.
+    expect(Array.from(deps.result.querySelectorAll("button")).map((b) => b.className)).toEqual(["result-dismiss"]);
     expect(sheet().hidden).toBe(false);
     expect(document.querySelector<HTMLInputElement>("#buy-credits-qty")!.value).toBe("3");
     dispose();

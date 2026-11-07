@@ -46,10 +46,15 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
 
             <!-- Controls float over the wall's corners so the wall gets the height. -->
             <div class="board-toolbar wall-bar" role="toolbar" aria-label="Wall controls">
-              <p class="wall-chip wall-gesture-hint" data-for-mode="look">Tap a tile to see who painted it</p>
-              <p class="wall-chip wall-gesture-hint" data-for-mode="paint">Tap or drag to paint · Space-drag to move</p>
-              <button id="wall-move" class="wall-move" type="button" aria-pressed="false" hidden
-                title="Drag moves the wall instead of painting">Move</button>
+              <!-- Move sits beside the hint on every pointer: it is how you browse and
+                   ask about tiles in Paint mode without painting them (owner, 7 Nov). -->
+              <div class="wall-bar-lead">
+                <button id="wall-move" class="wall-move" type="button" aria-pressed="false" hidden
+                  title="Drag moves the wall and a tap shows a tile, instead of painting">Move</button>
+                <p class="wall-chip wall-gesture-hint" data-for-mode="look">Tap a tile to see who painted it</p>
+                <p class="wall-chip wall-gesture-hint" data-for-mode="paint">Tap or drag to paint · Space-drag to move</p>
+                <p class="wall-chip wall-gesture-hint" data-for-mode="moving">Drag to move · tap a tile to see it · nothing paints</p>
+              </div>
               <div class="mp-seg mp-seg-small wall-views" role="group" aria-label="Wall view">
                 <button type="button" data-wall-view="art" aria-pressed="true" title="The picture as painted">Art</button>
                 <button type="button" data-wall-view="price" aria-pressed="false" title="What each tile costs to cover">Price</button>

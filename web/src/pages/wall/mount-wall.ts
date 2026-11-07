@@ -153,6 +153,14 @@ export function mountWall(
   let inspector: TileInspector | null = null;
   let invite: WallInvite | null = null;
   let invitePrimed = false;
+  // The tile under a mouse. The Tile card describes it, so asking about a tile
+  // never needs a tap (which paints in Paint mode). Pixel cache only: no RPC.
+  let hovered: Cell | null = null;
+  function setHovered(next: Cell | null): void {
+    if (hovered?.x === next?.x && hovered?.y === next?.y) return;
+    hovered = next;
+    inspector?.render();
+  }
 
   // Look / Paint and Move decide what a gesture means; they never change the camera
   // maths or the paint path. Look is the default (owner, 2 Nov); there is no toggle,
@@ -236,7 +244,11 @@ export function mountWall(
     tapSelected: (cell, tapOptions) => {
       if (modes.tapMayPaint()) paint.maybeEnqueueDirectPaint(cell, tapOptions);
     },
-    hoverCell: (cell) => pricing.requestCellPrice(cell),
+    hoverCell: (cell) => {
+      pricing.requestCellPrice(cell);
+      setHovered(cell);
+    },
+    hoverEnd: () => setHovered(null),
     panOnly: () => modes.panOnly(),
     tilePainter: () => views?.painter() ?? null,
   });
@@ -399,12 +411,13 @@ export function mountWall(
     });
   }
 
-  // The Tile card: painter, age, cost to cover, Paint over this, Copy link.
+  // The Tile card: painter, age, cost to cover, Paint over this.
   inspector = createTileInspector({
     scope,
     card: el<HTMLElement>(".wall-inspect"),
     host: el<HTMLElement>("#tile-inspector"),
     selected: () => view.selected(),
+    hovered: () => hovered,
     cachedPixel: (cell) => board.cachedPixel(cell),
     viewer: () => scope.walletAccount(),
     tunables: () => views?.tunables() ?? null,

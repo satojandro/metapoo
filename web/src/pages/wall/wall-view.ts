@@ -460,6 +460,21 @@ export function createWallView(deps: WallViewDeps): WallView {
   };
 }
 
+/**
+ * Every message block gets a close control (owner, 7 Nov: "not being able to close a
+ * notification"). Prepended so it sits in the corner; clicking it empties the host,
+ * and `.result:empty` hides it.
+ */
+function addDismiss(host: HTMLElement): void {
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "result-dismiss";
+  close.setAttribute("aria-label", "Dismiss this message");
+  close.textContent = "\u00d7";
+  close.addEventListener("click", () => clearBlock(host));
+  host.prepend(close);
+}
+
 /** textContent only. Account ids and error strings must not be inserted as HTML. */
 export function fillBlock(host: HTMLElement, title: string, message: string): void {
   host.replaceChildren();
@@ -468,12 +483,12 @@ export function fillBlock(host: HTMLElement, title: string, message: string): vo
   const paragraph = document.createElement("p");
   paragraph.textContent = message;
   host.append(heading, paragraph);
+  addDismiss(host);
 }
 
 /**
- * Like `fillBlock`, but dismissible. The wallet-error host floats over the page
- * (`.wallet-chrome > .result`), so a block without a close control is a trap: it
- * stays until the next attempt and sits on top of the palette.
+ * Kept for the wallet-error host, which floats over the page (`.wallet-chrome >
+ * .result`). Every block is dismissible now, so this is `fillBlock`.
  */
 export function fillDismissibleBlock(
   host: HTMLElement,
@@ -481,13 +496,6 @@ export function fillDismissibleBlock(
   message: string,
 ): void {
   fillBlock(host, title, message);
-  const close = document.createElement("button");
-  close.type = "button";
-  close.className = "result-dismiss";
-  close.setAttribute("aria-label", "Dismiss this message");
-  close.textContent = "\u00d7";
-  close.addEventListener("click", () => clearBlock(host));
-  host.prepend(close);
 }
 
 export function fillResultWithLink(
@@ -516,6 +524,7 @@ export function fillResultWithLink(
     link.textContent = "Open transaction in explorer";
     result.append(link);
   }
+  addDismiss(result);
 }
 
 export function clearBlock(host: HTMLElement): void {

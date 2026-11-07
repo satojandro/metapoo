@@ -516,10 +516,12 @@ describe("wall behaviour: paid board", () => {
     expect(root.querySelector("#result p")?.textContent).toBe(
       "This stroke needs 4 credits and this account has 1 credit. Nothing was submitted.",
     );
-    expect(root.querySelector("#result button")?.textContent).toBe("Buy credits");
-    expect(text(root, "#stroke-total")).toBe(
-      "this stroke: 1 cell · 4 credits. This stroke needs 4 credits and this account has 1 credit. Nothing was submitted.",
-    );
+    // Said once (owner, 7 Nov): the tally keeps only the size and cost, the block has
+    // no second Buy credits button, and it can be closed.
+    expect(Array.from(root.querySelectorAll("#result button")).map((b) => b.textContent)).toEqual(["×"]);
+    expect(text(root, "#stroke-total")).toBe("this stroke: 1 cell · 4 credits");
+    root.querySelector<HTMLButtonElement>("#result .result-dismiss")!.click();
+    expect(root.querySelector("#result")!.childElementCount).toBe(0);
     expect(root.querySelector<HTMLElement>(".buy-credits-sheet")!.hidden).toBe(false);
     expect(root.querySelector<HTMLInputElement>("#buy-credits-qty")!.value).toBe("3");
     dispose();

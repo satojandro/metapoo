@@ -67,6 +67,8 @@ export interface CameraControllerDeps {
   tapSelected(cell: Cell, options: { paintZoom: boolean }): void;
   /** Hovering a cell with a fine pointer; the price badge may follow. */
   hoverCell(cell: Cell): void;
+  /** The fine pointer left the wall (or became a touch): no cell is hovered. */
+  hoverEnd?(): void;
   /**
    * Every one-pointer drag moves the wall (Look mode, or Paint with Move on).
    * Same meaning as holding space; omitted means "only the usual pan gestures".
@@ -627,6 +629,7 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
   function clearPointerPreview(): void {
     pointerPreview.hidden = true;
     hoverSummary.textContent = "";
+    deps.hoverEnd?.();
   }
 
   return {
