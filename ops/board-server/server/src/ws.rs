@@ -15,9 +15,32 @@ const MAX_CATCH_UP: isize = 5_000;
 struct Viewer(std::sync::Arc<std::sync::atomic::AtomicUsize>);
 
 impl Viewer {
-    fn new(count: &std::sync::Arc<std::sync::atomic::AtomicUsize>) -> Self {
-        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Viewer(count.clone())
+    /// Count the socket. True when it is the only one: nobody was watching before it.
+    fn new(count: &std::sync::Arc<std::sync::atomic::AtomicUsize>) -> (Self, bool) {
+        let before = count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        (Viewer(count.clone()), before == 0)
+    }
+}
+
+/// A viewer came to a server that had none: raise the viewers flag now (the heartbeat would
+/// take up to `VIEWER_REFRESH_MS`) and tell the indexer to catch up at once. Without this,
+/// the first visitor after a quiet spell met a mirror minutes behind: their wall's first trust
+/// check failed and the tab walked the chain (seen in production, 7 Nov).
+async fn announce_arrival(mut valkey: redis::aio::ConnectionManager) {
+    let now = crate::consumer::now_ms();
+    let mut pipe = redis::pipe();
+    pipe.set(
+        common::keys::VIEWERS_UNTIL_MS,
+        now + common::demand::VIEWER_TTL_MS,
+    )
+    .ignore()
+    .set(common::keys::VIEWER_ARRIVED_MS, now)
+    .ignore();
+    let write = pipe.query_async::<()>(&mut valkey);
+    match tokio::time::timeout(std::time::Duration::from_millis(500), write).await {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => tracing::warn!("could not announce a viewer: {e}"),
+        Err(_) => tracing::warn!("could not announce a viewer: Valkey did not answer"),
     }
 }
 
@@ -28,7 +51,10 @@ impl Drop for Viewer {
 }
 
 pub async fn handle_socket(socket: WebSocket, state: AppState) {
-    let _viewer = Viewer::new(&state.viewers);
+    let (_viewer, first) = Viewer::new(&state.viewers);
+    if first {
+        tokio::spawn(announce_arrival(state.valkey.clone()));
+    }
     let (mut sender, mut receiver) = socket.split();
     let (tx, mut rx) = mpsc::channel::<String>(256);
     let mut live = state.broadcast_tx.subscribe();

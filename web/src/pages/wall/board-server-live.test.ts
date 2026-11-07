@@ -9,7 +9,13 @@
  * server, and a scripted WebSocket.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SERVER_CATCH_UP_SAFE_MS, SERVER_MAX_LAG_BLOCKS, SERVER_RESUME_GRACE_MS } from "./board-controller";
+import {
+  SERVER_CATCH_UP_GRACE_MS,
+  SERVER_CATCH_UP_RECHECK_MS,
+  SERVER_CATCH_UP_SAFE_MS,
+  SERVER_MAX_LAG_BLOCKS,
+  SERVER_RESUME_GRACE_MS,
+} from "./board-controller";
 import { BOARD_IDLE_PAUSE_MS, BOARD_POLL_BASE_MS } from "../../board-sync";
 import { memoryRegionStore } from "../../board-server/region-store";
 import { buildRegion, fakeSockets } from "../../board-server/test-support";
@@ -82,6 +88,8 @@ function stubWorld() {
     queueLength: 0,
     /** The consumer's own liveness, as the server derives it. */
     healthStatus: "ok" as "ok" | "degraded" | "stalled",
+    /** Every chain request fails like a network error: an RPC throttled or down. */
+    chainDown: false,
     chainCalls: [] as Rpc[],
     /** Every get_pixels call: when (fake ms since start) and the wall's status line, which names the load's reason. */
     walks: [] as Array<{ atMs: number; status: string; history: string[] }>,
@@ -114,6 +122,7 @@ function stubWorld() {
     }
     const body = JSON.parse(String(init?.body)) as Rpc;
     world.chainCalls.push(body);
+    if (world.chainDown) throw new TypeError("fetch failed");
     if (body.method === "block") return Response.json({ result: { header: { height: world.height() } } });
     const method = body.params.method_name;
     const block_height = typeof body.params.block_id === "number" ? body.params.block_id : world.height();
@@ -401,6 +410,71 @@ function setVisibility(state: "visible" | "hidden"): void {
 }
 
 const HOUR = 60 * 60_000;
+
+describe("board server: catching up, and a failing RPC", () => {
+  /** Mount and open the socket with the server `lagBlocks` behind, without requiring live. */
+  async function openWall(lagBlocks: number) {
+    const chain = stubWorld();
+    chain.world.serverLagBlocks = lagBlocks;
+    const wall = mount(true);
+    await settle(wall.controller.bootstrap());
+    wall.controller.scheduleBoardPoll();
+    wall.sockets.last().accept();
+    return { ...chain, ...wall };
+  }
+
+  it("a first visitor meeting a mirror still catching up re-checks instead of walking the chain", async () => {
+    // Production, 7 Nov: the indexer polls only while someone watches, so the first visitor
+    // after a quiet spell met a mirror minutes behind, failed the first trust check, and the
+    // tab walked the whole board while the indexer caught up within seconds.
+    const wall = await openWall(500);
+    liveDispose = wall.dispose;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wall.controller.serverLive()).toBe(false);
+    // The 4 s chain poll is held while the server catches up: a server-loaded copy has no
+    // chain version, so that poll would be a full walk.
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
+
+    wall.world.serverLagBlocks = 2; // the indexer caught up
+    await vi.advanceTimersByTimeAsync(SERVER_CATCH_UP_RECHECK_MS);
+    expect(wall.controller.serverLive()).toBe(true);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
+  });
+
+  it("a server still behind when the grace runs out falls back to the chain", async () => {
+    const wall = await openWall(500);
+    liveDispose = wall.dispose;
+    await vi.advanceTimersByTimeAsync(SERVER_CATCH_UP_GRACE_MS + 2 * SERVER_CATCH_UP_RECHECK_MS);
+    expect(wall.controller.serverLive()).toBe(false);
+    expect(wall.named("get_pixels")).toBeGreaterThanOrEqual(1);
+    const polls = wall.named("get_board_version");
+    await vi.advanceTimersByTimeAsync(10 * BOARD_POLL_BASE_MS);
+    expect(wall.named("get_board_version") - polls).toBeGreaterThanOrEqual(8);
+  });
+
+  it("a failed chain read does not discard a live server", async () => {
+    // Production, 7 Nov: with the RPC timing out, a healthy server was judged unhealthy and
+    // the wall fell back onto that same failing RPC.
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    wall.world.chainDown = true;
+    await touchedFor(5 * 60_000);
+    expect(wall.controller.serverLive()).toBe(true);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
+    wall.world.chainDown = false;
+    await touchedFor(2 * 60_000);
+    expect(wall.controller.serverLive()).toBe(true);
+  });
+
+  it("a server that stops answering still falls back, whatever the chain says", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    wall.world.healthStatus = "stalled";
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(wall.controller.serverLive()).toBe(false);
+  });
+});
 
 describe("disposing the wall mid-walk", () => {
   it("stops the walk: no page is read after the wall is gone", async () => {

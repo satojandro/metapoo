@@ -54,6 +54,15 @@ export const SERVER_CATCH_UP_SAFE_MS = 90 * 60_000;
  * chain walk even when the server is fine.
  */
 export const SERVER_RESUME_GRACE_MS = 10_000;
+/**
+ * Right after a socket opens, a server that reports `ok` but trails the chain is catching up,
+ * not broken: its indexer polls only while someone watches, so the first visitor after a
+ * quiet spell meets a mirror minutes behind until that catch-up lands (seconds). Within this
+ * window a lagging but `ok` server gets a re-check after SERVER_CATCH_UP_RECHECK_MS instead
+ * of a fallback, which would cost a full chain walk (seen in production, 7 Nov).
+ */
+export const SERVER_CATCH_UP_GRACE_MS = 30_000;
+export const SERVER_CATCH_UP_RECHECK_MS = 10_000;
 
 export type BoardLoadReason = "manual" | "poll" | "visible" | "reconnect" | "after_draw" | "resume";
 
@@ -169,6 +178,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
   let socketOpen = false;
   /** The last trust check passed: `/api/health` answered and the server keeps up with the chain. */
   let serverHealthy = false;
+  /** When the current socket opened: the catch-up grace (SERVER_CATCH_UP_GRACE_MS) counts from here. */
+  let socketOpenedAtMs = 0;
   /** The chain's version moved and the server never sent the write. Cleared by a fresh socket. */
   let serverDistrusted = false;
   let live = false;
@@ -554,6 +565,7 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
       onOpen() {
         if (scope.isDisposed()) return;
         socketOpen = true;
+        socketOpenedAtMs = Date.now();
         serverDistrusted = false;
         suspectSinceMs = null;
         lastTrustVersion = null;
@@ -708,13 +720,13 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     }
   }
 
-  function scheduleTrustCheck(): void {
+  function scheduleTrustCheck(delayMs = SERVER_TRUST_CHECK_MS): void {
     clearTrustCheck();
     if (!server || !socketOpen || scope.isDisposed()) return;
     trustTimer = setTimeout(() => {
       trustTimer = null;
       void runTrustCheck();
-    }, SERVER_TRUST_CHECK_MS);
+    }, delayMs);
   }
 
   /**
@@ -731,47 +743,84 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
       return;
     }
     trustInFlight = true;
+    let recheckSoon = false;
     try {
-      const [chain, health] = await Promise.all([readBoardVersion(), server.health()]);
+      // Settled separately: the two answer different questions, and one failing must not
+      // decide the other's. A failed **chain** read (RPC throttled or down) says nothing about
+      // the server; falling back would only move the tab onto that same failing RPC.
+      const [chainResult, healthResult] = await Promise.allSettled([readBoardVersion(), server.health()]);
       if (scope.isDisposed() || !socketOpen) return;
-      // Lag is measured from the **applied** watermark, not the indexer's: the two are the same
-      // block count apart only while the consumer is working, and a dead consumer leaves
-      // `last_processed_block` climbing while the board stops. `status` is the server's own
-      // consumer liveness (`ok` / `degraded` / `stalled`).
-      const applied = health.lastAppliedBlock ?? health.lastProcessedBlock;
-      const lag = applied === null ? Infinity : chain.blockHeight - applied;
-      serverHealthy = health.status === "ok" && lag <= SERVER_MAX_LAG_BLOCKS;
-      if (chain.version !== null) {
-        if (suspectSinceMs !== null) {
-          // A whole interval since an unexplained change, and still nothing from the server.
-          serverDistrusted = true;
-        } else if (
-          lastTrustVersion !== null &&
-          chain.version !== lastTrustVersion &&
-          Date.now() - lastServerMessageMs > SERVER_SILENCE_MS
-        ) {
-          suspectSinceMs = Date.now();
+      if (healthResult.status === "rejected") {
+        // The server itself did not answer: that is a reason to fall back.
+        serverHealthy = false;
+      } else {
+        const health = healthResult.value;
+        const statusOk = health.status === "ok";
+        // A freshly opened socket (first visit, or a reconnect after the server restarted),
+        // not a live one: give it the catch-up grace instead of an immediate fallback.
+        const catchingUp = statusOk && !live && Date.now() - socketOpenedAtMs <= SERVER_CATCH_UP_GRACE_MS;
+        if (chainResult.status === "rejected") {
+          // Unknown, not unhealthy: keep the last verdict while the server reports ok. A socket
+          // not yet live stays unverified, and is checked again soon.
+          if (!statusOk) serverHealthy = false;
+          else if (catchingUp) recheckSoon = true;
+        } else {
+          const chain = chainResult.value;
+          // Lag is measured from the **applied** watermark, not the indexer's: the two are the
+          // same block count apart only while the consumer is working, and a dead consumer
+          // leaves `last_processed_block` climbing while the board stops. `status` is the
+          // server's own consumer liveness (`ok` / `degraded` / `stalled`).
+          const applied = health.lastAppliedBlock ?? health.lastProcessedBlock;
+          const lag = applied === null ? Infinity : chain.blockHeight - applied;
+          const behind = lag > SERVER_MAX_LAG_BLOCKS;
+          // A live server falling behind still falls back; one still catching up is re-checked.
+          if (behind && catchingUp) {
+            // Catching up after a quiet spell: look again shortly instead of walking the chain.
+            recheckSoon = true;
+          } else {
+            serverHealthy = statusOk && !behind;
+          }
+          if (chain.version !== null) {
+            if (suspectSinceMs !== null) {
+              // A whole interval since an unexplained change, and still nothing from the server.
+              serverDistrusted = true;
+            } else if (
+              lastTrustVersion !== null &&
+              chain.version !== lastTrustVersion &&
+              Date.now() - lastServerMessageMs > SERVER_SILENCE_MS
+            ) {
+              suspectSinceMs = Date.now();
+            }
+            lastTrustVersion = chain.version;
+          }
         }
-        lastTrustVersion = chain.version;
       }
       if (live && serverHealthy && !serverDistrusted) {
         boardSync.lastAppliedAtMs = Date.now();
         showBoardFreshness();
       }
-    } catch {
-      serverHealthy = false;
     } finally {
       trustInFlight = false;
     }
     if (scope.isDisposed() || !socketOpen) return;
+    if (recheckSoon) {
+      // Hold chain reads while the server catches up: the 4 s poll of a copy loaded from the
+      // server always walks (it has no chain version), which is the walk this grace avoids.
+      // Bounded by SERVER_CATCH_UP_GRACE_MS: after it, the check settles and the hold ends.
+      clearResumeTimer();
+      if (!holdChainForServer) {
+        holdChainForServer = true;
+        clearBoardPoll();
+      }
+    }
     updateLive();
-    if (holdChainForServer && !serverPaused) endResumeHold();
+    if (holdChainForServer && !serverPaused && !recheckSoon) endResumeHold();
     if (serverDistrusted) {
       // A fresh socket catches up from the last message seen and earns trust again.
       server.reconnect();
       return;
     }
-    scheduleTrustCheck();
+    scheduleTrustCheck(recheckSoon ? SERVER_CATCH_UP_RECHECK_MS : SERVER_TRUST_CHECK_MS);
   }
 
   async function runBoardPoll(): Promise<void> {
