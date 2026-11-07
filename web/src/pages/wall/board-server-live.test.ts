@@ -227,7 +227,7 @@ describe("board server: chain polling while the socket is open", () => {
   it("loads from the server blob, with no get_pixels walk", async () => {
     const wall = await liveWall();
     liveDispose = wall.dispose;
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
     expect(wall.controller.cachedPixel({ x: 1, y: 2 })).toMatchObject({
       colorIndex: 3, artistAccountId: "alice.testnet", lastWriteTimestampNs: "1762500000000000000",
     });
@@ -327,7 +327,7 @@ describe("board server: chain polling while the socket is open", () => {
     );
     await vi.advanceTimersByTimeAsync(2 * 60_000);
     expect(wall.controller.serverLive()).toBe(true);
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
   });
 
   it("measures lag from the applied watermark, so a dead consumer is not live", async () => {
@@ -412,7 +412,7 @@ describe("board server: the socket closes when nobody is watching", () => {
     await vi.advanceTimersByTimeAsync(HOUR);
     expect(wall.sockets.sockets.length).toBe(created);
     expect(chainRequestCount() - chainBefore).toBe(0);
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
 
     setVisibility("visible");
     expect(wall.sockets.sockets.length).toBe(created + 1);
@@ -421,7 +421,7 @@ describe("board server: the socket closes when nobody is watching", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(wall.controller.serverLive()).toBe(true);
     // Resumed exactly as a reconnect: the trust check, not a chain walk.
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
   });
 
   it("an untouched visible tab closes the socket after BOARD_IDLE_PAUSE_MS and stays closed until input", async () => {
@@ -443,7 +443,7 @@ describe("board server: the socket closes when nobody is watching", () => {
     expect(wall.sockets.last().sent).toEqual([{ type: "catch_up", since_timestamp_ms: 5000 }]);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(wall.controller.serverLive()).toBe(true);
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
   });
 
   it("a deliberate idle close does not switch the wall to chain-polling fallback", async () => {
@@ -455,7 +455,7 @@ describe("board server: the socket closes when nobody is watching", () => {
     const versions = wall.named("get_board_version");
     await vi.advanceTimersByTimeAsync(20 * BOARD_POLL_BASE_MS);
     expect(wall.named("get_board_version")).toBe(versions);
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
     expect(status.textContent).not.toMatch(/polling the chain/);
     expect(document.getElementById("fresh")!.textContent).toMatch(/paused while you're away/);
   });
@@ -495,6 +495,6 @@ describe("board server: the socket closes when nobody is watching", () => {
     wall.sockets.last().accept();
     await vi.advanceTimersByTimeAsync(1_000);
     expect(wall.controller.serverLive()).toBe(true);
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
   });
 });
