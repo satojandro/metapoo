@@ -222,6 +222,7 @@ async fn run_txindex(
     while !stop.load(Ordering::SeqCst) {
         let viewers_until_ms: Option<u64> = con.get(keys::VIEWERS_UNTIL_MS).await.unwrap_or(None);
         let hint_at_ms: Option<u64> = con.get(keys::HINT_AT_MS).await.unwrap_or(None);
+        let viewer_arrived_ms: Option<u64> = con.get(keys::VIEWER_ARRIVED_MS).await.unwrap_or(None);
         let now = now_ms();
         let signals = Signals {
             now_ms: now,
@@ -229,6 +230,7 @@ async fn run_txindex(
             hint_at_ms: hint_at_ms.unwrap_or(0),
             last_poll_ms,
             last_event_ms,
+            viewer_arrived_ms: viewer_arrived_ms.unwrap_or(0),
         };
         if should_poll(signals, poll_ms) {
             last_poll_ms = now;

@@ -41,3 +41,7 @@ pub const WRITTEN_AT_KEY: &str = "written_at:0:0";
 pub const VIEWERS_UNTIL_MS: &str = "viewers_until_ms";
 /// Wall-clock ms of the last paint hint (`POST /api/hint`): poll now, someone just painted.
 pub const HINT_AT_MS: &str = "hint_at_ms";
+/// Wall-clock ms when a viewer arrived to a server that had none. The indexer polls at once
+/// instead of at its next interval, so the first visitor after a quiet spell sees a current
+/// mirror within seconds.
+pub const VIEWER_ARRIVED_MS: &str = "viewer_arrived_ms";

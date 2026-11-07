@@ -34,6 +34,8 @@ pub struct Signals {
     pub last_poll_ms: u64,
     /// When the indexer last queued an event, 0 if never.
     pub last_event_ms: u64,
+    /// `VIEWER_ARRIVED_MS`, 0 when absent: a viewer came to a server that had none.
+    pub viewer_arrived_ms: u64,
 }
 
 /// Should the indexer poll right now?
@@ -47,8 +49,11 @@ pub fn should_poll(s: Signals, poll_ms: u64) -> bool {
         return true;
     }
     let watched = s.now_ms < s.viewers_until_ms;
+    // Someone just arrived after a quiet spell: catch up now, not at the next interval. Their
+    // wall's first trust check compares the mirror with the chain within seconds of opening.
+    let arrived = s.viewer_arrived_ms > s.last_poll_ms;
     // `last_poll_ms == 0`: the first poll after a start happens as soon as anyone watches.
-    watched && (s.last_poll_ms == 0 || since_poll >= poll_ms)
+    watched && (arrived || s.last_poll_ms == 0 || since_poll >= poll_ms)
 }
 
 /// Should the server accept a hint now, given when it last accepted one?
@@ -69,6 +74,7 @@ mod tests {
             hint_at_ms: 0,
             last_poll_ms: 0,
             last_event_ms: 0,
+            viewer_arrived_ms: 0,
         }
     }
 
@@ -107,6 +113,37 @@ mod tests {
             Signals {
                 last_poll_ms: 70_000,
                 ..watched
+            },
+            POLL
+        ));
+    }
+
+    #[test]
+    fn a_viewer_arriving_after_a_quiet_spell_gets_a_poll_at_once() {
+        // The last poll was 10 s ago (a previous viewer); the interval is 30 s.
+        let s = Signals {
+            viewers_until_ms: 200_000,
+            last_poll_ms: 90_000,
+            ..at(100_000)
+        };
+        assert!(
+            !should_poll(s, POLL),
+            "without an arrival, wait for the interval"
+        );
+        let arrived = Signals {
+            viewer_arrived_ms: 99_500,
+            ..s
+        };
+        assert!(should_poll(arrived, POLL), "an arrival polls now");
+        // Answered by that poll: no second one until the interval.
+        let after = Signals {
+            last_poll_ms: 100_000,
+            ..arrived
+        };
+        assert!(!should_poll(
+            Signals {
+                now_ms: 101_000,
+                ..after
             },
             POLL
         ));
