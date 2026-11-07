@@ -224,3 +224,27 @@ describe("board server client: socket", () => {
     expect(parseServerMessage("not json")).toBeNull();
   });
 });
+
+describe("board server client: paint hint", () => {
+  it("POSTs /api/hint, at most once per HINT_MIN_GAP_MS, and swallows a failure", async () => {
+    let now = 1_000;
+    const calls: Array<{ url: string; method?: string }> = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), method: init?.method });
+      if (calls.length === 2) throw new Error("offline");
+      return new Response(null, { status: 202 });
+    }) as unknown as typeof fetch;
+    const client = createBoardServerClient({ baseUrl: `${BASE}/`, fetcher, store: memoryRegionStore(), now: () => now });
+
+    client.hint();
+    client.hint(); // same stroke, dropped
+    now += 1_999;
+    client.hint(); // still inside the gap
+    expect(calls).toEqual([{ url: `${BASE}/api/hint`, method: "POST" }]);
+
+    now += 1;
+    client.hint(); // a later paint; this one fails and must not throw
+    await vi.runAllTimersAsync();
+    expect(calls).toHaveLength(2);
+  });
+});

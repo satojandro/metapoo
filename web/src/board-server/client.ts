@@ -96,6 +96,13 @@ export interface BoardServerClient {
   /** Reopen after `pause()`; the new socket sends `catch_up` like any reconnect. */
   resume(): void;
   isPaused(): boolean;
+  /**
+   * Tell the server this tab just painted, so its indexer looks now instead of at its next
+   * poll (up to 30 s) and other viewers see the paint in seconds. Fire-and-forget: it carries
+   * no data, a failure changes nothing, and calls within `HINT_MIN_GAP_MS` are dropped, so a
+   * stroke of many cells sends one.
+   */
+  hint(): void;
   close(): void;
 }
 
@@ -117,7 +124,12 @@ export interface BoardServerOptions {
   maxBackoffMs?: number;
   /** HTTP timeout for every request to the server. */
   timeoutMs?: number;
+  /** Clock for the hint throttle; tests inject one. */
+  now?: () => number;
 }
+
+/** Matches the server's limit (`common/src/demand.rs` `HINT_MIN_GAP_MS`). */
+export const HINT_MIN_GAP_MS = 2_000;
 
 const REGION_KEY = "0,0";
 /** Berry Fast keeps 2 h of draws for catch-up; ask a little less back when nothing was seen. */
@@ -448,10 +460,21 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
     if (wasOpen) handlers.onClose?.();
   }
 
+  let lastHintMs = -Infinity;
+  function hint(): void {
+    const now = (options.now ?? Date.now)();
+    if (now - lastHintMs < HINT_MIN_GAP_MS) return;
+    lastHintMs = now;
+    void (options.fetcher ?? fetch)(`${baseUrl}/api/hint`, { method: "POST" }).catch(() => {
+      // Only timing depends on it: the indexer's regular poll still finds the paint.
+    });
+  }
+
   return {
     baseUrl,
     loadRegion,
     health,
+    hint,
     connect(next) {
       handlers = next;
       if (!closed) return;

@@ -358,6 +358,35 @@ function setVisibility(state: "visible" | "hidden"): void {
 
 const HOUR = 60 * 60_000;
 
+describe("board server: paint hint", () => {
+  it("a confirmed paint hints the server once per stroke, so its indexer looks now", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const hints = () => wall.world.serverPaths.filter((p) => p === "/api/hint").length;
+    expect(hints()).toBe(0);
+    const pixel = { x: 3, y: 4, color: 2, artist: "me.testnet", written_at_ns: "9" } as never;
+    wall.controller.rememberPixel(pixel, 10_100);
+    wall.controller.rememberPixel(pixel, 10_100);
+    wall.controller.rememberPixel(pixel, 10_101);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(hints()).toBe(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    wall.controller.rememberPixel(pixel, 10_110);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(hints()).toBe(2);
+  });
+
+  it("without a server, a paint sends no hint anywhere", async () => {
+    const { world } = stubWorld();
+    const wall = mount(false);
+    liveDispose = wall.dispose;
+    await settle(wall.controller.bootstrap());
+    wall.controller.rememberPixel({ x: 3, y: 4, color: 2, artist: "me.testnet", written_at_ns: "9" } as never, 10_100);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(world.serverPaths).toEqual([]);
+  });
+});
+
 describe("board server: the socket closes when nobody is watching", () => {
   // The server counts open sockets as viewers and polls the chain only while it has one,
   // so a hidden or forgotten tab must not hold its socket open.

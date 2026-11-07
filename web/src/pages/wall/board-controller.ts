@@ -799,6 +799,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     paintedPixels: () => paintedPixels(pixelCache),
     rememberPixel: (pixel, blockHeight) => {
       rememberPixelAtBlock(pixelCache, pixel, blockHeight);
+      // A confirmed paint of ours: the server's indexer looks now, not at its next poll.
+      deps.boardServer?.hint();
     },
     bootstrap,
     refreshBoardFromContract,
