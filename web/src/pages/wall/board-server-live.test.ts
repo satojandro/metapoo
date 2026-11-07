@@ -9,8 +9,8 @@
  * server, and a scripted WebSocket.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SERVER_MAX_LAG_BLOCKS } from "./board-controller";
-import { BOARD_POLL_BASE_MS } from "../../board-sync";
+import { SERVER_CATCH_UP_SAFE_MS, SERVER_MAX_LAG_BLOCKS, SERVER_RESUME_GRACE_MS } from "./board-controller";
+import { BOARD_IDLE_PAUSE_MS, BOARD_POLL_BASE_MS } from "../../board-sync";
 import { memoryRegionStore } from "../../board-server/region-store";
 import { buildRegion, fakeSockets } from "../../board-server/test-support";
 
@@ -348,5 +348,115 @@ describe("board server: chain polling while the socket is open", () => {
     wall.world.healthStatus = "ok";
     await vi.advanceTimersByTimeAsync(60_000);
     expect(wall.controller.serverLive()).toBe(true);
+  });
+});
+
+function setVisibility(state: "visible" | "hidden"): void {
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+const HOUR = 60 * 60_000;
+
+describe("board server: the socket closes when nobody is watching", () => {
+  // The server counts open sockets as viewers and polls the chain only while it has one,
+  // so a hidden or forgotten tab must not hold its socket open.
+
+  it("a hidden tab closes the socket, never reconnects, reads no chain; visible reopens and catches up", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const socket = wall.sockets.last();
+    const created = wall.sockets.sockets.length;
+    const chainBefore = chainRequestCount();
+
+    setVisibility("hidden");
+    expect(socket.readyState).toBe(3);
+    await vi.advanceTimersByTimeAsync(HOUR);
+    expect(wall.sockets.sockets.length).toBe(created);
+    expect(chainRequestCount() - chainBefore).toBe(0);
+    expect(wall.named("get_pixels")).toBe(0);
+
+    setVisibility("visible");
+    expect(wall.sockets.sockets.length).toBe(created + 1);
+    wall.sockets.last().accept();
+    expect(wall.sockets.last().sent).toEqual([{ type: "catch_up", since_timestamp_ms: 5000 }]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wall.controller.serverLive()).toBe(true);
+    // Resumed exactly as a reconnect: the trust check, not a chain walk.
+    expect(wall.named("get_pixels")).toBe(0);
+  });
+
+  it("an untouched visible tab closes the socket after BOARD_IDLE_PAUSE_MS and stays closed until input", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const socket = wall.sockets.last();
+    await vi.advanceTimersByTimeAsync(BOARD_IDLE_PAUSE_MS);
+    expect(socket.readyState).toBe(3);
+
+    const created = wall.sockets.sockets.length;
+    const chainBefore = chainRequestCount();
+    await vi.advanceTimersByTimeAsync(HOUR);
+    expect(wall.sockets.sockets.length).toBe(created);
+    expect(chainRequestCount() - chainBefore).toBe(0);
+
+    window.dispatchEvent(new Event("pointermove"));
+    expect(wall.sockets.sockets.length).toBe(created + 1);
+    wall.sockets.last().accept();
+    expect(wall.sockets.last().sent).toEqual([{ type: "catch_up", since_timestamp_ms: 5000 }]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wall.controller.serverLive()).toBe(true);
+    expect(wall.named("get_pixels")).toBe(0);
+  });
+
+  it("a deliberate idle close does not switch the wall to chain-polling fallback", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const status = document.getElementById("status")!;
+    await vi.advanceTimersByTimeAsync(BOARD_IDLE_PAUSE_MS);
+    expect(wall.sockets.last().readyState).toBe(3);
+    const versions = wall.named("get_board_version");
+    await vi.advanceTimersByTimeAsync(20 * BOARD_POLL_BASE_MS);
+    expect(wall.named("get_board_version")).toBe(versions);
+    expect(wall.named("get_pixels")).toBe(0);
+    expect(status.textContent).not.toMatch(/polling the chain/);
+    expect(document.getElementById("fresh")!.textContent).toMatch(/paused while you're away/);
+  });
+
+  it("falls back to polling if the reopened socket never opens within the grace period", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    setVisibility("hidden");
+    await vi.advanceTimersByTimeAsync(60_000);
+    setVisibility("visible");
+    // The new socket is never accepted: the server is down now.
+    await vi.advanceTimersByTimeAsync(SERVER_RESUME_GRACE_MS + 1_000);
+    expect(wall.controller.serverLive()).toBe(false);
+    expect(wall.named("get_pixels")).toBe(1);
+    const polled = wall.named("get_board_version");
+    await vi.advanceTimersByTimeAsync(10 * BOARD_POLL_BASE_MS);
+    expect(wall.named("get_board_version") - polled).toBeGreaterThanOrEqual(8);
+  });
+
+  it("after a gap longer than catch-up history covers, re-checks /api/regions on resume", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const metaReads = () => wall.world.serverPaths.filter((p) => p === "/api/regions?coords=0,0").length;
+    setVisibility("hidden");
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    setVisibility("visible");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(metaReads()).toBe(1); // a short gap trusts catch_up alone
+    wall.sockets.last().accept();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    setVisibility("hidden");
+    await vi.advanceTimersByTimeAsync(SERVER_CATCH_UP_SAFE_MS + 60_000);
+    setVisibility("visible");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(metaReads()).toBe(2);
+    wall.sockets.last().accept();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wall.controller.serverLive()).toBe(true);
+    expect(wall.named("get_pixels")).toBe(0);
   });
 });

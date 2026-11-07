@@ -87,6 +87,15 @@ export interface BoardServerClient {
   isOpen(): boolean;
   /** Drop the socket and open a new one (it catches up from the last message seen). */
   reconnect(): void;
+  /**
+   * Close the socket on purpose (hidden or idle tab) and stop reconnecting until `resume()`.
+   * The server counts open sockets as viewers and polls the chain only while it has one.
+   * `onClose` still fires if the socket was open; the caller knows it asked for this.
+   */
+  pause(): void;
+  /** Reopen after `pause()`; the new socket sends `catch_up` like any reconnect. */
+  resume(): void;
+  isPaused(): boolean;
   close(): void;
 }
 
@@ -206,6 +215,8 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
   let socket: SocketLike | null = null;
   let open = false;
   let closed = true;
+  /** Deliberately disconnected by `pause()`: no socket and no reconnect timer until `resume()`. */
+  let paused = false;
   let attempts = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -377,7 +388,7 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
   }
 
   function openSocket(): void {
-    if (closed) return;
+    if (closed || paused) return;
     const factory: SocketFactory = options.socketFactory ?? ((url) => new WebSocket(url) as unknown as SocketLike);
     let ws: SocketLike;
     try {
@@ -417,7 +428,7 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
   }
 
   function scheduleReconnect(): void {
-    if (closed || reconnectTimer !== null) return;
+    if (closed || paused || reconnectTimer !== null) return;
     const delay = Math.min(backoffMax, backoffBase * 2 ** Math.min(attempts, 10));
     attempts += 1;
     reconnectTimer = setTimeout(() => {
@@ -449,13 +460,28 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
     },
     isOpen: () => open,
     reconnect() {
-      if (closed) return;
+      if (closed || paused) return;
       dropSocket();
       if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       scheduleReconnect();
     },
+    pause() {
+      if (closed || paused) return;
+      paused = true;
+      attempts = 0;
+      if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      dropSocket();
+    },
+    resume() {
+      if (closed || !paused) return;
+      paused = false;
+      attempts = 0;
+      openSocket();
+    },
+    isPaused: () => paused,
     close() {
       closed = true;
+      paused = false;
       if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       if (persistTimer !== null) {
         clearTimeout(persistTimer);

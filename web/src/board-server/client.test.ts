@@ -124,6 +124,40 @@ describe("board server client: socket", () => {
     client.close();
   });
 
+  it("pause closes the socket and cancels reconnects until resume, which catches up", async () => {
+    const sockets = fakeSockets();
+    const closes = vi.fn();
+    const client = createBoardServerClient({
+      baseUrl: "http://board.unit.test", fetcher: stubServer({ lastUpdated: 1 }).fetcher,
+      store: memoryRegionStore(), socketFactory: sockets.factory, backoffMs: 1_000,
+    });
+    client.connect({ onClose: closes });
+    sockets.last().accept();
+    sockets.last().push(draw("r1", 70));
+    client.pause();
+    expect(client.isPaused()).toBe(true);
+    expect(client.isOpen()).toBe(false);
+    expect(sockets.last().readyState).toBe(3);
+    expect(closes).toHaveBeenCalledTimes(1);
+    client.reconnect(); // a paused client ignores it
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(sockets.sockets).toHaveLength(1);
+
+    // A pause while a reconnect is pending cancels it too.
+    client.resume();
+    expect(sockets.sockets).toHaveLength(2);
+    sockets.last().drop();
+    client.pause();
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(sockets.sockets).toHaveLength(2);
+
+    client.resume();
+    expect(sockets.sockets).toHaveLength(3);
+    sockets.last().accept();
+    expect(sockets.last().sent).toEqual([{ type: "catch_up", since_timestamp_ms: 70 }]);
+    client.close();
+  });
+
   it("a replay never lets an older write overwrite a newer tile", async () => {
     const store = memoryRegionStore();
     const server = stubServer({
