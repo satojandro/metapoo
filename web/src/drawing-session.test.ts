@@ -13,6 +13,7 @@ import {
   saveDrawingSessionRecord,
   type DrawingSessionRecord,
   isDrawingKeyLow,
+  impliedGasPriceYocto,
   quotedRefusalCostYocto,
   refusalCostRatio,
 } from "./drawing-session";
@@ -316,5 +317,18 @@ describe("refusalCostRatio", () => {
     expect(refusalCostRatio("1", "30000000000000", null)).toBeNull();
     expect(refusalCostRatio("1", "30000000000000", "not-a-number")).toBeNull();
     expect(refusalCostRatio("1", "0", "100000000")).toBeNull();
+  });
+});
+
+describe("impliedGasPriceYocto", () => {
+  it("derives the price the chain used from the refusal alone, with no RPC read", () => {
+    // 0.0309 NEAR over 30 Tgas = 1.0307e9 yocto/gas, about 10x the reported 1e8.
+    expect(impliedGasPriceYocto("30921309952619500000000", "30000000000000")).toBe("1030710331");
+  });
+
+  it("answers null when the quote or the gas is unusable", () => {
+    expect(impliedGasPriceYocto(null, "30000000000000")).toBeNull();
+    expect(impliedGasPriceYocto("1", "0")).toBeNull();
+    expect(impliedGasPriceYocto("abc", "30000000000000")).toBeNull();
   });
 });

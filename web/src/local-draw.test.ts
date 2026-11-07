@@ -37,6 +37,7 @@ vi.mock("./drawing-session", async (importOriginal) => ({
   isDrawingKeyLow: (await importOriginal<typeof import("./drawing-session")>()).isDrawingKeyLow,
   quotedRefusalCostYocto: (await importOriginal<typeof import("./drawing-session")>()).quotedRefusalCostYocto,
   refusalCostRatio: (await importOriginal<typeof import("./drawing-session")>()).refusalCostRatio,
+  impliedGasPriceYocto: (await importOriginal<typeof import("./drawing-session")>()).impliedGasPriceYocto,
   loadDrawingSessionRecord: () => ({ publicKey: "public", secretKey: "ed25519:secret" }),
   describeDrawingSession: () => ({ phase: "active" }),
 }));
@@ -197,6 +198,9 @@ describe("pipelined stroke submission", () => {
     await vi.waitFor(() => expect(log).toHaveBeenCalledWith("[wall] drawing key refused:", {
       attachedGas: DRAW_GAS,
       gasPrice: "100000000",
+      // Computed from the refusal alone: 0.0309 / 30 Tgas = 1.0307e9 yocto/gas,
+      // i.e. the chain priced ~10x the price it reports.
+      impliedGasPriceYocto: "1030710331",
       expectedCostYocto: "3000000000000000000000",
       quotedCostYocto: "30921309952619500000000",
       // 30 Tgas at 1.00e8 should cost 0.003 NEAR; the chain quoted 0.0309.

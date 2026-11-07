@@ -12,6 +12,7 @@ import { CONTRACT_ID, DRAW_DEPOSIT, DRAW_GAS, RPC_URL, rpcConnection } from "./c
 import { readRpcFetch } from "./read-rpc";
 import {
   describeDrawingSession,
+  impliedGasPriceYocto,
   isDrawingKeyLow,
   loadDrawingSessionRecord,
   quotedRefusalCostYocto,
@@ -644,6 +645,9 @@ function logAllowanceRefusal(message: string): void {
       console.error("[wall] drawing key refused:", {
         attachedGas: DRAW_GAS,
         gasPrice,
+        // Decisive without any RPC read: the refusal alone says which price
+        // the chain used, so a throttled gas_price cannot blind this line.
+        impliedGasPriceYocto: impliedGasPriceYocto(quotedCostYocto, DRAW_GAS),
         expectedCostYocto,
         quotedCostYocto,
         quotedOverExpected: refusalCostRatio(quotedCostYocto, DRAW_GAS, gasPrice),

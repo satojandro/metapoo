@@ -98,6 +98,25 @@ export function refusalCostRatio(
   }
 }
 
+/**
+ * The gas price the chain must have used to quote `quotedYocto` for
+ * `gasAttached`. Needs no network read, so it survives a throttled RPC — the
+ * refusal arrives with everything needed to compute it.
+ */
+export function impliedGasPriceYocto(
+  quotedYocto: string | null,
+  gasAttached: string,
+): string | null {
+  if (!quotedYocto) return null;
+  try {
+    const gas = BigInt(gasAttached);
+    if (gas === 0n) return null;
+    return (BigInt(quotedYocto) / gas).toString();
+  } catch {
+    return null;
+  }
+}
+
 export type DrawingSessionPhase =
   | "inactive"
   | "active"
