@@ -67,11 +67,11 @@ export function createPlacementOutcomeController(options: { now?: () => number }
 }
 
 const labels: Record<PlacementOutcomeState, string> = {
-  submitted: "Submitted — awaiting wallet/chain confirmation",
-  confirmed: "Confirmed on current cell",
-  failed: "Failed — no confirmed placement",
-  overwritten: "Overwritten — transaction executed; current cell owner differs",
-  "confirmation-delayed": "Confirmation delayed — pending/uncertain; not retried",
+  submitted: "Sending…",
+  confirmed: "Painted",
+  failed: "Didn’t paint",
+  overwritten: "Painted over since",
+  "confirmation-delayed": "Confirmation delayed",
 };
 
 /** Render only inside this wall mount; global page styling stays untouched. */
@@ -80,15 +80,17 @@ export function mountPlacementOutcomeLayer(host: HTMLElement, controller: Placem
   layer.dataset.placementOutcomes = "true";
   layer.setAttribute("aria-live", "polite");
   layer.setAttribute("aria-label", "Placement outcomes");
-  Object.assign(layer.style, { position: "absolute", left: "8px", bottom: "8px", zIndex: "3", maxWidth: "min(30rem, calc(100% - 16px))", display: "grid", gap: "4px", pointerEvents: "none", fontSize: "12px", lineHeight: "1.25" });
+  // Styled by wall-page.css: small pills over the wall, where the paint landed
+  // in attention terms. Confirmed ones fade; problems stay until replaced.
+  layer.className = "placement-outcomes";
   host.append(layer);
   const render = () => {
     layer.replaceChildren();
     for (const outcome of controller.list().slice(-4).reverse()) {
       const row = document.createElement("div");
       row.dataset.placementState = outcome.state;
-      row.textContent = `(${outcome.x}, ${outcome.y}) ${labels[outcome.state]}`;
-      Object.assign(row.style, { padding: "4px 6px", color: "#fff", background: outcome.state === "confirmed" ? "#176b3a" : outcome.state === "failed" ? "#8d2020" : outcome.state === "overwritten" ? "#75410d" : outcome.state === "confirmation-delayed" ? "#57407d" : "#334155", border: "1px solid rgba(255,255,255,.65)", borderRadius: "3px", boxShadow: "0 1px 2px rgba(0,0,0,.5)" });
+      row.className = "placement-outcome";
+      row.textContent = `${labels[outcome.state]} · ${outcome.x}, ${outcome.y}`;
       layer.append(row);
     }
   };
