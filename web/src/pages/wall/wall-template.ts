@@ -84,6 +84,12 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                 <div><dt>Never painted</dt><dd>…</dd></div>
                 <div><dt>Wet now</dt><dd>…</dd></div>
               </dl>
+              <div class="wall-meter-wrap">
+                <div class="wall-meter" role="img" data-wall-meter hidden><i></i></div>
+                <p class="wall-meter-label" data-wall-meter-label></p>
+              </div>
+              <p class="wall-earn" data-wall-earn hidden></p>
+              <p class="wall-happy" data-wall-happy hidden></p>
               <p class="wall-invite-body">Everything here was painted by someone. Tap a tile to see who. Fresh paint costs more to cover, so new work gets a moment on the wall.</p>
               <p class="wall-invite-free" hidden></p>
             </section>
@@ -139,6 +145,13 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
               <p id="selection-summary" class="summary" aria-live="polite" aria-atomic="true"></p>
               <div id="tile-inspector" class="tile-inspector" hidden></div>
             </section>
+
+            <!-- Look mode: the Turf ranking, always in view, with what each holder earns. -->
+            <section class="wall-card wall-holders" data-wall-card="look" aria-labelledby="wall-holders-heading" hidden>
+              <p id="wall-holders-heading" class="mp-eyebrow">Who holds the wall</p>
+              <ol class="wall-turf-list" data-wall-holders></ol>
+              <p class="wall-legend-note" data-wall-holders-note></p>
+            </section>
           </div>
 
           <!-- Always in view: the one primary action and what just happened. -->
@@ -171,6 +184,12 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
           </div>
         </aside>
       </main>
+
+      <!-- Below the wall: the rules in three lines, each leading to the page that explains it. -->
+      <section class="wall-story" aria-labelledby="wall-story-heading">
+        <p id="wall-story-heading" class="mp-eyebrow">How the stall works</p>
+        <div class="wall-rules" data-wall-rules></div>
+      </section>
 
         <details class="wall-advanced about wall-about">
           <summary>About / details <span aria-hidden="true">＋</span></summary>

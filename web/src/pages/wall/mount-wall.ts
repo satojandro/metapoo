@@ -18,7 +18,9 @@ import { createWallModes } from "./wall-modes";
 import { mountDockPrimary } from "./dock-primary";
 import { createWallViews, type WallViews } from "./wall-views";
 import { createTileInspector, parseTileHash, type TileInspector } from "./tile-inspector";
-import { createWallInvite, type WallInvite } from "./wall-invite";
+import { createWallInvite, wallStats, type WallInvite } from "./wall-invite";
+import { createWallStory, type WallStory } from "./wall-story";
+import { nowNs } from "./wall-views";
 import { PAGE_NETWORK } from "../../config";
 import { viewFunction } from "../../contract";
 import "./wall-page.css";
@@ -152,6 +154,7 @@ export function mountWall(
   let views: WallViews | null = null;
   let inspector: TileInspector | null = null;
   let invite: WallInvite | null = null;
+  let story: WallStory | null = null;
   let invitePrimed = false;
   // The tile under a mouse. The Tile card describes it, so asking about a tile
   // never needs a tap (which paints in Paint mode). Pixel cache only: no RPC.
@@ -290,6 +293,7 @@ export function mountWall(
         views.prime();
       }
       invite?.render();
+      story?.render();
     },
     onSchemaChanged: () => pricing.onSchemaChanged(),
     onManualRefresh: () => pricing.manualRefresh(),
@@ -383,6 +387,7 @@ export function mountWall(
     onChange: () => {
       inspector?.render();
       invite?.render();
+      story?.render();
     },
   });
 
@@ -397,6 +402,24 @@ export function mountWall(
     connected: () => scope.walletAccount() !== null,
   });
   invite.render();
+
+  // The story the other pages tell, said once here: fill, happy hour, earnings,
+  // who holds the wall, and the rules below it. Reads only; never paints.
+  story = createWallStory({
+    scope,
+    invite: el<HTMLElement>(".wall-invite"),
+    holders: el<HTMLElement>(".wall-holders"),
+    rules: el<HTMLElement>("[data-wall-rules]"),
+    pixels: () => board.paintedPixels(),
+    stats: () =>
+      board.syncState().lastAppliedAtMs === null
+        ? null
+        : wallStats(board.paintedPixels(), nowNs(), views?.tunables() ?? null),
+    viewer: () => scope.walletAccount(),
+    tunables: () => views?.tunables() ?? null,
+    colorOf: (account, you) => views?.colorOf(account, you) ?? "",
+    readEmission: () => viewFunction("get_toilet_emission"),
+  });
 
   // The drawing-key opt-in ("Also allow painting without a popup each time") is
   // shell-owned. On the wall it sits in the dock, next to Connect, not in the header.
@@ -515,6 +538,7 @@ export function mountWall(
     dockPrimary.sync();
     if (previousAccount !== session.accountId) views?.onWalletChanged();
     invite?.render();
+    story?.render();
   });
   scope.onDispose(unsubWallet);
   scope.onDispose(() => {

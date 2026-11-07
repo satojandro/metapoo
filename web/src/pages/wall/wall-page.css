@@ -951,3 +951,85 @@
 /* Painting, a tap already paints: the tile card's "Paint over this" would be a
    second paint button. It stays in Look, where it is the way in. */
 .wall-page[data-mode="paint"] .tile-paint-over { display: none; }
+
+/* ——— The wall's story (owner, 7 Nov): fill, happy hour, earnings, holders, rules ——— */
+/* The invite card's fill meter: the How it works meter, smaller. */
+.wall-page .wall-meter-wrap { display: grid; gap: 6px; }
+.wall-page .wall-meter {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--mp-radius-pill);
+  background: var(--mp-card-2);
+  box-shadow: inset 0 0 0 1px var(--mp-line);
+}
+.wall-page .wall-meter[hidden] { display: none; }
+.wall-page .wall-meter i { display: block; height: 100%; width: 0; background: var(--mp-stake); }
+.wall-page .wall-card .wall-meter-label { color: var(--mp-muted); font: 600 var(--mp-text-sm) var(--mp-mono); font-variant-numeric: tabular-nums; }
+.wall-page .wall-card .wall-meter-label:empty { display: none; }
+.wall-page .wall-card .wall-earn {
+  color: var(--mp-fg);
+  font-size: var(--mp-text-body);
+  line-height: 1.45;
+}
+.wall-page .wall-card .wall-earn b { color: var(--mp-stake); }
+.wall-page .wall-card .wall-happy { color: var(--mp-tag); font: 600 var(--mp-text-sm)/1.4 var(--mp-mono); }
+.wall-page .wall-earn[hidden],
+.wall-page .wall-happy[hidden] { display: none; }
+
+/* Who holds the wall: the Turf list, plus TOILET a day. The Turf view's legend shows
+   the same ranking, so the card steps aside while that view is on. */
+.wall-page .wall-holders[hidden] { display: none; }
+.wall-page:has(.wall-legend:not([hidden]) .wall-turf-list) .wall-holders { display: none; }
+.wall-page .wall-holder-day {
+  min-width: 4.5ch;
+  color: var(--mp-stake);
+  font: 600 var(--mp-text-sm) var(--mp-mono);
+  text-align: right;
+  white-space: nowrap;
+}
+.wall-page .wall-turf-list li[data-you="true"] .wall-holder-day { color: var(--mp-tag); }
+
+/* An empty Tile card is a placeholder: it appears when you point at or choose a
+   tile. The invite says how to ask about one. */
+.wall-page .wall-inspect:not([data-filled="true"]) { display: none; }
+
+/* Below the wall: three rules, each leading to the page that explains it. */
+.wall-page > .wall-story {
+  display: grid;
+  gap: var(--mp-space-3);
+  max-width: calc(var(--wall-size) + var(--wall-gap) + var(--wall-panel-w));
+  margin: var(--mp-space-8) auto 0;
+}
+.wall-page .wall-story > .mp-eyebrow { margin: 0; }
+.wall-page .wall-rules {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--mp-space-3);
+}
+.wall-page .wall-rule {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--mp-space-2);
+  padding: var(--mp-space-4);
+  border: 1px solid var(--mp-line);
+  border-top: 3px solid var(--rule-accent, var(--mp-line));
+  border-radius: 10px;
+  background: var(--mp-card);
+}
+.wall-page .wall-rule[data-rule="wet"] { --rule-accent: var(--mp-burn); }
+.wall-page .wall-rule[data-rule="earn"] { --rule-accent: var(--mp-stake); }
+.wall-page .wall-rule[data-rule="money"] { --rule-accent: var(--mp-near); }
+.wall-page .wall-rule h3 { margin: 0; color: var(--mp-fg); font: 800 var(--mp-text-h3)/1.25 var(--mp-font); }
+.wall-page .wall-rule p { margin: 0; color: var(--mp-soft); font-size: var(--mp-text-body); line-height: var(--mp-leading); }
+.wall-page .wall-rule a {
+  justify-self: start;
+  color: var(--mp-near);
+  font-size: var(--mp-text-md);
+  text-underline-offset: 3px;
+}
+.wall-page .wall-rule a:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
+.wall-page > .wall-story + .wall-about { margin-top: var(--mp-space-7); }
+@media (max-width: 760px) {
+  .wall-page > .wall-story { margin: var(--mp-space-6) 0 0; padding-bottom: var(--mp-space-4); }
+  .wall-page .wall-rules { grid-template-columns: minmax(0, 1fr); }
+}
