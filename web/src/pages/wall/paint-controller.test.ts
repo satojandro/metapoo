@@ -267,6 +267,21 @@ describe("paint controller", () => {
       t.dispose();
     });
 
+    it("offers it on a single-tile paint, which reports through submitDraw", async () => {
+      storeKey("ed25519:spent");
+      vi.mocked(submitDraw).mockResolvedValueOnce({
+        status: "failed", title: "Drawing session allowance exhausted",
+        message: "Nothing was painted. Your painting key is low.",
+        transactionId: null, explorerUrl: null, pixel: null, keyLow: true,
+      });
+      const t = setup();
+      t.paint.showDrawingSession();
+      t.select({ x: 4, y: 5 });
+      await t.paint.attemptDraw();
+      expect(renewPrompt().hidden).toBe(false);
+      t.dispose();
+    });
+
     it("keeps the prompt when the painter closes the wallet window", async () => {
       storeKey("ed25519:spent");
       vi.mocked(signAndSendStrokeLocally).mockResolvedValueOnce(refused());

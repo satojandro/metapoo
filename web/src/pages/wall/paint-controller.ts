@@ -474,7 +474,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       recordResult("failed");
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       deps.render();
-      if (submitResult.status === "failed" && isDrawingKeyLow(submitResult.message)) {
+      if (submitResult.status === "failed" && submitResult.keyLow) {
         session.promptKeyRenewal();
       }
       if (submitResult.status === "failed" && isPriceRoseAboveMax(submitResult.message) && !requote) {

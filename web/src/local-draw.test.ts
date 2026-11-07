@@ -33,7 +33,8 @@ vi.mock("@near-js/signers", () => ({ KeyPairSigner: class {
   async getPublicKey() { return "ed25519:public"; }
   signTransaction = mocks.sign;
 } }));
-vi.mock("./drawing-session", () => ({
+vi.mock("./drawing-session", async (importOriginal) => ({
+  isDrawingKeyLow: (await importOriginal<typeof import("./drawing-session")>()).isDrawingKeyLow,
   loadDrawingSessionRecord: () => ({ publicKey: "public", secretKey: "ed25519:secret" }),
   describeDrawingSession: () => ({ phase: "active" }),
 }));
@@ -181,6 +182,18 @@ describe("pipelined stroke submission", () => {
     expect(mocks.send).toHaveBeenCalledTimes(2);
     expect(result.chunks.map((c) => c.state)).toEqual(["confirmed", "failed", "not_sent"]);
     expect(result.chunks[2]!.message).toBe("Not sent: an earlier batch's send failed.");
+  });
+
+  it("logs the gas and gas price when the chain refuses the key, the only trace a refusal leaves", async () => {
+    const refusal = "Access Key alice.testnet:public does not have enough balance 1 for transaction costing 2";
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.send.mockRejectedValueOnce(typed("NotEnoughAllowance", refusal));
+    const result = await signAndSendStrokeLocally(args);
+    expect(result.chunks[0]).toMatchObject({ state: "failed", message: refusal });
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith("[wall] drawing key refused:", {
+      attachedGas: DRAW_GAS, gasPrice: "100000000", message: refusal,
+    }));
+    log.mockRestore();
   });
 
   it("looks up a send whose response was lost, and confirms it by hash", async () => {
