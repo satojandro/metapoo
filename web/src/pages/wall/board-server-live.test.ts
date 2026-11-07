@@ -158,8 +158,14 @@ function mount(withServer: boolean) {
 
 /** Advance time with someone at the page: a pointer move every 5 minutes. */
 async function touchedFor(ms: number): Promise<void> {
-  for (let left = ms; left > 0; left -= 60_000) {
-    await vi.advanceTimersByTimeAsync(Math.min(60_000, left));
+  // 10 s steps, not 60 s. The stub derives both the chain height and the server's watermark
+  // from the fake clock when each request is made. A trust check's chain read goes through the
+  // paced read transport, so on a slow runner it could land at a later timer within one jump.
+  // A 60 s jump then made a lag of 62 blocks out of a server 2 blocks behind: one false
+  // "behind", one chain walk (seen on CI for PR #90). Real requests are a few seconds apart.
+  const step = 10_000;
+  for (let left = ms; left > 0; left -= step) {
+    await vi.advanceTimersByTimeAsync(Math.min(step, left));
     if ((ms - left) % 300_000 === 0) window.dispatchEvent(new Event("pointermove"));
   }
 }
