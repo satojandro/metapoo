@@ -7,7 +7,13 @@
 
 use server::{api, board, consumer};
 
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
+
+use common::demand::{VIEWER_REFRESH_MS, VIEWER_TTL_MS};
+use common::keys;
+use redis::AsyncCommands;
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::CorsLayer;
 
@@ -19,6 +25,20 @@ async fn shutdown_signal() {
         _ = term.recv() => {},
     }
     tracing::info!("shutting down");
+}
+
+/// While any socket is open, keep `VIEWERS_UNTIL_MS` a little in the future. The indexer polls
+/// only while it is; with no viewers it lapses within `VIEWER_TTL_MS` and polling stops.
+async fn publish_viewers(mut con: redis::aio::ConnectionManager, viewers: Arc<AtomicUsize>) {
+    loop {
+        if viewers.load(Ordering::Relaxed) > 0 {
+            let until = consumer::now_ms() + VIEWER_TTL_MS;
+            if let Err(e) = con.set::<_, _, ()>(keys::VIEWERS_UNTIL_MS, until).await {
+                tracing::warn!("could not publish viewers: {e}");
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(VIEWER_REFRESH_MS)).await;
+    }
 }
 
 fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
@@ -58,11 +78,16 @@ async fn main() -> anyhow::Result<()> {
         consumer_health.clone(),
     ));
 
+    let viewers = Arc::new(AtomicUsize::new(0));
+    tokio::spawn(publish_viewers(con.clone(), viewers.clone()));
+
     let app = api::router(api::AppState {
         board: state,
         valkey: con,
         broadcast_tx,
         consumer: consumer_health,
+        viewers,
+        last_hint_ms: Arc::new(AtomicU64::new(0)),
     })
     .layer(CorsLayer::permissive());
     let listener = tokio::net::TcpListener::bind(&listen_addr).await?;

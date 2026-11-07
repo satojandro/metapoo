@@ -3,6 +3,7 @@
 //! Meta Poo contract forces it (spec §3).
 pub mod apply;
 pub mod catchup;
+pub mod demand;
 pub mod event;
 pub mod keys;
 pub mod palette;

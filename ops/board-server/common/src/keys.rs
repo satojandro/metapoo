@@ -35,3 +35,9 @@ pub const BOARD_SIDE: &str = "board_side";
 /// Per-tile write time (ms), Berry Fast's `pixel_ts`, trimmed to an hour.
 pub const PIXEL_TS_KEY: &str = "pixel_ts:0:0";
 pub const WRITTEN_AT_KEY: &str = "written_at:0:0";
+
+/// Wall-clock ms until which someone is watching. The server refreshes it while it has
+/// WebSocket clients; the indexer polls the chain only before it. See `demand.rs`.
+pub const VIEWERS_UNTIL_MS: &str = "viewers_until_ms";
+/// Wall-clock ms of the last paint hint (`POST /api/hint`): poll now, someone just painted.
+pub const HINT_AT_MS: &str = "hint_at_ms";

@@ -202,6 +202,24 @@ pins the `get_pixels` walk to the `block_height` the version was read at. A vers
 and pixels from a later one would record the new pixels under the old version, and the next poll
 would then skip one real change.
 
+**A server that reads every block pays per block, not per paint.** The first board-server deploy
+(`183efa9`) ported Berry Fast's indexer, which reads every final block from NEAR Data. On mainnet
+that is ~6,200 requests an hour (600 ms blocks), forever. The owner's FastNEAR dashboard showed
+~6,000 an hour on a board idle for nine hours, where the old browser polling cost zero with no tab
+open. Spec §6 described the per-tab saving and never multiplied the server's own rate out.
+
+Before a server is deployed, write down its cost in three cases: nobody watching, someone watching
+an idle board, and per paint. The indexer now reads FastNEAR's per-account transaction index, and
+only while a WebSocket is open or right after a paint hint (`ops/board-server/README.md`, "What it
+costs"). That is 0 with nobody watching, 240/hour while watched, and 20 requests for the board's
+whole history.
+
+**"Last applied event" is not a freshness watermark.** The wall trusted the server only while
+`last_applied_block` was within 60 blocks of the chain. That field was the block of the last
+*paint*, so ~36 s into any quiet spell every browser judged the server stale and went back to
+chain polling. Report how far the mirror has been *checked*: with nothing queued, that is the
+indexer's watermark.
+
 ---
 
 ## Contract state
