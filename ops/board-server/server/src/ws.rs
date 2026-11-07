@@ -11,7 +11,24 @@ use crate::api::AppState;
 /// Catch-up replies are capped so one client cannot make the server send its whole history.
 const MAX_CATCH_UP: isize = 5_000;
 
+/// Counts one open socket for as long as it lives, so the indexer knows someone is watching.
+struct Viewer(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+impl Viewer {
+    fn new(count: &std::sync::Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Viewer(count.clone())
+    }
+}
+
+impl Drop for Viewer {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 pub async fn handle_socket(socket: WebSocket, state: AppState) {
+    let _viewer = Viewer::new(&state.viewers);
     let (mut sender, mut receiver) = socket.split();
     let (tx, mut rx) = mpsc::channel::<String>(256);
     let mut live = state.broadcast_tx.subscribe();

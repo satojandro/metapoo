@@ -460,10 +460,30 @@ export async function readBoardVersion(): Promise<{ version: number | null; bloc
  * Without `knownVersion` (first load, Refresh) the walk always runs.
  * A board without the view falls back to the plain walk, every time.
  */
+/** A walk stopped by its caller (`isCancelled`), not a read failure. */
+export class WalkCancelled extends Error {
+  constructor() {
+    super("Board walk cancelled.");
+    this.name = "WalkCancelled";
+  }
+}
+
 export async function fetchAllPaintedPixels(
-  options: { knownVersion?: number | null; pageLimit?: number } = {},
+  options: {
+    knownVersion?: number | null;
+    pageLimit?: number;
+    /**
+     * Checked before every request after the first. True: stop with `WalkCancelled`, reading
+     * nothing more. The wall passes its scope's `isDisposed`, so leaving the page ends a walk
+     * instead of letting it read every remaining page for nobody.
+     */
+    isCancelled?: () => boolean;
+  } = {},
 ): Promise<BoardRead> {
   const pageLimit = options.pageLimit ?? PIXELS_PAGE_LIMIT;
+  const stopIfCancelled = () => {
+    if (options.isCancelled?.()) throw new WalkCancelled();
+  };
   let blockHeight: number | null = null;
   let version: number | null = null;
   if (boardVersionView !== "no") {
@@ -488,6 +508,7 @@ export async function fetchAllPaintedPixels(
   ) {
     return { unchanged: true, blockHeight, version };
   }
+  stopIfCancelled();
   if (blockHeight === null) {
     // No version view, or an RPC that left out block_height: pin the walk the old way,
     // and do not pair a version with pixels from a different block.
@@ -495,10 +516,10 @@ export async function fetchAllPaintedPixels(
     version = null;
   }
   const block: ViewBlockRef = { kind: "block", blockId: blockHeight };
-  const pixels = await loadAllPaintedPixels(
-    (fromIndex, limit) => getPixelsPage(fromIndex, limit, block),
-    pageLimit,
-  );
+  const pixels = await loadAllPaintedPixels((fromIndex, limit) => {
+    stopIfCancelled();
+    return getPixelsPage(fromIndex, limit, block);
+  }, pageLimit);
   return { pixels, blockHeight, version };
 }
 

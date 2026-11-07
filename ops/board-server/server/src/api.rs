@@ -2,12 +2,13 @@
 //! the only region is `(0,0)`. Additions: `x-board-side` / `x-last-block` headers, the
 //! `written-at` blob, `earning_count` in account stats, and `last_applied_block` in health.
 
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State, WebSocketUpgrade};
 use axum::http::{header, HeaderName, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use common::{keys, BoardState};
 use redis::AsyncCommands;
@@ -23,6 +24,11 @@ pub struct AppState {
     pub broadcast_tx: broadcast::Sender<String>,
     /// Consumer liveness, so `/api/health` can tell a working mirror from a frozen one.
     pub consumer: consumer::Health,
+    /// Open WebSocket clients. While above zero the server keeps `VIEWERS_UNTIL_MS` fresh and
+    /// the indexer polls; at zero it stops (`common/src/demand.rs`).
+    pub viewers: Arc<AtomicUsize>,
+    /// When the last hint was accepted (ms), for the rate limit.
+    pub last_hint_ms: Arc<AtomicU64>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -38,6 +44,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/stats/accounts", get(get_account_stats))
         .route("/api/account/{owner_id}", get(get_account_by_id))
         .route("/api/health", get(health))
+        .route("/api/hint", post(hint))
         .route("/ws", get(ws_upgrade))
         .with_state(state)
 }
@@ -275,11 +282,14 @@ async fn health(State(state): State<AppState>) -> Response {
     let processed: Option<u64> = health_get(con.clone(), keys::LAST_PROCESSED_BLOCK).await;
     let applied: Option<u64> = health_get(con.clone(), keys::LAST_APPLIED_BLOCK).await;
     let queue: u64 = health_len(con.clone(), keys::DRAW_QUEUE).await.unwrap_or(0);
+    let processing: u64 = health_len(con.clone(), keys::PROCESSING_QUEUE)
+        .await
+        .unwrap_or(1);
     let painted: Option<i64> = health_get(con, keys::PAINTED_TILES).await;
     let side = state.board.read().await.side;
     axum::Json(health_body(
         processed,
-        applied,
+        checked_through(processed, applied, queue, processing),
         queue,
         painted.unwrap_or(0),
         side,
@@ -287,6 +297,56 @@ async fn health(State(state): State<AppState>) -> Response {
         state.consumer.snapshot(),
     ))
     .into_response()
+}
+
+/// The block every event up to which has been applied: what `last_applied_block` reports.
+///
+/// The last *applied event* is the wrong number on a quiet board. The wall trusts the server
+/// only while this is within 60 blocks of the chain, so ~36 s after the last paint every
+/// browser decided the server was behind and went back to polling the chain (seen on the
+/// first deploy). With nothing queued and nothing in processing, everything the indexer has
+/// checked is applied, so its watermark is the answer.
+pub fn checked_through(
+    processed: Option<u64>,
+    applied: Option<u64>,
+    queue: u64,
+    processing: u64,
+) -> Option<u64> {
+    if queue == 0 && processing == 0 {
+        match (processed, applied) {
+            (Some(p), Some(a)) => Some(p.max(a)),
+            (p, a) => p.or(a),
+        }
+    } else {
+        applied
+    }
+}
+
+/// `POST /api/hint`: a tab just painted; poll the index now instead of at the next interval.
+///
+/// It carries no data and changes nothing but timing, so anyone may send it. Rate-limited to
+/// one per `HINT_MIN_GAP_MS`, so it cannot become a request pump.
+async fn hint(State(state): State<AppState>) -> StatusCode {
+    let now = consumer::now_ms();
+    let last = state.last_hint_ms.load(Ordering::Relaxed);
+    if !common::demand::accept_hint(now, last)
+        || state
+            .last_hint_ms
+            .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+    {
+        return StatusCode::TOO_MANY_REQUESTS;
+    }
+    let mut con = state.valkey.clone();
+    match tokio::time::timeout(
+        HEALTH_READ_TIMEOUT,
+        con.set::<_, _, ()>(keys::HINT_AT_MS, now),
+    )
+    .await
+    {
+        Ok(Ok(())) => StatusCode::ACCEPTED,
+        _ => StatusCode::SERVICE_UNAVAILABLE,
+    }
 }
 
 async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
@@ -331,6 +391,18 @@ mod tests {
         assert_eq!(body["status"], "stalled");
         assert_eq!(body["queue_length"], 42);
         assert_eq!(body["last_applied_block"], 300);
+    }
+
+    #[test]
+    fn a_quiet_board_reports_the_indexer_watermark_once_the_queue_is_empty() {
+        // Last paint at 499, indexer checked through 9,000: nothing pending, so 9,000.
+        assert_eq!(checked_through(Some(9_000), Some(499), 0, 0), Some(9_000));
+        // Something queued or in flight: only what is applied.
+        assert_eq!(checked_through(Some(9_000), Some(499), 1, 0), Some(499));
+        assert_eq!(checked_through(Some(9_000), Some(499), 0, 1), Some(499));
+        // A fresh mirror with no paint yet.
+        assert_eq!(checked_through(Some(9_000), None, 0, 0), Some(9_000));
+        assert_eq!(checked_through(None, None, 0, 0), None);
     }
 
     #[test]

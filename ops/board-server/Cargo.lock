@@ -1351,6 +1351,7 @@ dependencies = [
  "fastnear-neardata-fetcher",
  "fastnear-primitives",
  "redis",
+ "reqwest",
  "serde_json",
  "signal-hook",
  "tokio",

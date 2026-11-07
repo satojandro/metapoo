@@ -124,6 +124,40 @@ describe("board server client: socket", () => {
     client.close();
   });
 
+  it("pause closes the socket and cancels reconnects until resume, which catches up", async () => {
+    const sockets = fakeSockets();
+    const closes = vi.fn();
+    const client = createBoardServerClient({
+      baseUrl: "http://board.unit.test", fetcher: stubServer({ lastUpdated: 1 }).fetcher,
+      store: memoryRegionStore(), socketFactory: sockets.factory, backoffMs: 1_000,
+    });
+    client.connect({ onClose: closes });
+    sockets.last().accept();
+    sockets.last().push(draw("r1", 70));
+    client.pause();
+    expect(client.isPaused()).toBe(true);
+    expect(client.isOpen()).toBe(false);
+    expect(sockets.last().readyState).toBe(3);
+    expect(closes).toHaveBeenCalledTimes(1);
+    client.reconnect(); // a paused client ignores it
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(sockets.sockets).toHaveLength(1);
+
+    // A pause while a reconnect is pending cancels it too.
+    client.resume();
+    expect(sockets.sockets).toHaveLength(2);
+    sockets.last().drop();
+    client.pause();
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(sockets.sockets).toHaveLength(2);
+
+    client.resume();
+    expect(sockets.sockets).toHaveLength(3);
+    sockets.last().accept();
+    expect(sockets.last().sent).toEqual([{ type: "catch_up", since_timestamp_ms: 70 }]);
+    client.close();
+  });
+
   it("a replay never lets an older write overwrite a newer tile", async () => {
     const store = memoryRegionStore();
     const server = stubServer({
@@ -188,5 +222,29 @@ describe("board server client: socket", () => {
       .toEqual({ type: "board_expanded", event: { from: 64, to: 96, blockHeight: 5, blockTimestampMs: 6 } });
     expect(parseServerMessage('{"type":"state_migrated","block_height":5,"block_timestamp_ms":6}')).toBeNull();
     expect(parseServerMessage("not json")).toBeNull();
+  });
+});
+
+describe("board server client: paint hint", () => {
+  it("POSTs /api/hint, at most once per HINT_MIN_GAP_MS, and swallows a failure", async () => {
+    let now = 1_000;
+    const calls: Array<{ url: string; method?: string }> = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), method: init?.method });
+      if (calls.length === 2) throw new Error("offline");
+      return new Response(null, { status: 202 });
+    }) as unknown as typeof fetch;
+    const client = createBoardServerClient({ baseUrl: `${BASE}/`, fetcher, store: memoryRegionStore(), now: () => now });
+
+    client.hint();
+    client.hint(); // same stroke, dropped
+    now += 1_999;
+    client.hint(); // still inside the gap
+    expect(calls).toEqual([{ url: `${BASE}/api/hint`, method: "POST" }]);
+
+    now += 1;
+    client.hint(); // a later paint; this one fails and must not throw
+    await vi.runAllTimersAsync();
+    expect(calls).toHaveLength(2);
   });
 });

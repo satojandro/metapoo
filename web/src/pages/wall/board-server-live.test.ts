@@ -9,8 +9,8 @@
  * server, and a scripted WebSocket.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SERVER_MAX_LAG_BLOCKS } from "./board-controller";
-import { BOARD_POLL_BASE_MS } from "../../board-sync";
+import { SERVER_CATCH_UP_SAFE_MS, SERVER_MAX_LAG_BLOCKS, SERVER_RESUME_GRACE_MS } from "./board-controller";
+import { BOARD_IDLE_PAUSE_MS, BOARD_POLL_BASE_MS } from "../../board-sync";
 import { memoryRegionStore } from "../../board-server/region-store";
 import { buildRegion, fakeSockets } from "../../board-server/test-support";
 
@@ -59,7 +59,19 @@ const BOARD = {
 
 type Rpc = { method: string; params: Record<string, unknown> };
 
-/** Chain + board server behind one fetch. The chain advances one block a second. */
+/**
+ * The world's clock, in ms since the test began. Only the test moves it.
+ *
+ * The stub used to derive the chain height (and the server's watermark) from `Date.now()` at
+ * request time, which made the lag a function of *when each request happened to be served*.
+ * A trust check reads the chain and `/api/health` separately; on a loaded runner the two could
+ * land a whole timer step apart, turning a server 2 blocks behind into "62 blocks behind", one
+ * chain walk, and a red CI (seen on PR #90). With the clock owned by the test, both reads of one
+ * trust check see the same instant.
+ */
+let worldClockMs = 0;
+
+/** Chain + board server behind one fetch. The chain advances one block a second of world time. */
 function stubWorld() {
   const start = Date.now();
   const world = {
@@ -71,9 +83,11 @@ function stubWorld() {
     /** The consumer's own liveness, as the server derives it. */
     healthStatus: "ok" as "ok" | "degraded" | "stalled",
     chainCalls: [] as Rpc[],
+    /** Every get_pixels call: when (fake ms since start) and the wall's status line, which names the load's reason. */
+    walks: [] as Array<{ atMs: number; status: string; history: string[] }>,
     serverPaths: [] as string[],
-    height: () => 10_000 + Math.floor((Date.now() - start) / 1000),
-    applied: () => 10_000 + Math.floor((Date.now() - start) / 1000) - (world.appliedLagBlocks ?? world.serverLagBlocks),
+    height: () => 10_000 + Math.floor(worldClockMs / 1000),
+    applied: () => 10_000 + Math.floor(worldClockMs / 1000) - (world.appliedLagBlocks ?? world.serverLagBlocks),
   };
   const region = buildRegion([{ x: 1, y: 2, colorIndex: 3, ownerId: 1, writtenAtNs: "1762500000000000000" }]);
   const bytes = (value: unknown) => Array.from(new TextEncoder().encode(JSON.stringify(value)));
@@ -106,6 +120,12 @@ function stubWorld() {
     if (method === "get_board") return Response.json({ result: { result: bytes(BOARD), block_height } });
     if (method === "get_board_version") return Response.json({ result: { result: bytes(world.version), block_height } });
     if (method === "get_pixels") {
+      world.walks.push({
+        atMs: Date.now() - start,
+        status: document.getElementById("status")?.textContent ?? "",
+        // Every status line the wall wrote before this walk: it names each transition.
+        history: statusHistory.slice(-8).map((h) => `${h.atMs - start}: ${h.text}`),
+      });
       const page = { pixels: [{ x: 1, y: 2, color: 3, artist: "a.testnet", written_at_ns: "5" }], from_index: 0, limit: 256, total: 1, next_from_index: null };
       return Response.json({ result: { result: bytes(page), block_height } });
     }
@@ -115,10 +135,27 @@ function stubWorld() {
   return { world, named };
 }
 
+/** Status lines the wall wrote, with the fake time: printed when a test sees an unexpected walk. */
+let statusHistory: Array<{ atMs: number; text: string }> = [];
+
 function mount(withServer: boolean) {
   document.body.innerHTML = `
     <p id="evidence"></p><p id="line"></p><p id="status"></p><p id="fresh"></p>
     <button id="refresh"></button><p id="sponsor"></p>`;
+  statusHistory = [];
+  const statusEl = document.getElementById("status")!;
+  let lastText = "";
+  // Record each new text the moment it is set, without a MutationObserver's async delivery.
+  const descriptor = Object.getOwnPropertyDescriptor(Node.prototype, "textContent")!;
+  Object.defineProperty(statusEl, "textContent", {
+    configurable: true,
+    get() { return lastText; },
+    set(value: string) {
+      descriptor.set!.call(this, value);
+      if (value !== lastText) statusHistory.push({ atMs: Date.now(), text: value });
+      lastText = value;
+    },
+  });
   const el = (id: string) => document.getElementById(id)!;
   const scope = mods.createWallScope();
   const sockets = fakeSockets();
@@ -158,8 +195,14 @@ function mount(withServer: boolean) {
 
 /** Advance time with someone at the page: a pointer move every 5 minutes. */
 async function touchedFor(ms: number): Promise<void> {
-  for (let left = ms; left > 0; left -= 60_000) {
-    await vi.advanceTimersByTimeAsync(Math.min(60_000, left));
+  // The world clock moves with the timers, in the same 10 s steps, so the chain keeps producing
+  // blocks while someone is at the page. Each step is one trust check at most, and the step is
+  // far below SERVER_MAX_LAG_BLOCKS even if a read lands on the next one.
+  const step = 10_000;
+  for (let left = ms; left > 0; left -= step) {
+    const slice = Math.min(step, left);
+    worldClockMs += slice;
+    await vi.advanceTimersByTimeAsync(slice);
     if ((ms - left) % 300_000 === 0) window.dispatchEvent(new Event("pointermove"));
   }
 }
@@ -187,6 +230,7 @@ async function liveWall() {
 let liveDispose: (() => void) | null = null;
 
 beforeEach(async () => {
+  worldClockMs = 0;
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-07T12:00:00Z"));
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
@@ -218,7 +262,7 @@ describe("board server: chain polling while the socket is open", () => {
   it("loads from the server blob, with no get_pixels walk", async () => {
     const wall = await liveWall();
     liveDispose = wall.dispose;
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
     expect(wall.controller.cachedPixel({ x: 1, y: 2 })).toMatchObject({
       colorIndex: 3, artistAccountId: "alice.testnet", lastWriteTimestampNs: "1762500000000000000",
     });
@@ -232,7 +276,7 @@ describe("board server: chain polling while the socket is open", () => {
     const spent = chainRequestCount() - before;
     expect(spent).toBeLessThanOrEqual(61);
     expect(spent).toBeGreaterThanOrEqual(55); // the trust check really runs
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
     expect(wall.controller.serverLive()).toBe(true);
   });
 
@@ -318,7 +362,7 @@ describe("board server: chain polling while the socket is open", () => {
     );
     await vi.advanceTimersByTimeAsync(2 * 60_000);
     expect(wall.controller.serverLive()).toBe(true);
-    expect(wall.named("get_pixels")).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
   });
 
   it("measures lag from the applied watermark, so a dead consumer is not live", async () => {
@@ -348,5 +392,160 @@ describe("board server: chain polling while the socket is open", () => {
     wall.world.healthStatus = "ok";
     await vi.advanceTimersByTimeAsync(60_000);
     expect(wall.controller.serverLive()).toBe(true);
+  });
+});
+
+function setVisibility(state: "visible" | "hidden"): void {
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+const HOUR = 60 * 60_000;
+
+describe("disposing the wall mid-walk", () => {
+  it("stops the walk: no page is read after the wall is gone", async () => {
+    // Seen on CI for PR #90: a walk still in flight when its test disposed the wall went on to
+    // read get_pixels during the next test. In the browser it is the same leak: leave the
+    // wall and the walk kept reading pages for nobody.
+    const { named } = stubWorld();
+    const wall = mount(false);
+    await settle(wall.controller.bootstrap());
+    const pagesBefore = named("get_pixels");
+    void wall.controller.refreshBoardFromContract({ reason: "manual" });
+    wall.dispose();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(named("get_pixels")).toBe(pagesBefore);
+  });
+});
+
+describe("board server: paint hint", () => {
+  it("a confirmed paint hints the server once per stroke, so its indexer looks now", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const hints = () => wall.world.serverPaths.filter((p) => p === "/api/hint").length;
+    expect(hints()).toBe(0);
+    const pixel = { x: 3, y: 4, color: 2, artist: "me.testnet", written_at_ns: "9" } as never;
+    wall.controller.rememberPixel(pixel, 10_100);
+    wall.controller.rememberPixel(pixel, 10_100);
+    wall.controller.rememberPixel(pixel, 10_101);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(hints()).toBe(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    wall.controller.rememberPixel(pixel, 10_110);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(hints()).toBe(2);
+  });
+
+  it("without a server, a paint sends no hint anywhere", async () => {
+    const { world } = stubWorld();
+    const wall = mount(false);
+    liveDispose = wall.dispose;
+    await settle(wall.controller.bootstrap());
+    wall.controller.rememberPixel({ x: 3, y: 4, color: 2, artist: "me.testnet", written_at_ns: "9" } as never, 10_100);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(world.serverPaths).toEqual([]);
+  });
+});
+
+describe("board server: the socket closes when nobody is watching", () => {
+  // The server counts open sockets as viewers and polls the chain only while it has one,
+  // so a hidden or forgotten tab must not hold its socket open.
+
+  it("a hidden tab closes the socket, never reconnects, reads no chain; visible reopens and catches up", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const socket = wall.sockets.last();
+    const created = wall.sockets.sockets.length;
+    const chainBefore = chainRequestCount();
+
+    setVisibility("hidden");
+    expect(socket.readyState).toBe(3);
+    await vi.advanceTimersByTimeAsync(HOUR);
+    expect(wall.sockets.sockets.length).toBe(created);
+    expect(chainRequestCount() - chainBefore).toBe(0);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
+
+    setVisibility("visible");
+    expect(wall.sockets.sockets.length).toBe(created + 1);
+    wall.sockets.last().accept();
+    expect(wall.sockets.last().sent).toEqual([{ type: "catch_up", since_timestamp_ms: 5000 }]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wall.controller.serverLive()).toBe(true);
+    // Resumed exactly as a reconnect: the trust check, not a chain walk.
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
+  });
+
+  it("an untouched visible tab closes the socket after BOARD_IDLE_PAUSE_MS and stays closed until input", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const socket = wall.sockets.last();
+    await vi.advanceTimersByTimeAsync(BOARD_IDLE_PAUSE_MS);
+    expect(socket.readyState).toBe(3);
+
+    const created = wall.sockets.sockets.length;
+    const chainBefore = chainRequestCount();
+    await vi.advanceTimersByTimeAsync(HOUR);
+    expect(wall.sockets.sockets.length).toBe(created);
+    expect(chainRequestCount() - chainBefore).toBe(0);
+
+    window.dispatchEvent(new Event("pointermove"));
+    expect(wall.sockets.sockets.length).toBe(created + 1);
+    wall.sockets.last().accept();
+    expect(wall.sockets.last().sent).toEqual([{ type: "catch_up", since_timestamp_ms: 5000 }]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wall.controller.serverLive()).toBe(true);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
+  });
+
+  it("a deliberate idle close does not switch the wall to chain-polling fallback", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const status = document.getElementById("status")!;
+    await vi.advanceTimersByTimeAsync(BOARD_IDLE_PAUSE_MS);
+    expect(wall.sockets.last().readyState).toBe(3);
+    const versions = wall.named("get_board_version");
+    await vi.advanceTimersByTimeAsync(20 * BOARD_POLL_BASE_MS);
+    expect(wall.named("get_board_version")).toBe(versions);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
+    expect(status.textContent).not.toMatch(/polling the chain/);
+    expect(document.getElementById("fresh")!.textContent).toMatch(/paused while you're away/);
+  });
+
+  it("falls back to polling if the reopened socket never opens within the grace period", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    setVisibility("hidden");
+    await vi.advanceTimersByTimeAsync(60_000);
+    setVisibility("visible");
+    // The new socket is never accepted: the server is down now.
+    await vi.advanceTimersByTimeAsync(SERVER_RESUME_GRACE_MS + 1_000);
+    expect(wall.controller.serverLive()).toBe(false);
+    expect(wall.named("get_pixels")).toBe(1);
+    const polled = wall.named("get_board_version");
+    await vi.advanceTimersByTimeAsync(10 * BOARD_POLL_BASE_MS);
+    expect(wall.named("get_board_version") - polled).toBeGreaterThanOrEqual(8);
+  });
+
+  it("after a gap longer than catch-up history covers, re-checks /api/regions on resume", async () => {
+    const wall = await liveWall();
+    liveDispose = wall.dispose;
+    const metaReads = () => wall.world.serverPaths.filter((p) => p === "/api/regions?coords=0,0").length;
+    setVisibility("hidden");
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    setVisibility("visible");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(metaReads()).toBe(1); // a short gap trusts catch_up alone
+    wall.sockets.last().accept();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    setVisibility("hidden");
+    await vi.advanceTimersByTimeAsync(SERVER_CATCH_UP_SAFE_MS + 60_000);
+    setVisibility("visible");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(metaReads()).toBe(2);
+    wall.sockets.last().accept();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(wall.controller.serverLive()).toBe(true);
+    expect(wall.named("get_pixels"), JSON.stringify(wall.world.walks)).toBe(0);
   });
 });

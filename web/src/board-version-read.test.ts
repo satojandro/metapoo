@@ -96,4 +96,15 @@ describe("fetchAllPaintedPixels with the board version", () => {
     await fetchAllPaintedPixels({ knownVersion: null });
     expect(chain.named("get_board_version")).toHaveLength(1);
   });
+
+  it("stops before the pages when the caller cancels, reading nothing more", async () => {
+    const chain = stubChain(13);
+    const { fetchAllPaintedPixels, WalkCancelled } = await load();
+    let cancelled = false;
+    const walk = fetchAllPaintedPixels({ knownVersion: 12, isCancelled: () => cancelled });
+    cancelled = true; // e.g. the wall was disposed while the version read was in flight
+    await expect(walk).rejects.toBeInstanceOf(WalkCancelled);
+    expect(chain.named("get_board_version")).toHaveLength(1);
+    expect(chain.named("get_pixels")).toHaveLength(0);
+  });
 });

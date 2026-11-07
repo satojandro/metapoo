@@ -8,14 +8,46 @@ Berry Fast has no LICENSE file, so nothing here is copied verbatim. The structur
 key names, the region blob, the HTTP paths and the WebSocket messages follow it; the code is new.
 
 ```
-NEAR Data (final blocks) ──► indexer ──LPUSH──► Valkey draw_queue ──LMOVE──► server ──► HTTP + /ws
+FastNEAR tx index (board's transactions) ──► indexer ──LPUSH──► Valkey draw_queue ──LMOVE──► server ──► HTTP + /ws
+        ▲ polls only while someone watches, or right after a paint hint ◄── server (viewers, POST /api/hint)
 ```
+
+## What it costs
+
+Berry Fast's indexer reads **every final block**. On mainnet (600 ms blocks) that is
+~6,200 requests an hour, whether or not anyone paints or looks. The first deploy (`183efa9`)
+ran it that way, and the owner's FastNEAR dashboard showed ~6,000 an hour on a board that had
+been idle for nine hours. The old browser-only polling cost **zero** with no tab open.
+
+The indexer now reads FastNEAR's **transaction index** for the board's own transactions
+(`INDEX_MODE=txindex`, the default). It polls only when that is useful (`common/src/demand.rs`).
+Measured against mainnet on 7 Nov:
+
+| situation | indexer requests |
+|---|---|
+| nobody watching (no WebSocket open) | **0** |
+| someone watching, nothing painted | 2 per poll; at `POLL_MS=30000`, **240/hour** |
+| a tab paints | its `POST /api/hint` makes the indexer poll within ~1 s, then every 2 s for up to 12 s until the paint shows: ≤ 12 requests |
+| new paint found | + 1 per 20 new transactions |
+| cold start (whole history) | **20 requests** for the testing board's 274 board events, 666 tiles |
+
+The index is read **without a key** unless `FASTNEAR_API_KEY` is set, so none of this lands on
+the RPC key's dashboard. The wall closes its socket when its tab is hidden or idle
+(`BOARD_IDLE_PAUSE_MS`), so an abandoned tab does not keep anyone "watching".
+
+A viewer who arrives after a quiet spell gets a catch-up poll at once. It reads only the
+board's transactions since the watermark, however long the gap.
 
 - **`common/`**: the 6-byte-per-pixel region blob, the `mpoo_board` event parser, and
   `BoardState::apply_draw`. It is pure code, and it is where the tests for the board rules live.
-- **`indexer/`**: streams every final block. It takes `EVENT_JSON` logs only from **successful**
-  outcomes **executed by the board**, and queues them in chain order. A block's events and
-  `last_processed_block` are written in one transaction.
+- **`indexer/`**: finds the board's `EVENT_JSON` logs, only from **successful** outcomes
+  **executed by the board**, and queues them in chain order.
+  - Events and `last_processed_block` are written in one transaction.
+  - `txindex` mode (default, `indexer/src/txindex.rs`) queues an event only from a final
+    transaction, and only up to a cut below any unfinished one, so nothing is queued twice or
+    out of order.
+  - `stream` mode (Berry Fast's every-block reader) is kept for bounded replays
+    (`END_BLOCK_HEIGHT`). Do not leave it running: it is the ~6,200/hour mode.
 - **`server/`**: applies queued events and serves the mirror.
   - Each event is one `MULTI`/`EXEC`: board, counts, catch-up history, `last_applied_position`
     and the `LREM` all commit together.
@@ -56,7 +88,8 @@ NEAR Data (final blocks) ──► indexer ──LPUSH──► Valkey draw_queu
 | `GET /api/region/0/0/timestamps` | `[[x, y, ms], …]` for tiles written in the last hour |
 | `GET /api/account/{owner_id}` | the account name (immutable, cached for a year) |
 | `GET /api/stats/accounts` | `[{account_id, pixel_count, earning_count}]`, largest first |
-| `GET /api/health` | `status` (`ok` / `degraded` while retrying / `stalled` when the consumer has not ticked for a minute), `last_processed_block`, `last_applied_block`, `queue_length`, `side`, `painted_tiles`, `consumer_last_tick_ms`, `consumer_failures` |
+| `GET /api/health` | `status` (`ok` / `degraded` while retrying / `stalled` when the consumer has not ticked for a minute), `last_processed_block`, `last_applied_block` (with nothing queued or in processing, everything through `last_processed_block` is applied, so it reports that; otherwise the last applied event's block), `queue_length`, `side`, `painted_tiles`, `consumer_last_tick_ms`, `consumer_failures` |
+| `POST /api/hint` | 202: poll the index now, a tab just painted. 429 within 2 s of the last accepted hint. Carries no data |
 | `GET /ws` | pushes `{"type":"draw",…}` and `{"type":"board_expanded",…}`. Send `{"type":"catch_up","since_timestamp_ms":n}` after a reconnect |
 
 ## Run
@@ -68,16 +101,19 @@ docker compose up -d --build
 
 The first run needs `START_BLOCK_HEIGHT`. For the mainnet testing board that is
 `223113576`, the block that included the deploy tx. With it, the server rebuilds the wall from
-history, with no snapshot.
+history, with no snapshot. The first poll happens when the first viewer connects.
 
-**NEAR Data rate-limits anonymous archive fetches.** Measured 7 Nov:
+**Switching an existing deploy from `stream` to `txindex`** needs nothing: the indexer resumes
+from `last_processed_block`.
+
+**`stream` mode only: NEAR Data rate-limits anonymous archive fetches.** Measured 7 Nov:
 
 - 4 threads: about 40 blocks/s.
 - 32 threads: about 280 blocks/s, then HTTP 429s.
 - 8 threads after the 429s: about 25–35 blocks/s.
 
-Replaying the testing board's ~320k blocks without a token therefore takes hours. Spec B3:
-ask FastNEAR about `AUTH_BEARER_TOKEN` and billing.
+Replaying the testing board's ~320k blocks without a token therefore takes hours. With a token
+it is billed per block. `txindex` mode needs neither.
 
 ## Check
 

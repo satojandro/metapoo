@@ -24,6 +24,7 @@ import {
 import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
 import {
   fetchAllPaintedPixels,
+  WalkCancelled,
   getBoard,
   getPixelWithBlock,
   isContractConfigured,
@@ -41,6 +42,18 @@ export const SERVER_TRUST_CHECK_MS = 60_000;
 export const SERVER_MAX_LAG_BLOCKS = 60;
 /** The version moved and the server said nothing for this long: suspect it missed a write. */
 export const SERVER_SILENCE_MS = 60_000;
+/**
+ * The server keeps this much draw history for `catch_up` (`CATCHUP_RETENTION_MS`, default 2 h).
+ * A socket paused for longer than this, less a margin, may have missed draws catch-up no longer
+ * has, so the wall re-checks `/api/regions` (and reloads the blob if newer) before trusting it.
+ */
+export const SERVER_CATCH_UP_SAFE_MS = 90 * 60_000;
+/**
+ * After a deliberate pause the wall waits this long for the reopened socket and its trust check
+ * before it falls back to chain polling. Without the wait, every return to the tab would cost a
+ * chain walk even when the server is fine.
+ */
+export const SERVER_RESUME_GRACE_MS = 10_000;
 
 export type BoardLoadReason = "manual" | "poll" | "visible" | "reconnect" | "after_draw" | "resume";
 
@@ -165,6 +178,22 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
   let lastTrustVersion: number | null = null;
   /** When an unexplained version change was first seen; a server message clears it. */
   let suspectSinceMs: number | null = null;
+  /**
+   * The socket is closed on purpose: the tab is hidden or nobody has touched it for
+   * BOARD_IDLE_PAUSE_MS. The server counts open sockets as viewers and stops reading the
+   * chain without any, so a forgotten tab must not hold one open. Not a server failure.
+   */
+  let serverPaused = false;
+  /** `connect()` has been called; pausing before that has no socket to close. */
+  let serverStarted = false;
+  let pausedAtMs = 0;
+  /**
+   * The server was live (or about to be) when paused. While set, and until the reopened
+   * socket's trust check settles (`resumeTimer`), chain reads stay off as they were while live.
+   */
+  let holdChainForServer = false;
+  let resumeTimer: ReturnType<typeof setTimeout> | null = null;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   for (const type of ACTIVITY_EVENTS) {
     scope.listen(window, type, noteActivity, { passive: true });
@@ -173,6 +202,7 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
   /** Someone is here. If polling had stopped for idleness, catch up now and resume. */
   function noteActivity(): void {
     lastActivityMs = Date.now();
+    if (serverPaused && document.visibilityState !== "hidden") resumeServer();
     // The trust check skips an idle tab; the first input after that restarts it.
     if (socketOpen && trustTimer === null && !trustInFlight && !scope.isDisposed()) scheduleTrustCheck();
     if (!idlePaused || scope.isDisposed()) return;
@@ -188,10 +218,12 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
       // Coming back to the tab is activity: it must not land on a paused wall.
       lastActivityMs = Date.now();
       idlePaused = false;
+      if (serverPaused) resumeServer();
       void refreshBoardFromContract({ reason: "visible" });
       scheduleBoardPoll();
     } else {
       clearBoardPoll();
+      pauseServer();
     }
   });
 
@@ -359,13 +391,15 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
    */
   async function refreshBoardFromContract(options?: {
     reason?: BoardLoadReason;
+    /** Internal: walk even while the server holds chain reads off. */
+    force?: boolean;
   }): Promise<void> {
     if (scope.isDisposed() || !isContractConfigured() || boardLoadInFlight) {
       return;
     }
-    // While the server is live its socket keeps the copy current. Only Refresh (the
-    // visitor not trusting the copy) still walks the chain.
-    if (live && (options?.reason ?? "manual") !== "manual") return;
+    // While the server is live its socket keeps the copy current (and while a deliberately
+    // paused live socket reopens). Only Refresh (the visitor not trusting the copy) still walks.
+    if ((live || holdChainForServer) && !options?.force && (options?.reason ?? "manual") !== "manual") return;
     const loadId = beginBoardLoad(boardSync);
     boardLoadInFlight = true;
     refreshButton.disabled = true;
@@ -374,6 +408,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     try {
       const snapshot = await fetchAllPaintedPixels({
         knownVersion: VERSION_CHECKED.has(reason) ? cachedVersion : null,
+        // A disposed wall (the visitor left) stops reading instead of finishing the walk.
+        isCancelled: () => scope.isDisposed(),
       });
       if (!shouldApplyBoardLoad(boardSync, loadId, snapshot.blockHeight)) {
         boardLoadStatus.textContent = `Board load skipped stale snapshot (block ${snapshot.blockHeight}). ${formatFreshness(boardSync, Date.now())}`;
@@ -402,6 +438,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
         snapshot.pixels.length === 1 ? "" : "s"
       } at block ${snapshot.blockHeight}. ${formatFreshness(boardSync, Date.now())}`;
     } catch (error) {
+      // Cancelled because the wall was disposed: not a failure, and nobody is reading it.
+      if (error instanceof WalkCancelled) return;
       markBoardLoadFailed(boardSync);
       showBoardFreshness();
       const detail = error instanceof Error ? error.message : "Unknown read error";
@@ -455,8 +493,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     // With a socket open the once-a-minute trust check runs, live or not: it is also
     // what notices the server has caught up again.
     if (socketOpen && trustTimer === null && !trustInFlight) scheduleTrustCheck();
-    // While live the socket replaces the poll.
-    if (live) return;
+    // While live the socket replaces the poll; so it does while a paused live socket reopens.
+    if (live || holdChainForServer) return;
     if (
       scope.isDisposed() ||
       !isContractConfigured() ||
@@ -510,6 +548,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
 
   function startServer(): void {
     if (!server || scope.isDisposed()) return;
+    serverStarted = true;
+    scheduleIdleCheck();
     server.connect({
       onOpen() {
         if (scope.isDisposed()) return;
@@ -524,13 +564,21 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
       onClose() {
         if (scope.isDisposed()) return;
         socketOpen = false;
-        serverHealthy = false;
         clearTrustCheck();
+        if (serverPaused) {
+          // Our own pause: not a failure, so no fallback to chain polling and the last
+          // health verdict stands. The reopened socket's trust check re-earns live.
+          live = false;
+          return;
+        }
+        serverHealthy = false;
         updateLive();
       },
       onDraw: applyServerDraw,
       onExpanded: applyServerExpanded,
     });
+    // The tab was hidden while the first load ran: no viewer, no socket.
+    if (document.visibilityState === "hidden") pauseServer();
   }
 
   function applyServerDraw(draw: ServerDraw): void {
@@ -573,6 +621,81 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     }
     // Back to today's path. The version check decides whether the copy needs a walk:
     // a copy loaded from the server has no chain version, so it always gets one.
+    boardLoadStatus.textContent = "Board load: board server unavailable or behind; polling the chain.";
+    void refreshBoardFromContract({ reason: "reconnect" });
+    scheduleBoardPoll();
+  }
+
+  /** Close the socket after BOARD_IDLE_PAUSE_MS without input, as the chain poll stops. */
+  function scheduleIdleCheck(): void {
+    if (idleTimer !== null) clearTimeout(idleTimer);
+    idleTimer = null;
+    if (!server || serverPaused || scope.isDisposed()) return;
+    const wait = Math.max(0, lastActivityMs + BOARD_IDLE_PAUSE_MS - Date.now());
+    idleTimer = setTimeout(() => {
+      idleTimer = null;
+      if (scope.isDisposed() || serverPaused) return;
+      if (Date.now() - lastActivityMs < BOARD_IDLE_PAUSE_MS) {
+        scheduleIdleCheck();
+        return;
+      }
+      idlePaused = true;
+      clearBoardPoll();
+      pauseServer();
+      showBoardFreshness();
+    }, wait);
+  }
+
+  function clearResumeTimer(): void {
+    if (resumeTimer !== null) {
+      clearTimeout(resumeTimer);
+      resumeTimer = null;
+    }
+  }
+
+  /** Hidden or idle tab: close the server socket on purpose and stop its reconnects. */
+  function pauseServer(): void {
+    if (!server || !serverStarted || serverPaused || scope.isDisposed()) return;
+    // A socket that was live, or a resume still waiting to earn it, keeps chain reads off.
+    holdChainForServer = live || resumeTimer !== null;
+    clearResumeTimer();
+    if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
+    serverPaused = true;
+    pausedAtMs = Date.now();
+    clearTrustCheck();
+    server.pause();
+    socketOpen = false;
+    live = false;
+  }
+
+  /** Someone is back: reopen, catch up, and let the trust check decide as on any reconnect. */
+  function resumeServer(): void {
+    if (!server || !serverPaused || scope.isDisposed()) return;
+    serverPaused = false;
+    const longGap = Date.now() - pausedAtMs > SERVER_CATCH_UP_SAFE_MS;
+    if (holdChainForServer) {
+      clearResumeTimer();
+      resumeTimer = setTimeout(() => {
+        resumeTimer = null;
+        endResumeHold();
+      }, SERVER_RESUME_GRACE_MS);
+    }
+    scheduleIdleCheck();
+    if (longGap) {
+      // catch_up may not reach back that far: re-check the region's last_updated first.
+      void loadFromServer().then((ok) => {
+        if (!ok && !scope.isDisposed()) void refreshBoardFromContract({ reason: "reconnect", force: true });
+      });
+    }
+    server.resume();
+  }
+
+  /** The reopened socket's first trust check settled (or never came): live, or today's poll. */
+  function endResumeHold(): void {
+    if (!holdChainForServer) return;
+    clearResumeTimer();
+    holdChainForServer = false;
+    if (live || scope.isDisposed() || serverPaused) return;
     boardLoadStatus.textContent = "Board load: board server unavailable or behind; polling the chain.";
     void refreshBoardFromContract({ reason: "reconnect" });
     scheduleBoardPoll();
@@ -642,6 +765,7 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     }
     if (scope.isDisposed() || !socketOpen) return;
     updateLive();
+    if (holdChainForServer && !serverPaused) endResumeHold();
     if (serverDistrusted) {
       // A fresh socket catches up from the last message seen and earns trust again.
       server.reconnect();
@@ -680,6 +804,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     paintedPixels: () => paintedPixels(pixelCache),
     rememberPixel: (pixel, blockHeight) => {
       rememberPixelAtBlock(pixelCache, pixel, blockHeight);
+      // A confirmed paint of ours: the server's indexer looks now, not at its next poll.
+      deps.boardServer?.hint();
     },
     bootstrap,
     refreshBoardFromContract,
@@ -691,6 +817,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     dispose() {
       clearBoardPoll();
       clearTrustCheck();
+      clearResumeTimer();
+      if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
       server?.close();
       loadAbort.abort();
     },

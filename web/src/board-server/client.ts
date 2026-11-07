@@ -87,6 +87,22 @@ export interface BoardServerClient {
   isOpen(): boolean;
   /** Drop the socket and open a new one (it catches up from the last message seen). */
   reconnect(): void;
+  /**
+   * Close the socket on purpose (hidden or idle tab) and stop reconnecting until `resume()`.
+   * The server counts open sockets as viewers and polls the chain only while it has one.
+   * `onClose` still fires if the socket was open; the caller knows it asked for this.
+   */
+  pause(): void;
+  /** Reopen after `pause()`; the new socket sends `catch_up` like any reconnect. */
+  resume(): void;
+  isPaused(): boolean;
+  /**
+   * Tell the server this tab just painted, so its indexer looks now instead of at its next
+   * poll (up to 30 s) and other viewers see the paint in seconds. Fire-and-forget: it carries
+   * no data, a failure changes nothing, and calls within `HINT_MIN_GAP_MS` are dropped, so a
+   * stroke of many cells sends one.
+   */
+  hint(): void;
   close(): void;
 }
 
@@ -108,7 +124,12 @@ export interface BoardServerOptions {
   maxBackoffMs?: number;
   /** HTTP timeout for every request to the server. */
   timeoutMs?: number;
+  /** Clock for the hint throttle; tests inject one. */
+  now?: () => number;
 }
+
+/** Matches the server's limit (`common/src/demand.rs` `HINT_MIN_GAP_MS`). */
+export const HINT_MIN_GAP_MS = 2_000;
 
 const REGION_KEY = "0,0";
 /** Berry Fast keeps 2 h of draws for catch-up; ask a little less back when nothing was seen. */
@@ -206,6 +227,8 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
   let socket: SocketLike | null = null;
   let open = false;
   let closed = true;
+  /** Deliberately disconnected by `pause()`: no socket and no reconnect timer until `resume()`. */
+  let paused = false;
   let attempts = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -377,7 +400,7 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
   }
 
   function openSocket(): void {
-    if (closed) return;
+    if (closed || paused) return;
     const factory: SocketFactory = options.socketFactory ?? ((url) => new WebSocket(url) as unknown as SocketLike);
     let ws: SocketLike;
     try {
@@ -417,7 +440,7 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
   }
 
   function scheduleReconnect(): void {
-    if (closed || reconnectTimer !== null) return;
+    if (closed || paused || reconnectTimer !== null) return;
     const delay = Math.min(backoffMax, backoffBase * 2 ** Math.min(attempts, 10));
     attempts += 1;
     reconnectTimer = setTimeout(() => {
@@ -437,10 +460,21 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
     if (wasOpen) handlers.onClose?.();
   }
 
+  let lastHintMs = -Infinity;
+  function hint(): void {
+    const now = (options.now ?? Date.now)();
+    if (now - lastHintMs < HINT_MIN_GAP_MS) return;
+    lastHintMs = now;
+    void (options.fetcher ?? fetch)(`${baseUrl}/api/hint`, { method: "POST" }).catch(() => {
+      // Only timing depends on it: the indexer's regular poll still finds the paint.
+    });
+  }
+
   return {
     baseUrl,
     loadRegion,
     health,
+    hint,
     connect(next) {
       handlers = next;
       if (!closed) return;
@@ -449,13 +483,28 @@ export function createBoardServerClient(options: BoardServerOptions): BoardServe
     },
     isOpen: () => open,
     reconnect() {
-      if (closed) return;
+      if (closed || paused) return;
       dropSocket();
       if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       scheduleReconnect();
     },
+    pause() {
+      if (closed || paused) return;
+      paused = true;
+      attempts = 0;
+      if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      dropSocket();
+    },
+    resume() {
+      if (closed || !paused) return;
+      paused = false;
+      attempts = 0;
+      openSocket();
+    },
+    isPaused: () => paused,
     close() {
       closed = true;
+      paused = false;
       if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       if (persistTimer !== null) {
         clearTimeout(persistTimer);

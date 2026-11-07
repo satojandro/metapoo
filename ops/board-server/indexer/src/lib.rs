@@ -6,6 +6,8 @@ use common::{parse_log, ParseOutcome, QueuedEvent};
 use fastnear_primitives::block_with_tx_hash::BlockWithTxHashes;
 use fastnear_primitives::near_primitives::views::ExecutionStatusView;
 
+pub mod txindex;
+
 /// Board events in `block`, in chain order: shard order, then outcome order, then log order.
 /// Also returns warnings for logs that claim to be `mpoo_board` but do not parse.
 pub fn extract_events(block: &BlockWithTxHashes, board: &str) -> (Vec<QueuedEvent>, Vec<String>) {
