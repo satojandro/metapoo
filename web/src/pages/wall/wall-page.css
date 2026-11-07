@@ -1055,3 +1055,49 @@
 /* The paint footer: what the stroke's credit-paid tiles can earn. */
 .wall-page .wall-panel .stroke-earn { margin: 0; color: var(--mp-good); font-size: var(--mp-text-sm); line-height: 1.4; }
 .wall-page .wall-panel .stroke-earn[hidden] { display: none; }
+
+/* ——— Your tiles (journey phase 3): signed in, under the wall ——— */
+.wall-page > .wall-yours {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: var(--mp-space-6);
+  max-width: calc(var(--wall-size) + var(--wall-gap) + var(--wall-panel-w));
+  margin: var(--mp-space-8) auto 0;
+  padding: var(--mp-space-5);
+  border: 1px solid var(--mp-line);
+  border-top: 3px solid var(--mp-tag);
+  border-radius: 10px;
+  background: var(--mp-card);
+}
+.wall-page > .wall-yours[hidden] { display: none; }
+.wall-page > .wall-yours + .wall-story { margin-top: var(--mp-space-7); }
+.wall-page .wall-yours-main { display: grid; gap: var(--mp-space-3); align-content: start; min-width: 0; }
+.wall-page .wall-yours-main .mp-eyebrow { margin: 0; }
+.wall-page .wall-yours-covered {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px var(--mp-space-3);
+  margin: 0;
+  padding: var(--mp-space-3);
+  border-left: 3px solid var(--mp-stake);
+  border-radius: var(--mp-radius-md);
+  background: var(--mp-card-2);
+  color: var(--mp-fg);
+  font-size: var(--mp-text-body);
+  line-height: 1.45;
+}
+.wall-page .wall-yours-covered[hidden] { display: none; }
+.wall-page .wall-yours-covered[data-tone="covered"] { border-left-color: var(--mp-turf-2); }
+.wall-page .wall-yours-count { display: flex; align-items: baseline; gap: var(--mp-space-2); flex-wrap: wrap; }
+.wall-page .wall-yours-figure { color: var(--mp-tag); font: 800 var(--mp-text-figure)/1 var(--mp-mono); font-variant-numeric: tabular-nums; }
+.wall-page .wall-yours-unit { color: var(--mp-soft); font-size: var(--mp-text-body); }
+.wall-page .wall-yours-note { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-md); line-height: 1.45; max-width: 52ch; }
+.wall-page .wall-yours-mine { justify-self: start; min-height: var(--mp-hit); }
+.wall-page .wall-yours-mine[hidden],
+.wall-page .wall-yours [data-yours-show-covered][hidden] { display: none; }
+.wall-page .wall-yours-claim { min-width: 0; }
+.wall-page .wall-yours-claim:empty { display: none; }
+@media (max-width: 760px) {
+  .wall-page > .wall-yours { grid-template-columns: minmax(0, 1fr); margin: var(--mp-space-6) 0 0; padding: var(--mp-space-4); }
+}

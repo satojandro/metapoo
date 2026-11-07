@@ -193,6 +193,24 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
         </aside>
       </main>
 
+      <!-- Signed in, below the wall: your tiles, your TOILET, what happened since you last looked. -->
+      <section class="wall-yours" aria-labelledby="wall-yours-heading" hidden>
+        <div class="wall-yours-main">
+          <p id="wall-yours-heading" class="mp-eyebrow">Your tiles</p>
+          <p class="wall-yours-covered" data-yours-covered hidden>
+            <span data-yours-covered-text></span>
+            <button type="button" class="wall-link" data-yours-show-covered hidden>Show me</button>
+          </p>
+          <div class="wall-yours-count">
+            <span class="wall-yours-figure" data-yours-tiles>…</span>
+            <span class="wall-yours-unit">tiles you hold on the wall</span>
+          </div>
+          <p class="wall-yours-note">Only tiles you painted with credits earn TOILET. “Since you last looked” is what this browser remembers, not a history the wall keeps.</p>
+          <button type="button" class="mp-btn wall-yours-mine" data-yours-show-mine hidden>Show my tiles</button>
+        </div>
+        <div class="wall-yours-claim" data-yours-claim></div>
+      </section>
+
       <!-- Below the wall: the rules in three lines, each leading to the page that explains it. -->
       <section class="wall-story" aria-labelledby="wall-story-heading">
         <p id="wall-story-heading" class="mp-eyebrow">How the stall works</p>

@@ -188,7 +188,7 @@ export function ruleCards(tunables: ViewTunables | null): RuleCard[] {
     {
       key: "earn",
       title: "Tiles earn TOILET",
-      body: `Tiles you hold earn TOILET every second they survive. Stake it to share ${MPOO_SPLIT.stakers}% of the mPOO the stall takes in.`,
+      body: `Tiles you paint with credits earn TOILET every second they survive. Stake it to share ${MPOO_SPLIT.stakers}% of the mPOO the stall takes in.`,
       href: "/toilet",
       link: "What TOILET is for",
     },
