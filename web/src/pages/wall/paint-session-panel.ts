@@ -239,16 +239,17 @@ export function createPaintSessionPanel(deps: PaintSessionPanelDeps): PaintSessi
     // is the only pointer path. Enter still places either way (board keydown).
     drawButton.hidden = allowed && tapToPaintEnabled;
 
-    // A one-approval unlock that vanishes after use reads as "did it work?".
-    // Keep a quiet, permanent line while the session is live.
+    // A one-approval unlock that vanishes instantly reads as "did it work?", but a
+    // permanent line is clutter. It confirms, then fades (wall-page.css); revoking
+    // lives under About / details.
     paintUnlocked.hidden = !allowed || renew;
-    paintUnlocked.textContent = allowed && !renew
-      ? "Painting unlocked this browser. No wallet popup per pixel. Revoke it any time under About / details."
-      : "";
+    paintUnlocked.textContent = allowed && !renew ? "Painting unlocked. No wallet popup per tile." : "";
 
     tapToPaintAnnouncement.textContent = !allowed
       ? ""
-      : tapToPaintEnabled
+      : renew
+        ? "Your painting key needs renewing."
+        : tapToPaintEnabled
         ? "Drag to paint is on. Drag or click to paint. To move the board, hold space, use two fingers, or the middle mouse button."
         : "Choose a square, then Paint this tile.";
   }

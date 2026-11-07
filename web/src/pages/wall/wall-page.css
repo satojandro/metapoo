@@ -750,3 +750,130 @@
   font-size: var(--mp-text-md);
 }
 .wall-page .wall-optin input { width: 18px; height: 18px; accent-color: var(--mp-tag); }
+
+/* ——— Paint panel, quiet edition (owner, 6 Nov: "simplicity of an Apple product") ———
+   The body holds one thing, the palette. The footer holds the transaction: what
+   this stroke costs, what you have, the one button, one status line. Duplicates
+   are spoken only, and one-off confirmations fade. Later rules here win over the
+   older ones above at equal specificity. */
+.wall-page .wall-dock { gap: var(--mp-space-4); padding: var(--mp-space-5); }
+
+.wall-page .wall-colour-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mp-space-3);
+}
+.wall-page .wall-colour-head .mp-eyebrow { margin: 0; }
+.wall-page .wall-panel .selection-preview {
+  gap: var(--mp-space-2);
+  color: var(--mp-fg);
+  font: 600 var(--mp-text-body) var(--mp-font);
+}
+.wall-page .wall-panel .selection-preview .preview-label { font-size: var(--mp-text-body); }
+.wall-page .wall-panel .selection-preview .chip {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mp-fg) 18%, transparent);
+}
+.wall-page .wall-panel .selection-preview:not(:has(.chip)) { color: var(--mp-muted); font-weight: 400; }
+
+/* Round swatches with a ring for the chosen one: the colour, nothing else. */
+.wall-page .wall-panel .palette,
+.wall-page .wall-panel .palette[data-count="16"] { gap: 10px 8px; }
+.wall-page .wall-panel .swatch,
+.wall-page .wall-panel .palette[data-count="16"] .swatch {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.wall-page .wall-panel .swatch .chip {
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mp-fg) 14%, transparent);
+}
+.wall-page .wall-panel .swatch:hover { transform: scale(1.08); }
+.wall-page .wall-panel .swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--mp-card), 0 0 0 4px var(--mp-fg);
+}
+.wall-page .wall-panel .swatch:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--mp-card), 0 0 0 4px var(--mp-focus);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wall-page .wall-panel .swatch { transition: none; }
+  .wall-page .wall-panel .swatch:hover { transform: none; }
+}
+
+/* "Painting unlocked" confirms once, then gets out of the way. */
+.wall-page .wall-panel .paint-unlocked:not([hidden]) {
+  justify-self: start;
+  padding: 6px 12px;
+  border-radius: var(--mp-radius-pill);
+  background: color-mix(in srgb, var(--mp-good) 14%, transparent);
+  color: var(--mp-good);
+  font-size: var(--mp-text-md);
+  animation: wall-confirm-out .35s ease 4s forwards;
+}
+@keyframes wall-confirm-out {
+  to { opacity: 0; visibility: hidden; max-height: 0; padding-block: 0; margin-top: calc(-1 * var(--mp-space-4)); }
+}
+
+/* The footer tally: this stroke on the left, your credits on the right. */
+.wall-page .wall-tally {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--mp-space-3);
+  min-height: 20px;
+}
+.wall-page .wall-panel .wall-cost { display: block; padding: 0; border: 0; min-width: 0; }
+.wall-page .wall-panel .stroke-total {
+  color: var(--mp-fg);
+  font: 600 var(--mp-text-body)/1.3 var(--mp-font);
+}
+.wall-page .wall-panel .stroke-total::first-letter { text-transform: uppercase; }
+.wall-page .wall-panel .credits-dock {
+  flex: none;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: var(--mp-space-2);
+}
+.wall-page .wall-panel .credits-balance { color: var(--mp-muted); font: 500 var(--mp-text-md) var(--mp-font); }
+.wall-page .wall-panel #buy-credits-button { min-height: 0; font-size: var(--mp-text-md); }
+/* When Buy credits is already the big button, the small link would say it twice. */
+.wall-page:has(.wall-action[data-primary="buy"]) #buy-credits-button { display: none; }
+
+/* One status line, not a box. Colour carries the phase. */
+.wall-page .wall-panel .draw-state {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mp-muted);
+  font: var(--mp-text-md)/1.4 var(--mp-font);
+  text-align: center;
+}
+.wall-page .wall-panel .draw-state[data-phase="confirmed"] { color: var(--mp-good); }
+.wall-page .wall-panel .draw-state[data-phase="failed"] { color: var(--mp-bad); }
+.wall-page .wall-panel .draw-state[data-phase="overwritten"] { color: var(--mp-warn); }
+.wall-page .wall-panel .place-reason { text-align: center; }
+
+/* The tap-to-paint setting lives with the drawing session in About / details. */
+.wall-about .direct-paint-toggle { display: flex; align-items: center; gap: var(--mp-space-2); margin: var(--mp-space-2) 0; }
+.wall-about .direct-paint-toggle[hidden] { display: none; }
+.wall-about .direct-paint-toggle input { width: 18px; height: 18px; accent-color: var(--mp-tag); }
+
+/* The buy sheet is a fixed overlay when open; closed, its host takes no grid row. */
+.wall-page .buy-credits-host { display: contents; }
+
+/* Painting, an empty Tile card is a placeholder you don't need: it appears when
+   you choose a tile. */
+.wall-page[data-mode="paint"] .wall-inspect:not([data-filled="true"]) { display: none; }
+
+/* One status line. A specific reason ("Choose a square first") beats the resting
+   instruction; once paint is in flight the draw state always shows. */
+.wall-page .wall-dock-foot:has(.place-reason:not(:empty)) .draw-state:is(:not([data-phase]), [data-phase="connected"], [data-phase="editing"]) { display: none; }

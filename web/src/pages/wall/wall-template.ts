@@ -83,19 +83,18 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
               <p class="wall-invite-free" hidden></p>
             </section>
 
+            <!-- The active view's key comes first: it describes what you are looking at. -->
+            <section id="wall-view-legend" class="wall-card wall-legend" aria-label="View legend" hidden></section>
+
+            <!-- Paint mode's body is the palette. Cost, credits and status live in the
+                 footer; one-off confirmations fade; standing instructions are on the wall. -->
             <div class="paint-dock wall-card wall-dock" data-wall-card="paint">
               <div id="wall-hint-host" class="wall-hint-host"></div>
+              <div class="wall-colour-head">
+                <p class="mp-eyebrow">Colour</p>
+                <div id="selection-preview" class="selection-preview" aria-live="polite"></div>
+              </div>
               <div id="palette" class="palette" role="group" aria-label="Color palette"></div>
-              <div id="selection-preview" class="selection-preview" aria-live="polite"></div>
-              <div class="wall-cost">
-                <p id="repaint-legend" class="repaint-legend" hidden></p>
-                <p id="cell-price" class="cell-price" role="status" aria-live="polite"></p>
-                <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
-              </div>
-              <div id="credits-dock" class="credits-dock" hidden>
-                <p id="credits-balance" class="credits-balance" role="status" aria-live="polite">Credits: …</p>
-                <button id="buy-credits-button" class="mp-btn" type="button">Buy credits</button>
-              </div>
               <div id="buy-credits-host" class="buy-credits-host"></div>
               <div id="paint-unlock" class="paint-unlock" hidden>
                 <p class="paint-unlock-title">Painting is read-only until you approve one drawing key.</p>
@@ -110,8 +109,8 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                   Unlock painting — one approval
                 </button>
               </div>
-              <div id="paint-renew" class="paint-unlock" role="status" hidden>
-                <p class="paint-unlock-title">Your painting key needs renewing.</p>
+              <div id="paint-renew" class="paint-unlock" role="group" aria-labelledby="paint-renew-title" hidden>
+                <p id="paint-renew-title" class="paint-unlock-title">Your painting key needs renewing.</p>
                 <p class="paint-unlock-body">
                   Nothing is wrong with your wallet. The key that lets this browser
                   paint without a popup has a limit for network fees, and it has run
@@ -124,16 +123,11 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                   Renew painting key — one approval
                 </button>
               </div>
-              <label class="direct-paint-toggle" for="direct-paint-toggle">
-                <input id="direct-paint-toggle" type="checkbox" />
-                Drag to paint strokes
-              </label>
-              <p id="tap-to-paint-status" class="tap-to-paint-status" role="status" aria-live="polite" hidden></p>
               <p id="paint-unlocked" class="paint-unlocked" role="status" aria-live="polite" hidden></p>
+              <!-- Spoken, not shown: the wall's own hint chip says the same thing. -->
+              <p id="tap-to-paint-status" class="tap-to-paint-status visually-hidden" role="status" aria-live="polite" hidden></p>
               <div id="wall-optin-slot" class="wall-optin"></div>
             </div>
-
-            <section id="wall-view-legend" class="wall-card wall-legend" aria-label="View legend" hidden></section>
 
             <section class="wall-card wall-inspect" aria-labelledby="wall-tile-heading">
               <p id="wall-tile-heading" class="mp-eyebrow">Tile</p>
@@ -148,6 +142,18 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
               <button id="start-painting" class="mp-btn mp-btn-primary wall-primary" type="button">Start painting</button>
             </div>
             <div class="paint-dock wall-dock-foot" data-wall-card="paint">
+              <div class="wall-tally">
+                <div class="wall-cost">
+                  <!-- The Price view's key explains wet paint; this copy stays for screen readers. -->
+                  <p id="repaint-legend" class="repaint-legend visually-hidden" hidden></p>
+                  <p id="cell-price" class="cell-price visually-hidden" role="status" aria-live="polite"></p>
+                  <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
+                </div>
+                <div id="credits-dock" class="credits-dock" hidden>
+                  <p id="credits-balance" class="credits-balance" role="status" aria-live="polite">Credits: …</p>
+                  <button id="buy-credits-button" class="wall-link" type="button">Buy</button>
+                </div>
+              </div>
               <div class="wall-action">
                 <button id="dock-primary" class="mp-btn mp-btn-primary wall-primary" type="button" hidden></button>
                 <button id="draw-button" class="mp-btn mp-btn-primary wall-primary action place" type="button">Paint this tile</button>
@@ -211,6 +217,10 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                   Revoke session on-chain
                 </button>
               </div>
+              <label class="direct-paint-toggle" for="direct-paint-toggle">
+                <input id="direct-paint-toggle" type="checkbox" />
+                Paint as soon as I tap or drag
+              </label>
               <p id="drawing-session-note" class="help"></p>
             </section>
             <section>
