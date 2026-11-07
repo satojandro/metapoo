@@ -107,14 +107,18 @@ export function happyHourLine(
   if (!schedule) return null;
   if (!schedule.enabled) {
     // The board turns happy hour on after the first fill; before that, say when.
-    return stats && stats.neverPainted > 0 ? "Happy hour starts when the wall is full" : null;
+    return stats && stats.neverPainted > 0 ? "Happy hour when full" : null;
   }
   const startMs = nextHappyHourStart(nowMs, schedule.weekday, schedule.startS, schedule.lengthS);
   if (nowMs >= startMs) {
     const left = Math.max(1, Math.ceil((startMs + schedule.lengthS * 1000 - nowMs) / 60_000));
-    return `Happy hour on · dry tiles free · ${left} min left`;
+    // Short by necessity: the strip is one line and this is its right-hand end. The long form
+    // was ellipsized to "Happy hour sta…" at 1280×720 and lost the time entirely.
+    return `Happy hour · ${left} min`;
   }
-  return `Next happy hour: ${weekdayName(schedule.weekday)} ${utcClock(schedule.startS)}`;
+  // Three-letter weekday: the full name plus "UTC" is 159px, more than the smallest
+  // desktop strip has once the wall is short (its width comes from the height term).
+  return `Next: ${weekdayName(schedule.weekday).slice(0, 3)} ${utcClock(schedule.startS)}`;
 }
 
 export interface HolderRow extends PainterRow {

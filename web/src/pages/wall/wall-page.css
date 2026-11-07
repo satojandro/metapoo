@@ -40,6 +40,9 @@
   display: block;
   width: var(--wall-size);
   min-width: 0;
+  /* The pulse strip below queries this: the wall's width comes from the *height* term on short
+     windows, so a viewport media query cannot tell how much room the strip actually has. */
+  container-type: inline-size;
 }
 
 .wall-page .mp-seg {
@@ -995,6 +998,17 @@
 .wall-page .wall-pulse-wet { color: var(--mp-turf-2); }
 .wall-page .wall-pulse-happy { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--mp-tag); }
 .wall-page .wall-pulse-happy[hidden] { display: none; }
+/* One line on desktop. Under a ~560px wall the four facts do not fit, and the happy-hour item
+   is the one that pays: it was ellipsized to "Happy hour sta…" at 1280×720. Blank and wet are
+   both readable on the tile card, so they step aside and the fill plus happy hour keep room. */
+@media (min-width: 761px) {
+  @container (max-width: 560px) {
+    .wall-page .wall-pulse-blank,
+    .wall-page .wall-pulse-wet { display: none; }
+    /* Two items, one gap: 8px instead of 16 buys the last few characters at the smallest wall. */
+    .wall-page .wall-pulse-line { column-gap: var(--mp-space-2); }
+  }
+}
 .wall-page .wall-card .wall-earn {
   color: var(--mp-fg);
   font-size: var(--mp-text-body);

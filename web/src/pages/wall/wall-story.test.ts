@@ -99,12 +99,12 @@ describe("happy hour", () => {
   const blank = wallStats([px(0, "a.near")], 0n, null);
 
   it("before the first fill, says it starts once the wall is full", () => {
-    expect(happyHourLine({ ...sunday, enabled: false }, blank, SATURDAY_NOON)).toBe("Happy hour starts when the wall is full");
+    expect(happyHourLine({ ...sunday, enabled: false }, blank, SATURDAY_NOON)).toBe("Happy hour when full");
   });
 
   it("names the next one, and says when one is open", () => {
-    expect(happyHourLine(sunday, blank, SATURDAY_NOON)).toBe("Next happy hour: Sunday 20:00 UTC");
-    expect(happyHourLine(sunday, blank, SUNDAY_2015)).toBe("Happy hour on · dry tiles free · 45 min left");
+    expect(happyHourLine(sunday, blank, SATURDAY_NOON)).toBe("Next: Sun 20:00 UTC");
+    expect(happyHourLine(sunday, blank, SUNDAY_2015)).toBe("Happy hour · 45 min");
   });
 
   it("stays quiet without a schedule, or when switched off on a full wall", () => {
@@ -238,7 +238,7 @@ describe("the story on the page", () => {
       "Every tile you paint with credits earns 86.4 TOILET a day until someone paints over it. Free tiles earn nothing.",
     );
     expect(q("[data-wall-earn] b").textContent).toBe("86.4 TOILET a day");
-    expect(q("[data-wall-happy]").textContent).toBe("Happy hour starts when the wall is full");
+    expect(q("[data-wall-happy]").textContent).toBe("Happy hour when full");
     expect(q("[data-pulse-blank]").textContent).toBe(`${(wallTiles() - 3).toLocaleString("en-US")} blank`);
     expect(q("[data-pulse-wet]").textContent).toBe("3 wet");
     expect(q(".wall-holders").hidden).toBe(false);
