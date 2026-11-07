@@ -35,6 +35,8 @@ vi.mock("@near-js/signers", () => ({ KeyPairSigner: class {
 } }));
 vi.mock("./drawing-session", async (importOriginal) => ({
   isDrawingKeyLow: (await importOriginal<typeof import("./drawing-session")>()).isDrawingKeyLow,
+  quotedRefusalCostYocto: (await importOriginal<typeof import("./drawing-session")>()).quotedRefusalCostYocto,
+  refusalCostRatio: (await importOriginal<typeof import("./drawing-session")>()).refusalCostRatio,
   loadDrawingSessionRecord: () => ({ publicKey: "public", secretKey: "ed25519:secret" }),
   describeDrawingSession: () => ({ phase: "active" }),
 }));
@@ -185,14 +187,35 @@ describe("pipelined stroke submission", () => {
   });
 
   it("logs the gas and gas price when the chain refuses the key, the only trace a refusal leaves", async () => {
-    const refusal = "Access Key alice.testnet:public does not have enough balance 1 for transaction costing 2";
+    // The chain's own shape: integers in yoctoNEAR.
+    const refusal =
+      "Access Key alice.testnet:public does not have enough balance 30873458166076100000000 for transaction costing 30921309952619500000000";
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     mocks.send.mockRejectedValueOnce(typed("NotEnoughAllowance", refusal));
     const result = await signAndSendStrokeLocally(args);
     expect(result.chunks[0]).toMatchObject({ state: "failed", message: refusal });
     await vi.waitFor(() => expect(log).toHaveBeenCalledWith("[wall] drawing key refused:", {
-      attachedGas: DRAW_GAS, gasPrice: "100000000", message: refusal,
+      attachedGas: DRAW_GAS,
+      gasPrice: "100000000",
+      expectedCostYocto: "3000000000000000000000",
+      quotedCostYocto: "30921309952619500000000",
+      // 30 Tgas at 1.00e8 should cost 0.003 NEAR; the chain quoted 0.0309.
+      // The exact number is the open question this line exists to answer.
+      quotedOverExpected: 10.3,
+      message: refusal,
     }));
+    log.mockRestore();
+  });
+
+  it("leaves the ratio unknown when the refusal is human-formatted copy, not yoctoNEAR", async () => {
+    // Formatted copy (decimals) has no recoverable unit: the line must not invent one.
+    const refusal = "Access Key alice.testnet:public does not have enough balance 0.0308 for transaction costing 0.0309";
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.send.mockRejectedValueOnce(typed("NotEnoughAllowance", refusal));
+    await signAndSendStrokeLocally(args);
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith("[wall] drawing key refused:", expect.objectContaining({
+      quotedCostYocto: null, quotedOverExpected: null,
+    })));
     log.mockRestore();
   });
 

@@ -14,6 +14,8 @@ import {
   describeDrawingSession,
   isDrawingKeyLow,
   loadDrawingSessionRecord,
+  quotedRefusalCostYocto,
+  refusalCostRatio,
   type DrawingSessionRecord,
 } from "./drawing-session";
 
@@ -629,10 +631,24 @@ function summarize(
  * failed price read must not change what the painter sees.
  */
 function logAllowanceRefusal(message: string): void {
+  const quotedCostYocto = quotedRefusalCostYocto(message);
   void readRpc<{ gas_price: string }>("gas_price", [null])
     .then((price) => price.gas_price, () => null)
     .then((gasPrice) => {
-      console.error("[wall] drawing key refused:", { attachedGas: DRAW_GAS, gasPrice, message });
+      // `attachedGas` is what this code asked for, not proof of what went on the
+      // wire, so also log what that gas should have cost against the chain's
+      // quote. The ratio settles the open question: ~1 blames something other
+      // than the gas limit, ~10 means the chain priced ten times the attached gas.
+      const expectedCostYocto =
+        gasPrice === null ? null : (BigInt(DRAW_GAS) * BigInt(gasPrice)).toString();
+      console.error("[wall] drawing key refused:", {
+        attachedGas: DRAW_GAS,
+        gasPrice,
+        expectedCostYocto,
+        quotedCostYocto,
+        quotedOverExpected: refusalCostRatio(quotedCostYocto, DRAW_GAS, gasPrice),
+        message,
+      });
     });
 }
 

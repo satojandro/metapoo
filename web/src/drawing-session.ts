@@ -60,6 +60,44 @@ export function paintFailureCopy(message: string): string {
   return isDrawingKeyLow(message) ? KEY_LOW_COPY : message;
 }
 
+/**
+ * The cost the chain quoted in a NotEnoughAllowance refusal, in yoctoNEAR.
+ *
+ * The chain writes it as an integer ("… for transaction costing
+ * 30921309952619500000000"). A message carrying a decimal point is
+ * human-formatted copy, whose unit cannot be recovered here, so it answers
+ * null rather than a number in the wrong unit.
+ */
+export function quotedRefusalCostYocto(
+  message: string | null | undefined,
+): string | null {
+  if (!message) return null;
+  const match = /for transaction costing (\d+)(?![\d.])/.exec(message);
+  return match?.[1] ?? null;
+}
+
+/**
+ * The refusal's quoted cost as a multiple of what `gasAttached` should have
+ * cost at `gasPrice`. This is the open question in docs/learning/traps.md:
+ * ~1 means the gas limit is not the explanation, ~10 means the chain priced
+ * ten times the attached gas. Null when either input is unusable.
+ */
+export function refusalCostRatio(
+  quotedYocto: string | null,
+  gasAttached: string,
+  gasPrice: string | null,
+): number | null {
+  if (!quotedYocto || !gasPrice) return null;
+  try {
+    const expected = BigInt(gasAttached) * BigInt(gasPrice);
+    if (expected === 0n) return null;
+    // Two decimals are enough to tell 1x from 10x.
+    return Number((BigInt(quotedYocto) * 100n) / expected) / 100;
+  } catch {
+    return null;
+  }
+}
+
 export type DrawingSessionPhase =
   | "inactive"
   | "active"

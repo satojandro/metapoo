@@ -13,6 +13,8 @@ import {
   saveDrawingSessionRecord,
   type DrawingSessionRecord,
   isDrawingKeyLow,
+  quotedRefusalCostYocto,
+  refusalCostRatio,
 } from "./drawing-session";
 
 /** Tiny in-memory Storage stand-in for unit tests (no browser required). */
@@ -279,5 +281,40 @@ describe("isDrawingKeyLow", () => {
     expect(isDrawingKeyLow("Sender alice.testnet does not have enough balance 1 for transaction costing 2")).toBe(false);
     expect(isDrawingKeyLow("Price rose above max")).toBe(false);
     expect(isDrawingKeyLow(null)).toBe(false);
+  });
+});
+
+describe("quotedRefusalCostYocto", () => {
+  it("reads the chain's integer yoctoNEAR quote", () => {
+    expect(quotedRefusalCostYocto(
+      "Access Key alice.testnet:ed25519:abc does not have enough balance 30873458166076100000000 for transaction costing 30921309952619500000000",
+    )).toBe("30921309952619500000000");
+  });
+
+  it("refuses to guess a unit from human-formatted copy", () => {
+    expect(quotedRefusalCostYocto(
+      "Access Key alice.testnet:public does not have enough balance 0.0308 for transaction costing 0.0309",
+    )).toBeNull();
+  });
+
+  it("answers null when there is no quote at all", () => {
+    expect(quotedRefusalCostYocto("The drawing-session gas allowance is exhausted.")).toBeNull();
+    expect(quotedRefusalCostYocto(null)).toBeNull();
+  });
+});
+
+describe("refusalCostRatio", () => {
+  it("puts the refusal's quote against what the attached gas should cost", () => {
+    // 30 Tgas at 1.00e8 = 0.003 NEAR; the chain quoted 0.0309 NEAR.
+    expect(refusalCostRatio("30921309952619500000000", "30000000000000", "100000000")).toBe(10.3);
+    // Same quote, a price that makes it match: 3 Tgas worth.
+    expect(refusalCostRatio("3000000000000000000000", "30000000000000", "100000000")).toBe(1);
+  });
+
+  it("answers null rather than a wrong number when an input is unusable", () => {
+    expect(refusalCostRatio(null, "30000000000000", "100000000")).toBeNull();
+    expect(refusalCostRatio("1", "30000000000000", null)).toBeNull();
+    expect(refusalCostRatio("1", "30000000000000", "not-a-number")).toBeNull();
+    expect(refusalCostRatio("1", "0", "100000000")).toBeNull();
   });
 });
