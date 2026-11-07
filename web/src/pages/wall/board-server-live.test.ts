@@ -59,7 +59,19 @@ const BOARD = {
 
 type Rpc = { method: string; params: Record<string, unknown> };
 
-/** Chain + board server behind one fetch. The chain advances one block a second. */
+/**
+ * The world's clock, in ms since the test began. Only the test moves it.
+ *
+ * The stub used to derive the chain height (and the server's watermark) from `Date.now()` at
+ * request time, which made the lag a function of *when each request happened to be served*.
+ * A trust check reads the chain and `/api/health` separately; on a loaded runner the two could
+ * land a whole timer step apart, turning a server 2 blocks behind into "62 blocks behind", one
+ * chain walk, and a red CI (seen on PR #90). With the clock owned by the test, both reads of one
+ * trust check see the same instant.
+ */
+let worldClockMs = 0;
+
+/** Chain + board server behind one fetch. The chain advances one block a second of world time. */
 function stubWorld() {
   const start = Date.now();
   const world = {
@@ -74,8 +86,8 @@ function stubWorld() {
     /** Every get_pixels call: when (fake ms since start) and the wall's status line, which names the load's reason. */
     walks: [] as Array<{ atMs: number; status: string; history: string[] }>,
     serverPaths: [] as string[],
-    height: () => 10_000 + Math.floor((Date.now() - start) / 1000),
-    applied: () => 10_000 + Math.floor((Date.now() - start) / 1000) - (world.appliedLagBlocks ?? world.serverLagBlocks),
+    height: () => 10_000 + Math.floor(worldClockMs / 1000),
+    applied: () => 10_000 + Math.floor(worldClockMs / 1000) - (world.appliedLagBlocks ?? world.serverLagBlocks),
   };
   const region = buildRegion([{ x: 1, y: 2, colorIndex: 3, ownerId: 1, writtenAtNs: "1762500000000000000" }]);
   const bytes = (value: unknown) => Array.from(new TextEncoder().encode(JSON.stringify(value)));
@@ -183,14 +195,14 @@ function mount(withServer: boolean) {
 
 /** Advance time with someone at the page: a pointer move every 5 minutes. */
 async function touchedFor(ms: number): Promise<void> {
-  // 10 s steps, not 60 s. The stub derives both the chain height and the server's watermark
-  // from the fake clock when each request is made. A trust check's chain read goes through the
-  // paced read transport, so on a slow runner it could land at a later timer within one jump.
-  // A 60 s jump then made a lag of 62 blocks out of a server 2 blocks behind: one false
-  // "behind", one chain walk (seen on CI for PR #90). Real requests are a few seconds apart.
+  // The world clock moves with the timers, in the same 10 s steps, so the chain keeps producing
+  // blocks while someone is at the page. Each step is one trust check at most, and the step is
+  // far below SERVER_MAX_LAG_BLOCKS even if a read lands on the next one.
   const step = 10_000;
   for (let left = ms; left > 0; left -= step) {
-    await vi.advanceTimersByTimeAsync(Math.min(step, left));
+    const slice = Math.min(step, left);
+    worldClockMs += slice;
+    await vi.advanceTimersByTimeAsync(slice);
     if ((ms - left) % 300_000 === 0) window.dispatchEvent(new Event("pointermove"));
   }
 }
@@ -218,6 +230,7 @@ async function liveWall() {
 let liveDispose: (() => void) | null = null;
 
 beforeEach(async () => {
+  worldClockMs = 0;
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-07T12:00:00Z"));
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
