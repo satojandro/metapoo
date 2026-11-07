@@ -877,3 +877,67 @@
 /* One status line. A specific reason ("Choose a square first") beats the resting
    instruction; once paint is in flight the draw state always shows. */
 .wall-page .wall-dock-foot:has(.place-reason:not(:empty)) .draw-state:is(:not([data-phase]), [data-phase="connected"], [data-phase="editing"]) { display: none; }
+
+/* ——— After a paint: one confirmation, not four (owner, 7 Nov) ———
+   The footer's status line says it, a quiet link offers the transaction, and the
+   wall shows a small pill where it happened. No disabled button pretending to be
+   an action: when a tap paints, the wall's hint chip is the instruction. */
+.wall-page .wall-panel-foot,
+.wall-page .wall-foot-look,
+.wall-page .wall-dock-foot { grid-template-columns: minmax(0, 1fr); }
+.wall-page .wall-panel .result { overflow-wrap: anywhere; }
+.wall-page .wall-tally { flex-wrap: wrap; row-gap: var(--mp-space-1); }
+
+/* A disabled primary is a status ("Pick a colour", "Tap or drag on the wall"):
+   the colour heading and the hint chip already say it. */
+.wall-page .wall-panel #dock-primary:disabled { display: none; }
+
+/* Confirmed: keep the explorer link, drop the essay. Failures keep the full block. */
+.wall-page .wall-dock-foot:has(.draw-state[data-phase="confirmed"]) .result {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: center;
+}
+.wall-page .wall-dock-foot:has(.draw-state[data-phase="confirmed"]) .result > :not(a) { display: none; }
+.wall-page .wall-dock-foot:has(.draw-state[data-phase="confirmed"]) .result a {
+  color: var(--mp-near);
+  font-size: var(--mp-text-sm);
+}
+
+/* Placement pills: centred one row above the status and zoom chips. */
+.wall-page .placement-outcomes {
+  position: absolute;
+  left: 50%;
+  bottom: 72px;
+  z-index: 3;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  max-width: calc(100% - 32px);
+  pointer-events: none;
+}
+.wall-page .placement-outcome {
+  padding: 5px 12px;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-pill);
+  background: var(--wall-overlay);
+  color: var(--mp-fg);
+  font: 600 var(--mp-text-sm)/1.3 var(--mp-font);
+  white-space: nowrap;
+}
+.wall-page .placement-outcome[data-placement-state="confirmed"] {
+  color: var(--mp-good);
+  animation: wall-confirm-out .35s ease 3s forwards;
+}
+.wall-page .placement-outcome[data-placement-state="failed"] { color: var(--mp-bad); }
+.wall-page .placement-outcome[data-placement-state="overwritten"],
+.wall-page .placement-outcome[data-placement-state="confirmation-delayed"] { color: var(--mp-warn); }
+@media (max-width: 760px) {
+  .wall-page .placement-outcomes { bottom: 12px; max-width: calc(100% - 24px); }
+}
+
+/* Painting, a tap already paints: the tile card's "Paint over this" would be a
+   second paint button. It stays in Look, where it is the way in. */
+.wall-page[data-mode="paint"] .tile-paint-over { display: none; }

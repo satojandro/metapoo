@@ -99,6 +99,18 @@ describe("wallPageHtml", () => {
     expect(root.querySelector(".wall-dock #direct-paint-toggle")).toBeNull();
   });
 
+  it("lets the footer hold only text and real actions (no grid blow-out, one confirmation)", async () => {
+    // Vitest stubs CSS imports, so read the stylesheet itself.
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync(`${process.cwd()}/src/pages/wall/wall-page.css`, "utf8");
+    // A disabled primary is a status, not a button: hidden.
+    expect(css).toMatch(/#dock-primary:disabled\s*\{\s*display:\s*none/);
+    // A long transaction id can never widen the footer past the panel.
+    expect(css).toMatch(/\.wall-dock-foot\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    // Confirmed: the result keeps only its explorer link.
+    expect(css).toMatch(/data-phase="confirmed"\]\) \.result > :not\(a\)\s*\{\s*display:\s*none/);
+  });
+
   it("labels the network it is configured for, and claims no fee", () => {
     const root = document.createElement("div");
     root.innerHTML = wallPageHtml("mainnet");

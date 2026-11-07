@@ -30,7 +30,9 @@ describe("placement outcome controller", () => {
     controller.settle(id, result("overwritten"));
 
     const row = host.querySelector<HTMLElement>("[data-placement-state='overwritten']");
-    expect(row?.textContent).toContain("transaction executed; current cell owner differs");
+    // Your paint went through; someone has covered it since. Plain words, same distinction.
+    expect(row?.textContent).toContain("Painted over since");
+    expect(row?.textContent).toContain("8, 12");
     expect(row?.children).toHaveLength(0);
     unmount();
   });
