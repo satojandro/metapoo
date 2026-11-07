@@ -1,0 +1,31 @@
+# Valkey + indexer + server on one small machine, as Berry Fast runs. Put HTTPS in front of
+# :3000 (WebSocket at /ws). Values in .env (see .env.example).
+services:
+  valkey:
+    image: valkey/valkey:8
+    volumes:
+      - ./valkey-data:/data
+      - ./valkey.conf:/usr/local/etc/valkey/valkey.conf:ro
+    command: valkey-server /usr/local/etc/valkey/valkey.conf
+    restart: unless-stopped
+
+  indexer:
+    build: { context: ../.., dockerfile: ops/board-server/Dockerfile }
+    command: indexer
+    env_file: .env
+    environment:
+      VALKEY_URL: redis://valkey:6379
+    depends_on: [valkey]
+    restart: unless-stopped
+
+  server:
+    build: { context: ../.., dockerfile: ops/board-server/Dockerfile }
+    command: server
+    env_file: .env
+    environment:
+      VALKEY_URL: redis://valkey:6379
+      LISTEN_ADDR: 0.0.0.0:3000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on: [valkey]
+    restart: unless-stopped

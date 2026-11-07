@@ -108,6 +108,34 @@ jobs:
       # neard raises its open-file limit to 65,535; the hosted runners allow it.
       - run: cargo test --locked -- --nocapture
 
+  # The board server (ops/board-server, a Berry Fast port). Unit tests, the indexer against a
+  # real NEAR Data block fixture, and the consumer against a real Valkey.
+  board-server:
+    name: board server (Rust)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      valkey:
+        image: valkey/valkey:8
+        ports: ['6379:6379']
+    defaults:
+      run:
+        working-directory: ops/board-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ops/board-server
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      # One thread: the Valkey tests share and flush database 15.
+      - run: cargo test --locked -- --test-threads=1
+        env:
+          TEST_VALKEY_URL: redis://127.0.0.1:6379/15
+
   keeper:
     name: revenue keeper
     runs-on: ubuntu-latest

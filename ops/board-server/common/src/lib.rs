@@ -1,0 +1,12 @@
+//! Shared by the indexer and the server: the board's binary format, its events, and how an
+//! event is applied. A port of `fastnear/berry-fast` `backend/common`, changed only where the
+//! Meta Poo contract forces it (spec §3).
+pub mod apply;
+pub mod event;
+pub mod keys;
+pub mod palette;
+pub mod region;
+
+pub use apply::*;
+pub use event::*;
+pub use region::*;
