@@ -210,7 +210,7 @@ export function createWallView(deps: WallViewDeps): WallView {
     label.className = "preview-label";
 
     if (selectedColor === null) {
-      label.textContent = "Pick a colour.";
+      label.textContent = "Pick one";
       preview.append(label);
       return;
     }
@@ -226,8 +226,12 @@ export function createWallView(deps: WallViewDeps): WallView {
     chip.className = "chip";
     chip.style.background = swatch.hex;
     chip.setAttribute("aria-hidden", "true");
-    label.textContent = `Your colour: ${swatch.name}`;
-    preview.append(chip, label);
+    // Shown as just the name next to the Colour heading; spoken in full.
+    const spoken = document.createElement("span");
+    spoken.className = "visually-hidden";
+    spoken.textContent = "Your colour: ";
+    label.textContent = swatch.name;
+    preview.append(chip, spoken, label);
   }
 
   function updateCompactStatus(): void {
