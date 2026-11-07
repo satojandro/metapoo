@@ -135,10 +135,12 @@ async fn get_regions_batch(
         .collect();
     let updated = meta(&state).await.0;
     let results: Vec<_> = coords
-        .chunks_exact(2)
-        .map(|c| {
-            let last_updated = if is_wall(c[0], c[1]) { updated } else { 0 };
-            serde_json::json!({ "rx": c[0], "ry": c[1], "last_updated": last_updated })
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&[rx, ry]| {
+            let last_updated = if is_wall(rx, ry) { updated } else { 0 };
+            serde_json::json!({ "rx": rx, "ry": ry, "last_updated": last_updated })
         })
         .collect();
     axum::Json(results).into_response()
