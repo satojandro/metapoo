@@ -63,7 +63,7 @@ export function createBetaBanner(options: Partial<BetaBannerOptions> = {}): HTML
   const short = document.createElement("span");
   short.className = "beta-banner-text beta-banner-short";
   short.setAttribute("aria-hidden", "true");
-  short.innerHTML = "Test board: it will be paused and <b>TOILET</b> will be worthless. NEAR spent is real.";
+  short.innerHTML = "Test board: will be paused, <b>TOILET</b> worthless. NEAR spent is real.";
 
   banner.append(tag, long, short);
 

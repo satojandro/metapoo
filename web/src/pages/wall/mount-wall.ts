@@ -18,8 +18,12 @@ import { createWallModes } from "./wall-modes";
 import { mountDockPrimary } from "./dock-primary";
 import { createWallViews, type WallViews } from "./wall-views";
 import { createTileInspector, parseTileHash, type TileInspector } from "./tile-inspector";
-import { createWallInvite, type WallInvite } from "./wall-invite";
-import { PAGE_NETWORK } from "../../config";
+import { createWallInvite, wallStats, type WallInvite } from "./wall-invite";
+import { createWallStory, type WallStory } from "./wall-story";
+import { createWallYours, localHeldStore, type WallYours } from "./wall-yours";
+import { mountToiletClaim, toiletConfigured } from "../../app/toilet-claim";
+import { nowNs } from "./wall-views";
+import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
 import { viewFunction } from "../../contract";
 import "./wall-page.css";
 
@@ -104,6 +108,7 @@ export function mountWall(
     badge: el("#cell-price"),
     strokeTotal: el("#stroke-total"),
     submit: drawButton,
+    onQuote: (paidCells) => story?.onQuote(paidCells),
   };
   const drawState = el("#draw-state");
   const result = el("#result");
@@ -152,6 +157,8 @@ export function mountWall(
   let views: WallViews | null = null;
   let inspector: TileInspector | null = null;
   let invite: WallInvite | null = null;
+  let story: WallStory | null = null;
+  let yours: WallYours | null = null;
   let invitePrimed = false;
   // The tile under a mouse. The Tile card describes it, so asking about a tile
   // never needs a tap (which paints in Paint mode). Pixel cache only: no RPC.
@@ -290,6 +297,8 @@ export function mountWall(
         views.prime();
       }
       invite?.render();
+      story?.render();
+      yours?.render();
     },
     onSchemaChanged: () => pricing.onSchemaChanged(),
     onManualRefresh: () => pricing.manualRefresh(),
@@ -383,6 +392,7 @@ export function mountWall(
     onChange: () => {
       inspector?.render();
       invite?.render();
+      story?.render();
     },
   });
 
@@ -397,6 +407,50 @@ export function mountWall(
     connected: () => scope.walletAccount() !== null,
   });
   invite.render();
+
+  // The story the other pages tell, said once here: fill, happy hour, earnings,
+  // who holds the wall, and the rules below it. Reads only; never paints.
+  story = createWallStory({
+    scope,
+    invite: el<HTMLElement>(".wall-invite"),
+    holders: el<HTMLElement>(".wall-holders"),
+    recent: el<HTMLElement>(".wall-recent"),
+    rules: el<HTMLElement>("[data-wall-rules]"),
+    strokeEarn: el<HTMLElement>("#stroke-earn"),
+    pixels: () => board.paintedPixels(),
+    stats: () =>
+      board.syncState().lastAppliedAtMs === null
+        ? null
+        : wallStats(board.paintedPixels(), nowNs(), views?.tunables() ?? null),
+    viewer: () => scope.walletAccount(),
+    tunables: () => views?.tunables() ?? null,
+    colorOf: (account, you) => views?.colorOf(account, you) ?? "",
+    readEmission: () => viewFunction("get_toilet_emission"),
+    flyTo: (cell) => flyTo(cell),
+  });
+
+  // Signed in: your tiles, your TOILET claim, and what was covered since you last looked.
+  const wallStage = el<HTMLElement>(".wall-stage");
+  const backToWall = () => wallStage.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  yours = createWallYours({
+    scope,
+    section: el<HTMLElement>(".wall-yours"),
+    board: CONTRACT_ID,
+    pixels: () => board.paintedPixels(),
+    // Every page of the wall read, not just the first: a half-read wall would look like covered tiles.
+    loaded: () => board.syncState().lastAppliedAtMs !== null,
+    viewer: () => scope.walletAccount(),
+    store: localHeldStore(),
+    mountClaim: (host) => (toiletConfigured() ? mountToiletClaim(host, services) : () => {}),
+    showMine: () => {
+      views?.setMode("turf");
+      backToWall();
+    },
+    flyTo: (cell) => {
+      flyTo(cell);
+      backToWall();
+    },
+  });
 
   // The drawing-key opt-in ("Also allow painting without a popup each time") is
   // shell-owned. On the wall it sits in the dock, next to Connect, not in the header.
@@ -465,14 +519,19 @@ export function mountWall(
   camera.render();
   view.showSelection();
 
-  // `#tile-x-y` opens the wall on that tile, in Look mode.
-  function focusTileFromHash(): void {
-    const cell = parseTileHash(window.location.hash);
-    if (!cell || scope.isDisposed()) return;
+  // Select a tile and zoom the wall to it: the `#tile-x-y` link and the Right now feed.
+  function flyTo(cell: Cell): void {
+    if (scope.isDisposed()) return;
     view.select(cell);
     camera.applyCamera(paintZoomCamera(camera.readViewportSize(), cell, PAINT_CELL_PX));
     camera.render();
     view.showSelection();
+  }
+
+  // `#tile-x-y` opens the wall on that tile, in Look mode.
+  function focusTileFromHash(): void {
+    const cell = parseTileHash(window.location.hash);
+    if (cell) flyTo(cell);
   }
   focusTileFromHash();
   scope.listen(window, "hashchange", focusTileFromHash);
@@ -515,6 +574,8 @@ export function mountWall(
     dockPrimary.sync();
     if (previousAccount !== session.accountId) views?.onWalletChanged();
     invite?.render();
+    story?.render();
+    yours?.render();
   });
   scope.onDispose(unsubWallet);
   scope.onDispose(() => {

@@ -383,6 +383,8 @@ export interface WallViews {
   painter(): TilePainter | null;
   tunables(): ViewTunables | null;
   free(): FreeFirstState;
+  /** A painter's Turf colour (yours in yellow), so other lists match the Turf view. */
+  colorOf(account: string, you: boolean): string;
   /** Board pixels or the wallet changed: refresh legend (and free paints on wallet change). */
   refresh(): void;
   onWalletChanged(): void;
@@ -584,6 +586,7 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
     painter: () => tilePainterFor(painterInput()),
     tunables: () => tunables,
     free: () => free,
+    colorOf: (account, you) => (you ? palette.you : turfColors().get(account) ?? turfColor(account)),
     refresh: () => {
       if (!tunables && (primed || mode === "price" || mode === "age")) void ensureTunables();
       if (mode !== "art") renderLegend();

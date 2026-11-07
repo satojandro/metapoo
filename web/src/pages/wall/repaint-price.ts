@@ -367,6 +367,8 @@ export interface RepaintChrome {
   badge: HTMLElement;
   strokeTotal: HTMLElement;
   submit: HTMLButtonElement;
+  /** Told how many tiles in the quoted stroke are paid with credits; null when there is no quote. */
+  onQuote?: (paidCells: number | null) => void;
 }
 
 /** Paint a failed read. Submit stays disabled so a guess cannot be sent. */
@@ -378,6 +380,7 @@ export function showPriceUnavailable(chrome: RepaintChrome): void {
   chrome.strokeTotal.textContent = PRICE_UNAVAILABLE;
   chrome.strokeTotal.dataset.state = "unavailable";
   chrome.submit.disabled = true;
+  chrome.onQuote?.(null);
 }
 
 /** Paint a successful quote into the default view (never inside `<details>`). */
@@ -390,6 +393,7 @@ export function showRepaintQuote(chrome: RepaintChrome, quote: Extract<RepaintQu
   chrome.strokeTotal.textContent = quote.strokeText;
   chrome.strokeTotal.dataset.state = quote.strokeText ? "ready" : "";
   chrome.submit.disabled = false;
+  chrome.onQuote?.(quote.cells.length ? quote.cells.filter((c) => !c.free && c.credits > 0).length : null);
 }
 
 export interface ChainRepaintReaders extends RepaintReaders {
