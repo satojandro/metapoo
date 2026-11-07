@@ -135,6 +135,9 @@ jobs:
       - run: cargo test --locked -- --test-threads=1
         env:
           TEST_VALKEY_URL: redis://127.0.0.1:6379/15
+          # tests/outage.rs kills and restarts a Valkey of its own (via Docker here); fail
+          # rather than skip if it cannot.
+          REQUIRE_OUTAGE_TEST: '1'
 
   keeper:
     name: revenue keeper

@@ -3,4 +3,5 @@
 pub mod api;
 pub mod board;
 pub mod consumer;
+pub use common::valkey;
 pub mod ws;

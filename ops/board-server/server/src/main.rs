@@ -43,11 +43,9 @@ async fn main() -> anyhow::Result<()> {
     let retention: u64 = env_or("CATCHUP_RETENTION_MS", 7_200_000);
 
     // A `ConnectionManager`, not a bare multiplexed connection: it reconnects in the
-    // background. A dropped connection otherwise stays dropped, and every later command fails
-    // even after Valkey is back — the process would need a restart to heal.
-    let mut con = redis::Client::open(valkey_url.as_str())?
-        .get_connection_manager()
-        .await?;
+    // background. Its timeouts and backoff are set in common/src/valkey.rs; with the library
+    // defaults an outage froze the consumer for minutes after Valkey was back.
+    let mut con = server::valkey::connect(&valkey_url).await?;
     let state = Arc::new(RwLock::new(board::load(&mut con, initial_side).await?));
     let (broadcast_tx, _) = broadcast::channel::<String>(4096);
     let consumer_health = consumer::Health::default();

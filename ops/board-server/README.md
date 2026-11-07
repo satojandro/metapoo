@@ -25,6 +25,12 @@ NEAR Data (final blocks) ──► indexer ──LPUSH──► Valkey draw_queu
   - A failed apply is **retried** with backoff, on a reconnecting connection, rather than
     ending the consumer: skipping would leave a permanent gap, and exiting would freeze the
     mirror. `/api/health` reports the consumer's liveness, so a stuck one is visible.
+  - **A Valkey outage heals by itself.** `common/src/valkey.rs` bounds every reply (5 s) and
+    every connect (2 s), and caps the reconnect backoff at 1 s.
+    - With redis 0.27's defaults, an outage blocked every command for minutes after Valkey was
+      back: the reconnect backoff multiplies by 100.
+    - `server/tests/outage.rs` SIGKILLs Valkey under a running consumer and restarts it. The
+      next event must apply without a server restart; it now does in under a second.
 
 ## Differences from Berry Fast (spec §3–§4)
 
@@ -76,7 +82,8 @@ ask FastNEAR about `AUTH_BEARER_TOKEN` and billing.
 ## Check
 
 ```bash
-cargo test -- --test-threads=1          # Valkey tests are skipped unless TEST_VALKEY_URL is set
+cargo test -- --test-threads=1          # Valkey tests are skipped unless TEST_VALKEY_URL is set;
+                                        # the outage test needs valkey-server/redis-server or Docker
 cargo clippy --all-targets -- -D warnings
 ```
 

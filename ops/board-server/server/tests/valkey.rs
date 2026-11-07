@@ -11,12 +11,12 @@ use tokio::sync::{broadcast, RwLock};
 
 async fn connect() -> Option<redis::aio::ConnectionManager> {
     let url = std::env::var("TEST_VALKEY_URL").ok()?;
-    let mut con = redis::Client::open(url)
-        .ok()?
-        .get_connection_manager()
+    // Set but unreachable is a failure, not a skip: a skip here once hid a dead test Valkey
+    // behind four green tests.
+    let mut con = server::valkey::connect(&url)
         .await
-        .ok()?;
-    let _: () = redis::cmd("FLUSHDB").query_async(&mut con).await.ok()?;
+        .unwrap_or_else(|e| panic!("TEST_VALKEY_URL={url} is set but unreachable: {e}"));
+    let _: () = redis::cmd("FLUSHDB").query_async(&mut con).await.unwrap();
     Some(con)
 }
 

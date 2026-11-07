@@ -33,10 +33,9 @@ async fn main() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("CHAIN_ID: {e:?}"))?;
     let valkey_url =
         std::env::var("VALKEY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into());
-    // Reconnects in the background: the retry loop below must survive a Valkey restart.
-    let mut con = redis::Client::open(valkey_url)?
-        .get_connection_manager()
-        .await?;
+    // Reconnects in the background, with bounded waits (common/src/valkey.rs): the retry loop
+    // below must survive a Valkey restart.
+    let mut con = common::valkey::connect(&valkey_url).await?;
 
     let resume: Option<u64> = con.get(keys::LAST_PROCESSED_BLOCK).await?;
     let env_u64 = |name: &str| std::env::var(name).ok().and_then(|s| s.parse::<u64>().ok());

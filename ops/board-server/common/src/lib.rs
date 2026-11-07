@@ -7,6 +7,7 @@ pub mod event;
 pub mod keys;
 pub mod palette;
 pub mod region;
+pub mod valkey;
 
 pub use apply::*;
 pub use catchup::*;
