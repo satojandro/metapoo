@@ -426,6 +426,29 @@ function isMissingView(error: unknown): boolean {
 }
 
 /**
+ * The board server's trust check: one `get_board_version` read, and the block it was
+ * read at. A board without the view answers with `version: null` and the latest final
+ * block instead, still one request, so the check can still measure the server's lag.
+ */
+export async function readBoardVersion(): Promise<{ version: number | null; blockHeight: number }> {
+  if (boardVersionView !== "no") {
+    try {
+      const read = await viewFunctionWithMeta<number>("get_board_version");
+      if (typeof read.data !== "number" || !Number.isSafeInteger(read.data)) {
+        throw new Error("get_board_version did not return a whole number.");
+      }
+      boardVersionView = "yes";
+      if (read.blockHeight !== null) return { version: read.data, blockHeight: read.blockHeight };
+      return { version: read.data, blockHeight: await fetchLatestBlockHeight() };
+    } catch (error) {
+      if (!isMissingView(error)) throw error;
+      boardVersionView = "no";
+    }
+  }
+  return { version: null, blockHeight: await fetchLatestBlockHeight() };
+}
+
+/**
  * Read the board, or learn that it has not changed.
  *
  * With `knownVersion` (the `version` of the copy the caller holds), one

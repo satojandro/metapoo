@@ -23,7 +23,8 @@ import { createWallStory, type WallStory } from "./wall-story";
 import { createWallYours, localHeldStore, type WallYours } from "./wall-yours";
 import { mountToiletClaim, toiletConfigured } from "../../app/toilet-claim";
 import { nowNs } from "./wall-views";
-import { CONTRACT_ID, PAGE_NETWORK } from "../../config";
+import { BOARD_SERVER_URL, CONTRACT_ID, PAGE_NETWORK } from "../../config";
+import { createBoardServerClient } from "../../board-server/client";
 import { viewFunction } from "../../contract";
 import "./wall-page.css";
 
@@ -309,6 +310,8 @@ export function mountWall(
       camera.render();
       view.fillRules();
     },
+    // Unset VITE_BOARD_SERVER_URL: no client exists, no request is made.
+    boardServer: BOARD_SERVER_URL ? createBoardServerClient({ baseUrl: BOARD_SERVER_URL }) : undefined,
   });
 
   // The view reports selection changes; Place paint follows once painting is wired.

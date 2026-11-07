@@ -27,11 +27,20 @@ import {
   getBoard,
   getPixelWithBlock,
   isContractConfigured,
+  readBoardVersion,
 } from "../../contract";
+import type { BoardServerClient, ServerBoardExpanded, ServerDraw } from "../../board-server/client";
 import { validateContractMetadata, type ContractMetaIssue } from "../../contract-meta";
 import type { Cell } from "../../selection";
 import type { SponsorshipStatus } from "../../sponsorship";
 import type { WallScope } from "./wall-scope";
+
+/** While the board server is live, one `get_board_version` read a minute checks it. */
+export const SERVER_TRUST_CHECK_MS = 60_000;
+/** The server may trail the chain by this many blocks (about a minute) before the page polls again. */
+export const SERVER_MAX_LAG_BLOCKS = 60;
+/** The version moved and the server said nothing for this long: suspect it missed a write. */
+export const SERVER_SILENCE_MS = 60_000;
 
 export type BoardLoadReason = "manual" | "poll" | "visible" | "reconnect" | "after_draw" | "resume";
 
@@ -78,6 +87,12 @@ export interface BoardControllerDeps {
   onPaletteChanged(paletteLength: number): void;
   /** The contract reported a different board size; refit and redraw at the new size. */
   onBoardSizeChanged(): void;
+  /**
+   * The board server (`VITE_BOARD_SERVER_URL`). Absent: today's chain polling, unchanged.
+   * Present: the wall loads from it and takes live draws over its WebSocket; while that
+   * socket is open and the server keeps up, the 4 s poll and `get_pixels` walks stop.
+   */
+  boardServer?: BoardServerClient;
 }
 
 export interface BoardController {
@@ -95,6 +110,8 @@ export interface BoardController {
   scheduleBoardPoll(): void;
   clearBoardPoll(): void;
   revalidateContractMeta(): Promise<boolean>;
+  /** True while board state comes from the server's socket and chain polling is off. */
+  serverLive(): boolean;
   dispose(): void;
 }
 
@@ -134,6 +151,21 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
   let lastActivityMs = Date.now();
   let idlePaused = false;
 
+  // Board server state. All of it stays at its initial value without `deps.boardServer`.
+  const server = deps.boardServer ?? null;
+  let socketOpen = false;
+  /** The last trust check passed: `/api/health` answered and the server keeps up with the chain. */
+  let serverHealthy = false;
+  /** The chain's version moved and the server never sent the write. Cleared by a fresh socket. */
+  let serverDistrusted = false;
+  let live = false;
+  let trustTimer: ReturnType<typeof setTimeout> | null = null;
+  let trustInFlight = false;
+  let lastServerMessageMs = 0;
+  let lastTrustVersion: number | null = null;
+  /** When an unexplained version change was first seen; a server message clears it. */
+  let suspectSinceMs: number | null = null;
+
   for (const type of ACTIVITY_EVENTS) {
     scope.listen(window, type, noteActivity, { passive: true });
   }
@@ -141,6 +173,8 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
   /** Someone is here. If polling had stopped for idleness, catch up now and resume. */
   function noteActivity(): void {
     lastActivityMs = Date.now();
+    // The trust check skips an idle tab; the first input after that restarts it.
+    if (socketOpen && trustTimer === null && !trustInFlight && !scope.isDisposed()) scheduleTrustCheck();
     if (!idlePaused || scope.isDisposed()) return;
     idlePaused = false;
     showBoardFreshness();
@@ -298,8 +332,11 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
         `Every square is stored on the NEAR ${PAGE_NETWORK} contract ${CONTRACT_ID}. ` +
         `Painting a square replaces the colour that was there, and the contract ` +
         `records which account painted it and when.`;
-      await refreshBoardFromContract();
+      // With a server, its blob is the first load; the chain walk runs only if that fails.
+      const fromServer = server ? await loadFromServer() : false;
+      if (!fromServer) await refreshBoardFromContract();
       deps.applyRoutePaintingContext();
+      if (server) startServer();
     } catch (error) {
       contractMetaOk = false;
       const detail = error instanceof Error ? error.message : "Unknown read error";
@@ -326,6 +363,9 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     if (scope.isDisposed() || !isContractConfigured() || boardLoadInFlight) {
       return;
     }
+    // While the server is live its socket keeps the copy current. Only Refresh (the
+    // visitor not trusting the copy) still walks the chain.
+    if (live && (options?.reason ?? "manual") !== "manual") return;
     const loadId = beginBoardLoad(boardSync);
     boardLoadInFlight = true;
     refreshButton.disabled = true;
@@ -412,6 +452,11 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
 
   function scheduleBoardPoll(): void {
     clearBoardPoll();
+    // With a socket open the once-a-minute trust check runs, live or not: it is also
+    // what notices the server has caught up again.
+    if (socketOpen && trustTimer === null && !trustInFlight) scheduleTrustCheck();
+    // While live the socket replaces the poll.
+    if (live) return;
     if (
       scope.isDisposed() ||
       !isContractConfigured() ||
@@ -427,6 +472,182 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     pollTimer = setTimeout(() => {
       void runBoardPoll();
     }, delay);
+  }
+
+  /**
+   * First load from the server: cached blob, `last_updated`, and the blob only if newer.
+   * Refused without per-tile `written_at_ns`: tile ages feed the repaint estimate on a
+   * money screen, so a copy without them is not good enough and the chain walk runs.
+   */
+  async function loadFromServer(): Promise<boolean> {
+    if (!server) return false;
+    const loadId = beginBoardLoad(boardSync);
+    try {
+      boardLoadStatus.textContent = "Board load: reading the board server…";
+      const region = await server.loadRegion();
+      if (scope.isDisposed() || !region.hasWrittenAt) return false;
+      const block = region.lastBlock ?? 0;
+      if (!shouldApplyBoardLoad(boardSync, loadId, block)) return false;
+      replaceCacheAtBlock(pixelCache, region.pixels, block);
+      // Not a chain-verified copy: a fallback poll must walk the chain, not trust a version.
+      cachedVersion = null;
+      deps.reconcilePending(region.pixels);
+      markBoardLoadApplied(boardSync, loadId, block, Date.now());
+      showBoardFreshness();
+      deps.render();
+      deps.onBoardUpdated();
+      deps.showSelection();
+      boardLoadStatus.textContent = `Board load: ${region.pixels.length} painted cell${
+        region.pixels.length === 1 ? "" : "s"
+      } from the board server${region.fromCache ? " (cached copy, still current)" : ""}, last write at block ${block}.`;
+      return true;
+    } catch {
+      return false;
+    } finally {
+      deps.updateCompactStatus();
+    }
+  }
+
+  function startServer(): void {
+    if (!server || scope.isDisposed()) return;
+    server.connect({
+      onOpen() {
+        if (scope.isDisposed()) return;
+        socketOpen = true;
+        serverDistrusted = false;
+        suspectSinceMs = null;
+        lastTrustVersion = null;
+        lastServerMessageMs = Date.now();
+        // Live only once a trust check says the server keeps up.
+        void runTrustCheck();
+      },
+      onClose() {
+        if (scope.isDisposed()) return;
+        socketOpen = false;
+        serverHealthy = false;
+        clearTrustCheck();
+        updateLive();
+      },
+      onDraw: applyServerDraw,
+      onExpanded: applyServerExpanded,
+    });
+  }
+
+  function applyServerDraw(draw: ServerDraw): void {
+    if (scope.isDisposed()) return;
+    lastServerMessageMs = Date.now();
+    suspectSinceMs = null;
+    const pixels: PixelView[] = draw.pixels.map((p) => ({
+      x: p.x,
+      y: p.y,
+      colorIndex: p.colorIndex,
+      artistAccountId: p.artistAccountId,
+      lastWriteTimestampNs: p.lastWriteTimestampNs,
+    }));
+    // Entries in applied order; a repeated tile ends with its last entry, as on chain.
+    for (const pixel of pixels) rememberPixelAtBlock(pixelCache, pixel, draw.blockHeight);
+    deps.reconcilePending(pixels);
+    boardSync.lastAppliedAtMs = Date.now();
+    showBoardFreshness();
+    deps.render();
+    deps.onBoardUpdated();
+    deps.showSelection();
+  }
+
+  function applyServerExpanded(event: ServerBoardExpanded): void {
+    if (scope.isDisposed()) return;
+    lastServerMessageMs = Date.now();
+    suspectSinceMs = null;
+    if (setBoardSide(event.to)) deps.onBoardSizeChanged();
+    deps.render();
+  }
+
+  function updateLive(): void {
+    const next = socketOpen && serverHealthy && !serverDistrusted && !scope.isDisposed();
+    if (next === live) return;
+    live = next;
+    if (live) {
+      clearBoardPoll();
+      boardLoadStatus.textContent = "Board load: live from the board server. Chain polling paused; one check a minute.";
+      return;
+    }
+    // Back to today's path. The version check decides whether the copy needs a walk:
+    // a copy loaded from the server has no chain version, so it always gets one.
+    boardLoadStatus.textContent = "Board load: board server unavailable or behind; polling the chain.";
+    void refreshBoardFromContract({ reason: "reconnect" });
+    scheduleBoardPoll();
+  }
+
+  function clearTrustCheck(): void {
+    if (trustTimer !== null) {
+      clearTimeout(trustTimer);
+      trustTimer = null;
+    }
+  }
+
+  function scheduleTrustCheck(): void {
+    clearTrustCheck();
+    if (!server || !socketOpen || scope.isDisposed()) return;
+    trustTimer = setTimeout(() => {
+      trustTimer = null;
+      void runTrustCheck();
+    }, SERVER_TRUST_CHECK_MS);
+  }
+
+  /**
+   * One chain read (`get_board_version`, with its block) and one `/api/health`.
+   * Falls back to polling when the server trails the chain by more than
+   * SERVER_MAX_LAG_BLOCKS, when health fails, or when the version moved and the server
+   * sent nothing about it for a whole check interval.
+   */
+  async function runTrustCheck(): Promise<void> {
+    if (!server || !socketOpen || scope.isDisposed() || trustInFlight) return;
+    clearTrustCheck();
+    if (document.visibilityState === "hidden" || Date.now() - lastActivityMs >= BOARD_IDLE_PAUSE_MS) {
+      // Nobody is looking: no chain reads. Input or visibility restarts the check.
+      return;
+    }
+    trustInFlight = true;
+    try {
+      const [chain, health] = await Promise.all([readBoardVersion(), server.health()]);
+      if (scope.isDisposed() || !socketOpen) return;
+      // Lag is measured from the **applied** watermark, not the indexer's: the two are the same
+      // block count apart only while the consumer is working, and a dead consumer leaves
+      // `last_processed_block` climbing while the board stops. `status` is the server's own
+      // consumer liveness (`ok` / `degraded` / `stalled`).
+      const applied = health.lastAppliedBlock ?? health.lastProcessedBlock;
+      const lag = applied === null ? Infinity : chain.blockHeight - applied;
+      serverHealthy = health.status === "ok" && lag <= SERVER_MAX_LAG_BLOCKS;
+      if (chain.version !== null) {
+        if (suspectSinceMs !== null) {
+          // A whole interval since an unexplained change, and still nothing from the server.
+          serverDistrusted = true;
+        } else if (
+          lastTrustVersion !== null &&
+          chain.version !== lastTrustVersion &&
+          Date.now() - lastServerMessageMs > SERVER_SILENCE_MS
+        ) {
+          suspectSinceMs = Date.now();
+        }
+        lastTrustVersion = chain.version;
+      }
+      if (live && serverHealthy && !serverDistrusted) {
+        boardSync.lastAppliedAtMs = Date.now();
+        showBoardFreshness();
+      }
+    } catch {
+      serverHealthy = false;
+    } finally {
+      trustInFlight = false;
+    }
+    if (scope.isDisposed() || !socketOpen) return;
+    updateLive();
+    if (serverDistrusted) {
+      // A fresh socket catches up from the last message seen and earns trust again.
+      server.reconnect();
+      return;
+    }
+    scheduleTrustCheck();
   }
 
   async function runBoardPoll(): Promise<void> {
@@ -466,8 +687,11 @@ export function createBoardController(deps: BoardControllerDeps): BoardControlle
     scheduleBoardPoll,
     clearBoardPoll,
     revalidateContractMeta,
+    serverLive: () => live,
     dispose() {
       clearBoardPoll();
+      clearTrustCheck();
+      server?.close();
       loadAbort.abort();
     },
   };
