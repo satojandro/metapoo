@@ -6,8 +6,9 @@
  *
  * Read-only. Every fact comes from data the page already has: the wall's pixel
  * cache (colour, painter, write time), the pricing controller's last quote for
- * the tile, and the board's tunables. Whether a tile earns TOILET is not shown:
- * no view the page reads says whether a tile's latest paint was free.
+ * the tile, and the board's tunables. Wet and drying paint also says when it gets
+ * cheaper. Whether a tile earns TOILET is not shown: no view the page reads says
+ * whether a tile's latest paint was free.
  */
 
 import { paletteColor } from "@shared/palette.ts";
@@ -72,6 +73,8 @@ export interface InspectorModel {
   ago: string | null;
   wetness: Wetness | null;
   cost: string;
+  /** "1 credit in 42 min": when wet or drying paint gets cheaper to cover. Null otherwise. */
+  cheaper: string | null;
   link: string;
 }
 
@@ -80,7 +83,7 @@ const credits = (n: number) => `${n} credit${n === 1 ? "" : "s"}`;
 export function inspectorModel(input: InspectorInput): InspectorModel {
   const { cell, pixel, viewer, now, tunables, free, knownCost, network, pageUrl } = input;
   if (input.loaded === false && !(pixel && pixel.colorIndex !== null)) {
-    return { loading: true, colour: null, painter: null, ago: null, wetness: null, cost: "", link: tileLink(pageUrl, cell) };
+    return { loading: true, colour: null, painter: null, ago: null, wetness: null, cost: "", cheaper: null, link: tileLink(pageUrl, cell) };
   }
   const painted = !!pixel && pixel.colorIndex !== null;
   const swatch = painted ? paletteColor(pixel!.colorIndex!) : null;
@@ -98,6 +101,9 @@ export function inspectorModel(input: InspectorInput): InspectorModel {
     cost = "Price unavailable";
   }
 
+  const isFree = knownCost === 0 || (!painted && blankIsFree(free));
+  const cheaper = painted && !isFree && tunables && age !== null ? cheaperIn(age, tunables) : null;
+
   return {
     loading: false,
     colour: swatch ? { name: swatch.name, hex: swatch.hex } : null,
@@ -105,8 +111,32 @@ export function inspectorModel(input: InspectorInput): InspectorModel {
     ago: age === null ? null : formatAgo(age),
     wetness: painted ? wetnessOf(pixel!.lastWriteTimestampNs, now, tunables) : null,
     cost,
+    cheaper,
     link: tileLink(pageUrl, cell),
   };
+}
+
+/** The next, lower price and how long until it applies, from the board's own windows. */
+export function cheaperIn(ageNs: bigint, tunables: ViewTunables): string | null {
+  const young = BigInt(tunables.repaint_young_ns);
+  const mid = BigInt(tunables.repaint_mid_ns);
+  let leftNs: bigint;
+  let next: number;
+  let current: number;
+  if (ageNs < young) {
+    leftNs = young - ageNs;
+    next = tunables.repaint_mid_credits;
+    current = tunables.repaint_young_credits;
+  } else if (ageNs < mid) {
+    leftNs = mid - ageNs;
+    next = tunables.repaint_base_credits;
+    current = tunables.repaint_mid_credits;
+  } else {
+    return null;
+  }
+  if (next >= current) return null;
+  const minutes = Math.max(1, Math.ceil(Number(leftNs) / 60_000_000_000));
+  return `${credits(next)} in ${minutes} min`;
 }
 
 /* ---------- DOM ---------- */
@@ -244,6 +274,7 @@ export function createTileInspector(deps: TileInspectorDeps): TileInspector {
     }
 
     list.append(row("Cover it for", el("span", "tile-cost", model.cost)));
+    if (model.cheaper) list.append(row("Cheaper", el("span", "tile-cheaper", model.cheaper)));
 
     const actions = el("div", "tile-actions");
     const paintOver = el("button", "mp-btn mp-btn-primary tile-paint-over", model.colour ? "Paint over this" : "Paint this tile");

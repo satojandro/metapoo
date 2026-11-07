@@ -285,6 +285,7 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       repaintChrome.legend.textContent = "";
       repaintChrome.badge.textContent = "";
       repaintChrome.strokeTotal.textContent = "";
+      repaintChrome.onQuote?.(null);
       creditsDock.hidden = true;
       buyCreditsSheet.setVisible(false);
       deps.syncSubmitEnabled();

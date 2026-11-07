@@ -980,14 +980,6 @@
    the same ranking, so the card steps aside while that view is on. */
 .wall-page .wall-holders[hidden] { display: none; }
 .wall-page:has(.wall-legend:not([hidden]) .wall-turf-list) .wall-holders { display: none; }
-.wall-page .wall-holder-day {
-  min-width: 4.5ch;
-  color: var(--mp-stake);
-  font: 600 var(--mp-text-sm) var(--mp-mono);
-  text-align: right;
-  white-space: nowrap;
-}
-.wall-page .wall-turf-list li[data-you="true"] .wall-holder-day { color: var(--mp-tag); }
 
 /* An empty Tile card is a placeholder: it appears when you point at or choose a
    tile. The invite says how to ask about one. */
@@ -1033,3 +1025,33 @@
   .wall-page > .wall-story { margin: var(--mp-space-6) 0 0; padding-bottom: var(--mp-space-4); }
   .wall-page .wall-rules { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ——— Right now: the latest strokes (journey phase 2) ——— */
+.wall-page .wall-recent[hidden] { display: none; }
+.wall-page .wall-recent-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--mp-line); }
+.wall-page .wall-recent-item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--mp-space-2);
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 0;
+  border: 0;
+  border-bottom: 1px solid var(--mp-line);
+  background: none;
+  color: var(--mp-soft);
+  font: var(--mp-text-md)/1.35 var(--mp-font);
+  text-align: left;
+  cursor: pointer;
+}
+.wall-page .wall-recent-item:hover { color: var(--mp-fg); }
+.wall-page .wall-recent-item:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
+.wall-page .wall-recent-item i { width: 14px; height: 14px; border-radius: var(--mp-radius-sm); box-shadow: inset 0 0 0 1px var(--mp-line); }
+.wall-page .wall-recent-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wall-page .wall-recent-what b { color: var(--mp-fg); font-weight: 700; }
+.wall-page .wall-recent-item time { color: var(--mp-muted); font: 600 var(--mp-text-sm) var(--mp-mono); white-space: nowrap; }
+
+/* The paint footer: what the stroke's credit-paid tiles can earn. */
+.wall-page .wall-panel .stroke-earn { margin: 0; color: var(--mp-good); font-size: var(--mp-text-sm); line-height: 1.4; }
+.wall-page .wall-panel .stroke-earn[hidden] { display: none; }

@@ -106,6 +106,7 @@ export function mountWall(
     badge: el("#cell-price"),
     strokeTotal: el("#stroke-total"),
     submit: drawButton,
+    onQuote: (paidCells) => story?.onQuote(paidCells),
   };
   const drawState = el("#draw-state");
   const result = el("#result");
@@ -409,7 +410,9 @@ export function mountWall(
     scope,
     invite: el<HTMLElement>(".wall-invite"),
     holders: el<HTMLElement>(".wall-holders"),
+    recent: el<HTMLElement>(".wall-recent"),
     rules: el<HTMLElement>("[data-wall-rules]"),
+    strokeEarn: el<HTMLElement>("#stroke-earn"),
     pixels: () => board.paintedPixels(),
     stats: () =>
       board.syncState().lastAppliedAtMs === null
@@ -419,6 +422,7 @@ export function mountWall(
     tunables: () => views?.tunables() ?? null,
     colorOf: (account, you) => views?.colorOf(account, you) ?? "",
     readEmission: () => viewFunction("get_toilet_emission"),
+    flyTo: (cell) => flyTo(cell),
   });
 
   // The drawing-key opt-in ("Also allow painting without a popup each time") is
@@ -488,14 +492,19 @@ export function mountWall(
   camera.render();
   view.showSelection();
 
-  // `#tile-x-y` opens the wall on that tile, in Look mode.
-  function focusTileFromHash(): void {
-    const cell = parseTileHash(window.location.hash);
-    if (!cell || scope.isDisposed()) return;
+  // Select a tile and zoom the wall to it: the `#tile-x-y` link and the Right now feed.
+  function flyTo(cell: Cell): void {
+    if (scope.isDisposed()) return;
     view.select(cell);
     camera.applyCamera(paintZoomCamera(camera.readViewportSize(), cell, PAINT_CELL_PX));
     camera.render();
     view.showSelection();
+  }
+
+  // `#tile-x-y` opens the wall on that tile, in Look mode.
+  function focusTileFromHash(): void {
+    const cell = parseTileHash(window.location.hash);
+    if (cell) flyTo(cell);
   }
   focusTileFromHash();
   scope.listen(window, "hashchange", focusTileFromHash);

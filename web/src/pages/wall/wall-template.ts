@@ -146,6 +146,13 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
               <div id="tile-inspector" class="tile-inspector" hidden></div>
             </section>
 
+            <!-- Look mode: the latest strokes, from the wall's own paint times. -->
+            <section class="wall-card wall-recent" data-wall-card="look" aria-labelledby="wall-recent-heading" hidden>
+              <p id="wall-recent-heading" class="mp-eyebrow">Right now</p>
+              <ol class="wall-recent-list" data-wall-recent></ol>
+              <p class="wall-legend-note">Latest paint on each tile. Tap one to see it on the wall.</p>
+            </section>
+
             <!-- Look mode: the Turf ranking, always in view, with what each holder earns. -->
             <section class="wall-card wall-holders" data-wall-card="look" aria-labelledby="wall-holders-heading" hidden>
               <p id="wall-holders-heading" class="mp-eyebrow">Who holds the wall</p>
@@ -166,6 +173,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                   <p id="repaint-legend" class="repaint-legend visually-hidden" hidden></p>
                   <p id="cell-price" class="cell-price visually-hidden" role="status" aria-live="polite"></p>
                   <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
+                  <p id="stroke-earn" class="stroke-earn" hidden></p>
                 </div>
                 <div id="credits-dock" class="credits-dock" hidden>
                   <p id="credits-balance" class="credits-balance" role="status" aria-live="polite">Credits: …</p>

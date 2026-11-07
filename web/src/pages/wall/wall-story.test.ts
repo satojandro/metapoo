@@ -13,7 +13,9 @@ import {
   happyHourLine,
   holderRows,
   perTileDayFrom,
+  recentStrokes,
   ruleCards,
+  strokeEarnLine,
 } from "./wall-story";
 import type { ViewTunables } from "./wall-views";
 
@@ -42,13 +44,13 @@ const tunables: ViewTunables & Record<string, unknown> = {
   happy_hour_cap_per_account: 100,
 };
 
-function px(x: number, artist: string | null): PixelView {
+function px(x: number, artist: string | null, atMin = 0, y = 0): PixelView {
   return {
     x,
-    y: 0,
+    y,
     colorIndex: artist ? 3 : null,
     artistAccountId: artist,
-    lastWriteTimestampNs: artist ? "1" : null,
+    lastWriteTimestampNs: artist ? (BigInt(atMin) * MIN + 1n).toString() : null,
   };
 }
 
@@ -71,9 +73,11 @@ describe("formatToilet", () => {
 });
 
 describe("the earning line", () => {
-  it("states the board's own rate", () => {
+  it("states the board's own rate, and that only credit-paid paint earns", () => {
     expect(perTileDayFrom(EMISSION)).toBe(PER_DAY);
-    expect(earnLine(PER_DAY)).toBe("Every tile you hold earns 86.4 TOILET a day until someone paints over it.");
+    expect(earnLine(PER_DAY)).toBe(
+      "Every tile you paint with credits earns 86.4 TOILET a day until someone paints over it. Free tiles earn nothing.",
+    );
   });
 
   it("says nothing when emission is off, malformed or unread", () => {
@@ -81,6 +85,13 @@ describe("the earning line", () => {
     expect(perTileDayFrom({ per_cell_second: 5 })).toBeNull();
     expect(perTileDayFrom(undefined)).toBeNull();
     expect(earnLine(null)).toBeNull();
+  });
+
+  it("a stroke's earnings count its credit-paid tiles only, as an upper bound", () => {
+    expect(strokeEarnLine(12, PER_DAY)).toBe("Earns up to 1,037 TOILET a day while they survive");
+    expect(strokeEarnLine(1, PER_DAY)).toBe("Earns up to 86.4 TOILET a day while it survives");
+    expect(strokeEarnLine(0, PER_DAY)).toBeNull();
+    expect(strokeEarnLine(5, null)).toBeNull();
   });
 });
 
@@ -106,17 +117,44 @@ describe("happy hour", () => {
 describe("who holds the wall", () => {
   const pixels = [px(0, "b.near"), px(1, "b.near"), px(2, "a.near"), px(3, "me.near"), px(4, null)];
 
-  it("ranks holders with their TOILET a day, the viewer marked", () => {
-    const rows = holderRows(pixels, "me.near", PER_DAY);
-    expect(rows.map((r) => [r.account, r.tiles, r.perDay, r.you])).toEqual([
-      ["b.near", 2, "173", false],
-      ["a.near", 1, "86.4", false],
-      ["me.near", 1, "86.4", true],
+  it("ranks holders by tiles, the viewer marked, with no TOILET figure", () => {
+    const rows = holderRows(pixels, "me.near");
+    expect(rows.map((r) => [r.account, r.tiles, r.you])).toEqual([
+      ["b.near", 2, false],
+      ["a.near", 1, false],
+      ["me.near", 1, true],
     ]);
+    expect(rows.some((r) => "perDay" in r)).toBe(false);
+  });
+});
+
+describe("right now", () => {
+  it("groups each painter's paint into strokes, newest first", () => {
+    const pixels = [
+      // b.near: one stroke of three tiles at minutes 100–102.
+      px(10, "b.near", 100), px(11, "b.near", 101), px(12, "b.near", 102),
+      // a.near painted in between, and once long before.
+      px(20, "a.near", 101), px(21, "a.near", 30),
+      // b.near again, much earlier: a separate stroke.
+      px(30, "b.near", 10),
+      px(40, null),
+    ];
+    const strokes = recentStrokes(pixels);
+    expect(strokes.map((s) => [s.artist, s.tiles])).toEqual([
+      ["b.near", 3],
+      ["a.near", 1],
+      ["a.near", 1],
+      ["b.near", 1],
+    ]);
+    expect(strokes[0]!.atNs).toBe(102n * MIN + 1n);
+    // The tile nearest the stroke's middle, so the wall opens on the stroke.
+    expect(strokes[0]!.cell).toEqual({ x: 11, y: 0 });
   });
 
-  it("leaves earnings out while the rate is unknown", () => {
-    expect(holderRows(pixels, null, null).every((r) => r.perDay === null)).toBe(true);
+  it("keeps to the limit and ignores blank tiles", () => {
+    const pixels = Array.from({ length: 10 }, (_, i) => px(i, `p${i}.near`, i * 10));
+    expect(recentStrokes(pixels, 3).map((s) => s.artist)).toEqual(["p9.near", "p8.near", "p7.near"]);
+    expect(recentStrokes([px(0, null)])).toEqual([]);
   });
 });
 
@@ -146,13 +184,19 @@ describe("the story on the page", () => {
         <p data-wall-happy hidden></p>
       </section>
       <section class="wall-holders" hidden><ol data-wall-holders></ol><p data-wall-holders-note></p></section>
-      <div data-wall-rules></div>`;
+      <section class="wall-recent" hidden><ol data-wall-recent></ol></section>
+      <div data-wall-rules></div>
+      <p id="stroke-earn" hidden></p>`;
     const pixels = opts.pixels ?? [px(0, "b.near"), px(1, "b.near"), px(2, "a.near")];
     const loaded = opts.loaded ?? true;
+    const flown: Array<{ x: number; y: number }> = [];
     const story = createWallStory({
       scope: createWallScope(),
       invite: document.querySelector<HTMLElement>(".wall-invite")!,
       holders: document.querySelector<HTMLElement>(".wall-holders")!,
+      recent: document.querySelector<HTMLElement>(".wall-recent")!,
+      strokeEarn: document.querySelector<HTMLElement>("#stroke-earn")!,
+      flyTo: (cell) => flown.push(cell),
       rules: document.querySelector<HTMLElement>("[data-wall-rules]")!,
       pixels: () => pixels,
       stats: () => (loaded ? wallStats(pixels, 0n, tunables) : null),
@@ -162,7 +206,7 @@ describe("the story on the page", () => {
       readEmission: opts.emission,
       now: () => SATURDAY_NOON,
     });
-    return { story, q: <T extends HTMLElement>(s: string) => document.querySelector<T>(s)! };
+    return { story, flown, q: <T extends HTMLElement>(s: string) => document.querySelector<T>(s)! };
   }
 
   it("fills the meter, the earning line, the holders and the rules from live reads", async () => {
@@ -173,11 +217,13 @@ describe("the story on the page", () => {
     expect(meter.hidden).toBe(false);
     expect(meter.getAttribute("aria-label")).toBe(`3 of ${wallTiles().toLocaleString("en-US")} tiles painted`);
     expect(q("[data-wall-earn]").hidden).toBe(false);
-    expect(q("[data-wall-earn]").textContent).toBe("Every tile you hold earns 86.4 TOILET a day until someone paints over it.");
+    expect(q("[data-wall-earn]").textContent).toBe(
+      "Every tile you paint with credits earns 86.4 TOILET a day until someone paints over it. Free tiles earn nothing.",
+    );
     expect(q("[data-wall-earn] b").textContent).toBe("86.4 TOILET a day");
     expect(q("[data-wall-happy]").textContent).toBe("Happy hour starts once the wall is full.");
     expect(q(".wall-holders").hidden).toBe(false);
-    expect(q("[data-wall-holders]").textContent).toBe("1b.near2 tiles173/day2a.near1 tile86.4/day");
+    expect(q("[data-wall-holders]").textContent).toBe("1b.near2 tiles2a.near1 tile");
     expect(document.querySelectorAll(".wall-rule a").length).toBe(3);
   });
 
@@ -186,13 +232,40 @@ describe("the story on the page", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(q("[data-wall-earn]").hidden).toBe(true);
-    expect(q("[data-wall-holders]").textContent).toBe("1b.near2 tiles2a.near1 tile");
     expect(q("[data-wall-holders-note]").textContent).toBe("Tiles held now. Paint over a tile and it’s yours.");
+  });
+
+  it("lists the latest strokes, and a tap shows one on the wall", () => {
+    const { q, flown } = setup({
+      emission: async () => EMISSION,
+      pixels: [px(3, "b.near", 0, 7), px(4, "b.near", 0, 7)],
+    });
+    expect(q(".wall-recent").hidden).toBe(false);
+    const item = q<HTMLButtonElement>(".wall-recent-item");
+    expect(item.textContent).toContain("b.near painted 2 tiles");
+    item.click();
+    expect(flown).toEqual([{ x: 3, y: 7 }]);
+  });
+
+  it("the paint footer's earnings line follows the quote and the rate", async () => {
+    const { story, q } = setup({ emission: async () => EMISSION });
+    await Promise.resolve();
+    await Promise.resolve();
+    const line = q("#stroke-earn");
+    expect(line.hidden).toBe(true);
+    story.onQuote(3);
+    expect(line.hidden).toBe(false);
+    expect(line.textContent).toBe("Earns up to 259 TOILET a day while they survive");
+    story.onQuote(0);
+    expect(line.hidden).toBe(true);
+    story.onQuote(null);
+    expect(line.hidden).toBe(true);
   });
 
   it("before the wall is read, shows no meter and no holders", () => {
     const { q } = setup({ emission: () => new Promise(() => undefined), loaded: false });
     expect(q("[data-wall-meter]").hidden).toBe(true);
     expect(q(".wall-holders").hidden).toBe(true);
+    expect(q(".wall-recent").hidden).toBe(true);
   });
 });

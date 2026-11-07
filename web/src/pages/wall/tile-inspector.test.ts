@@ -3,7 +3,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import type { PixelView } from "@shared/types.ts";
-import { createTileInspector, formatAgo, inspectorModel, parseTileHash, tileLink } from "./tile-inspector";
+import { cheaperIn, createTileInspector, formatAgo, inspectorModel, parseTileHash, tileLink } from "./tile-inspector";
 import { createWallScope } from "./wall-scope";
 import type { ViewTunables } from "./wall-views";
 
@@ -49,6 +49,28 @@ describe("tile hash", () => {
 
   it("builds a link that replaces any existing hash", () => {
     expect(tileLink("https://meta.poo/wall?x=1#old", { x: 5, y: 6 })).toBe("https://meta.poo/wall?x=1#tile-5-6");
+  });
+});
+
+describe("when a tile gets cheaper", () => {
+  it("wet paint: the drying price and the minutes until it applies", () => {
+    expect(inspectorModel({ ...base, pixel: painted(3) }).cheaper).toBe("2 credits in 7 min");
+    expect(cheaperIn(9n * MIN + 30_000_000_000n, tunables)).toBe("2 credits in 1 min");
+  });
+
+  it("drying paint: the dry price", () => {
+    expect(inspectorModel({ ...base, pixel: painted(18) }).cheaper).toBe("1 credit in 42 min");
+  });
+
+  it("says nothing for dry, blank or free tiles, or without the board's windows", () => {
+    expect(inspectorModel({ ...base, pixel: painted(90) }).cheaper).toBeNull();
+    expect(inspectorModel({ ...base, pixel: null }).cheaper).toBeNull();
+    expect(inspectorModel({ ...base, pixel: painted(3), knownCost: 0 }).cheaper).toBeNull();
+    expect(inspectorModel({ ...base, pixel: painted(3), tunables: null }).cheaper).toBeNull();
+  });
+
+  it("says nothing when the next window costs the same", () => {
+    expect(cheaperIn(3n * MIN, { ...tunables, repaint_mid_credits: 4 })).toBeNull();
   });
 });
 
