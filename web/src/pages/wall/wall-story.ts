@@ -2,10 +2,11 @@
  * The wall's story: what the other pages explain, said once on the wall itself
  * (owner, 7 Nov: "we are hiding a lot of the design and useful info elsewhere").
  *
- * - In the invite card: how full the wall is, when happy hour is, and what a held
- *   tile earns in TOILET.
+ * - Under the wall (the pulse): how full the wall is, how much is blank and wet,
+ *   and when happy hour is.
+ * - In the invite card: what a tile painted with credits earns in TOILET.
  * - "Who holds the wall": the Turf ranking, always visible in Look mode, with each
- *   holder's TOILET per day.
+ *   holder's TOILET per day from the board's own count of their earning tiles.
  * - Below the wall: three short rule cards that lead to How it works, TOILET and
  *   Where the money goes.
  *
@@ -22,7 +23,7 @@ import {
   weekdayName,
   type HappyHourSchedule,
 } from "../../app/how-it-works";
-import { MPOO_SPLIT } from "../../app/revenue-panel";
+import { isMethodNotFound, MPOO_SPLIT } from "../../app/revenue-panel";
 import { parseEmission, perCellDay } from "../../app/toilet";
 import type { WallScope } from "./wall-scope";
 import type { WallStats } from "./wall-invite";
@@ -30,6 +31,17 @@ import { formatAgo } from "./tile-inspector";
 import { topPainters, type PainterRow, type ViewTunables } from "./wall-views";
 
 const count = (n: number) => n.toLocaleString("en-US");
+
+/**
+ * Punctuation a screen reader hears but the eye doesn't need: the visual layout
+ * separates the parts with a gap, which the accessibility tree does not see.
+ */
+function spoken(text: string): HTMLSpanElement {
+  const span = document.createElement("span");
+  span.className = "visually-hidden";
+  span.textContent = text;
+  return span;
+}
 
 /** 1e-18 units → whole TOILET as a float, for display only. */
 function toiletFloat(units: bigint): number {
@@ -95,23 +107,41 @@ export function happyHourLine(
   if (!schedule) return null;
   if (!schedule.enabled) {
     // The board turns happy hour on after the first fill; before that, say when.
-    return stats && stats.neverPainted > 0 ? "Happy hour starts once the wall is full." : null;
+    return stats && stats.neverPainted > 0 ? "Happy hour starts when the wall is full" : null;
   }
   const startMs = nextHappyHourStart(nowMs, schedule.weekday, schedule.startS, schedule.lengthS);
   if (nowMs >= startMs) {
     const left = Math.max(1, Math.ceil((startMs + schedule.lengthS * 1000 - nowMs) / 60_000));
-    return `Happy hour is on: dry tiles are free for ${left} more minute${left === 1 ? "" : "s"}.`;
+    return `Happy hour on · dry tiles free · ${left} min left`;
   }
-  return `Next happy hour: ${weekdayName(schedule.weekday)} ${utcClock(schedule.startS)}.`;
+  return `Next happy hour: ${weekdayName(schedule.weekday)} ${utcClock(schedule.startS)}`;
+}
+
+export interface HolderRow extends PainterRow {
+  /** TOILET a day from this holder's earning tiles; null while unknown. */
+  perDay: string | null;
 }
 
 /**
- * Who holds the most wall. Tiles only, no TOILET figure: a holder's free-painted
- * tiles earn nothing, and no view the page reads says which tiles those are.
+ * Who holds the most wall, and what each earns a day. The figure uses the board's
+ * `get_earning_cells` (paid tiles only: free paint holds but earns nothing), never
+ * tiles × rate. Unknown earning cells, or an unknown rate, leave the figure out.
  */
-export function holderRows(pixels: readonly PixelView[], viewer: string | null, limit = 5): PainterRow[] {
-  return topPainters(pixels, viewer, limit);
+export function holderRows(
+  pixels: readonly PixelView[],
+  viewer: string | null,
+  perTileDay: bigint | null = null,
+  earning: (account: string, tiles: number) => number | null = () => null,
+  limit = 5,
+): HolderRow[] {
+  return topPainters(pixels, viewer, limit).map((row) => {
+    const cells = perTileDay === null ? null : earning(row.account, row.tiles);
+    return { ...row, perDay: cells === null || perTileDay === null ? null : formatToilet(perTileDay * BigInt(cells)) };
+  });
 }
+
+/** How long a holder's earning-cell count is trusted while their tile count is unchanged. */
+export const EARNING_TTL_MS = 60_000;
 
 export interface RecentStroke {
   artist: string;
@@ -206,8 +236,10 @@ export function ruleCards(tunables: ViewTunables | null): RuleCard[] {
 
 export interface WallStoryDeps {
   scope: WallScope;
-  /** The invite card's meter, happy-hour and earn lines. */
+  /** The invite card: its earning line. */
   invite: HTMLElement;
+  /** The strip under the wall: fill meter, blank and wet counts, happy hour. */
+  pulse: HTMLElement;
   holders: HTMLElement;
   /** The "Right now" card: latest strokes, each a button that shows it on the wall. */
   recent: HTMLElement;
@@ -222,6 +254,8 @@ export interface WallStoryDeps {
   /** One painter's Turf colour, so this list matches the Turf view. */
   colorOf(account: string, you: boolean): string;
   readEmission(): Promise<unknown>;
+  /** `get_earning_cells` for one account. A board without the view rejects with MethodNotFound. */
+  readEarningCells(account: string): Promise<unknown>;
   /** Move the wall to a tile (the `#tile-x-y` path: select, zoom, show). */
   flyTo(cell: { x: number; y: number }): void;
   now?: () => number;
@@ -236,10 +270,13 @@ export interface WallStory {
 export function createWallStory(deps: WallStoryDeps): WallStory {
   const { scope, invite, holders, rules } = deps;
   const now = deps.now ?? Date.now;
-  const meter = invite.querySelector<HTMLElement>("[data-wall-meter]");
-  const meterFill = invite.querySelector<HTMLElement>("[data-wall-meter] i");
-  const meterLabel = invite.querySelector<HTMLElement>("[data-wall-meter-label]");
-  const happy = invite.querySelector<HTMLElement>("[data-wall-happy]");
+  const { pulse } = deps;
+  const meter = pulse.querySelector<HTMLElement>("[data-wall-meter]");
+  const meterFill = pulse.querySelector<HTMLElement>("[data-wall-meter] i");
+  const meterLabel = pulse.querySelector<HTMLElement>("[data-wall-meter-label]");
+  const blankEl = pulse.querySelector<HTMLElement>("[data-pulse-blank]");
+  const wetEl = pulse.querySelector<HTMLElement>("[data-pulse-wet]");
+  const happy = pulse.querySelector<HTMLElement>("[data-wall-happy]");
   const earn = invite.querySelector<HTMLElement>("[data-wall-earn]");
   const holderList = holders.querySelector<HTMLElement>("[data-wall-holders]");
   const holderNote = holders.querySelector<HTMLElement>("[data-wall-holders-note]");
@@ -247,6 +284,36 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
   const recentList = deps.recent.querySelector<HTMLElement>("[data-wall-recent]");
   const { strokeEarn } = deps;
   let perTileDay: bigint | null = null;
+  /** Earning cells per holder, keyed to the tile count they were read at. */
+  const earningCache = new Map<string, { tiles: number; cells: number; at: number }>();
+  const earningInFlight = new Set<string>();
+  /** The board predates `get_earning_cells`: stop asking, show tiles only. */
+  let earningUnsupported = false;
+
+  function earningFor(account: string, tiles: number): number | null {
+    const hit = earningCache.get(account);
+    const fresh = hit && hit.tiles === tiles && now() - hit.at < EARNING_TTL_MS;
+    if (!fresh && !earningUnsupported && !earningInFlight.has(account)) {
+      earningInFlight.add(account);
+      deps.readEarningCells(account).then(
+        (raw) => {
+          earningInFlight.delete(account);
+          if (scope.isDisposed()) return;
+          if (typeof raw === "number" && Number.isInteger(raw) && raw >= 0) {
+            earningCache.set(account, { tiles, cells: Math.min(raw, tiles), at: now() });
+            render();
+          }
+        },
+        (error: unknown) => {
+          earningInFlight.delete(account);
+          if (isMethodNotFound(error)) earningUnsupported = true;
+          // Any other failure: try again on a later render. Keep the last good value.
+        },
+      );
+    }
+    // A stale value is still the best estimate while a fresh read is on its way.
+    return hit ? Math.min(hit.cells, tiles) : null;
+  }
   let paidInStroke: number | null = null;
   let lastDrawn: string | null = null;
 
@@ -279,9 +346,11 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
     const raw = deps.tunables();
     const schedule = raw && typeof raw === "object" ? parseHappyHour(raw as Record<string, unknown>) : null;
     const tunables = (raw ?? null) as ViewTunables | null;
-    const rows = holderRows(deps.pixels(), deps.viewer());
+    const rows = holderRows(deps.pixels(), deps.viewer(), perTileDay, earningFor);
     const model = {
       painted: stats?.painted ?? null,
+      blank: stats?.neverPainted ?? null,
+      wet: stats?.wetNow ?? null,
       happy: happyHourLine(schedule, stats, now()),
       earn: earnLine(perTileDay),
       rows,
@@ -294,18 +363,20 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
     if (drawn === lastDrawn) return;
     lastDrawn = drawn;
 
-    if (meter && meterFill && meterLabel) {
+    // Before the first read the strip stays hidden: an unread wall is not an empty one.
+    pulse.hidden = model.painted === null;
+    if (meter && meterFill && meterLabel && model.painted !== null) {
       const total = wallTiles();
-      if (model.painted === null) {
-        meter.hidden = true;
-      } else {
-        meter.hidden = false;
+      {
         const pct = total ? (model.painted / total) * 100 : 0;
         meterFill.style.width = `${Math.min(100, pct)}%`;
         meter.setAttribute("aria-label", `${count(model.painted)} of ${count(total)} tiles painted`);
         meterLabel.textContent = `${count(model.painted)} / ${count(total)} painted · ${pct < 1 && pct > 0 ? "<1" : Math.round(pct)}%`;
       }
     }
+    if (blankEl) blankEl.textContent = model.blank === null ? "" : `${count(model.blank)} blank`;
+    // Wet needs the board's own window; unknown is left out, never shown as 0.
+    if (wetEl) wetEl.textContent = model.wet === null ? "" : `${count(model.wet)} wet`;
     setLine(happy, model.happy);
     if (earn) {
       const parts = earnParts(perTileDay);
@@ -328,29 +399,41 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
           rank.className = "wall-turf-rank";
           // Punctuation, not just CSS gap: the gap is invisible to a screen reader,
           // which otherwise reads "1misfits-validator.near261 tiles".
-          rank.textContent = `${row.rank}.`;
+          rank.append(document.createTextNode(`${row.rank}`), spoken("."));
           const sw = document.createElement("i");
           sw.style.background = deps.colorOf(row.account, row.you);
           sw.setAttribute("aria-hidden", "true");
           const name = document.createElement("span");
           name.className = "wall-turf-name";
           const nameText = row.you ? `${row.account} (you)` : row.account;
-          name.textContent = `${nameText},`;
+          name.append(document.createTextNode(nameText), spoken(","));
           const tiles = document.createElement("span");
           tiles.className = "wall-turf-tiles";
           const tilesText = `${count(row.tiles)} tile${row.tiles === 1 ? "" : "s"}`;
           tiles.textContent = tilesText;
           li.append(rank, sw, name, tiles);
-          li.setAttribute("aria-label", `${row.rank}. ${nameText}, ${tilesText}`);
+          if (row.perDay !== null) {
+            const day = document.createElement("span");
+            day.className = "wall-holder-day";
+            day.textContent = `${row.perDay}/day`;
+            day.title = `${row.perDay} TOILET a day from tiles painted with credits, at today’s rate`;
+            li.append(day);
+          }
+          li.setAttribute(
+            "aria-label",
+            `${row.rank}. ${nameText}, ${tilesText}${row.perDay !== null ? `, ${row.perDay} TOILET a day` : ""}`,
+          );
           return li;
         }),
       );
     }
     holders.hidden = stats === null;
     if (holderNote) {
-      holderNote.textContent = rows.length
-        ? "Tiles held now. Paint over a tile and it’s yours."
-        : "Nobody holds any wall yet. Be first.";
+      holderNote.textContent = !rows.length
+        ? "Nobody holds any wall yet. Be first."
+        : rows.some((r) => r.perDay !== null)
+          ? "TOILET a day from tiles painted with credits. Free tiles hold but don’t earn."
+          : "Tiles held now. Paint over a tile and it’s yours.";
     }
 
     if (recentList) {
@@ -375,7 +458,7 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
           const age = nowNsValue - BigInt(stroke.atNs);
           const ago = formatAgo(age < 0n ? 0n : age);
           // The comma is the separator a screen reader hears; the visual gap is not one.
-          when.textContent = `, ${ago}`;
+          when.append(spoken(", "), document.createTextNode(ago));
           button.append(sw, what, when);
           button.setAttribute(
             "aria-label",

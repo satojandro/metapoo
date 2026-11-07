@@ -97,6 +97,13 @@ impl Board {
         U128(self.settled_holder(&account, acc).pending)
     }
 
+    /// Cells an account holds whose latest paint was paid with credits: the cells that
+    /// earn TOILET (§B1). Always at most `get_cells_owned`; free paints are the difference.
+    /// Read-only, so a page can show what a holder earns a day (rate × this).
+    pub fn get_earning_cells(&self, account_id: AccountId) -> u32 {
+        self.holders.get(&account_id).map_or(0, |holder| holder.earning)
+    }
+
     /// Persisted reservations; a view cannot advance the accrual clock.
     pub fn get_toilet_emission(&self) -> EmissionView {
         EmissionView {
@@ -674,6 +681,7 @@ mod tests {
         board.draw(0, 0, 1, u32::MAX);
         assert_eq!(credits(&board, 1), 1000, "fixture: the paint must be a free first paint");
         assert_eq!(board.get_cells_owned(accounts(1)), 1, "ownership still counts");
+        assert_eq!(board.get_earning_cells(accounts(1)), 0, "a free paint holds but does not earn");
         context(1, 10);
         assert_eq!(board.get_pending_toilet(accounts(1)), U128(0));
         // Settling (any paint accrues) must not reserve anything either.
@@ -708,6 +716,11 @@ mod tests {
         assert_eq!(board.get_pending_toilet(accounts(3)), U128(70));
         assert_eq!(board.get_pending_toilet(accounts(2)), U128(70));
         assert_eq!((board.total_cells, board.total_earning), (2, 2));
+        // The view follows: accounts(1) lost its cell, 2 and 3 each hold one paid cell.
+        assert_eq!(board.get_earning_cells(accounts(1)), 0);
+        assert_eq!(board.get_earning_cells(accounts(2)), 1);
+        assert_eq!(board.get_earning_cells(accounts(3)), 1);
+        assert_eq!(board.get_earning_cells(accounts(4)), 0, "an account that never painted");
     }
 
     #[test]

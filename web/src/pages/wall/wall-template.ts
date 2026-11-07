@@ -72,6 +72,17 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
               <p class="wall-runtime-status" aria-label="Network"><span>${NETWORK_BADGE[network]}</span></p>
             </div>
           </div>
+
+          <!-- The pulse: how full the wall is, how much is wet, when happy hour is. -->
+          <div class="wall-pulse" data-wall-pulse aria-label="The wall right now" hidden>
+            <div class="wall-meter" role="img" data-wall-meter><i></i></div>
+            <p class="wall-pulse-line">
+              <span class="wall-pulse-fill" data-wall-meter-label></span>
+              <span class="wall-pulse-blank" data-pulse-blank></span>
+              <span class="wall-pulse-wet" data-pulse-wet></span>
+              <span class="wall-pulse-happy" data-wall-happy hidden></span>
+            </p>
+          </div>
         </section>
 
         <aside class="wall-panel" aria-label="Wall panel">
@@ -79,17 +90,8 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             <section class="wall-card wall-invite" data-wall-card="look" data-state="loading">
               <p class="mp-eyebrow">The wall</p>
               <h3>Leave your mark. <em>Cover someone else’s.</em></h3>
-              <dl class="wall-stats" aria-label="The wall right now" aria-busy="true">
-                <div><dt>Painted</dt><dd>…</dd></div>
-                <div><dt>Never painted</dt><dd>…</dd></div>
-                <div><dt>Wet now</dt><dd>…</dd></div>
-              </dl>
-              <div class="wall-meter-wrap">
-                <div class="wall-meter" role="img" data-wall-meter hidden><i></i></div>
-                <p class="wall-meter-label" data-wall-meter-label></p>
-              </div>
+              <!-- The counts, the fill meter and happy hour are in the pulse under the wall. -->
               <p class="wall-earn" data-wall-earn hidden></p>
-              <p class="wall-happy" data-wall-happy hidden></p>
               <p class="wall-invite-body">Everything here was painted by someone. Tap a tile to see who. Fresh paint costs more to cover, so new work gets a moment on the wall.</p>
               <p class="wall-invite-free" hidden></p>
             </section>
