@@ -49,6 +49,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 |---|---|
 | what is next, in what order | [`implementation/2026-11-01-work-queue.md`](implementation/2026-11-01-work-queue.md): parallel work orders, 1 Nov |
 | what is left, with proof | [`backlog.md`](backlog.md) |
+| wall journey (PR #87): what shipped, owner decisions, full-screen hybrid, handover | [`learning/2026-11-07-wall-journey.md`](learning/2026-11-07-wall-journey.md): start here for the next wall session |
 | board server: a port of Berry Fast (indexer, Valkey, region blob, WebSocket) | [`implementation/2026-11-07-board-server-berry-fast-port.md`](implementation/2026-11-07-board-server-berry-fast-port.md): draft for owner review, not built; no contract change |
 | wall page front-end: what is broken, and the plan | [`2026-11-02-wall-frontend-audit.md`](2026-11-02-wall-frontend-audit.md): audit 2 Nov, plan awaiting owner approval |
 
