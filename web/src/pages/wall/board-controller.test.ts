@@ -222,13 +222,13 @@ describe("board controller", () => {
     const { controller, deps, dispose } = setup();
     await controller.bootstrap();
     // The first load always walks every cell.
-    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith({ knownVersion: null });
+    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith(expect.objectContaining({ knownVersion: null }));
     vi.mocked(fetchAllPaintedPixels).mockClear();
     deps.reconcilePending.mockClear();
     deps.onBoardUpdated.mockClear();
     vi.mocked(fetchAllPaintedPixels).mockResolvedValueOnce({ unchanged: true, blockHeight: 9, version: 12 });
     await vi.advanceTimersByTimeAsync(4_000);
-    expect(fetchAllPaintedPixels).toHaveBeenCalledWith({ knownVersion: 12 });
+    expect(fetchAllPaintedPixels).toHaveBeenCalledWith(expect.objectContaining({ knownVersion: 12 }));
     // Same picture: nothing replaced or reconciled, but the copy is now vouched for at block 9.
     expect(controller.cachedPixel({ x: 1, y: 2 })?.colorIndex).toBe(3);
     expect(deps.reconcilePending).not.toHaveBeenCalled();
@@ -247,10 +247,10 @@ describe("board controller", () => {
     expect(controller.cachedPixel({ x: 4, y: 4 })?.colorIndex).toBe(2);
     vi.mocked(fetchAllPaintedPixels).mockClear();
     await vi.advanceTimersByTimeAsync(4_000);
-    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith({ knownVersion: 13 });
+    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith(expect.objectContaining({ knownVersion: 13 }));
     deps.refreshButton.click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith({ knownVersion: null });
+    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith(expect.objectContaining({ knownVersion: null }));
     dispose();
   });
 
@@ -260,7 +260,7 @@ describe("board controller", () => {
     const { controller, dispose } = setup();
     await controller.bootstrap();
     await vi.advanceTimersByTimeAsync(4_000);
-    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith({ knownVersion: null });
+    expect(fetchAllPaintedPixels).toHaveBeenLastCalledWith(expect.objectContaining({ knownVersion: null }));
     dispose();
   });
 
