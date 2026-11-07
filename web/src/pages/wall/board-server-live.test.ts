@@ -72,7 +72,7 @@ function stubWorld() {
     healthStatus: "ok" as "ok" | "degraded" | "stalled",
     chainCalls: [] as Rpc[],
     /** Every get_pixels call: when (fake ms since start) and the wall's status line, which names the load's reason. */
-    walks: [] as Array<{ atMs: number; status: string }>,
+    walks: [] as Array<{ atMs: number; status: string; history: string[] }>,
     serverPaths: [] as string[],
     height: () => 10_000 + Math.floor((Date.now() - start) / 1000),
     applied: () => 10_000 + Math.floor((Date.now() - start) / 1000) - (world.appliedLagBlocks ?? world.serverLagBlocks),
@@ -108,7 +108,12 @@ function stubWorld() {
     if (method === "get_board") return Response.json({ result: { result: bytes(BOARD), block_height } });
     if (method === "get_board_version") return Response.json({ result: { result: bytes(world.version), block_height } });
     if (method === "get_pixels") {
-      world.walks.push({ atMs: Date.now() - start, status: document.getElementById("status")?.textContent ?? "" });
+      world.walks.push({
+        atMs: Date.now() - start,
+        status: document.getElementById("status")?.textContent ?? "",
+        // Every status line the wall wrote before this walk: it names each transition.
+        history: statusHistory.slice(-8).map((h) => `${h.atMs - start}: ${h.text}`),
+      });
       const page = { pixels: [{ x: 1, y: 2, color: 3, artist: "a.testnet", written_at_ns: "5" }], from_index: 0, limit: 256, total: 1, next_from_index: null };
       return Response.json({ result: { result: bytes(page), block_height } });
     }
@@ -118,10 +123,27 @@ function stubWorld() {
   return { world, named };
 }
 
+/** Status lines the wall wrote, with the fake time: printed when a test sees an unexpected walk. */
+let statusHistory: Array<{ atMs: number; text: string }> = [];
+
 function mount(withServer: boolean) {
   document.body.innerHTML = `
     <p id="evidence"></p><p id="line"></p><p id="status"></p><p id="fresh"></p>
     <button id="refresh"></button><p id="sponsor"></p>`;
+  statusHistory = [];
+  const statusEl = document.getElementById("status")!;
+  let lastText = "";
+  // Record each new text the moment it is set, without a MutationObserver's async delivery.
+  const descriptor = Object.getOwnPropertyDescriptor(Node.prototype, "textContent")!;
+  Object.defineProperty(statusEl, "textContent", {
+    configurable: true,
+    get() { return lastText; },
+    set(value: string) {
+      descriptor.set!.call(this, value);
+      if (value !== lastText) statusHistory.push({ atMs: Date.now(), text: value });
+      lastText = value;
+    },
+  });
   const el = (id: string) => document.getElementById(id)!;
   const scope = mods.createWallScope();
   const sockets = fakeSockets();
