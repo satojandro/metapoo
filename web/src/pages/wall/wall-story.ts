@@ -326,17 +326,22 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
           if (row.you) li.dataset.you = "true";
           const rank = document.createElement("span");
           rank.className = "wall-turf-rank";
-          rank.textContent = `${row.rank}`;
+          // Punctuation, not just CSS gap: the gap is invisible to a screen reader,
+          // which otherwise reads "1misfits-validator.near261 tiles".
+          rank.textContent = `${row.rank}.`;
           const sw = document.createElement("i");
           sw.style.background = deps.colorOf(row.account, row.you);
           sw.setAttribute("aria-hidden", "true");
           const name = document.createElement("span");
           name.className = "wall-turf-name";
-          name.textContent = row.you ? `${row.account} (you)` : row.account;
+          const nameText = row.you ? `${row.account} (you)` : row.account;
+          name.textContent = `${nameText},`;
           const tiles = document.createElement("span");
           tiles.className = "wall-turf-tiles";
-          tiles.textContent = `${count(row.tiles)} tile${row.tiles === 1 ? "" : "s"}`;
+          const tilesText = `${count(row.tiles)} tile${row.tiles === 1 ? "" : "s"}`;
+          tiles.textContent = tilesText;
           li.append(rank, sw, name, tiles);
+          li.setAttribute("aria-label", `${row.rank}. ${nameText}, ${tilesText}`);
           return li;
         }),
       );
@@ -363,12 +368,19 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
           const what = document.createElement("span");
           what.className = "wall-recent-what";
           const who = document.createElement("b");
-          who.textContent = stroke.artist === deps.viewer() ? "You" : stroke.artist;
+          const whoText = stroke.artist === deps.viewer() ? "You" : stroke.artist;
+          who.textContent = whoText;
           what.append(who, document.createTextNode(` painted ${count(stroke.tiles)} tile${stroke.tiles === 1 ? "" : "s"}`));
           const when = document.createElement("time");
           const age = nowNsValue - BigInt(stroke.atNs);
-          when.textContent = formatAgo(age < 0n ? 0n : age);
+          const ago = formatAgo(age < 0n ? 0n : age);
+          // The comma is the separator a screen reader hears; the visual gap is not one.
+          when.textContent = `, ${ago}`;
           button.append(sw, what, when);
+          button.setAttribute(
+            "aria-label",
+            `${whoText} painted ${count(stroke.tiles)} tile${stroke.tiles === 1 ? "" : "s"}, ${ago}`,
+          );
           // Plain listener: the button is replaced on the next render and goes with it.
           button.addEventListener("click", () => deps.flyTo(stroke.cell));
           li.append(button);

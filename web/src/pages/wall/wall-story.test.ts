@@ -223,7 +223,9 @@ describe("the story on the page", () => {
     expect(q("[data-wall-earn] b").textContent).toBe("86.4 TOILET a day");
     expect(q("[data-wall-happy]").textContent).toBe("Happy hour starts once the wall is full.");
     expect(q(".wall-holders").hidden).toBe(false);
-    expect(q("[data-wall-holders]").textContent).toBe("1b.near2 tiles2a.near1 tile");
+    expect(q("[data-wall-holders]").textContent).toBe("1.b.near,2 tiles2.a.near,1 tile");
+    // A screen reader hears punctuation, not a CSS gap: the rows read as sentences.
+    expect(q("[data-wall-holders] li").getAttribute("aria-label")).toBe("1. b.near, 2 tiles");
     expect(document.querySelectorAll(".wall-rule a").length).toBe(3);
   });
 
@@ -243,6 +245,9 @@ describe("the story on the page", () => {
     expect(q(".wall-recent").hidden).toBe(false);
     const item = q<HTMLButtonElement>(".wall-recent-item");
     expect(item.textContent).toContain("b.near painted 2 tiles");
+    // Comma before the age: without it a screen reader reads "2 tiles2 h ago".
+    expect(item.textContent).toMatch(/2 tiles, (just now|.+ ago)$/);
+    expect(item.getAttribute("aria-label")).toMatch(/^b\.near painted 2 tiles, (just now|.+ ago)$/);
     item.click();
     expect(flown).toEqual([{ x: 3, y: 7 }]);
   });
