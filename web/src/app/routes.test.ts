@@ -17,6 +17,7 @@ describe("matchRoute", () => {
     expect(matchRoute("/stake").pageId).toBe("stake");
     expect(matchRoute("/how-it-works").pageId).toBe("how");
     expect(matchRoute("/how-it-works/").pageId).toBe("how");
+    expect(matchRoute("/agents").pageId).toBe("agents");
     expect(matchRoute("/nope").pageId).toBe("not-found");
   });
 

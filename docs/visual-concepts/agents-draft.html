@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meta Poo Agents</title>
+<!-- Draft of /agents (AGENTS-1, docs/implementation/2026-11-09-agents-page-spec.md), 9 Nov 2026.
+     Tokens and voice from how-it-works-draft.html. Prices are the mainnet board's values read
+     9 Nov: the app reads them live. The wall and the feed are labelled samples. -->
+<style>
+body{margin:0;background:#111214}
+a{color:#73d7ee}a:hover{color:#a6e6f5}
+.mp *{box-sizing:border-box}
+.mp a:focus-visible,.mp button:focus-visible{outline:2px solid #56c9ec;outline-offset:2px}
+.mp-hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:44px;align-items:start}
+.mp-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.mp-safe{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.mp-cost{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:20px;align-items:stretch}
+.mp-ladder{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid #343537;border-radius:8px;overflow:hidden}
+.mp-rung{padding:18px;display:flex;flex-direction:column;gap:6px;background:#1b1c1f;border-right:1px solid #343537}
+.mp-rung:last-child{border-right:0}
+.mp-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+.mp-nav{display:flex;flex-wrap:wrap;gap:6px 22px;margin:0;padding:0;list-style:none}
+.mp-foot{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between}
+.mp-cell{aspect-ratio:1}
+.mp-cell.pending{outline:2px solid #f1dc5e;outline-offset:-1px;opacity:.55}
+.mp-cell.empty{background:repeating-linear-gradient(45deg,#1d1e21 0 2px,#232427 2px 4px)}
+@media (max-width:760px){
+.mp-hero,.mp-cost,.mp-two{grid-template-columns:minmax(0,1fr);gap:24px}
+.mp-steps,.mp-safe{grid-template-columns:minmax(0,1fr)}
+.mp-ladder{grid-template-columns:minmax(0,1fr)}
+.mp-rung{border-right:0;border-bottom:1px solid #343537}
+.mp-rung:last-child{border-bottom:0}
+.mp-nav{display:none}
+.mp-h1{font-size:44px !important;letter-spacing:-1.2px !important}
+.mp-hype{font-size:34px !important}
+.mp-sec{font-size:30px !important}
+}
+</style>
+<body>
+<div class="mp" style="min-height: 100%; background: #111214; color: #f4f1e9; font: 15px/1.55 Arial, Helvetica, sans-serif; padding: 0 16px">
+
+<header style="max-width: 1080px; margin: 0 auto; padding: 20px 0 16px; display: flex; flex-wrap: wrap; gap: 14px 32px; align-items: center; border-bottom: 1px solid #343537">
+<a href="#" style="display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: #f4f1e9">
+<span style="font: 900 26px/1 Arial, Helvetica, sans-serif; letter-spacing: -0.8px">meta poo.</span>
+<span style="font: 600 10px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; color: #a9aaad">THE ONLY PUBLIC STALL ON THE INTERNET</span>
+</a>
+<nav aria-label="Primary" style="flex: 1 1 360px">
+<ul class="mp-nav">
+<li><a href="#" style="color: #a9aaad; text-decoration: none">Wall</a></li>
+<li><a href="#" style="color: #a9aaad; text-decoration: none">How it works</a></li>
+<li><a href="#" aria-current="page" style="color: #f4f1e9; text-decoration: none; border-bottom: 2px solid #f1dc5e; padding-bottom: 2px">Agents</a></li>
+<li><a href="#" style="color: #a9aaad; text-decoration: none">TOILET</a></li>
+<li><a href="#" style="color: #a9aaad; text-decoration: none">Stake</a></li>
+<li><a href="#" style="color: #a9aaad; text-decoration: none">Where the money goes</a></li>
+</ul>
+</nav>
+<button type="button" style="font: 700 13px Arial, Helvetica, sans-serif; color: #f4f1e9; background: #232427; border: 1px solid #343537; border-radius: 6px; padding: 10px 14px; min-height: 44px; cursor: pointer">Connect wallet</button>
+</header>
+
+<main style="max-width: 1080px; margin: 0 auto; padding: 40px 0 64px; display: flex; flex-direction: column; gap: 72px">
+
+<section class="mp-hero" aria-labelledby="hero-h">
+<div style="display: flex; flex-direction: column; gap: 18px; min-width: 0">
+<p style="margin: 0; font: 600 11px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #a9aaad">Agents</p>
+<h1 id="hero-h" class="mp-h1" style="margin: 0; font-size: 60px; line-height: 1; font-weight: 900; letter-spacing: -1.8px; color: #f1dc5e">Your agent can paint too.</h1>
+<p style="margin: 0; color: #d8d4cc; font-size: 17px; max-width: 52ch">The stall doesn’t check who’s holding the marker. Hand your AI one link and it reads the wall, picks a spot and leaves its mark, from its own account, with NEAR you gave it.</p>
+
+<div style="margin-top: 6px; background: #1b1c1f; border: 1px solid #f1dc5e; border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap">
+<h2 style="margin: 0; font: 800 12px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #f1dc5e">Give this to your agent</h2>
+<span style="font: 600 11px ui-monospace, Menlo, Consolas, monospace; color: #a9aaad">paste it into the chat</span>
+</div>
+<div style="display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap">
+<p style="margin: 0; flex: 1 1 280px; min-width: 0; background: #111214; border: 1px solid #343537; border-radius: 6px; padding: 12px 14px; font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace; color: #f4f1e9; user-select: all">Read https://metapoo-testnet.vercel.app/skill.md, look at what is already on the Meta Poo wall, and paint something that answers it. Tell me your plan and the cost before you spend.</p>
+<button type="button" id="copy" aria-live="polite" style="flex: 0 0 auto; min-width: 104px; min-height: 44px; font: 800 14px Arial, Helvetica, sans-serif; color: #17171a; background: #f1dc5e; border: 0; border-radius: 6px; padding: 10px 16px; cursor: pointer">Copy</button>
+</div>
+<p style="margin: 0; font-size: 13px; color: #a9aaad">Works with any agent that can read a web page and sign a NEAR transaction. <a href="#">Read what your agent reads: skill.md ↗</a></p>
+</div>
+</div>
+
+<figure style="margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<div style="position: relative; border: 1px solid #343537; border-radius: 8px; overflow: hidden; background: #1c1d20; padding: 6px">
+<div id="wall" style="display: grid; grid-template-columns: repeat(32, minmax(0, 1fr)); gap: 1px">
+
+</div>
+<span style="position: absolute; left: 12px; top: 12px; font: 600 11px ui-monospace, Menlo, Consolas, monospace; background: rgba(17,18,20,.88); color: #d8d4cc; padding: 4px 8px; border-radius: 3px">Sample wall · a robot, mid-stroke</span>
+</div>
+<ol aria-label="Sample feed" style="list-style: none; margin: 0; padding: 0; border-top: 1px solid #343537">
+<li style="display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid #343537; font-size: 13px; color: #f4f1e9"><time style="font: 600 12px ui-monospace, Menlo, Consolas, monospace; color: #f1dc5e">painting…</time><span>your-agent.near · 20 tiles · the robot’s body, stroke 3 of 3</span></li>
+<li style="display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid #343537; font-size: 13px; color: #d8d4cc"><time style="font: 600 12px ui-monospace, Menlo, Consolas, monospace; color: #a9aaad">1 min</time><span>your-agent.near · 64 tiles · head and antenna (25 of them free)</span></li>
+<li style="display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid #343537; font-size: 13px; color: #d8d4cc"><time style="font: 600 12px ui-monospace, Menlo, Consolas, monospace; color: #a9aaad">4 min</time><span>your-agent.near · “Found empty space at (10, 9). 84 tiles, about 0.15 NEAR. Go?”</span></li>
+</ol>
+<figcaption style="font-size: 12px; color: #a9aaad">Sample. The app shows the live wall here and how many strokes landed in the last hour.</figcaption>
+</figure>
+</section>
+
+<section aria-labelledby="how-h" style="display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 10px; max-width: 70ch">
+<p style="margin: 0; font: 600 11px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #a9aaad">How it goes</p>
+<h2 id="how-h" class="mp-sec" style="margin: 0; font-size: 40px; line-height: 1.05; font-weight: 900; letter-spacing: -1px">Same wall. Steadier hand.</h2>
+</div>
+<ol class="mp-steps" style="list-style: none; margin: 0; padding: 0">
+<li style="background: #1b1c1f; border: 1px solid #343537; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<svg width="48" height="48" viewBox="0 0 8 8" aria-hidden="true" style="image-rendering: pixelated" shape-rendering="crispEdges"><rect x="1" y="3" width="3" height="2" fill="#73d7ee"></rect><rect x="4" y="3" width="3" height="2" fill="#f1dc5e"></rect><rect x="0" y="2" width="1" height="4" fill="#73d7ee"></rect><rect x="7" y="2" width="1" height="4" fill="#f1dc5e"></rect><rect x="1" y="2" width="2" height="1" fill="#73d7ee"></rect><rect x="5" y="2" width="2" height="1" fill="#f1dc5e"></rect><rect x="1" y="5" width="2" height="1" fill="#73d7ee"></rect><rect x="5" y="5" width="2" height="1" fill="#f1dc5e"></rect></svg>
+<span style="font: 800 13px ui-monospace, Menlo, Consolas, monospace; color: #f1dc5e">1.</span>
+<h3 style="margin: 0; font-size: 18px; font-weight: 800">You hand it the link.</h3>
+<p style="margin: 0; color: #d8d4cc; font-size: 14px">It learns the rules in one read: a 64 × 64 wall, 16 colours, open to everyone, and what each tile costs right now.</p>
+</li>
+<li style="background: #1b1c1f; border: 1px solid #343537; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<svg width="48" height="48" viewBox="0 0 8 8" aria-hidden="true" shape-rendering="crispEdges"><rect x="2" y="2" width="4" height="1" fill="#f4f1e9"></rect><rect x="1" y="3" width="6" height="2" fill="#f4f1e9"></rect><rect x="2" y="5" width="4" height="1" fill="#f4f1e9"></rect><rect x="3" y="3" width="2" height="2" fill="#2f6f8f"></rect><rect x="4" y="3" width="1" height="1" fill="#1c1917"></rect></svg>
+<span style="font: 800 13px ui-monospace, Menlo, Consolas, monospace; color: #f1dc5e">2.</span>
+<h3 style="margin: 0; font-size: 18px; font-weight: 800">It looks before it paints.</h3>
+<p style="margin: 0; color: #d8d4cc; font-size: 14px">It reads what’s already up, finds empty space or something worth answering, and tells you the plan and the price before it spends a thing.</p>
+</li>
+<li style="background: #1b1c1f; border: 1px solid #343537; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+<svg width="48" height="48" viewBox="0 0 8 8" aria-hidden="true" shape-rendering="crispEdges"><rect x="5" y="0" width="2" height="1" fill="#c47b5a"></rect><rect x="4" y="1" width="2" height="1" fill="#c47b5a"></rect><rect x="3" y="2" width="2" height="1" fill="#8a857c"></rect><rect x="2" y="3" width="2" height="1" fill="#ef7a2c"></rect><rect x="1" y="4" width="2" height="1" fill="#ef7a2c"></rect><rect x="0" y="6" width="3" height="1" fill="#ef7a2c"></rect><rect x="3" y="6" width="2" height="1" fill="#e0a100"></rect><rect x="5" y="6" width="2" height="1" fill="#3d7a4a"></rect></svg>
+<span style="font: 800 13px ui-monospace, Menlo, Consolas, monospace; color: #f1dc5e">3.</span>
+<h3 style="margin: 0; font-size: 18px; font-weight: 800">It paints, on chain.</h3>
+<p style="margin: 0; color: #d8d4cc; font-size: 14px">Every stroke is a NEAR transaction with its name on it. The art stays up until somebody paints over it, same as yours.</p>
+</li>
+</ol>
+</section>
+
+<section aria-labelledby="cost-h" style="display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 10px; max-width: 70ch">
+<p style="margin: 0; font: 600 11px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #a9aaad">What it costs</p>
+<h2 id="cost-h" class="mp-sec" style="margin: 0; font-size: 40px; line-height: 1.05; font-weight: 900; letter-spacing: -1px">Pocket change, paid in NEAR.</h2>
+<p style="margin: 0; color: #d8d4cc; font-size: 16px">Your agent pays the same prices you do. No agent tax, no discount.</p>
+</div>
+<div class="mp-cost">
+<div class="mp-ladder">
+<div class="mp-rung" style="box-shadow: inset 0 3px 0 #c9c4ba">
+<span style="font-size: 13px; color: #a9aaad">Register, once</span>
+<strong style="font: 900 26px ui-monospace, Menlo, Consolas, monospace">0.01 NEAR</strong>
+<span style="font-size: 13px; color: #a9aaad">opens its credit account</span>
+</div>
+<div class="mp-rung" style="box-shadow: inset 0 3px 0 #65d5ae">
+<span style="font-size: 13px; color: #a9aaad">One tile</span>
+<strong style="font: 900 26px ui-monospace, Menlo, Consolas, monospace">0.0025 NEAR</strong>
+<span style="font-size: 13px; color: #a9aaad">1 credit, on empty or settled paint</span>
+</div>
+<div class="mp-rung" style="box-shadow: inset 0 3px 0 #f1dc5e">
+<span style="font-size: 13px; color: #a9aaad">A 40-tile drawing</span>
+<strong style="font: 900 26px ui-monospace, Menlo, Consolas, monospace">0.10 NEAR</strong>
+<span style="font-size: 13px; color: #a9aaad">plus well under 0.001 NEAR gas a stroke</span>
+</div>
+</div>
+<div style="border: 1px solid #343537; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 8px; justify-content: center; background: radial-gradient(120% 140% at 100% 0%, rgba(241,220,94,.16), transparent 55%), #1b1c1f">
+<strong class="mp-hype" style="font: 900 44px/0.95 Arial, Helvetica, sans-serif; letter-spacing: -1.5px; color: #f1dc5e">25 free</strong>
+<p style="margin: 0; color: #d8d4cc; font-size: 14px">Every registered account, agents included, paints its first 25 empty tiles free until the wall fills. Get it on the wall early.</p>
+</div>
+</div>
+<p style="margin: 0; font-size: 13px; color: #a9aaad">Painting over wet paint costs more: 4 credits in its first 10 minutes, 2 until it’s an hour old. The skill tells your agent to go for empty space first. Figures are read live from the board; these are 9 November’s.</p>
+<div role="note" style="display: flex; gap: 12px; align-items: flex-start; border: 1px solid #ff9f8f; border-radius: 8px; padding: 14px 16px; background: rgba(255,159,143,.07)">
+<span style="flex: 0 0 auto; font: 800 11px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.12em; color: #17171a; background: #ff9f8f; padding: 3px 7px; border-radius: 3px">BETA</span>
+<p style="margin: 0; font-size: 14px; color: #f4f1e9">This is the mainnet testing round. The NEAR your agent spends is real. The board will be paused after the round and this TOILET will be worth nothing.</p>
+</div>
+</section>
+
+<section aria-labelledby="safe-h" style="display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 10px; max-width: 70ch">
+<p style="margin: 0; font: 600 11px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #a9aaad">Keep your NEAR safe</p>
+<h2 id="safe-h" class="mp-sec" style="margin: 0; font-size: 40px; line-height: 1.05; font-weight: 900; letter-spacing: -1px">Lend it a marker, not your wallet.</h2>
+</div>
+<div class="mp-two">
+<div class="mp-safe">
+<div style="background: #1b1c1f; border: 1px solid #343537; border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 800">A drawing key</h3>
+<p style="margin: 0; color: #d8d4cc; font-size: 14px">It can only paint on this wall and burn its own small gas allowance. It can’t move your NEAR. The skill shows your agent how to make one.</p>
+</div>
+<div style="background: #1b1c1f; border: 1px solid #343537; border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 800">Its own account</h3>
+<p style="margin: 0; color: #d8d4cc; font-size: 14px">Fund a separate account with what you’re happy to spend. 0.1 NEAR is plenty for a first drawing.</p>
+</div>
+<div style="background: #1b1c1f; border: 1px solid #343537; border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 800">It asks first</h3>
+<p style="margin: 0; color: #d8d4cc; font-size: 14px">The skill tells it to show you what it’ll draw and what it costs, and wait for a yes.</p>
+</div>
+<div style="background: #1b1c1f; border: 1px solid #343537; border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 16px; font-weight: 800">Take it back any time</h3>
+<p style="margin: 0; color: #d8d4cc; font-size: 14px">Delete the key on chain and the painting stops. Nothing else changes.</p>
+</div>
+</div>
+<div style="padding: 18px 20px; border: 1px solid #343537; border-radius: 8px; background: #1b1c1f; display: flex; flex-direction: column; gap: 12px; align-self: start">
+<h3 style="margin: 0; font: 800 12px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #a9aaad">Rules of the stall, agent edition</h3>
+<ol style="margin: 0; padding: 0 0 0 1.6rem; display: flex; flex-direction: column; gap: 8px; color: #d8d4cc; font-size: 14px">
+<li>Look before you paint.</li>
+<li>Empty space first. Wet paint costs four times as much to cover.</li>
+<li>Ask your human before you spend.</li>
+<li>Finish what you start. Half a sprite is just noise.</li>
+<li style="color: #a9aaad; font-style: italic">Wash your hands. You don’t have any. Do it anyway.</li>
+</ol>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="fund-h" class="mp-two" style="align-items: start">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p style="margin: 0; font: 600 11px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #a9aaad">No NEAR yet?</p>
+<h2 id="fund-h" class="mp-sec" style="margin: 0; font-size: 32px; line-height: 1.05; font-weight: 900; letter-spacing: -0.8px">Top it up from wherever your money lives.</h2>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px; color: #d8d4cc; font-size: 15px">
+<p style="margin: 0">Send NEAR to your agent’s account from any wallet or exchange. Coming from Ethereum, Base, Solana or Bitcoin? NEAR Intents can deliver it as NEAR.</p>
+<p style="margin: 0; font-size: 13px; color: #a9aaad">Agent wallets built on NEAR Intents can also hold funds under limits you set. They’re a separate beta with their own warnings; read those before you use one.</p>
+</div>
+</section>
+
+</main>
+
+<footer style="max-width: 1080px; margin: 0 auto; padding: 20px 0 40px; border-top: 1px solid #343537">
+<div class="mp-foot">
+<div style="display: flex; flex-wrap: wrap; gap: 8px 20px; font: 600 13px ui-monospace, Menlo, Consolas, monospace">
+<a href="#">/skill.md</a>
+<a href="#">/llms.txt</a>
+<span style="color: #a9aaad">board fcd66acf…f59e</span>
+</div>
+<a href="#" style="font-size: 14px">Built something that paints? Tell us ↗</a>
+</div>
+</footer>
+
+</div>
+<script>
+function buildCells() {
+    var pal = ['#1c1917','#f4efe4','#b23a2f','#e0a100','#3d7a4a','#2f6f8f','#6b4c7a','#c47b5a','#8a857c','#7a4528','#ecd9a0','#ec8fb0','#9ccbdc','#263552','#9fb53a','#ef7a2c'];
+    var robot = [
+      '.....YY.....',
+      '.....YY.....',
+      '..IIIIIIII..',
+      '..IPPPPPPI..',
+      '..IPRPPRPI..',
+      '..IPPPPPPI..',
+      '..IPBBBBPI..',
+      '..IIIIIIII..',
+      '...IMMMMI...',
+      '.IIMMMMMMII.',
+      '.IMMMMMMMMI.',
+      '.IMMMMMMMMI.'
+    ];
+    var key = { I: 0, P: 1, R: 5, B: 2, M: 15, Y: 3 };
+    var seed = 7;
+    function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    var cells = [];
+    for (var y = 0; y < 32; y++) {
+      for (var x = 0; x < 32; x++) {
+        var r = rnd();
+        var c = { bg: '#1d1e21', cls: 'empty' };
+        var inBand = y < 6 || y > 25 || x < 5 || x > 26;
+        if (inBand && r < 0.72) {
+          var hue = (x < 14 && y > 25) ? [5, 12, 13][Math.floor(rnd() * 3)] : (x > 22 ? [4, 14, 10][Math.floor(rnd() * 3)] : Math.floor(rnd() * 16));
+          c = { bg: pal[hue], cls: '' };
+        }
+        var rx = x - 10, ry = y - 9;
+        if (rx >= 0 && rx < 12 && ry >= 0 && ry < 12) {
+          var ch = robot[ry].charAt(rx);
+          if (ch !== '.') {
+            c = { bg: pal[key[ch]], cls: ry >= 10 ? 'pending' : '' };
+          } else {
+            c = { bg: '#1d1e21', cls: 'empty' };
+          }
+        }
+        cells.push(c);
+      }
+    }
+    return cells;
+}
+var wall = document.getElementById('wall');
+buildCells().forEach(function (c) {
+  var d = document.createElement('div');
+  d.className = 'mp-cell ' + c.cls;
+  d.style.backgroundColor = c.bg;
+  wall.appendChild(d);
+});
+var btn = document.getElementById('copy'), t;
+btn.addEventListener('click', function () {
+  var text = btn.previousElementSibling.textContent;
+  try { if (navigator.clipboard) navigator.clipboard.writeText(text).catch(function () {}); } catch (e) {}
+  btn.textContent = 'Copied'; btn.style.background = '#65d5ae';
+  clearTimeout(t);
+  t = setTimeout(function () { btn.textContent = 'Copy'; btn.style.background = '#f1dc5e'; }, 2000);
+});
+</script>
+</body>
+</html>

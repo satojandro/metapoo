@@ -29,6 +29,7 @@ export type PageId =
   | "home"
   | "wall"
   | "how"
+  | "agents"
   | "money"
   | "toilet"
   | "stake"
