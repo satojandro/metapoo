@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meta Poo Onboarding</title>
+<!-- Draft of the new-player journey: Privy social login (PRIVY-1) → funding through NEAR Intents
+     (INTENTS-1) → drawing key → first paint. 9 Nov 2026. PROPOSAL, not approved.
+     Tokens and voice from how-it-works-draft.html and agents-draft.html (PR #92).
+     Specs: docs/implementation/2026-11-03-privy-near-connect-spec.md,
+            docs/implementation/2026-11-03-intents-funding-spec.md.
+     Every quote, amount, address and route is a labelled SAMPLE. Board figures (0.01 NEAR
+     registration, 0.0025 NEAR a credit, 25 free tiles, 0.25 NEAR key allowance) are the
+     mainnet values of 9 Nov; the app reads them live. -->
+<style>
+:root{--bg:#111214;--panel:#1b1c1f;--panel2:#232427;--line:#343537;--ink:#f4f1e9;--body:#d8d4cc;--mute:#a9aaad;--y:#f1dc5e;--c:#73d7ee;--g:#65d5ae;--r:#ff9f8f;--mono:ui-monospace,Menlo,Consolas,monospace}
+body{margin:0;background:var(--bg)}
+*{box-sizing:border-box}
+a{color:var(--c)}
+.mp{min-height:100%;background:var(--bg);color:var(--ink);font:15px/1.55 Arial,Helvetica,sans-serif;padding:0 16px}
+.wrap{max-width:1180px;margin:0 auto}
+.eyebrow{margin:0;font:600 11px/1.2 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+h1{margin:0;font-size:56px;line-height:1;font-weight:900;letter-spacing:-1.6px;color:var(--y)}
+.sec{margin:0;font-size:34px;line-height:1.05;font-weight:900;letter-spacing:-.9px}
+.lede{margin:0;color:var(--body);font-size:17px;max-width:64ch}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.decide{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:20px}
+.flowmap{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font:700 12px var(--mono)}
+.flowmap span{padding:6px 9px;border:1px solid var(--line);border-radius:4px;background:var(--panel2);color:var(--body)}
+.flowmap span.new{border-color:var(--y);color:var(--y)}
+.flowmap i{color:var(--mute);font-style:normal}
+.tag{display:inline-block;font:800 10px var(--mono);letter-spacing:.1em;padding:3px 6px;border-radius:3px;color:#17171a;vertical-align:middle}
+.t-built{background:var(--g)}.t-new{background:var(--y)}.t-gate{background:var(--r)}.t-dec{background:var(--c)}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:28px 22px}
+.step{display:flex;flex-direction:column;gap:12px;min-width:0}
+.stephead{display:flex;gap:10px;align-items:baseline}
+.stephead b{font:900 13px var(--mono);color:var(--y)}
+.stephead h3{margin:0;font-size:17px;font-weight:800}
+.phone{position:relative;width:100%;max-width:340px;aspect-ratio:340/640;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:#1c1d20}
+.phone canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+.phone .dim{position:absolute;inset:0;background:rgba(10,10,12,.55)}
+.topbar{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:linear-gradient(rgba(17,18,20,.95),rgba(17,18,20,.6));font:900 15px Arial;letter-spacing:-.4px}
+.topbar small{font:700 11px var(--mono);color:var(--body);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:5px 8px;letter-spacing:0}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px;max-height:88%;overflow:hidden}
+.sheet.full{top:46px;max-height:none}
+.grab{align-self:center;width:36px;height:4px;border-radius:2px;background:var(--line)}
+.sh{margin:0;font-size:20px;line-height:1.1;font-weight:900;letter-spacing:-.4px}
+.sp{margin:0;font-size:13px;color:var(--body)}
+.sm{margin:0;font-size:11.5px;color:var(--mute)}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border-radius:7px;font:800 14px Arial;border:1px solid var(--line);background:var(--panel2);color:var(--ink);padding:0 12px;width:100%}
+.btn.y{background:var(--y);color:#17171a;border:0}
+.btn.ghost{background:transparent}
+.btn[aria-disabled=true]{opacity:.45}
+.or{display:flex;align-items:center;gap:8px;font:600 10px var(--mono);color:var(--mute);letter-spacing:.12em}
+.or:before,.or:after{content:"";flex:1;height:1px;background:var(--line)}
+.field{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--mute)}
+.input{background:#111214;border:1px solid var(--line);border-radius:6px;padding:10px 11px;font:13px var(--mono);color:var(--ink);display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
+.input span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;font-size:12.5px}
+.kv dt{color:var(--mute)}.kv dd{margin:0;text-align:right;font:700 12.5px var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.big{font:900 28px var(--mono);letter-spacing:-.5px}
+.pill{display:inline-flex;align-items:center;gap:6px;font:700 11px var(--mono);padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--body)}
+.pill.ok{border-color:var(--g);color:var(--g)}.pill.warn{border-color:var(--r);color:var(--r)}.pill.y{border-color:var(--y);color:var(--y)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.prog{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;font-size:12.5px}
+.prog li{display:flex;gap:9px;align-items:center;color:var(--mute)}
+.prog li:before{content:"";flex:0 0 14px;height:14px;border-radius:50%;border:2px solid var(--line)}
+.prog li.done{color:var(--body)}.prog li.done:before{background:var(--g);border-color:var(--g)}
+.prog li.now{color:var(--ink);font-weight:700}.prog li.now:before{border-color:var(--y);box-shadow:inset 0 0 0 3px var(--panel),inset 0 0 0 7px var(--y)}
+.route{display:flex;justify-content:space-between;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:7px;font-size:13px;background:#111214}
+.route.on{border-color:var(--y)}
+.route em{font:600 11px var(--mono);color:var(--mute);font-style:normal}
+.qr{width:96px;height:96px;flex:0 0 96px;background:#f4f1e9;border-radius:6px;padding:7px}
+.qr canvas{position:static;width:100%;height:100%}
+.popup{position:absolute;left:18px;right:18px;top:70px;border-radius:12px;overflow:hidden;border:1px solid #4a4b4f;box-shadow:0 18px 50px rgba(0,0,0,.6);background:#f7f6f2;color:#1b1c1f}
+.popup .url{display:flex;gap:6px;align-items:center;padding:8px 10px;background:#e3e1db;font:11px var(--mono);color:#55565a}
+.popup .url b{color:#1a7f37}
+.popup .body{padding:16px;display:flex;flex-direction:column;gap:10px}
+.popup .btn{background:#fff;color:#1b1c1f;border-color:#cfccc4}
+.popup .btn.dark{background:#1b1c1f;color:#f4f1e9;border:0}
+.popup .sm{color:#6b6c70}
+.popup .kv dt{color:#6b6c70}
+.note{font-size:13px;color:var(--body);display:flex;flex-direction:column;gap:6px;max-width:340px}
+.note p{margin:0}
+.note .src{font:11px var(--mono);color:var(--mute)}
+.dock{position:absolute;left:10px;right:10px;bottom:10px;background:#17181a;border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.swatches i{aspect-ratio:1;border-radius:3px}
+.toast{position:absolute;left:14px;right:14px;top:56px;background:var(--panel);border:1px solid var(--g);border-radius:9px;padding:10px 12px;font-size:12.5px;display:flex;gap:9px;align-items:center}
+.banner{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--r);border-radius:8px;padding:12px 14px;background:rgba(255,159,143,.07);font-size:14px}
+.edges{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.edge{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.edge h4{margin:0;font-size:14px;font-weight:800}
+.edge .say{background:#111214;border:1px solid var(--line);border-radius:6px;padding:9px 10px;font-size:13px;color:var(--ink)}
+.edge p{margin:0;font-size:12.5px;color:var(--mute)}
+table.open{width:100%;border-collapse:collapse;font-size:14px}
+table.open td,table.open th{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top}
+table.open th{font:700 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+table.open td:first-child{font:800 13px var(--mono);color:var(--y);white-space:nowrap}
+@media (max-width:760px){h1{font-size:40px;letter-spacing:-1px}.sec{font-size:28px}.decide{grid-template-columns:minmax(0,1fr)}.phone{max-width:none}.note{max-width:none}table.open td:first-child{white-space:normal}table.open,table.open tbody,table.open tr,table.open td{display:block}table.open thead{display:none}table.open tr{border-bottom:1px solid var(--line);padding:6px 0}table.open td{border:0;padding:4px 0}table.open td:last-child{color:var(--body)}}
+</style>
+<body>
+<div class="mp">
+
+<header class="wrap" style="padding:20px 0 16px;display:flex;flex-wrap:wrap;gap:14px 32px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)">
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font:900 26px/1 Arial;letter-spacing:-.8px">meta poo.</span>
+<span style="font:600 10px/1.2 var(--mono);letter-spacing:.14em;color:var(--mute)">THE ONLY PUBLIC STALL ON THE INTERNET</span>
+</div>
+<span class="pill y"><span class="dot"></span>Draft · not approved · 9 Nov 2026</span>
+</header>
+
+<main class="wrap" style="padding:36px 0 64px;display:flex;flex-direction:column;gap:56px">
+
+<section style="display:flex;flex-direction:column;gap:16px">
+<p class="eyebrow">Onboarding mockup · PRIVY-1 + INTENTS-1</p>
+<h1>From “never heard of NEAR” to paint on the wall.</h1>
+<p class="lede">A new player signs in with Google or email, gets a NEAR account they never had to set up, tops it up from whatever chain their money is on, hands the browser a drawing key, and paints. Seven screens, one sheet, no new page.</p>
+<p class="sm" style="font-size:13px">Every quote, address, route and balance below is a <strong style="color:var(--ink)">sample</strong>. Board figures (0.01 NEAR to register, 0.0025 NEAR a tile, 25 free tiles, 0.25 NEAR key allowance) are mainnet values from 9 Nov; the app reads them live. Tags: <span class="tag t-built">BUILT</span> exists behind a flag (PR #56) · <span class="tag t-new">NEW UI</span> needs design work · <span class="tag t-gate">GATE</span> blocked on live evidence · <span class="tag t-dec">DECIDE</span> owner call.</p>
+</section>
+
+<section class="decide" aria-labelledby="where-h">
+<div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:var(--y)">
+<p class="eyebrow" style="color:var(--y)">Owner agreed 9 Nov · does Intents need a new screen?</p>
+<h2 id="where-h" class="sec" style="font-size:26px">No new route. A step in the same sheet.</h2>
+<p style="margin:0;color:var(--body);font-size:14px">“Add funds” is the third step of the sign-up sheet that slides up over the wall, the same pattern as Buy credits. The wall stays mounted, so the player’s draft and place survive a 5-minute wait for a cross-chain deposit. The same sheet opens from the wallet menu (“Add funds”) for players who are already in.</p>
+<p style="margin:0;color:var(--body);font-size:14px">A separate <code>/add-funds</code> page would break the spec’s rule that funding never unmounts the wall, and an empty account would have to bounce between pages. The one exception worth a link is <strong>/agents → “No NEAR yet?”</strong>, which opens this sheet (see open decision 3).</p>
+</div>
+<div class="card" style="display:flex;flex-direction:column;gap:12px">
+<p class="eyebrow">The order is fixed by the specs</p>
+<div class="flowmap" aria-label="Flow">
+<span>Paint</span><i>→</i><span class="new">Sign in · Privy</span><i>→</i><span>Account address</span><i>→</i><span class="new">Add funds · Intents</span><i>→</i><span>Verified balance</span><i>→</i><span class="new">Drawing key</span><i>→</i><span>Paint</span>
+</div>
+<ul style="margin:0;padding-left:1.2rem;color:var(--body);font-size:13.5px;display:flex;flex-direction:column;gap:5px">
+<li>The key is <strong>not</strong> requested at sign-in. The new account doesn’t exist on chain yet and can’t pay for AddKey.</li>
+<li>Funding never buys credits. Signing in never adds a key. Each is its own explicit tap.</li>
+<li>Players pay their own gas. No sponsor, no relayer.</li>
+<li>Existing NEAR wallets stay one tap away on the very first sheet.</li>
+</ul>
+</div>
+</section>
+
+<section aria-labelledby="flow-h" style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p class="eyebrow">The happy path · phone, 390 px</p>
+<h2 id="flow-h" class="sec">Seven screens.</h2>
+</div>
+
+<div class="board">
+
+<!-- 1 -->
+<article class="step">
+<div class="stephead"><b>1</b><h3>Tap Paint, pick a way in</h3></div>
+<div class="phone"><canvas class="wallbg"></canvas><div class="dim"></div>
+<div class="topbar">meta poo.<small>Menu</small></div>
+<div class="sheet">
+<div class="grab"></div>
+<p class="eyebrow" style="color:var(--y)">Step 1 of 3 · Sign in</p>
+<p class="sh">Grab a marker.</p>
+<p class="sp">Your first <strong style="color:var(--y)">25 empty tiles are free</strong>. You’ll need a little NEAR for network fees; we’ll help you get some.</p>
+<div class="btn"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="#f4f1e9" stroke-width="2"/><rect x="8" y="7" width="7" height="2" fill="#f4f1e9"/></svg>Continue with Google</div>
+<div class="btn">✉&nbsp; Continue with email</div>
+<div class="or">OR</div>
+<div class="btn ghost">I have a NEAR wallet</div>
+<p class="sm">Sign-in by Privy. Your account is yours: we never hold its keys or your money.</p>
+</div></div>
+<div class="note"><p><span class="tag t-new">NEW UI</span> Replaces “Connect wallet” as the first thing a non-crypto player sees. Only configured providers render: Google + email first, Apple only once its credentials and return-flow tests exist.</p><p>“I have a NEAR wallet” opens the existing NEAR Connect picker; Meteor and the rest stay selectable.</p><p class="src">privy spec §1, §3, §5.2</p></div>
+</article>
+
+<!-- 2 -->
+<article class="step">
+<div class="stephead"><b>2</b><h3>Privy popup</h3></div>
+<div class="phone"><canvas class="wallbg"></canvas><div class="dim" style="background:rgba(10,10,12,.75)"></div>
+<div class="topbar">meta poo.<small>Menu</small></div>
+<div class="popup">
+<div class="url"><b>🔒</b> metapoo.app/privy-sign.html</div>
+<div class="body">
+<strong style="font-size:18px">Sign in to Meta Poo</strong>
+<p class="sm">Enter the 6-digit code we sent to <span style="color:#1b1c1f">s•••@proton.me</span></p>
+<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
+<div class="input" style="background:#fff;border-color:#cfccc4;color:#1b1c1f;justify-content:center;padding:10px 0">4</div><div class="input" style="background:#fff;border-color:#cfccc4;color:#1b1c1f;justify-content:center;padding:10px 0">8</div><div class="input" style="background:#fff;border-color:#cfccc4;color:#1b1c1f;justify-content:center;padding:10px 0">1</div><div class="input" style="background:#fff;border-color:#1b1c1f;color:#1b1c1f;justify-content:center;padding:10px 0">_</div><div class="input" style="background:#fff;border-color:#cfccc4;justify-content:center;padding:10px 0">&nbsp;</div><div class="input" style="background:#fff;border-color:#cfccc4;justify-content:center;padding:10px 0">&nbsp;</div>
+</div>
+<div class="btn dark">Continue</div>
+<div class="btn">Cancel</div>
+<p class="sm">Network: <strong style="color:#1b1c1f">NEAR mainnet</strong></p>
+</div></div>
+<div class="sheet" style="max-height:22%"><p class="sm" style="text-align:center">Waiting for the sign-in window… <a href="#">Reopen it</a></p></div>
+</div>
+<div class="note"><p><span class="tag t-built">BUILT</span> <code>web/privy-sign.html</code> is a separate entry: it never boots the wall. It always shows the network and refuses a request with none.</p><p><span class="tag t-new">NEW UI</span> Style it light so it reads as “a different window you trust”, and give the sheet behind it a <em>Reopen</em> for blocked or closed popups.</p><p class="src">privy spec §5.2–3, §6</p></div>
+</article>
+
+<!-- 3 -->
+<article class="step">
+<div class="stephead"><b>3</b><h3>You have an account. It’s empty.</h3></div>
+<div class="phone"><canvas class="wallbg"></canvas><div class="dim"></div>
+<div class="topbar">meta poo.<small>8f3c…a91e</small></div>
+<div class="sheet">
+<div class="grab"></div>
+<p class="eyebrow" style="color:var(--y)">Step 2 of 3 · Add funds</p>
+<p class="sh">You’re in. Now it needs fuel.</p>
+<div class="input"><span>8f3c2d…7b04a91e</span><span style="font:700 11px var(--mono);color:var(--c)">Copy</span></div>
+<dl class="kv" style="margin:0"><dt>Balance</dt><dd>0 NEAR</dd><dt>Status</dt><dd style="color:var(--mute)">not on chain yet</dd><dt>Enough to start</dt><dd style="color:var(--y)">0.30 NEAR</dd></dl>
+<p class="sm">Your first deposit creates the account. Fees and your drawing key’s gas come out of it; Meta Poo doesn’t pay them for you.</p>
+<div class="btn y">Add funds from another chain</div>
+<div class="btn">I’ll send NEAR myself</div>
+</div></div>
+<div class="note"><p><span class="tag t-built">BUILT</span> Readiness reads the chain itself: an unknown account is <em>absent</em>, a timeout is <em>unavailable</em>, never “0”. Signing and painting stay off until funds are confirmed.</p><p><span class="tag t-dec">DECIDE</span> “Enough to start” = registration + key setup + play reserve (<code>VITE_ACQUISITION_PLAY_RESERVE_YOCTO</code>, unset today). 0.30 is a sample.</p><p class="src">privy spec §5.6–7 · intents spec “Quote and deposit” 1</p></div>
+</article>
+
+<!-- 4 -->
+<article class="step">
+<div class="stephead"><b>4</b><h3>Pick a source, get a quote</h3></div>
+<div class="phone"><canvas class="wallbg"></canvas><div class="dim"></div>
+<div class="topbar">meta poo.<small>8f3c…a91e</small></div>
+<div class="sheet full">
+<p class="eyebrow" style="color:var(--y)">Add funds · via NEAR Intents</p>
+<div class="route on"><span><strong>USDC</strong> on Base</span><em>sample route</em></div>
+<div class="route" style="opacity:.45"><span>ETH · SOL · BTC · USDT…</span><em>coming route by route</em></div>
+<div class="field">You send<div class="input"><span style="font-size:16px;font-weight:700">5.00</span><span style="color:var(--mute)">USDC</span></div></div>
+<div class="field">Refund to, if anything goes wrong (your Base address)<div class="input"><span>0x71C9…3b8E</span><span style="font:700 11px var(--mono);color:var(--c)">Paste</span></div></div>
+<dl class="kv" style="margin:0;padding:10px;border:1px solid var(--line);border-radius:7px"><dt>Estimated received</dt><dd style="color:var(--g)">≈ 1.92 NEAR</dd><dt>Minimum received</dt><dd>1.90 NEAR</dd><dt>Network + provider fees</dt><dd>0.06 USDC</dd><dt>To</dt><dd>8f3c…a91e</dd><dt>Usually takes</dt><dd>2–5 min</dd></dl>
+<div class="btn y">Get payment address</div>
+<p class="sm">Sending from an exchange? Use a refund address you control, not the exchange’s deposit address.</p>
+</div></div>
+<div class="note"><p><span class="tag t-built">BUILT</span> Quote fields, exact decimals, 1% slippage with no silent widening, and requote on any edit.</p><p><span class="tag t-dec">DECIDE</span> Which <strong>one</strong> source route ships first. The spec allows one, proven by evidence, then widens route by route (INTENTS-ROUTES, PR #92).</p><p class="src">intents spec “Quote and deposit” 2–5</p></div>
+</article>
+
+<!-- 5 -->
+<article class="step">
+<div class="stephead"><b>5</b><h3>Send it, from your own wallet</h3></div>
+<div class="phone"><canvas class="wallbg"></canvas><div class="dim"></div>
+<div class="topbar">meta poo.<small>8f3c…a91e</small></div>
+<div class="sheet full">
+<div style="display:flex;justify-content:space-between;align-items:center"><p class="eyebrow" style="color:var(--y)">Send exactly</p><span class="pill y"><span class="dot"></span>expires 18:42</span></div>
+<p class="big">5.00 USDC</p>
+<div style="display:flex;gap:12px;align-items:center">
+<div class="qr"><canvas id="qr"></canvas></div>
+<div style="display:flex;flex-direction:column;gap:6px;min-width:0;flex:1">
+<p class="sm">Network</p><strong style="font-size:14px">Base</strong>
+<p class="sm">QR has the address only. Type the amount yourself.</p>
+</div></div>
+<div class="field">To this address<div class="input"><span>0x4e2a9F…d01C77</span><span style="font:700 11px var(--mono);color:var(--c)">Copy</span></div></div>
+<div class="btn">Copy payment details</div>
+<ol class="prog" aria-live="polite">
+<li class="now">Waiting for your deposit</li>
+<li>Deposit seen on Base</li>
+<li>Converting to NEAR</li>
+<li>Arrived · checking on NEAR</li>
+</ol>
+<p class="sm">You can close this. The wall stays put, and we pick it up again when you come back.</p>
+</div></div>
+<div class="note"><p><span class="tag t-built">BUILT</span> The address only shows after the committed quote passes its signature and recipient checks and is saved. Polling backs off, pauses in hidden tabs and survives a reload.</p><p><span class="tag t-new">NEW UI</span> The four-step progress, the expiry pill, and “you can close this”.</p><p class="src">intents spec “Quote and deposit” 5–8 · “State, storage”</p></div>
+</article>
+
+<!-- 6 -->
+<article class="step">
+<div class="stephead"><b>6</b><h3>Funded. Now the drawing key.</h3></div>
+<div class="phone"><canvas class="wallbg"></canvas><div class="dim"></div>
+<div class="topbar">meta poo.<small>1.92 NEAR</small></div>
+<div class="sheet">
+<div class="grab"></div>
+<span class="pill ok"><span class="dot"></span>1.92 NEAR arrived · checked on chain</span>
+<p class="eyebrow" style="color:var(--y)">Step 3 of 3 · Drawing key</p>
+<p class="sh">Lend this browser a marker.</p>
+<p class="sp">So you can paint tap by tap without a popup each time.</p>
+<dl class="kv" style="margin:0;padding:10px;border:1px solid var(--line);border-radius:7px"><dt>Can</dt><dd>paint on this wall</dd><dt>Gas it can burn, at most</dt><dd>0.25 NEAR</dd><dt>Can’t</dt><dd style="color:var(--g)">move your NEAR</dd></dl>
+<div class="btn y">Set up drawing key</div>
+<p class="sm">You’ll approve it in the Privy window. You can delete it any time.</p>
+</div></div>
+<div class="note"><p><span class="tag t-built">BUILT</span> Reuses <code>connectWallet({ authorizeDrawingSession: true })</code> against the already-selected Privy wallet, with no second picker. Active only after the key is read back on chain as FunctionCall with exactly <code>draw</code>/<code>draw_many</code>.</p><p>The 0.25 NEAR is a cap, not a deposit; the balance stays the player’s.</p><p class="src">privy spec §5.8 · commit 37d36c6</p></div>
+</article>
+
+<!-- 6b -->
+<article class="step">
+<div class="stephead"><b>6b</b><h3>Approve in Privy</h3></div>
+<div class="phone"><canvas class="wallbg"></canvas><div class="dim" style="background:rgba(10,10,12,.75)"></div>
+<div class="topbar">meta poo.<small>1.92 NEAR</small></div>
+<div class="popup" style="top:96px">
+<div class="url"><b>🔒</b> metapoo.app/privy-sign.html</div>
+<div class="body">
+<strong style="font-size:18px">Authorize drawing</strong>
+<dl class="kv" style="margin:0"><dt>Account</dt><dd style="color:#1b1c1f">8f3c…a91e</dd><dt>Contract</dt><dd style="color:#1b1c1f">fcd66acf…f59e</dd><dt>Methods</dt><dd style="color:#1b1c1f">draw, draw_many</dd><dt>Gas allowance</dt><dd style="color:#1b1c1f">0.25 NEAR</dd><dt>Network</dt><dd style="color:#1b1c1f">mainnet</dd></dl>
+<p class="sm">This key can only call these two methods. It can’t transfer funds.</p>
+<div class="btn dark">Approve</div>
+<div class="btn">Cancel</div>
+</div></div>
+</div>
+<div class="note"><p><span class="tag t-built">BUILT</span> The sign page shows receiver, methods and allowance from the payload it will actually sign, never from labels, as text nodes.</p><p class="src">privy spec §6 · sign-page.ts “Authorize drawing”</p></div>
+</article>
+
+<!-- 7 -->
+<article class="step">
+<div class="stephead"><b>7</b><h3>Back on the wall, painting</h3></div>
+<div class="phone"><canvas class="wallbg" data-bright="1"></canvas>
+<div class="topbar">meta poo.<small>1.92 NEAR</small></div>
+<div class="toast"><span class="pill ok" style="padding:3px 6px"><span class="dot"></span></span><span>Drawing key is live. <strong style="color:var(--y)">25 free tiles</strong> are yours: start with empty space.</span></div>
+<div class="dock">
+<div style="display:flex;justify-content:space-between;font:700 12px var(--mono)"><span style="color:var(--y)">PAINT</span><span style="color:var(--body)">free 25 · credits 0</span></div>
+<div class="swatches"><i style="background:#1c1917"></i><i style="background:#f4efe4"></i><i style="background:#b23a2f"></i><i style="background:#e0a100;outline:2px solid #f4f1e9;outline-offset:1px"></i><i style="background:#3d7a4a"></i><i style="background:#2f6f8f"></i><i style="background:#6b4c7a"></i><i style="background:#c47b5a"></i><i style="background:#8a857c"></i><i style="background:#7a4528"></i><i style="background:#ecd9a0"></i><i style="background:#ec8fb0"></i><i style="background:#9ccbdc"></i><i style="background:#263552"></i><i style="background:#9fb53a"></i><i style="background:#ef7a2c"></i></div>
+<div style="display:flex;gap:8px"><div class="btn ghost" style="min-height:38px">Look</div><div class="btn y" style="min-height:38px">Paint</div></div>
+</div></div>
+<div class="note"><p><span class="tag t-built">BUILT</span> The wall’s existing dock and local signer. Registration (0.01 NEAR) is the existing first-paint flow. Nothing in onboarding buys credits.</p><p>The player lands back where they tapped Paint, with any draft intact.</p><p class="src">privy spec §5.9 · wall-draft.html</p></div>
+</article>
+
+</div>
+</section>
+
+<section aria-labelledby="alt-h" style="display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p class="eyebrow">Until the native-NEAR gate closes</p>
+<h2 id="alt-h" class="sec">Screen 3, honest version.</h2>
+</div>
+<div class="board" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
+<article class="step">
+<div class="phone"><canvas class="wallbg"></canvas><div class="dim"></div>
+<div class="topbar">meta poo.<small>8f3c…a91e</small></div>
+<div class="sheet">
+<div class="grab"></div>
+<p class="eyebrow" style="color:var(--y)">Step 2 of 3 · Add funds</p>
+<p class="sh">First, receive a little NEAR.</p>
+<p class="sp">A brand-new account has to be opened with NEAR itself. Send at least <strong>0.30 NEAR</strong> from any wallet or exchange to:</p>
+<div class="input"><span>8f3c2d…7b04a91e</span><span style="font:700 11px var(--mono);color:var(--c)">Copy</span></div>
+<p class="sm">Only native NEAR, on NEAR mainnet. Exchanges call this “NEAR (NEAR Protocol)”.</p>
+<div class="btn" aria-disabled="true">Add funds from another chain</div>
+<p class="sm">Cross-chain top-ups open once your account exists.</p>
+<span class="pill"><span class="dot" style="background:var(--y)"></span>Watching for your deposit…</span>
+</div></div>
+</article>
+<div class="note" style="max-width:none;align-self:center;font-size:14px">
+<p><span class="tag t-gate">GATE · INT-NATIVE</span></p>
+<p>Nobody has yet shown that a 1Click delivery to a <strong>fresh, uninitialized implicit account</strong> (exactly what a new Privy player has) arrives as native NEAR and creates the account. Until a recorded trial proves it, the spec blocks the Intents route for empty accounts and offers the direct NEAR receive address instead. This is the screen that ships first.</p>
+<p>Once the gate passes with <code>deliveryMode=native</code>, screen 3 becomes the version above, and Intents is the very first thing a social-login player sees.</p>
+<p>This is also why INTENTS-ROUTES “pairs with Privy” in PR #92: social login is only complete end to end for people without NEAR once this gate is closed.</p>
+<p class="src">intents spec “Provider facts and unresolved native-NEAR gate”, resolution 3 · backlog ACQ-4</p>
+</div>
+</div>
+</section>
+
+<section aria-labelledby="edge-h" style="display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p class="eyebrow">When it goes sideways</p>
+<h2 id="edge-h" class="sec">What the sheet says.</h2>
+</div>
+<div class="edges">
+<div class="edge"><h4>Popup blocked or closed</h4><div class="say">The sign-in window didn’t open. <u>Try again</u></div><p>Blocked and closed are separate states, and neither auto-retries. Cancelling sign-in is not a failed purchase.</p></div>
+<div class="edge"><h4>Quote expired, nothing sent</h4><div class="say">This payment address has expired. Don’t send to it. <u>Get a new quote</u></div><p>Send instructions hide at the expiry margin. The record and status check stay.</p></div>
+<div class="edge"><h4>Taking longer than usual</h4><div class="say">Still checking. Cross-chain transfers can take up to 15 minutes.</div><p>A timeout is never shown as “Failed”.</p></div>
+<div class="edge"><h4>Refund on its way</h4><div class="say">The conversion didn’t go through. Your USDC is being returned to 0x71C9…3b8E.</div><p><code>INCOMPLETE_DEPOSIT</code> and <code>FAILED</code> are never shown as “refunded” until there is evidence.</p></div>
+<div class="edge"><h4>Signed in as someone else now</h4><div class="say">This payment is for 8f3c…a91e. Switch back to that account to continue.</div><p>A deposit is never retargeted to the new account; read-only tracking continues.</p></div>
+<div class="edge"><h4>Arrived, but short</h4><div class="say">0.12 NEAR arrived. You need 0.30 NEAR to start; send 0.18 more.</div><p>Shows the real balance and the shortfall, never “ready”.</p></div>
+<div class="edge"><h4>Coming back, same browser</h4><div class="say">Welcome back. Your drawing key is still live.</div><p>Painting doesn’t need a fresh Privy sign-in; spending money does.</p></div>
+<div class="edge"><h4>New phone or browser</h4><div class="say">Same account, new browser. Set up a drawing key here to paint.</div><p>Drawing secrets are never copied between devices.</p></div>
+</div>
+</section>
+
+<section aria-labelledby="open-h" style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p class="eyebrow">For the owner</p>
+<h2 id="open-h" class="sec">Open decisions.</h2>
+<p class="lede" style="font-size:15px">None of these blocks turning the flags on for testing. Each has a default below that is safe for testnet and the first trial; testing produces the evidence to settle it.</p>
+</div>
+<table class="open">
+<thead><tr><th>#</th><th>Question</th><th>Default until testing answers it</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Sign-up sheet as the first thing behind <em>Paint</em> for disconnected players, with “I have a NEAR wallet” as the secondary choice?</td><td>Yes. Most new players won’t have a NEAR wallet; the ones who do lose one tap.</td></tr>
+<tr><td>2</td><td>Which single source route ships first?</td><td>The one we can trial cheapest on mainnet and the INT-NATIVE evidence covers. USDC on Base is only the sample here.</td></tr>
+<tr><td>3</td><td>Should <code>/agents</code> “No NEAR yet?” open this sheet to fund an <em>agent’s</em> account?</td><td>Not in v1. The spec fixes the recipient to the connected account; funding another account is a spec change. Link to the sheet for the human’s own account, and keep plain “send NEAR to your agent” text.</td></tr>
+<tr><td>4</td><td>“Enough to start” amount (play reserve)</td><td>Set <code>VITE_ACQUISITION_PLAY_RESERVE_YOCTO</code> from measured costs: account + AddKey storage, registration, and a few strokes of gas.</td></tr>
+<tr><td>5</td><td>Show “via NEAR Intents” and “Sign-in by Privy” to players?</td><td>Yes, one small line each. Players are trusting a third party with sign-in and a cross-chain transfer, so they should be able to see which one.</td></tr>
+</tbody>
+</table>
+<div class="banner"><span class="tag t-gate">ACQ-4</span><span>Nothing here is live. Privy needs public ids, a real testnet login → key → paint read-back, and hosting headers. Intents needs deployed-origin CORS and the INT-NATIVE trial. Both flags are off in the repo defaults.</span></div>
+</section>
+
+</main>
+</div>
+<script>
+(function () {
+  var pal = ['#1c1917','#f4efe4','#b23a2f','#e0a100','#3d7a4a','#2f6f8f','#6b4c7a','#c47b5a','#8a857c','#7a4528','#ecd9a0','#ec8fb0','#9ccbdc','#263552','#9fb53a','#ef7a2c'];
+  var seed = 11;
+  function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+  document.querySelectorAll('canvas.wallbg').forEach(function (cv) {
+    var W = 34, H = 64; cv.width = W; cv.height = H;
+    var g = cv.getContext('2d');
+    g.fillStyle = '#1d1e21'; g.fillRect(0, 0, W, H);
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var r = rnd();
+      var band = y < 18 || x < 6 || x > 27 || y > 44;
+      if ((band && r < 0.7) || r < 0.08) {
+        var h = x > 24 ? [4, 14, 10][Math.floor(rnd() * 3)] : (y > 44 ? [5, 12, 13][Math.floor(rnd() * 3)] : Math.floor(rnd() * 16));
+        g.fillStyle = pal[h]; g.fillRect(x, y, 1, 1);
+      }
+    }
+    if (cv.dataset.bright) {
+      var sun = ['..YY..', '.YYYY.', 'YYYYYY', 'YYYYYY', '.YYYY.', '..YY..'];
+      for (var sy = 0; sy < 6; sy++) for (var sx = 0; sx < 6; sx++) if (sun[sy][sx] === 'Y') { g.fillStyle = sy > 3 ? 'rgba(224,161,0,.55)' : '#e0a100'; g.fillRect(14 + sx, 26 + sy, 1, 1); }
+    }
+  });
+  var q = document.getElementById('qr');
+  if (q) {
+    var n = 25; q.width = n; q.height = n; var c = q.getContext('2d');
+    c.fillStyle = '#f4f1e9'; c.fillRect(0, 0, n, n); c.fillStyle = '#111214';
+    function finder(x, y) { c.fillRect(x, y, 7, 7); c.fillStyle = '#f4f1e9'; c.fillRect(x + 1, y + 1, 5, 5); c.fillStyle = '#111214'; c.fillRect(x + 2, y + 2, 3, 3); }
+    for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) if (rnd() < 0.48) c.fillRect(x, y, 1, 1);
+    c.fillStyle = '#f4f1e9'; c.fillRect(0, 0, 8, 8); c.fillRect(n - 8, 0, 8, 8); c.fillRect(0, n - 8, 8, 8); c.fillStyle = '#111214';
+    finder(0, 0); finder(n - 7, 0); finder(0, n - 7);
+  }
+})();
+</script>
+</body>
+</html>
