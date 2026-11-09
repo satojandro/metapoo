@@ -51,6 +51,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | what is left, with proof | [`backlog.md`](backlog.md) |
 | wall journey (PR #87): what shipped, owner decisions, full-screen hybrid, handover | [`learning/2026-11-07-wall-journey.md`](learning/2026-11-07-wall-journey.md): start here for the next wall session |
 | board server: a port of Berry Fast (indexer, Valkey, region blob, WebSocket) | [`implementation/2026-11-07-board-server-berry-fast-port.md`](implementation/2026-11-07-board-server-berry-fast-port.md): draft for owner review, not built; no contract change |
+| agents painting: the agent-facing `skill.md` and the `/agents` page for humans | [`../web/public/skill.md`](../web/public/skill.md) (drafted 9 Nov, not yet proven by an agent paint); [`implementation/2026-11-09-agents-page-spec.md`](implementation/2026-11-09-agents-page-spec.md): proposal awaiting owner decisions |
 | wall page front-end: what is broken, and the plan | [`2026-11-02-wall-frontend-audit.md`](2026-11-02-wall-frontend-audit.md): audit 2 Nov, plan awaiting owner approval |
 
 The task orders in [`implementation/`](implementation/) (repaint price, checkout, safety, TOILET token,
