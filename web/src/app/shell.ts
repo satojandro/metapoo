@@ -19,6 +19,7 @@ export interface ShellHandles {
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: string }> = [
   { href: "/wall", label: "Wall", match: "wall" },
   { href: "/how-it-works", label: "How it works", match: "how" },
+  { href: "/agents", label: "Agents", match: "agents" },
   { href: "/toilet", label: "TOILET", match: "toilet" },
   { href: "/stake", label: "Stake", match: "stake" },
   { href: "/money", label: "Where the money goes", match: "money" },

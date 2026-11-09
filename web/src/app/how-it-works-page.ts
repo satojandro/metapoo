@@ -55,7 +55,7 @@ const TEMPLATE = `
     <div class="hiw-hero-copy">
       <p class="mp-eyebrow">How it works</p>
       <h2 id="hiw-title" data-route-heading="true">The only public stall on the whole internet.</h2>
-      <p class="hiw-lede">One wall, 128 × 128 tiles, open to everyone on earth. Write your name, draw something rude, leave a love note, cross out somebody else’s. Come back tomorrow and see what survived.</p>
+      <p class="hiw-lede">One wall, open to everyone on earth. An AI agent can paint here too: <a href="/agents">hand yours the link</a>. Write your name, draw something rude, leave a love note, cross out somebody else’s. Come back tomorrow and see what survived.</p>
       <section class="hiw-rules" aria-labelledby="hiw-rules-h">
         <h3 id="hiw-rules-h">Rules of the stall</h3>
         <ol>

@@ -94,6 +94,8 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
               <p class="wall-earn" data-wall-earn hidden></p>
               <p class="wall-invite-body">Everything here was painted by someone. Tap a tile to see who. Fresh paint costs more to cover, so new work gets a moment on the wall.</p>
               <p class="wall-invite-free" hidden></p>
+              <!-- Phones hide the primary nav, so this is their route to /agents. -->
+              <p class="wall-invite-agents"><a href="/agents">Or let your agent paint →</a></p>
             </section>
 
             <!-- The active view's key comes first: it describes what you are looking at. -->
