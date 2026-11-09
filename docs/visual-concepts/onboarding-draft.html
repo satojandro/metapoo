@@ -120,7 +120,7 @@ table.open td:first-child{font:800 13px var(--mono);color:var(--y);white-space:n
 
 <section class="decide" aria-labelledby="where-h">
 <div class="card" style="display:flex;flex-direction:column;gap:12px;border-color:var(--y)">
-<p class="eyebrow" style="color:var(--y)">Recommendation · does Intents need a new screen?</p>
+<p class="eyebrow" style="color:var(--y)">Owner agreed 9 Nov · does Intents need a new screen?</p>
 <h2 id="where-h" class="sec" style="font-size:26px">No new route. A step in the same sheet.</h2>
 <p style="margin:0;color:var(--body);font-size:14px">“Add funds” is the third step of the sign-up sheet that slides up over the wall, the same pattern as Buy credits. The wall stays mounted, so the player’s draft and place survive a 5-minute wait for a cross-chain deposit. The same sheet opens from the wallet menu (“Add funds”) for players who are already in.</p>
 <p style="margin:0;color:var(--body);font-size:14px">A separate <code>/add-funds</code> page would break the spec’s rule that funding never unmounts the wall, and an empty account would have to bounce between pages. The one exception worth a link is <strong>/agents → “No NEAR yet?”</strong>, which opens this sheet (see open decision 3).</p>
@@ -356,9 +356,10 @@ table.open td:first-child{font:800 13px var(--mono);color:var(--y);white-space:n
 <div style="display:flex;flex-direction:column;gap:8px">
 <p class="eyebrow">For the owner</p>
 <h2 id="open-h" class="sec">Open decisions.</h2>
+<p class="lede" style="font-size:15px">None of these blocks turning the flags on for testing. Each has a default below that is safe for testnet and the first trial; testing produces the evidence to settle it.</p>
 </div>
 <table class="open">
-<thead><tr><th>#</th><th>Question</th><th>Recommendation</th></tr></thead>
+<thead><tr><th>#</th><th>Question</th><th>Default until testing answers it</th></tr></thead>
 <tbody>
 <tr><td>1</td><td>Sign-up sheet as the first thing behind <em>Paint</em> for disconnected players, with “I have a NEAR wallet” as the secondary choice?</td><td>Yes. Most new players won’t have a NEAR wallet; the ones who do lose one tap.</td></tr>
 <tr><td>2</td><td>Which single source route ships first?</td><td>The one we can trial cheapest on mainnet and the INT-NATIVE evidence covers. USDC on Base is only the sample here.</td></tr>
