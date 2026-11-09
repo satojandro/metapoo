@@ -20,6 +20,12 @@ the site keeps one voice and look (`fe-how-it-works`, `fe-toilet-page` in
 [`../implementation/`](../implementation/)). Other agents touching the frontend should match these
 pages rather than restyle them, and should not copy the drafts' sample numbers into the app.
 
+## Proposals (not approved)
+
+| flow | draft | what it proposes |
+|---|---|---|
+| new-player onboarding | [`onboarding-draft.html`](onboarding-draft.html) (screenshots `onboarding-draft-desktop.png`, `onboarding-draft-mobile.png`) | Privy sign-in → empty account → **Add funds via NEAR Intents as a step in the same sheet, not a new route** → drawing key → paint. Also the INT-NATIVE fallback screen, error copy, and open owner decisions. Specs: [`privy`](../implementation/2026-11-03-privy-near-connect-spec.md), [`intents`](../implementation/2026-11-03-intents-funding-spec.md). All amounts are samples |
+
 ## Earlier concepts
 
 `concept-preview.html`, `palette-16-proposal.html` and the PNG/JPG files are earlier explorations of the
