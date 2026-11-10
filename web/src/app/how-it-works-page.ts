@@ -7,7 +7,7 @@
  */
 
 import { PALETTE } from "@shared/palette.ts";
-import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
+import { CONTRACT_ID, INTENTS_FUNDING_ENABLED, PAGE_NETWORK, RPC_URL } from "../config";
 import type { PageContext, PageDispose } from "./page-registry";
 import { MPOO_SPLIT, NEAR_SPLIT, createRpcView } from "./revenue-panel";
 import {
@@ -27,6 +27,8 @@ export interface HowItWorksDeps {
   reducedMotion: boolean;
   /** How often live numbers are re-read. */
   pollMs: number;
+  /** Paying from another chain (Intents) is switched on for this build. */
+  crossChainFunding: boolean;
 }
 
 function defaultDeps(): HowItWorksDeps {
@@ -39,6 +41,7 @@ function defaultDeps(): HowItWorksDeps {
     board: CONTRACT_ID,
     reducedMotion: typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
     pollMs: 60_000,
+    crossChainFunding: INTENTS_FUNDING_ENABLED,
   };
 }
 
@@ -182,6 +185,22 @@ const TEMPLATE = `
     </div>
   </section>
 
+  <section class="hiw-sec" id="hiw-pay" aria-labelledby="hiw-pay-h">
+    <div class="hiw-head">
+      <p class="mp-eyebrow">Paying</p>
+      <h3 id="hiw-pay-h">Pay with NEAR, <span data-needs-funding>or bring it from another chain.</span><span data-unless-funding hidden>or with mPOO.</span></h3>
+      <p>Painting runs on credits. You buy them in the Buy credits window on the wall, and they stay in your account until you spend them. Credits are prepaid paint: they can’t be withdrawn or refunded.</p>
+    </div>
+    <div class="hiw-limits hiw-pay">
+      <div><h4>NEAR</h4><p>The everyday way. Choose how many credits and approve one payment in your wallet.<span data-needs="regFee"> The first time, opening your account costs <span data-hiw="regFee">…</span> once.</span></p></div>
+      <div data-needs-funding><h4>From another chain</h4><p>No NEAR? Pay with USDC, USDT, ETH or SOL from Ethereum, Base, Arbitrum, Optimism, Polygon, Avalanche or Solana. It arrives as NEAR in your account, and you buy credits as usual. Open <b>Add funds from another chain</b> in the Buy credits window or the wallet menu.</p></div>
+      <div><h4>mPOO, 20% off</h4><p>When the stall is selling credits for mPOO that day, the Buy credits window offers it. There’s a daily limit; anything above it is offered in NEAR.</p></div>
+      <div><h4>Free paint</h4><p>New accounts get free tiles while the wall fills, and happy hour is free every week. Free tiles earn no TOILET.</p></div>
+      <div><h4>Network fees</h4><p>Every paint is a tiny NEAR transaction. Keep a little NEAR in your wallet for fees, on top of your credits.</p></div>
+      <div><h4>Where it goes</h4><p>What you pay belongs to the stall, not to anyone’s wallet. <a href="/money">See where the money goes →</a></p></div>
+    </div>
+  </section>
+
   <section class="hiw-sec" id="hiw-stall" aria-labelledby="hiw-stall-h">
     <div class="hiw-head">
       <p class="mp-eyebrow">The autonomous stall</p>
@@ -280,6 +299,10 @@ export function mountHowItWorksPage(root: HTMLElement, _ctx: PageContext, overri
     cleanups.push(() => el.removeEventListener(type, fn, opts));
   };
   const every = (ms: number, fn: () => void) => { intervals.push(window.setInterval(fn, ms)); };
+
+  // Cross-chain funding is shown only when this build can actually do it.
+  for (const el of page.querySelectorAll<HTMLElement>("[data-needs-funding]")) el.hidden = !deps.crossChainFunding;
+  for (const el of page.querySelectorAll<HTMLElement>("[data-unless-funding]")) el.hidden = deps.crossChainFunding;
 
   /* ——— Live values ——— */
   function applyLive(): void {
@@ -661,6 +684,10 @@ export function mountHowItWorksPage(root: HTMLElement, _ctx: PageContext, overri
     void refresh();
     every(deps.pollMs, () => { if (!document.hidden) void refresh(); });
   }
+  // A link such as /how-it-works#hiw-pay (from the Buy credits window) lands on its section:
+  // the router mounts the page after the browser has already tried to scroll.
+  const anchor = /^#hiw-[a-z-]+$/.test(window.location.hash) ? page.querySelector<HTMLElement>(window.location.hash) : null;
+  if (anchor) requestAnimationFrame(() => { if (!disposed) anchor.scrollIntoView?.({ block: "start" }); });
 
   return () => {
     disposed = true;

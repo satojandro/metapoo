@@ -218,3 +218,12 @@ summary { cursor: pointer; }
   /* The strapline repeats the banner's job of saying what this is; the wall says it. */
   .brand .lede { display: none; }
 }
+/* Cross-chain funding offer inside Buy credits: one line and one button; stronger after a
+   payment fails for lack of NEAR. */
+.buy-credits-funding { display: grid; gap: var(--mp-space-2); padding: var(--mp-space-3); border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); }
+.buy-credits-funding[hidden] { display: none; }
+.buy-credits-funding p { margin: 0; font-size: var(--mp-text-sm); line-height: 1.4; color: var(--mp-soft); }
+.buy-credits-funding .action { justify-self: start; min-height: var(--mp-hit); }
+.buy-credits-funding[data-emphasis="true"] { border-color: var(--mp-tag); }
+.buy-credits-how { margin: 0; font-size: var(--mp-text-sm); }
+.buy-credits-how a { color: var(--mp-soft); }

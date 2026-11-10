@@ -52,6 +52,23 @@ async function mount(deps: Partial<HowItWorksDeps>) {
 }
 
 describe("/how-it-works", () => {
+  it("explains paying, including another chain when this build can fund from one", async () => {
+    const { root, visible } = await mount({ crossChainFunding: true });
+    const pay = root.querySelector("#hiw-pay")!;
+    expect(pay.textContent).toContain("can’t be withdrawn");
+    expect(pay.textContent).toContain("USDC, USDT, ETH or SOL");
+    expect(visible("#hiw-pay [data-needs-funding]")).toBe(true);
+    expect(visible("#hiw-pay [data-unless-funding]")).toBe(false);
+    expect(pay.querySelector<HTMLAnchorElement>('a[href="/money"]')).not.toBeNull();
+  });
+
+  it("does not offer another chain when funding is off in this build", async () => {
+    const { visible } = await mount({ crossChainFunding: false });
+    expect(visible("#hiw-pay")).toBe(true);
+    expect(visible("#hiw-pay [data-needs-funding]")).toBe(false);
+    expect(visible("#hiw-pay [data-unless-funding]")).toBe(true);
+  });
+
   it("fills live values from the board", async () => {
     const { root, text } = await mount({});
     expect(text('.hiw-price [data-hiw="price"]')).toBe("0.0025 NEAR");

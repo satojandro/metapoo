@@ -19,7 +19,7 @@ import {
   type PayAsset,
   type PaymentConfigView,
 } from "../buy-credits";
-import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
+import { CONTRACT_ID, INTENTS_FUNDING_ENABLED, PAGE_NETWORK, RPC_URL } from "../config";
 import { viewFunction } from "../contract";
 import {
   BUY_NEAR_URL,
@@ -105,9 +105,21 @@ export function mountBuyCreditsSheet(
     onPurchaseSettled?: () => void;
     /** Injectable for tests; defaults to a `ft_metadata` read over RPC. */
     readTokenMetadata?: (tokenId: string) => Promise<TokenMetadata>;
+    /**
+     * Opens the cross-chain "Add funds" dialog and calls `onClosed` when it closes, or returns
+     * false if there is no such dialog on the page. Defaults to the wallet menu's own button
+     * (`.paint-wallet-add-funds`), so there is one funding flow, not two. Null hides the offer.
+     */
+    openFunding?: ((onClosed: () => void) => boolean) | null;
   } = {},
 ): BuyCreditsSheetHandles {
   const readMetadata = options.readTokenMetadata ?? readTokenMetadata;
+  const openFunding =
+    options.openFunding === undefined
+      ? INTENTS_FUNDING_ENABLED && PAGE_NETWORK === "mainnet"
+        ? openWalletFundingDialog
+        : null
+      : options.openFunding;
   host.innerHTML = `
     <div class="buy-credits-sheet" hidden>
       <div class="buy-credits-panel" role="dialog" aria-modal="true" aria-labelledby="buy-credits-title">
@@ -138,6 +150,10 @@ export function mountBuyCreditsSheet(
         <ul class="buy-credits-lines" data-buy="lines"></ul>
         <p class="buy-credits-total" data-buy="total"></p>
         <p class="buy-credits-note" data-buy="note">Credits are prepaid paint. They cannot be withdrawn.</p>
+        <div class="buy-credits-funding" data-buy="funding" hidden>
+          <p>No NEAR? Pay with USDC, USDT, ETH or SOL from another chain. It arrives as NEAR in this wallet, then you buy credits here.</p>
+          <button type="button" class="action secondary" data-buy="add-funds">Add funds from another chain</button>
+        </div>
         <p class="buy-credits-status" data-buy="status" role="status"></p>
         <div class="buy-credits-actions">
           <button type="button" class="action place" data-buy="pay">Pay</button>
@@ -145,6 +161,7 @@ export function mountBuyCreditsSheet(
           <a class="action secondary buy-credits-buy-near" data-buy="buy-near" target="_blank" rel="noopener noreferrer">Buy NEAR ↗</a>
           <a class="action secondary buy-credits-nearly" data-buy="nearly" target="_blank" rel="noopener noreferrer" hidden>Buy on NEARLY ↗</a>
         </div>
+        <p class="buy-credits-how"><a href="/how-it-works#hiw-pay">How paying works →</a></p>
       </div>
     </div>
   `;
@@ -170,6 +187,9 @@ export function mountBuyCreditsSheet(
   const nearRadio = host.querySelector<HTMLInputElement>('input[name="buy-asset"][value="near"]')!;
   const tokenRadio = host.querySelector<HTMLInputElement>('input[name="buy-asset"][value="token"]')!;
   const closeButton = host.querySelector<HTMLButtonElement>(".buy-credits-close")!;
+  const fundingBox = host.querySelector<HTMLElement>("[data-buy=funding]")!;
+  const addFundsButton = host.querySelector<HTMLButtonElement>("[data-buy=add-funds]")!;
+  fundingBox.hidden = !openFunding;
 
   buyNear.href = BUY_NEAR_URL;
   nearly.href = NEARLY_MPOO_URL;
@@ -506,7 +526,12 @@ export function mountBuyCreditsSheet(
       await refreshConfig(result.message);
       return;
     }
-    setStatus(`${result.title}. ${result.message}`);
+    setStatus(
+      result.code === "insufficient_funds" && openFunding
+        ? `${result.title}. ${result.message} You can add funds from another chain below.`
+        : `${result.title}. ${result.message}`,
+    );
+    if (result.code === "insufficient_funds" && openFunding) fundingBox.dataset.emphasis = "true";
     payButton.disabled = false;
     renderQuote();
   }
@@ -541,6 +566,20 @@ export function mountBuyCreditsSheet(
   };
 
   closeButton.addEventListener("click", close);
+  // One funding flow: close this window, open the wallet menu's Add funds dialog, and come
+  // back here when it closes, so the next step after NEAR lands is buying credits.
+  addFundsButton.addEventListener("click", () => {
+    if (!openFunding) return;
+    const quantityNow = quantity();
+    close();
+    const opened = openFunding(() => {
+      if (!disposed) open({ quantity: quantityNow });
+    });
+    if (!opened) {
+      open({ quantity: quantityNow });
+      setStatus("Add funds is in the wallet menu at the top of the page.");
+    }
+  });
   retryPrice.addEventListener("click", () => {
     void refreshConfig();
   });
@@ -634,4 +673,14 @@ async function readTokenMetadata(tokenId: string): Promise<TokenMetadata> {
   return parseTokenMetadata(
     JSON.parse(new TextDecoder().decode(new Uint8Array(response.result))),
   );
+}
+
+/** Click the wallet menu's "Add funds from another chain" and watch its dialog close. */
+export function openWalletFundingDialog(onClosed: () => void): boolean {
+  const button = document.querySelector<HTMLButtonElement>(".paint-wallet-add-funds");
+  if (!button) return false;
+  button.click();
+  const dialog = document.querySelector<HTMLDialogElement>("dialog.mp-funding-dialog");
+  if (dialog) dialog.addEventListener("close", onClosed, { once: true });
+  return true;
 }
