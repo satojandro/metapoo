@@ -577,8 +577,15 @@ export function mountIntentsFundingPanel(
     );
   };
   recovery.addEventListener("submit", onResume);
-  if (options.initialOperationId)
-    void controller.resume(options.initialOperationId);
+  if (options.initialOperationId) {
+    const saved = getContext();
+    // Same shape the manual recovery form sends: the context carries the saved payment's id,
+    // so a reload can re-approve sending for it instead of leaving the address hidden.
+    void controller.resume(
+      options.initialOperationId,
+      saved ? { ...saved, operationId: options.initialOperationId } : undefined,
+    );
+  }
   else if (controller.getState().phase !== "disabled")
     void controller.loadAssets();
   // Expiry can change without a provider status update; clear copy and QR promptly.

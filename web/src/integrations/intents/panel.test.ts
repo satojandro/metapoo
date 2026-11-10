@@ -12,6 +12,7 @@ import {
   fixtureStatus,
 } from "./fixtures";
 import type { FundingClient, FundingPolicy, FundingStatus } from "./types";
+import type { OperationContext } from "../types";
 vi.mock("qrcode", () => ({
   default: { toDataURL: vi.fn(async () => "data:image/png;base64,fixture") },
 }));
@@ -38,11 +39,21 @@ afterEach(() => {
   else Reflect.deleteProperty(navigator, "locks");
 });
 
-function app(enabled = true, testMode = false, tokens = [FIXTURE_TOKEN]) {
+function app(
+  enabled = true,
+  testMode = false,
+  tokens = [FIXTURE_TOKEN],
+  seed?: {
+    data: Map<string, string>;
+    initialOperationId?: string;
+    context?: OperationContext;
+    status?: FundingStatus["status"];
+  },
+) {
   let now = FIXTURE_TIME;
-  let context = { ...FIXTURE_CONTEXT };
-  let providerStatus: FundingStatus["status"] = "PROCESSING";
-  const data = new Map<string, string>();
+  let context = seed?.context ?? { ...FIXTURE_CONTEXT };
+  let providerStatus: FundingStatus["status"] = seed?.status ?? "PROCESSING";
+  const data = seed?.data ?? new Map<string, string>();
   const client: FundingClient = {
     tokens: async () => tokens,
     verify: async () => true,
@@ -91,12 +102,14 @@ function app(enabled = true, testMode = false, tokens = [FIXTURE_TOKEN]) {
       getContext: () => context,
       newContext,
       testMode,
+      initialOperationId: seed?.initialOperationId,
     }),
   );
   return {
     host,
     controller,
     newContext,
+    data,
     setTime: (value: number) => {
       now = value;
     },
@@ -197,6 +210,34 @@ describe("Intents inline panel", () => {
     expect(host.querySelector("img")).toBeNull();
     // The card now names the gate instead of printing one catch-all sentence.
     expect(host.textContent).toContain("must not be reused");
+  });
+  it("shows the payment address again when the page reloads on a saved payment", async () => {
+    const first = app();
+    await first.controller.loadAssets();
+    const preview = await first.controller.preview(
+      {
+        assetId: FIXTURE_TOKEN.assetId,
+        amount: "1",
+        refundAddress: FIXTURE_REFUND,
+        refundAddressConfirmed: true,
+      },
+      FIXTURE_CONTEXT,
+    );
+    const committed = await first.controller.commit(
+      preview.preview!.correlationId,
+      FIXTURE_CONTEXT,
+    );
+    // Reload: same browser storage, but a new page context (fresh epoch and page id).
+    const second = app(true, false, [FIXTURE_TOKEN], {
+      data: first.data,
+      initialOperationId: committed.operation!.id,
+      context: { ...FIXTURE_CONTEXT, operationId: "page-session", sessionEpoch: 9 },
+      status: "PENDING_DEPOSIT",
+    });
+    await vi.waitFor(() =>
+      expect(second.host.textContent).toContain("0x3333333333333333"),
+    );
+    expect(second.host.textContent).not.toContain("capability checks have not passed");
   });
   it("explains an expired unpaid quote and offers a new payment", async () => {
     const { host, controller, setTime, setStatus } = app();

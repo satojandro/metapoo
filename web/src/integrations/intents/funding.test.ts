@@ -227,6 +227,30 @@ describe("Intents funding authority and recovery", () => {
     expect(reset.message).toContain(id);
     expect(app.storage.load(id)).toBeTruthy();
   });
+  it("re-approves sending for a saved payment after a reload changes id and epoch", async () => {
+    const app = setup();
+    const committed = await app.commit();
+    const id = committed.operation!.id;
+    expect(committed.canSend).toBe(true);
+    // A reload starts a new session: fresh page operation id and epoch.
+    const reloaded: OperationContext = {
+      ...FIXTURE_CONTEXT,
+      operationId: "page-session",
+      sessionEpoch: 7,
+    };
+    app.setContext(reloaded);
+    app.setStatus("PENDING_DEPOSIT");
+    const resumed = await app.controller.resume(id, reloaded);
+    expect(resumed.phase).toBe("awaiting_deposit");
+    expect(resumed.canSend).toBe(true);
+    expect(resumed.sendBlockedReason).toBeUndefined();
+    // The payment keeps its own id; only the session epoch is rebound.
+    expect(resumed.operation!.id).toBe(id);
+    expect(resumed.operation!.context.operationId).toBe(id);
+    expect(resumed.operation!.context.sessionEpoch).toBe(7);
+    expect(resumed.operation!.quote.quote.depositAddress).toBeTruthy();
+    expect(app.storage.load(id)?.context.operationId).toBe(id);
+  });
   it("still refuses a new payment while money may be in flight", async () => {
     const app = setup();
     const committed = await app.commit();

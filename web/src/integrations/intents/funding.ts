@@ -371,17 +371,20 @@ export function createIntentsFundingController(
         );
       if (disposed) return getState();
       assertQuoteMatches(operation.quote, operation.quote.quoteRequest);
-      // Rebind only the session epoch, never the historical recipient/network.
+      // Every reload starts a new session: a fresh operation id and epoch, while the saved
+      // payment keeps the id that built its address (storage rejects a record whose context
+      // id differs from its own). Requiring those to match meant a reloaded payment never
+      // re-approved sending, so its address stayed hidden behind "capability checks".
       if (
         context &&
         context.accountId === operation.context.accountId &&
-        context.networkId === operation.context.networkId &&
-        context.operationId === operation.id &&
-        matches(context)
+        context.networkId === operation.context.networkId
       ) {
+        // Rebind only the session epoch, never the historical recipient, network or id.
+        const rebound = { ...operation.context, sessionEpoch: context.sessionEpoch };
         try {
-          await prerequisites(context);
-          operation.context = clone(context);
+          await prerequisites(rebound);
+          operation.context = rebound;
           save(operation);
           approvedToSend = operation.id;
           gateReason = "";
