@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self-custody mockups</title>
+<!--
+  Mockup for docs/implementation/2026-11-11-privy-self-custody-spec.md. Static, no scripts.
+  Tokens copied from web/src/design/tokens.css; approval window classes (ps-*) from
+  web/src/integrations/privy/privy-sign.css; in-game panel language from wall-design.css
+  (.wallet-details, .action, .buy-credits-*). Example accounts and amounts are fictional.
+-->
+<style>
+:root{--mp-bg:#111214;--mp-card:#1b1c1f;--mp-card-2:#232427;--mp-line:#343537;--mp-fg:#f4f1e9;--mp-soft:#d8d4cc;--mp-muted:#a9aaad;--mp-on-tag:#17171a;--mp-tag:#f1dc5e;--mp-near:#73d7ee;--mp-stake:#65d5ae;--mp-burn:#ff9f8f;--mp-focus:#56c9ec;--mp-glow:#282629;--mp-soft-btn:#f0ddd9;--mp-soft-btn-ink:#251d22;--mp-soft-btn-line:#515156;--mp-shadow:#0009;--mp-good:var(--mp-stake);--mp-warn:var(--mp-tag);--mp-bad:var(--mp-burn);--mp-font:Arial,Helvetica,sans-serif;--mp-mono:ui-monospace,Menlo,monospace;--mp-text-xs:11px;--mp-text-sm:12px;--mp-text-md:13px;--mp-text-body:14px;--mp-text-base:15px;--mp-leading:1.55;--mp-space-1:4px;--mp-space-2:8px;--mp-space-3:12px;--mp-space-4:16px;--mp-space-5:20px;--mp-space-6:24px;--mp-space-7:32px;--mp-radius-md:6px;--mp-radius-lg:8px;--mp-radius-pill:999px;--mp-hit:44px;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 50% 0%,var(--mp-glow),transparent 70%),var(--mp-bg);color:var(--mp-fg);font:var(--mp-text-base)/var(--mp-leading) var(--mp-font)}
+.page{max-width:1240px;margin:0 auto;padding:var(--mp-space-6) var(--mp-space-4) var(--mp-space-7)}
+.page>header h1{margin:0;font-size:clamp(26px,5vw,40px);font-weight:900;letter-spacing:-1px}
+.page>header p{margin:var(--mp-space-2) 0 0;color:var(--mp-soft);max-width:70ch}
+.page>header a{color:var(--mp-near)}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:var(--mp-space-6);margin-top:var(--mp-space-6);align-items:start}
+figure{margin:0;display:grid;gap:var(--mp-space-2)}
+figcaption{font-size:var(--mp-text-sm);color:var(--mp-muted)}
+figcaption b{color:var(--mp-tag);font:600 var(--mp-text-xs) var(--mp-mono);letter-spacing:.14em;text-transform:uppercase;display:block}
+.phone{width:100%;max-width:375px;border:1px solid var(--mp-line);border-radius:22px;background:var(--mp-bg);padding:var(--mp-space-4) var(--mp-space-3);overflow:hidden;font-size:var(--mp-text-base)}
+.mp-eyebrow{font:600 var(--mp-text-xs)/1.2 var(--mp-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mp-muted);margin:0}
+.mp-btn{font:700 var(--mp-text-md) var(--mp-font);color:var(--mp-fg);background:var(--mp-card-2);border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);padding:var(--mp-space-2) var(--mp-space-3);min-height:var(--mp-hit)}
+.mp-btn-primary{background:var(--mp-tag);color:var(--mp-on-tag);border-color:var(--mp-tag)}
+.mp-btn:disabled{opacity:.45}
+.mp-chip{font:600 var(--mp-text-md) var(--mp-font);color:var(--mp-soft);background:var(--mp-card);border:1px solid var(--mp-line);border-radius:var(--mp-radius-pill);padding:var(--mp-space-2) 14px;min-height:40px}
+.mp-chip[aria-pressed=true]{background:var(--mp-tag);color:var(--mp-on-tag);border-color:var(--mp-tag)}
+.mp-chip small{display:block;font:500 var(--mp-text-xs) var(--mp-mono);opacity:.8}
+/* In-game wallet panel (wall-design.css .wallet-details[open]) */
+.panel{background:var(--mp-card);border:1px solid var(--mp-line);border-radius:var(--mp-radius-lg);padding:var(--mp-space-5);display:grid;gap:var(--mp-space-3);box-shadow:0 18px 50px var(--mp-shadow)}
+.panel h2{margin:0;font-size:var(--mp-text-body);font-weight:700}
+.panel-head{display:flex;justify-content:space-between;align-items:center}
+.link{background:none;border:0;color:var(--mp-near);font:inherit;font-size:var(--mp-text-sm);text-decoration:underline;padding:0}
+.chips{display:flex;gap:var(--mp-space-2);flex-wrap:wrap}
+.field{display:grid;gap:var(--mp-space-1)}
+.field>span{font-size:var(--mp-text-sm);font-weight:700;color:var(--mp-soft)}
+.input-row{display:flex;gap:var(--mp-space-2)}
+.input{flex:1;min-width:0;min-height:var(--mp-hit);padding:var(--mp-space-2) var(--mp-space-3);background:var(--mp-bg);color:var(--mp-fg);border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);font:var(--mp-text-body) var(--mp-mono)}
+.input.bad{border-color:var(--mp-bad)}
+.input.ok{border-color:var(--mp-good)}
+.suffix{align-self:center;font:700 var(--mp-text-sm) var(--mp-mono);color:var(--mp-muted)}
+.hint{margin:0;font-size:var(--mp-text-sm);color:var(--mp-muted)}
+.hint.bad{color:var(--mp-bad)}
+.hint.ok{color:var(--mp-good)}
+.notice{margin:0;padding:var(--mp-space-3);border:1px dashed var(--mp-line);border-radius:var(--mp-radius-md);background:var(--mp-card-2);font-size:var(--mp-text-sm);color:var(--mp-soft)}
+.notice b{color:var(--mp-fg)}
+.notice.warn{border:1px solid var(--mp-warn);border-style:solid}
+.notice.bad{border:1px solid var(--mp-bad)}
+.summary{margin:0;display:grid;border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);overflow:hidden;font-size:var(--mp-text-sm)}
+.summary div{display:flex;justify-content:space-between;gap:var(--mp-space-3);padding:var(--mp-space-2) var(--mp-space-3);background:var(--mp-card-2)}
+.summary div+div{border-top:1px solid var(--mp-line)}
+.summary dt{color:var(--mp-muted)}.summary dd{margin:0;font-weight:700;text-align:right;overflow-wrap:anywhere}
+.mono{font-family:var(--mp-mono);font-weight:500;word-break:break-all}
+.actions{display:flex;gap:var(--mp-space-2);flex-wrap:wrap}
+.actions .mp-btn-primary{flex:1 1 auto}
+.big{font-size:32px;font-weight:900;letter-spacing:-1px;line-height:1.05;margin:0}
+.state-icon{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:900;font-size:22px}
+.state-icon.good{background:var(--mp-good);color:var(--mp-on-tag)}
+.state-icon.bad{background:var(--mp-bad);color:var(--mp-on-tag)}
+.state-icon.warn{background:var(--mp-warn);color:var(--mp-on-tag)}
+/* Privy approval window (privy-sign.css) */
+.ps{display:grid;gap:var(--mp-space-4)}
+.ps-brand{display:flex;align-items:center;justify-content:space-between;gap:var(--mp-space-3);flex-wrap:wrap}
+.ps-wordmark{font-size:24px;font-weight:900;letter-spacing:-1.5px;line-height:1}
+.ps-trust{display:flex;align-items:center;gap:var(--mp-space-2);font:600 var(--mp-text-xs) var(--mp-mono);color:var(--mp-muted)}
+.ps-secure::before{content:"";display:inline-block;width:8px;height:8px;border:1.6px solid var(--mp-good);border-radius:2px;margin-right:6px;vertical-align:-1px}
+.ps-pill{padding:2px var(--mp-space-2);border:1px solid var(--mp-line);border-radius:var(--mp-radius-pill);color:var(--mp-soft);text-transform:uppercase;letter-spacing:.08em}
+.ps-card{background:var(--mp-card);border:1px solid var(--mp-line);border-radius:var(--mp-radius-lg);padding:var(--mp-space-6) var(--mp-space-5);display:grid;gap:var(--mp-space-3);box-shadow:0 18px 40px var(--mp-shadow)}
+.ps-eyebrow{color:var(--mp-tag)}
+.ps-title{margin:0;font-size:26px;font-weight:900;letter-spacing:-.8px;line-height:1.15}
+.ps-lede{margin:0;color:var(--mp-soft)}
+.ps-facts{margin:0;display:grid;border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);overflow:hidden}
+.ps-fact{display:grid;grid-template-columns:minmax(88px,34%) 1fr;gap:var(--mp-space-3);padding:var(--mp-space-3);background:var(--mp-card-2)}
+.ps-fact+.ps-fact{border-top:1px solid var(--mp-line)}
+.ps-fact dt{color:var(--mp-muted);font-size:var(--mp-text-body)}
+.ps-fact dd{margin:0;font-size:var(--mp-text-body);font-weight:700}
+.ps-fact.hl{box-shadow:inset 3px 0 0 var(--mp-tag)}
+.ps-note{margin:0;color:var(--mp-muted);font-size:var(--mp-text-body)}
+.ps-technical{font-size:var(--mp-text-sm);color:var(--mp-muted)}
+.ps-technical ul{margin:var(--mp-space-2) 0 0;padding-left:var(--mp-space-4)}
+.ps-actions{display:flex;flex-wrap:wrap;gap:var(--mp-space-2);margin-top:var(--mp-space-2)}
+.ps-actions .mp-btn-primary{flex:1 1 auto}
+.ps-btn{font-size:var(--mp-text-base);padding:var(--mp-space-2) var(--mp-space-5)}
+.ps-btn-quiet{background:transparent;color:var(--mp-soft)}
+.ps-status{margin:0;font-size:var(--mp-text-body);padding:var(--mp-space-3);border:1px solid var(--mp-bad);border-radius:var(--mp-radius-md)}
+.ps-foot{margin:0;text-align:center;font-size:var(--mp-text-sm);color:var(--mp-muted)}
+.anno{margin:0;font-size:var(--mp-text-xs);color:var(--mp-muted);font-family:var(--mp-mono);border-left:2px solid var(--mp-line);padding-left:var(--mp-space-2)}
+
+.keys{list-style:none;margin:0;padding:0;display:grid;border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);overflow:hidden}
+.keys li{display:grid;grid-template-columns:1fr auto;gap:2px var(--mp-space-2);padding:var(--mp-space-2) var(--mp-space-3);background:var(--mp-card-2);font-size:var(--mp-text-sm)}
+.keys li+li{border-top:1px solid var(--mp-line)}
+.keys .who{font-weight:700;color:var(--mp-fg)}
+.keys .k{grid-column:1;font-family:var(--mp-mono);color:var(--mp-muted)}
+.keys .acts{grid-column:2;grid-row:2;font-size:var(--mp-text-xs)}
+.badge{align-self:start;font:600 var(--mp-text-xs) var(--mp-mono);text-transform:uppercase;letter-spacing:.06em;padding:1px 6px;border-radius:var(--mp-radius-pill);border:1px solid var(--mp-line);color:var(--mp-soft)}
+.badge.full{border-color:var(--mp-bad);color:var(--mp-bad)}
+.badge.paint{border-color:var(--mp-good);color:var(--mp-good)}
+.status-line{margin:0;font-size:var(--mp-text-sm);font-weight:700}
+.danger{margin:0;padding:var(--mp-space-3);border:1px solid var(--mp-bad);border-radius:var(--mp-radius-md);background:color-mix(in srgb,var(--mp-bad) 8%,var(--mp-card-2));font-size:var(--mp-text-body)}
+.danger b{color:var(--mp-fg)}
+.check{display:flex;gap:var(--mp-space-2);align-items:flex-start;font-size:var(--mp-text-body);color:var(--mp-soft)}
+.check input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--mp-tag);flex:none}
+.chunks{font:600 15px/1.6 var(--mp-mono);letter-spacing:.04em;word-spacing:.3em;margin:0;padding:var(--mp-space-3);background:var(--mp-bg);border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);overflow-wrap:anywhere}
+.mask{color:var(--mp-muted);letter-spacing:.1em}
+.ps-field{display:grid;gap:var(--mp-space-1)}
+.ps-field>span{font-size:var(--mp-text-body);font-weight:700;color:var(--mp-soft)}
+.ps-input{min-height:var(--mp-hit);padding:var(--mp-space-2) var(--mp-space-3);background:var(--mp-bg);color:var(--mp-fg);border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);font:700 18px var(--mp-mono);letter-spacing:.2em;text-align:center;width:100%}
+.ps-input.ok{border-color:var(--mp-good)}
+.steps{margin:0;padding-left:20px;font-size:var(--mp-text-sm);color:var(--mp-soft);display:grid;gap:4px}
+</style>
+</head>
+<body>
+<main class="page">
+<header>
+  <p class="mp-eyebrow">Mockup · 11 Nov 2026 · mobile-first</p>
+  <h1>Self-custody for Privy accounts</h1>
+  <p>Screens for <a href="../2026-11-11-privy-self-custody-spec.md">the self-custody spec</a>. In-game screens use the wallet panel's look. The add-key approval is the Privy window. Removing Privy's key is signed in the player's own wallet, never in the Privy window. Keys and accounts are examples.</p>
+</header>
+
+<section class="gallery">
+
+<!-- 1. Panel: Privy only -->
+<figure>
+  <figcaption><b>1 · Self-custody panel</b>Fresh painter: Privy key plus a drawing key (spec §3)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="panel-head"><h2>Self-custody</h2><button class="link">Close</button></div>
+    <p class="status-line">Only Privy can sign for this account.</p>
+    <p class="hint">Your Meta Poo account is a real NEAR account. Today the key that controls it is held by Privy, the sign-in service. You can add a key of your own so you never depend on us or Privy to reach your funds.</p>
+    <p class="mp-eyebrow">Keys on this account</p>
+    <ul class="keys">
+      <li><span class="who">Privy (your sign-in)</span><span class="badge full">Full access</span><span class="k">ed25519:BwP4…r7Lc</span></li>
+      <li><span class="who">This browser's drawing key</span><span class="badge paint">Paint only</span><span class="k">ed25519:5nQe…Ys2A</span></li>
+    </ul>
+    <div class="actions"><button class="mp-btn mp-btn-primary">Add your own key</button></div>
+    <button class="link">Export your Privy key</button>
+    <p class="anno">"Export" shows only if Path B passes its live test (spec §6). Hidden by default.</p>
+  </div></div>
+</figure>
+
+<!-- 2. Add key: paste -->
+<figure>
+  <figcaption><b>2 · Add your own key: paste</b>Game side; validation, chunked display (spec §4.1)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="panel-head"><h2>Add your own key</h2><button class="link">Cancel</button></div>
+    <ol class="steps">
+      <li>In a wallet you control (for example a Ledger), create a new key.</li>
+      <li>Copy its <b>public</b> key. It starts with <span class="mono">ed25519:</span></li>
+      <li>Paste it below.</li>
+    </ol>
+    <p class="danger"><b>Never paste a private key or recovery phrase.</b> Not here, not anywhere. Meta Poo will never ask for one.</p>
+    <label class="field"><span>Public key</span>
+      <div class="input-row"><input class="input ok" value="ed25519:7xKpR2v9GmT3hYc1LqWzD8nBf4sJu6Qm3dVa"><button class="mp-btn">Paste</button></div>
+    </label>
+    <p class="hint">Does this match your wallet? Check it in groups:</p>
+    <p class="chunks">ed25519: 7xKp R2v9 GmT3 hYc1 LqWz D8nB f4sJ u6Qm 3dVa</p>
+    <div class="actions"><button class="mp-btn mp-btn-primary">Continue</button></div>
+    <p class="anno">Rejected inline: a 64-byte (private) key or a 12/24-word phrase ("That looks like a private key…"), Privy's key, a key already on the account, the drawing key, secp256k1.</p>
+  </div></div>
+</figure>
+
+<!-- 3. Approval: add-key confirmation -->
+<figure>
+  <figcaption><b>3 · Approval: add-key confirmation</b>Privy window; last 8 characters masked, typed from the player's wallet (spec §4.2)</figcaption>
+  <div class="phone"><div class="ps">
+    <header class="ps-brand"><span class="ps-wordmark">meta poo.</span><span class="ps-trust"><span class="ps-secure">Secure sign-in</span><span class="ps-pill">NEAR mainnet</span></span></header>
+    <section class="ps-card">
+      <p class="mp-eyebrow ps-eyebrow">Self-custody</p>
+      <h1 class="ps-title">Add your own key</h1>
+      <p class="ps-lede">This gives a key you control full access to your Meta Poo account. Privy keeps its key too, so both can sign.</p>
+      <dl class="ps-facts">
+        <div class="ps-fact"><dt>Adds</dt><dd>A full-access key</dd></div>
+        <div class="ps-fact hl"><dt>Key</dt><dd class="mono">ed25519:7xKpR2…<span class="mask">••••••••</span></dd></div>
+        <div class="ps-fact"><dt>Account</dt><dd class="mono">9f2c…e41a (yours)</dd></div>
+      </dl>
+      <p class="danger"><b>Both keys can move all your funds.</b> If this key isn't yours, or someone else can see it, they can empty this account. Meta Poo can't reverse it.</p>
+      <label class="ps-field"><span>Type the last 8 characters of the public key, exactly as your wallet shows them</span>
+        <input class="ps-input ok" value="u6Qm3dVa" autocomplete="off" spellcheck="false"></label>
+      <label class="check"><input type="checkbox" checked> I created this key myself and I'm the only one who has it</label>
+      <div class="ps-actions"><button class="mp-btn mp-btn-primary ps-btn">Add my key</button><button class="mp-btn ps-btn ps-btn-quiet">Cancel</button></div>
+    </section>
+    <p class="anno">Add my key stays disabled until the 8 characters match (case-sensitive) and the box is ticked. The masked characters are never in the DOM.</p>
+  </div></div>
+</figure>
+
+<!-- 4. Panel: two keys -->
+<figure>
+  <figcaption><b>4 · Two-key warning</b>After Path A, confirmed on chain (spec §3, §4.3)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="panel-head"><h2>Self-custody</h2><button class="link">Close</button></div>
+    <p class="status-line">You and Privy can both sign for this account.</p>
+    <p class="danger"><b>Both keys can move all your funds.</b> Anyone who gets either one can empty this account, and Meta Poo can't undo it. Keep your own key as safe as a bank password.</p>
+    <p class="mp-eyebrow">Keys on this account</p>
+    <ul class="keys">
+      <li><span class="who">Privy (your sign-in)</span><span class="badge full">Full access</span><span class="k">ed25519:BwP4…r7Lc</span></li>
+      <li><span class="who">Your key</span><span class="badge full">Full access</span><span class="k">ed25519:7xKp…3dVa</span><button class="link acts">Remove</button></li>
+      <li><span class="who">This browser's drawing key</span><span class="badge paint">Paint only</span><span class="k">ed25519:5nQe…Ys2A</span></li>
+    </ul>
+    <div class="actions"><button class="mp-btn">Remove Privy's key…</button></div>
+    <p class="hint">Removing Privy's key is optional and opens 24 hours after you add your own.</p>
+  </div></div>
+</figure>
+
+<!-- 5. Graduation warning -->
+<figure>
+  <figcaption><b>5 · DeleteKey graduation warning</b>Shown before the player's own wallet opens (spec §5)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="panel-head"><h2>Remove Privy's key?</h2><button class="link">Cancel</button></div>
+    <p class="danger">After this, <b>Privy sign-in can't approve anything for this account</b>: no painting authorisation, no buying, no sending. Only your own wallet can.<br><br><b>If you lose your own key, nobody can recover this account, including Meta Poo and Privy.</b> This can't be undone.</p>
+    <label class="check"><input type="checkbox" checked> I've signed in with my own wallet at least once</label>
+    <label class="check"><input type="checkbox" checked> I've backed up my own key or recovery phrase</label>
+    <label class="check"><input type="checkbox"> I understand this can't be undone</label>
+    <label class="field"><span>Type REMOVE to continue</span><input class="input" value="" placeholder="REMOVE"></label>
+    <div class="actions"><button class="mp-btn mp-btn-primary" disabled>Continue in my wallet</button></div>
+    <p class="hint">Next: disconnect Privy, connect this same account with your own wallet, and approve the removal there. The Privy window never removes its own key.</p>
+  </div></div>
+</figure>
+
+<!-- 6. Graduated state -->
+<figure>
+  <figcaption><b>6 · Graduated</b>Privy sign-in after Privy's key is gone (spec §5 step 5)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="state-icon good" aria-hidden="true">✓</div>
+    <p class="mp-eyebrow">Self-custody</p>
+    <h2 style="font-size:20px">This account is now controlled by your own wallet</h2>
+    <p class="hint">Connect with that wallet to buy credits, send or authorise drawing. Privy sign-in can still show your address and balances, but it can't approve anything.</p>
+    <ul class="keys">
+      <li><span class="who">Your key</span><span class="badge full">Full access</span><span class="k">ed25519:7xKp…3dVa</span></li>
+      <li><span class="who">This browser's drawing key</span><span class="badge paint">Paint only</span><span class="k">ed25519:5nQe…Ys2A</span></li>
+    </ul>
+    <div class="actions"><button class="mp-btn mp-btn-primary">Connect my wallet</button></div>
+  </div></div>
+</figure>
+
+<!-- 7. Refusals -->
+<figure>
+  <figcaption><b>7 · Add-key refused</b>No matching pending request, extra action, or another account (spec §4.2)</figcaption>
+  <div class="phone"><div class="ps">
+    <header class="ps-brand"><span class="ps-wordmark">meta poo.</span><span class="ps-trust"><span class="ps-secure">Secure sign-in</span><span class="ps-pill">NEAR mainnet</span></span></header>
+    <section class="ps-card">
+      <p class="mp-eyebrow ps-eyebrow">Request refused</p>
+      <h1 class="ps-title">This key can't be added here</h1>
+      <p class="ps-status">It doesn't match the key you started adding in the game, or the request asks for more than one change. Nothing was signed. Close this window and start again from Self-custody.</p>
+      <div class="ps-actions"><button class="mp-btn ps-btn ps-btn-quiet">Close</button></div>
+    </section>
+  </div></div>
+</figure>
+
+</section>
+</main>
+</body>
+</html>

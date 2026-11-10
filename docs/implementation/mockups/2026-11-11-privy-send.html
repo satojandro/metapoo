@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privy Send mockups</title>
+<!--
+  Mockup for docs/implementation/2026-11-11-privy-send-spec.md. Static, no scripts.
+  Tokens copied from web/src/design/tokens.css; approval window classes (ps-*) from
+  web/src/integrations/privy/privy-sign.css; in-game panel language from wall-design.css
+  (.wallet-details, .action, .buy-credits-*). Example accounts and amounts are fictional.
+-->
+<style>
+:root{--mp-bg:#111214;--mp-card:#1b1c1f;--mp-card-2:#232427;--mp-line:#343537;--mp-fg:#f4f1e9;--mp-soft:#d8d4cc;--mp-muted:#a9aaad;--mp-on-tag:#17171a;--mp-tag:#f1dc5e;--mp-near:#73d7ee;--mp-stake:#65d5ae;--mp-burn:#ff9f8f;--mp-focus:#56c9ec;--mp-glow:#282629;--mp-soft-btn:#f0ddd9;--mp-soft-btn-ink:#251d22;--mp-soft-btn-line:#515156;--mp-shadow:#0009;--mp-good:var(--mp-stake);--mp-warn:var(--mp-tag);--mp-bad:var(--mp-burn);--mp-font:Arial,Helvetica,sans-serif;--mp-mono:ui-monospace,Menlo,monospace;--mp-text-xs:11px;--mp-text-sm:12px;--mp-text-md:13px;--mp-text-body:14px;--mp-text-base:15px;--mp-leading:1.55;--mp-space-1:4px;--mp-space-2:8px;--mp-space-3:12px;--mp-space-4:16px;--mp-space-5:20px;--mp-space-6:24px;--mp-space-7:32px;--mp-radius-md:6px;--mp-radius-lg:8px;--mp-radius-pill:999px;--mp-hit:44px;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 50% 0%,var(--mp-glow),transparent 70%),var(--mp-bg);color:var(--mp-fg);font:var(--mp-text-base)/var(--mp-leading) var(--mp-font)}
+.page{max-width:1240px;margin:0 auto;padding:var(--mp-space-6) var(--mp-space-4) var(--mp-space-7)}
+.page>header h1{margin:0;font-size:clamp(26px,5vw,40px);font-weight:900;letter-spacing:-1px}
+.page>header p{margin:var(--mp-space-2) 0 0;color:var(--mp-soft);max-width:70ch}
+.page>header a{color:var(--mp-near)}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:var(--mp-space-6);margin-top:var(--mp-space-6);align-items:start}
+figure{margin:0;display:grid;gap:var(--mp-space-2)}
+figcaption{font-size:var(--mp-text-sm);color:var(--mp-muted)}
+figcaption b{color:var(--mp-tag);font:600 var(--mp-text-xs) var(--mp-mono);letter-spacing:.14em;text-transform:uppercase;display:block}
+.phone{width:100%;max-width:375px;border:1px solid var(--mp-line);border-radius:22px;background:var(--mp-bg);padding:var(--mp-space-4) var(--mp-space-3);overflow:hidden;font-size:var(--mp-text-base)}
+.mp-eyebrow{font:600 var(--mp-text-xs)/1.2 var(--mp-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mp-muted);margin:0}
+.mp-btn{font:700 var(--mp-text-md) var(--mp-font);color:var(--mp-fg);background:var(--mp-card-2);border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);padding:var(--mp-space-2) var(--mp-space-3);min-height:var(--mp-hit)}
+.mp-btn-primary{background:var(--mp-tag);color:var(--mp-on-tag);border-color:var(--mp-tag)}
+.mp-btn:disabled{opacity:.45}
+.mp-chip{font:600 var(--mp-text-md) var(--mp-font);color:var(--mp-soft);background:var(--mp-card);border:1px solid var(--mp-line);border-radius:var(--mp-radius-pill);padding:var(--mp-space-2) 14px;min-height:40px}
+.mp-chip[aria-pressed=true]{background:var(--mp-tag);color:var(--mp-on-tag);border-color:var(--mp-tag)}
+.mp-chip small{display:block;font:500 var(--mp-text-xs) var(--mp-mono);opacity:.8}
+/* In-game wallet panel (wall-design.css .wallet-details[open]) */
+.panel{background:var(--mp-card);border:1px solid var(--mp-line);border-radius:var(--mp-radius-lg);padding:var(--mp-space-5);display:grid;gap:var(--mp-space-3);box-shadow:0 18px 50px var(--mp-shadow)}
+.panel h2{margin:0;font-size:var(--mp-text-body);font-weight:700}
+.panel-head{display:flex;justify-content:space-between;align-items:center}
+.link{background:none;border:0;color:var(--mp-near);font:inherit;font-size:var(--mp-text-sm);text-decoration:underline;padding:0}
+.chips{display:flex;gap:var(--mp-space-2);flex-wrap:wrap}
+.field{display:grid;gap:var(--mp-space-1)}
+.field>span{font-size:var(--mp-text-sm);font-weight:700;color:var(--mp-soft)}
+.input-row{display:flex;gap:var(--mp-space-2)}
+.input{flex:1;min-width:0;min-height:var(--mp-hit);padding:var(--mp-space-2) var(--mp-space-3);background:var(--mp-bg);color:var(--mp-fg);border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);font:var(--mp-text-body) var(--mp-mono)}
+.input.bad{border-color:var(--mp-bad)}
+.input.ok{border-color:var(--mp-good)}
+.suffix{align-self:center;font:700 var(--mp-text-sm) var(--mp-mono);color:var(--mp-muted)}
+.hint{margin:0;font-size:var(--mp-text-sm);color:var(--mp-muted)}
+.hint.bad{color:var(--mp-bad)}
+.hint.ok{color:var(--mp-good)}
+.notice{margin:0;padding:var(--mp-space-3);border:1px dashed var(--mp-line);border-radius:var(--mp-radius-md);background:var(--mp-card-2);font-size:var(--mp-text-sm);color:var(--mp-soft)}
+.notice b{color:var(--mp-fg)}
+.notice.warn{border:1px solid var(--mp-warn);border-style:solid}
+.notice.bad{border:1px solid var(--mp-bad)}
+.summary{margin:0;display:grid;border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);overflow:hidden;font-size:var(--mp-text-sm)}
+.summary div{display:flex;justify-content:space-between;gap:var(--mp-space-3);padding:var(--mp-space-2) var(--mp-space-3);background:var(--mp-card-2)}
+.summary div+div{border-top:1px solid var(--mp-line)}
+.summary dt{color:var(--mp-muted)}.summary dd{margin:0;font-weight:700;text-align:right;overflow-wrap:anywhere}
+.mono{font-family:var(--mp-mono);font-weight:500;word-break:break-all}
+.actions{display:flex;gap:var(--mp-space-2);flex-wrap:wrap}
+.actions .mp-btn-primary{flex:1 1 auto}
+.big{font-size:32px;font-weight:900;letter-spacing:-1px;line-height:1.05;margin:0}
+.state-icon{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:900;font-size:22px}
+.state-icon.good{background:var(--mp-good);color:var(--mp-on-tag)}
+.state-icon.bad{background:var(--mp-bad);color:var(--mp-on-tag)}
+.state-icon.warn{background:var(--mp-warn);color:var(--mp-on-tag)}
+/* Privy approval window (privy-sign.css) */
+.ps{display:grid;gap:var(--mp-space-4)}
+.ps-brand{display:flex;align-items:center;justify-content:space-between;gap:var(--mp-space-3);flex-wrap:wrap}
+.ps-wordmark{font-size:24px;font-weight:900;letter-spacing:-1.5px;line-height:1}
+.ps-trust{display:flex;align-items:center;gap:var(--mp-space-2);font:600 var(--mp-text-xs) var(--mp-mono);color:var(--mp-muted)}
+.ps-secure::before{content:"";display:inline-block;width:8px;height:8px;border:1.6px solid var(--mp-good);border-radius:2px;margin-right:6px;vertical-align:-1px}
+.ps-pill{padding:2px var(--mp-space-2);border:1px solid var(--mp-line);border-radius:var(--mp-radius-pill);color:var(--mp-soft);text-transform:uppercase;letter-spacing:.08em}
+.ps-card{background:var(--mp-card);border:1px solid var(--mp-line);border-radius:var(--mp-radius-lg);padding:var(--mp-space-6) var(--mp-space-5);display:grid;gap:var(--mp-space-3);box-shadow:0 18px 40px var(--mp-shadow)}
+.ps-eyebrow{color:var(--mp-tag)}
+.ps-title{margin:0;font-size:26px;font-weight:900;letter-spacing:-.8px;line-height:1.15}
+.ps-lede{margin:0;color:var(--mp-soft)}
+.ps-facts{margin:0;display:grid;border:1px solid var(--mp-line);border-radius:var(--mp-radius-md);overflow:hidden}
+.ps-fact{display:grid;grid-template-columns:minmax(88px,34%) 1fr;gap:var(--mp-space-3);padding:var(--mp-space-3);background:var(--mp-card-2)}
+.ps-fact+.ps-fact{border-top:1px solid var(--mp-line)}
+.ps-fact dt{color:var(--mp-muted);font-size:var(--mp-text-body)}
+.ps-fact dd{margin:0;font-size:var(--mp-text-body);font-weight:700}
+.ps-fact.hl{box-shadow:inset 3px 0 0 var(--mp-tag)}
+.ps-note{margin:0;color:var(--mp-muted);font-size:var(--mp-text-body)}
+.ps-technical{font-size:var(--mp-text-sm);color:var(--mp-muted)}
+.ps-technical ul{margin:var(--mp-space-2) 0 0;padding-left:var(--mp-space-4)}
+.ps-actions{display:flex;flex-wrap:wrap;gap:var(--mp-space-2);margin-top:var(--mp-space-2)}
+.ps-actions .mp-btn-primary{flex:1 1 auto}
+.ps-btn{font-size:var(--mp-text-base);padding:var(--mp-space-2) var(--mp-space-5)}
+.ps-btn-quiet{background:transparent;color:var(--mp-soft)}
+.ps-status{margin:0;font-size:var(--mp-text-body);padding:var(--mp-space-3);border:1px solid var(--mp-bad);border-radius:var(--mp-radius-md)}
+.ps-foot{margin:0;text-align:center;font-size:var(--mp-text-sm);color:var(--mp-muted)}
+.anno{margin:0;font-size:var(--mp-text-xs);color:var(--mp-muted);font-family:var(--mp-mono);border-left:2px solid var(--mp-line);padding-left:var(--mp-space-2)}
+</style>
+</head>
+<body>
+<main class="page">
+<header>
+  <p class="mp-eyebrow">Mockup · 11 Nov 2026 · mobile-first</p>
+  <h1>Send NEAR, TOILET and mPOO</h1>
+  <p>Screens for <a href="../2026-11-11-privy-send-spec.md">the Send spec</a>. In-game screens use the wallet panel's look. The approval screens are the Privy window (<code>privy-sign.html</code>), whose content comes only from the payload being signed. Accounts and amounts are examples.</p>
+</header>
+
+<section class="gallery">
+
+<!-- 1. Send form: token, unregistered recipient -->
+<figure>
+  <figcaption><b>1 · Send form</b>TOILET to an account that doesn't hold TOILET yet (spec §5.1–5.4)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="panel-head"><h2>Send</h2><button class="link">Close</button></div>
+    <div class="chips" role="group" aria-label="Asset">
+      <button class="mp-chip">NEAR<small>2.4873 avail.</small></button>
+      <button class="mp-chip" aria-pressed="true">TOILET<small>1,204.5</small></button>
+      <button class="mp-chip">mPOO<small>88,000</small></button>
+    </div>
+    <label class="field"><span>To</span>
+      <div class="input-row"><input class="input ok" value="alice.near" aria-describedby="h1"><button class="mp-btn">Paste</button></div>
+    </label>
+    <p class="hint ok" id="h1">✓ alice.near exists on mainnet</p>
+    <label class="field"><span>Amount</span>
+      <div class="input-row"><input class="input" value="1000" inputmode="decimal"><span class="suffix">TOILET</span><button class="mp-btn">Max</button></div>
+    </label>
+    <p class="notice warn"><b>alice.near doesn't hold TOILET yet.</b> Sending will also pay 0.00125 NEAR to open a TOILET balance for them. This is a one-time network charge, not a Meta Poo fee.</p>
+    <dl class="summary">
+      <div><dt>Network fee</dt><dd>under 0.005 NEAR</dd></div>
+      <div><dt>Registration</dt><dd>0.00125 NEAR</dd></div>
+      <div><dt>Kept for fees</dt><dd>0.01 NEAR</dd></div>
+    </dl>
+    <div class="actions"><button class="mp-btn mp-btn-primary">Review send</button></div>
+    <p class="hint">Transfers can't be undone. Next, your wallet asks you to approve.</p>
+  </div></div>
+</figure>
+
+<!-- 2. Send form: NEAR with validation -->
+<figure>
+  <figcaption><b>2 · Send form, blocked</b>NEAR: unknown account, Max floor, over-max amount (spec §5.2, §5.4)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="panel-head"><h2>Send</h2><button class="link">Close</button></div>
+    <div class="chips">
+      <button class="mp-chip" aria-pressed="true">NEAR<small>2.4873 avail.</small></button>
+      <button class="mp-chip">TOILET<small>1,204.5</small></button>
+      <button class="mp-chip">mPOO<small>88,000</small></button>
+    </div>
+    <label class="field"><span>To</span>
+      <div class="input-row"><input class="input bad" value="bob-wallet.near"><button class="mp-btn">Paste</button></div>
+    </label>
+    <p class="hint bad">No NEAR account called bob-wallet.near exists on mainnet.</p>
+    <label class="field"><span>Amount</span>
+      <div class="input-row"><input class="input bad" value="2.6" inputmode="decimal"><span class="suffix">NEAR</span><button class="mp-btn">Max</button></div>
+    </label>
+    <p class="hint bad">You can send up to 2.4873 NEAR. Meta Poo keeps 0.01 NEAR so you can still pay fees later.</p>
+    <div class="actions"><button class="mp-btn mp-btn-primary" disabled>Review send</button></div>
+    <p class="anno">Other inline errors: "That's your own account." · "That isn't a NEAR account…" · "We couldn't check that account right now. Try again." (RPC down: never shown as "doesn't exist")</p>
+  </div></div>
+</figure>
+
+<!-- 3. Approval: NEAR transfer -->
+<figure>
+  <figcaption><b>3 · Approval: NEAR transfer</b>Privy window, native <code>Transfer</code> (spec §4.5)</figcaption>
+  <div class="phone"><div class="ps">
+    <header class="ps-brand"><span class="ps-wordmark">meta poo.</span><span class="ps-trust"><span class="ps-secure">Secure sign-in</span><span class="ps-pill">NEAR mainnet</span></span></header>
+    <section class="ps-card">
+      <p class="mp-eyebrow ps-eyebrow">Send NEAR</p>
+      <h1 class="ps-title">Send 2.4 NEAR</h1>
+      <p class="ps-lede">This moves NEAR out of your Meta Poo account. Transfers can't be undone, so check the recipient.</p>
+      <dl class="ps-facts">
+        <div class="ps-fact hl"><dt>To</dt><dd class="mono">carol.near</dd></div>
+        <div class="ps-fact hl"><dt>Amount</dt><dd>2.4 NEAR</dd></div>
+        <div class="ps-fact"><dt>Network fee</dt><dd>Under 0.001 NEAR</dd></div>
+        <div class="ps-fact"><dt>From</dt><dd class="mono">9f2c…e41a (your account)</dd></div>
+      </dl>
+      <p class="ps-note">Double-check the recipient. If it's wrong, Meta Poo can't get it back.</p>
+      <details class="ps-technical"><summary>Technical details</summary><ul class="mono"><li>Transfer: 2400000000000000000000000 yoctoNEAR to carol.near</li><li>Network: mainnet</li></ul></details>
+      <div class="ps-actions"><button class="mp-btn mp-btn-primary ps-btn">Send 2.4 NEAR</button><button class="mp-btn ps-btn ps-btn-quiet">Cancel</button></div>
+    </section>
+    <p class="ps-foot">Meta Poo never sees your keys or holds your money. Sign-in and signing are handled by Privy.</p>
+  </div></div>
+</figure>
+
+<!-- 4. Approval: token + registration -->
+<figure>
+  <figcaption><b>4 · Approval: TOILET + registration</b>One transaction: <code>storage_deposit</code> then <code>ft_transfer</code> (spec §3, §4.5, §6.6)</figcaption>
+  <div class="phone"><div class="ps">
+    <header class="ps-brand"><span class="ps-wordmark">meta poo.</span><span class="ps-trust"><span class="ps-secure">Secure sign-in</span><span class="ps-pill">NEAR mainnet</span></span></header>
+    <section class="ps-card">
+      <p class="mp-eyebrow ps-eyebrow">Send TOILET</p>
+      <h1 class="ps-title">Send 1,000 TOILET</h1>
+      <p class="ps-lede">This moves TOILET out of your Meta Poo account. Transfers can't be undone, so check the recipient.</p>
+      <dl class="ps-facts">
+        <div class="ps-fact hl"><dt>To</dt><dd class="mono">alice.near</dd></div>
+        <div class="ps-fact hl"><dt>Amount</dt><dd>1,000 TOILET</dd></div>
+        <div class="ps-fact"><dt>Token</dt><dd class="mono">toilet.metapoo.near</dd></div>
+        <div class="ps-fact"><dt>Also pays</dt><dd>0.00125 NEAR to open a TOILET balance for the recipient</dd></div>
+        <div class="ps-fact"><dt>From</dt><dd class="mono">9f2c…e41a (your account)</dd></div>
+      </dl>
+      <p class="ps-note">The recipient doesn't hold TOILET yet. Registration and transfer happen together: if the transfer fails, the registration is undone too and only the network fee is spent.</p>
+      <p class="ps-note">Double-check the recipient. If it's wrong, Meta Poo can't get it back.</p>
+      <details class="ps-technical" open><summary>Technical details</summary><ul class="mono">
+        <li>toilet.metapoo.near → storage_deposit {"account_id":"alice.near","registration_only":true}; deposit 1250000000000000000000 yocto; gas 10 TGas</li>
+        <li>toilet.metapoo.near → ft_transfer {"receiver_id":"alice.near","amount":"1000000000000000000000"}; deposit 1 yocto; gas 30 TGas</li>
+      </ul></details>
+      <div class="ps-actions"><button class="mp-btn mp-btn-primary ps-btn">Send 1,000 TOILET</button><button class="mp-btn ps-btn ps-btn-quiet">Cancel</button></div>
+    </section>
+    <p class="anno">No "N transactions in order" note: a Send is always one transaction. Token contract name is illustrative; the real one comes from VITE_TOILET_ID.</p>
+  </div></div>
+</figure>
+
+<!-- 5. Approval refused -->
+<figure>
+  <figcaption><b>5 · Approval refused</b>Unknown token contract, wrong deposit, or FullAccess AddKey mixed in (spec §4.2)</figcaption>
+  <div class="phone"><div class="ps">
+    <header class="ps-brand"><span class="ps-wordmark">meta poo.</span><span class="ps-trust"><span class="ps-secure">Secure sign-in</span><span class="ps-pill">NEAR mainnet</span></span></header>
+    <section class="ps-card">
+      <p class="mp-eyebrow ps-eyebrow">Request refused</p>
+      <h1 class="ps-title">This transfer can't be approved here</h1>
+      <p class="ps-status">Meta Poo can only send TOILET and mPOO from this window. Nothing was sent. Close this window and try again from the game.</p>
+      <div class="ps-actions"><button class="mp-btn ps-btn ps-btn-quiet">Close</button></div>
+    </section>
+    <p class="anno">No Approve button is ever rendered for a refused request.</p>
+  </div></div>
+</figure>
+
+<!-- 6. Success -->
+<figure>
+  <figcaption><b>6 · Sent</b>Confirmed by receipts and the transfer event (spec §6.1)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="state-icon good" aria-hidden="true">✓</div>
+    <p class="mp-eyebrow">Sent</p>
+    <p class="big">1,000 TOILET</p>
+    <dl class="summary">
+      <div><dt>To</dt><dd class="mono">alice.near</dd></div>
+      <div><dt>Registration</dt><dd>0.00125 NEAR paid</dd></div>
+      <div><dt>Network fee</dt><dd>0.0009 NEAR</dd></div>
+    </dl>
+    <p class="hint">Your balances are up to date. alice.near can see the TOILET in their wallet now.</p>
+    <div class="actions"><button class="mp-btn mp-btn-primary">Done</button><button class="mp-btn">View on explorer ↗</button></div>
+    <p class="anno">mPOO with a tax shortfall adds: "alice.near received 970 mPOO after mPOO's transfer tax."</p>
+  </div></div>
+</figure>
+
+<!-- 7. Failed -->
+<figure>
+  <figcaption><b>7 · Failed on chain</b>Receipt failed; registration rolled back with it (spec §6.3)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="state-icon bad" aria-hidden="true">!</div>
+    <p class="mp-eyebrow">Not sent</p>
+    <h2 style="font-size:20px">The transfer didn't go through</h2>
+    <p class="notice bad">Your TOILET is still in your account; only the network fee was spent. Nothing was registered for alice.near.</p>
+    <details class="ps-technical"><summary>Technical details</summary><ul class="mono"><li>Smart contract panicked: The account alice.near is not registered</li><li>tx 6pQ…h2W</li></ul></details>
+    <div class="actions"><button class="mp-btn mp-btn-primary">Try again</button><button class="mp-btn">Close</button></div>
+  </div></div>
+</figure>
+
+<!-- 8. Unknown -->
+<figure>
+  <figcaption><b>8 · Can't confirm yet</b>Possible broadcast; never auto-resend (spec §6.4)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="state-icon warn" aria-hidden="true">?</div>
+    <p class="mp-eyebrow">Checking</p>
+    <h2 style="font-size:20px">We can't confirm this transfer yet</h2>
+    <p class="hint">2.4 NEAR to carol.near. It may already have gone through. We're checking the network and your balance; this can take up to 2 minutes.</p>
+    <p class="notice"><b>Don't send it again yet.</b> Sending NEAR is paused until this one is confirmed or you've checked it yourself.</p>
+    <div class="actions"><button class="mp-btn mp-btn-primary">Check again</button><button class="mp-btn">I've checked, start a new send</button></div>
+  </div></div>
+</figure>
+
+<!-- 9. Cancelled + fee shortfall -->
+<figure>
+  <figcaption><b>9 · Cancelled / not enough NEAR for fees</b>Not errors: values kept (spec §6.2, §5.4)</figcaption>
+  <div class="phone"><div class="panel">
+    <div class="panel-head"><h2>Send</h2><button class="link">Close</button></div>
+    <p class="notice">Cancelled. Nothing was sent.</p>
+    <div class="chips"><button class="mp-chip">NEAR<small>0.004 avail.</small></button><button class="mp-chip" aria-pressed="true">mPOO<small>88,000</small></button></div>
+    <label class="field"><span>To</span><div class="input-row"><input class="input ok" value="dave.near"><button class="mp-btn">Paste</button></div></label>
+    <label class="field"><span>Amount</span><div class="input-row"><input class="input" value="88000"><span class="suffix">mPOO</span><button class="mp-btn">Max</button></div></label>
+    <p class="notice warn">You need about 0.0114 NEAR for network fees to send mPOO. Add NEAR first.</p>
+    <div class="actions"><button class="mp-btn mp-btn-primary" disabled>Review send</button><button class="mp-btn">Add NEAR</button></div>
+  </div></div>
+</figure>
+
+</section>
+</main>
+</body>
+</html>
