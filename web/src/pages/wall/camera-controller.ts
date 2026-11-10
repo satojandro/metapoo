@@ -90,6 +90,8 @@ export interface CameraController {
   positionSelection(): void;
   updatePositionReadout(): void;
   cellAtClientPoint(clientX: number, clientY: number): Cell | null;
+  /** Called after every camera move and every board render (the minimap). */
+  onChange(listener: () => void): () => void;
   dispose(): void;
 }
 
@@ -130,6 +132,10 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
   let camera: Camera = { cellSize: 4, panX: 0, panY: 0 };
   let viewTransform: CameraTransform = createCameraTransform(camera);
   const zoomStateListeners = new Set<() => void>();
+  const changeListeners = new Set<() => void>();
+  const notifyChange = (): void => {
+    for (const listener of changeListeners) listener();
+  };
 
   scope.onDispose(
     mountWallZoomControls(boardToolbar, {
@@ -239,6 +245,7 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
     positionSelection();
     updatePositionReadout();
     deps.updateCompactStatus();
+    notifyChange();
   }
 
   function updatePositionReadout(): void {
@@ -280,7 +287,10 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
     boardStage.style.transform = viewTransform.stage.transform;
     positionSelection();
     updatePositionReadout();
+    // The status chip shows px/cell, so every camera move refreshes it, whoever moved it.
+    deps.updateCompactStatus();
     for (const listener of zoomStateListeners) listener();
+    notifyChange();
   }
 
   function readZoomState(): WallZoomState {
@@ -644,7 +654,12 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
     positionSelection,
     updatePositionReadout,
     cellAtClientPoint,
+    onChange(listener) {
+      changeListeners.add(listener);
+      return () => changeListeners.delete(listener);
+    },
     dispose() {
+      changeListeners.clear();
       resizeObserver.disconnect();
     },
   };

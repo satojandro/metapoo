@@ -61,6 +61,14 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                 <button type="button" data-wall-view="age" aria-pressed="false" title="How recently each tile was painted">Age</button>
                 <button type="button" data-wall-view="turf" aria-pressed="false" title="Who holds the most tiles">Turf</button>
               </div>
+              <!-- Full screen: the wall takes the window; the panel floats and can hide. -->
+              <button id="wall-fullscreen" class="wall-icon-btn wall-fullscreen-btn" type="button"
+                aria-pressed="false" aria-label="Full screen" title="Full screen">
+                <svg class="icon-enter" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"></path><path d="M20 9V4h-5"></path><path d="M4 15v5h5"></path><path d="M20 15v5h-5"></path></svg>
+                <svg class="icon-exit" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4"></path><path d="M15 4v5h5"></path><path d="M9 20v-5H4"></path><path d="M15 20v-5h5"></path></svg>
+              </button>
+              <button id="wall-panel-toggle" class="wall-chip-btn wall-panel-toggle" type="button"
+                aria-controls="wall-panel" aria-expanded="true" hidden>Hide panel</button>
             </div>
 
             <div class="wall-foot">
@@ -85,7 +93,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
           </div>
         </section>
 
-        <aside class="wall-panel" aria-label="Wall panel">
+        <aside id="wall-panel" class="wall-panel" aria-label="Wall panel">
           <div class="wall-panel-body">
             <section class="wall-card wall-invite" data-wall-card="look" data-state="loading">
               <p class="mp-eyebrow">The wall</p>
