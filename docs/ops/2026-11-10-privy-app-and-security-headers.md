@@ -45,6 +45,16 @@ appears in the wallet picker at `localhost:5173`.
 
 ## 2. What changed in the repo
 
+- `web/.env.development` — committed dev defaults: `VITE_PRIVY_ENABLED=true`, the Meta Poo app
+  ID, and `/privy-sign.html`. `web/.env` is gitignored, so social login used to depend on who had
+  hand-edited their machine; on a fresh checkout "Google or email" simply was not in the wallet
+  picker. `.env` (and `.env.local`) still win per machine.
+- `readPrivyConfig` now mirrors `src/config.ts` and treats an unset `VITE_NEAR_NETWORK` as
+  `testnet` instead of failing. Requiring that variable made the whole connector disappear
+  whenever it was not in the loaded env files — indistinguishable from "Privy is broken". An
+  explicit `mock`/`localnet` is still refused. Verified: with only `.env.development` present
+  (no `.env` at all) the wallet picker lists Google or email.
+
 - `web/vercel.json` — added, on every route: `Content-Security-Policy-Report-Only`,
   `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `Permissions-Policy` (camera/microphone/geolocation off). The existing asset-cache and
