@@ -54,6 +54,15 @@ export interface FundingQuote {
   raw: Record<string, unknown>;
 }
 
+/**
+ * `/v0/status` echoes the signed quote without `correlationId`: the vendor's signed
+ * payload (`quoteHash`) excludes it. Bind payment identity by deposit address, memo
+ * and minimum output instead of a field the provider does not return.
+ */
+export type FundingQuoteEcho = Omit<FundingQuote, "correlationId"> & {
+  correlationId?: string;
+};
+
 export const PROVIDER_STATUSES = [
   "PENDING_DEPOSIT",
   "KNOWN_DEPOSIT_TX",
@@ -68,7 +77,7 @@ export interface FundingStatus {
   status: ProviderStatus | "UNKNOWN";
   providerStatus: string;
   updatedAt: string;
-  quoteResponse: FundingQuote;
+  quoteResponse: FundingQuoteEcho;
   destinationHashes: string[];
   originHashes: string[];
   refundHashes: string[];
@@ -164,7 +173,8 @@ export interface FundingClient {
     signal?: AbortSignal,
   ): Promise<FundingQuote>;
   status(quote: FundingQuote, signal?: AbortSignal): Promise<FundingStatus>;
-  verify(quote: FundingQuote): Promise<boolean>;
+  /** The signature covers the quote payload, which a status echo reproduces verbatim. */
+  verify(quote: FundingQuoteEcho): Promise<boolean>;
 }
 
 export interface FundingPreviewInput {

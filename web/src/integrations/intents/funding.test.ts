@@ -17,7 +17,7 @@ import type {
   FundingStatus,
 } from "./types";
 import type { OperationContext } from "../types";
-import { parseQuote } from "./client";
+import { parseQuote, parseStatus } from "./client";
 import { REVIEWED_PLATFORM_FEE_RECIPIENT } from "./quote";
 
 class MemoryStorage {
@@ -163,6 +163,47 @@ describe("Intents funding authority and recovery", () => {
     const snapshot = await app.controller.preview(app.input, FIXTURE_CONTEXT);
     expect(snapshot.phase).toBe("review");
     expect(app.client.tokens).toHaveBeenCalledTimes(2);
+  });
+  it("keeps tracking when the status echo carries no correlationId", async () => {
+    // Live provider shape (10 Nov 2026): /v0/status returns the signed quote without
+    // correlationId and with explicit null referral/virtualChain* fields. Polling this
+    // used to replace the deposit instructions with "Unsupported provider status".
+    const app = setup();
+    const committed = await app.commit();
+    const operationId = committed.operation!.id;
+    const echo = () => {
+      const raw = structuredClone(committed.operation!.quote.raw);
+      delete raw.correlationId;
+      Object.assign(raw.quoteRequest as Record<string, unknown>, {
+        referral: null,
+        virtualChainRecipient: null,
+        virtualChainRefundRecipient: null,
+      });
+      return raw;
+    };
+    const providerStatus = (quoteResponse: unknown) =>
+      parseStatus({
+        status: "PENDING_DEPOSIT",
+        updatedAt: new Date(FIXTURE_TIME + 1000).toISOString(),
+        correlationId: "provider-envelope-id",
+        swapDetails: { originChainTxHashes: [], destinationChainTxHashes: [] },
+        quoteResponse,
+      });
+    vi.mocked(app.client.status).mockImplementation(async () =>
+      providerStatus(echo()),
+    );
+    const snapshot = await app.controller.refresh(operationId);
+    expect(snapshot.phase).toBe("awaiting_deposit");
+    expect(snapshot.message).toContain("Waiting for your source payment");
+    expect(snapshot.operation?.id).toBe(operationId);
+
+    // A provider that does echo a different correlation id is still refused.
+    vi.mocked(app.client.status).mockImplementation(async () =>
+      providerStatus({ ...echo(), correlationId: "some-other-payment" }),
+    );
+    const mismatched = await app.controller.refresh(operationId);
+    expect(mismatched.phase).not.toBe("awaiting_deposit");
+    expect(mismatched.message).toContain("Status does not match");
   });
   it("rejects testnet funding and a nonexistent named account", async () => {
     const app = setup();

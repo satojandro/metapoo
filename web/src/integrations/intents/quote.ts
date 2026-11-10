@@ -1,4 +1,9 @@
-import type { FundingQuoteRequest, FundingQuote, IntentsToken } from "./types";
+import type {
+  FundingQuote,
+  FundingQuoteEcho,
+  FundingQuoteRequest,
+  IntentsToken,
+} from "./types";
 
 /** Captured in a signature-verified public 1Click dry quote on 3 Nov 2026. */
 export const REVIEWED_PLATFORM_FEE_RECIPIENT =
@@ -39,7 +44,7 @@ const CORE_REQUEST_FIELDS = [
 ] as const;
 
 /** Provider-reported fee only. Absence is not evidence that all provider costs are zero. */
-export function providerFeeBps(quote: FundingQuote): number | undefined {
+export function providerFeeBps(quote: FundingQuoteEcho): number | undefined {
   const fees = quote.quoteRequest.appFees;
   if (fees === undefined) return undefined;
   if (!Array.isArray(fees) || fees.length > 1)
@@ -174,7 +179,7 @@ export function validateRefundAddress(chain: string, address: string): void {
 }
 
 export function assertQuoteMatches(
-  quote: FundingQuote,
+  quote: FundingQuoteEcho,
   request: FundingQuoteRequest,
 ): void {
   const actual = quote.quoteRequest as unknown as Record<string, unknown>;
@@ -183,10 +188,15 @@ export function assertQuoteMatches(
       throw new Error(`Quote changed ${key}; request a new quote`);
   }
   // Accept only captured, nonprogrammable defaults; unknown routing extensions stay rejected.
+  // `/v0/status` echoes these three as explicit nulls where `/v0/quote` omits them; a
+  // non-null value means the provider rerouted the payment and is still refused.
   const defaults: Record<string, unknown> = {
     confidentiality: "public",
     quoteWaitingTimeMs: 0,
     insured: false,
+    referral: null,
+    virtualChainRecipient: null,
+    virtualChainRefundRecipient: null,
   };
   for (const key of Object.keys(actual)) {
     if (

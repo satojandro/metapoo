@@ -99,6 +99,9 @@ describe("Intents exact payments", () => {
       { insured: true },
       { quoteWaitingTimeMs: 1000 },
       { customRecipientMsg: "purchase" },
+      { referral: "attacker.near" },
+      { virtualChainRecipient: "attacker.near" },
+      { virtualChainRefundRecipient: "attacker.near" },
     ]) {
       const raw = structuredClone(liveDryQuote);
       Object.assign(raw.quoteRequest, extra);

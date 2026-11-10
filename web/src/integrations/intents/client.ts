@@ -4,6 +4,7 @@ import { PROVIDER_STATUSES } from "./types";
 import type {
   FundingClient,
   FundingQuote,
+  FundingQuoteEcho,
   FundingQuoteRequest,
   FundingStatus,
   IntentsToken,
@@ -75,6 +76,18 @@ export function parseTokens(value: unknown): IntentsToken[] {
 
 /** Validate restored records with the same parser as network responses. */
 export function parseQuote(value: unknown): FundingQuote {
+  return quoteEnvelope(value, true) as FundingQuote;
+}
+
+/**
+ * One validator for both envelopes: `/v0/quote` carries `correlationId`, the
+ * `/v0/status` echo does not (it falls outside the vendor's signed payload), so the
+ * echo parses without it and the parsed object simply has no such field.
+ */
+function quoteEnvelope(
+  value: unknown,
+  requireCorrelationId: boolean,
+): FundingQuoteEcho {
   const envelope = object(value);
   const request = object(envelope.quoteRequest);
   const quote = object(envelope.quote);
@@ -94,8 +107,7 @@ export function parseQuote(value: unknown): FundingQuote {
     text(request[field], field, 256);
   integer(request.amount);
   date(request.deadline);
-  const result: FundingQuote = {
-    correlationId: text(envelope.correlationId, "correlation id", 256),
+  const result: FundingQuoteEcho = {
     timestamp: date(envelope.timestamp),
     signature: text(envelope.signature, "signature", 2048),
     quoteRequest: request as unknown as FundingQuoteRequest,
@@ -107,6 +119,8 @@ export function parseQuote(value: unknown): FundingQuote {
     },
     raw: envelope,
   };
+  if (envelope.correlationId != null || requireCorrelationId)
+    result.correlationId = text(envelope.correlationId, "correlation id", 256);
   if (
     !Number.isFinite(quote.timeEstimate) ||
     result.quote.timeEstimate < 0 ||
@@ -150,7 +164,7 @@ export function parseStatus(value: unknown): FundingStatus {
       : "UNKNOWN",
     providerStatus: status,
     updatedAt: date(row.updatedAt),
-    quoteResponse: parseQuote(row.quoteResponse),
+    quoteResponse: quoteEnvelope(row.quoteResponse, false),
     destinationHashes: hashes(detail.destinationChainTxHashes),
     originHashes: hashes(detail.originChainTxHashes),
     refundHashes: hashes(detail.refundTxHashes),
@@ -196,7 +210,7 @@ export function createIntentsClient(
       verifyQuoteSignature(
         value as Parameters<typeof verifyQuoteSignature>[0],
       ));
-  const verify = async (quote: FundingQuote) => {
+  const verify = async (quote: FundingQuoteEcho) => {
     try {
       return (await verifier(quote.raw)) === true;
     } catch {

@@ -396,8 +396,11 @@ export function createIntentsFundingController(
         if (disposed) return getState();
         const echoed = status.quoteResponse;
         assertQuoteMatches(echoed, operation.quote.quoteRequest);
+        // `/v0/status` omits correlationId (it is outside the vendor's signed payload), so
+        // bind identity to the deposit address, memo and minimum output that were approved.
         if (
-          echoed.correlationId !== operation.quote.correlationId ||
+          (echoed.correlationId !== undefined &&
+            echoed.correlationId !== operation.quote.correlationId) ||
           echoed.quote.depositAddress !==
             operation.quote.quote.depositAddress ||
           echoed.quote.depositMemo !== operation.quote.quote.depositMemo ||
