@@ -1,7 +1,9 @@
 import {
   DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
   DRAWING_SESSION_METHODS,
+  formatAllowanceNear,
 } from "../../drawing-session";
+import { formatUnits } from "../../paint-wallet";
 import type { PrivyConfig } from "./config";
 import type {
   HostIdentity,
@@ -14,12 +16,35 @@ export interface SigningSession {
   targetOrigin: string;
   sign(): Promise<void>;
 }
+export interface PrivyReviewRow {
+  label: string;
+  value: string;
+  /** Account ids, contract ids and keys: monospace, wrapped anywhere. */
+  mono?: boolean;
+}
 export interface PrivyReview {
+  /** Short uppercase label above the heading. */
+  eyebrow: string;
   title: string;
+  /** One or two sentences telling the player what is happening and why. */
+  lede: string;
+  /** Plain-language facts the player approves, built from the exact payload. */
+  rows: PrivyReviewRow[];
+  /** Consequences worth reading before approving. */
+  notes: string[];
+  /** Exact values from the payload (yocto, gas units, raw arguments), shown collapsed. */
   details: string[];
+  approveLabel: string;
   requiresFunds: boolean;
   requiresHost: boolean;
 }
+const TGAS = 1_000_000_000_000n;
+const formatGas = (gas: string): string => {
+  const whole = BigInt(gas) / TGAS;
+  return whole > 0n ? `${whole} TGas` : "under 1 TGas";
+};
+const formatDeposit = (yocto: string): string =>
+  BigInt(yocto) === 0n ? "None" : `${formatUnits(yocto, 24)} NEAR`;
 const record = (v: unknown): Record<string, unknown> => {
   if (!v || typeof v !== "object" || Array.isArray(v))
     throw new Error("Invalid wallet request.");
@@ -65,12 +90,19 @@ export function reviewPrivyRequest(
   if (payload.kind === "signIn") {
     if (!payload.addFunctionCallKey)
       return {
-        title: "Connect your account",
-        details: [
-          `Account: ${wallet.address}`,
-          `Network: ${config.network}`,
-          "Connecting does not buy credits or paint.",
+        eyebrow: "Your NEAR account",
+        title: "You're signed in",
+        lede: "Signing in gave you a NEAR account of your own. Connect it to Meta Poo to see your balance and start painting.",
+        rows: [
+          { label: "Account", value: wallet.address, mono: true },
+          { label: "Network", value: `NEAR ${config.network}` },
         ],
+        notes: [
+          "Connecting is free. It doesn't send a transaction, spend NEAR, buy credits or paint.",
+        ],
+        // Nothing is signed beyond these two facts, so there is nothing more technical to show.
+        details: [],
+        approveLabel: "Connect to Meta Poo",
         requiresFunds: false,
         requiresHost: false,
       };
@@ -115,13 +147,26 @@ export function reviewPrivyRequest(
       );
     }
     return {
-      title: "Authorize drawing",
+      eyebrow: "Authorize drawing",
+      title: "Let this browser paint for you",
+      lede: "This adds a drawing key to your account, so you can paint tile by tile without a window like this one each time.",
+      rows: [
+        { label: "Can do", value: "Paint on the Meta Poo wall, nothing else" },
+        { label: "Fees it can spend", value: `Up to ${formatAllowanceNear(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO)}, then it stops` },
+        { label: "Can't do", value: "Move your NEAR, buy credits or swap tokens" },
+        { label: "Account", value: wallet.address, mono: true },
+      ],
+      notes: [
+        "Adding the key is one small transaction; you pay its network fee from your NEAR. You can revoke the key from the game at any time.",
+      ],
       details: [
-        `Board: ${boardContractId}`,
+        `Board contract: ${boardContractId}`,
         `Methods: ${DRAWING_SESSION_METHODS.join(", ")}`,
         `Gas allowance: ${DRAWING_SESSION_GAS_ALLOWANCE_YOCTO} yoctoNEAR`,
-        "You pay network gas from your account. This key cannot buy credits or swap tokens.",
+        `Public key: ${String(key.publicKey)}`,
+        `Network: ${config.network}`,
       ],
+      approveLabel: "Approve",
       requiresFunds: true,
       requiresHost: true,
     };
@@ -150,6 +195,8 @@ export function reviewPrivyRequest(
   )
     throw new Error("Invalid transaction batch.");
   const details = [`Account: ${wallet.address}`, `Network: ${config.network}`];
+  const rows: PrivyReviewRow[] = [];
+  let revokesKey = false;
   for (const value of transactions) {
     const tx = record(value),
       receiver = account(tx.receiverId);
@@ -169,6 +216,8 @@ export function reviewPrivyRequest(
           params.publicKey !== drawingPublicKey
         )
           throw new Error("Only the current drawing key can be revoked here.");
+        revokesKey = true;
+        rows.push({ label: "Remove", value: "This browser's drawing key" });
         details.push(`Revoke drawing key: ${drawingPublicKey}`);
       } else if (action.type === "FunctionCall") {
         if (
@@ -182,6 +231,11 @@ export function reviewPrivyRequest(
           throw new Error("Invalid gas limit.");
         const args = params.args;
         if (!(args instanceof Uint8Array)) record(args);
+        rows.push(
+          { label: "Calls", value: `${params.methodName} on ${receiver}`, mono: true },
+          { label: "Sends", value: formatDeposit(deposit) },
+          { label: "Gas limit", value: formatGas(gas) },
+        );
         details.push(
           `${receiver} → ${params.methodName}`,
           `Attached deposit: ${deposit} yoctoNEAR; gas limit: ${gas}`,
@@ -191,12 +245,22 @@ export function reviewPrivyRequest(
         throw new Error("This wallet request contains an unsupported action.");
     }
   }
-  details.push(
-    "You pay network gas. A failed later transaction does not undo earlier transactions.",
-  );
+  const notes = [
+    "Network fees come out of your NEAR. You only pay for gas actually used, never more than the limit.",
+  ];
+  if (transactions.length > 1)
+    notes.push(
+      `This sends ${transactions.length} transactions in order. If a later one fails, the earlier ones still happen.`,
+    );
+  rows.push({ label: "From", value: wallet.address, mono: true });
   return {
-    title: "Approve transaction",
+    eyebrow: "Approve transaction",
+    title: revokesKey && rows.length === 2 ? "Remove the drawing key" : "Check and approve",
+    lede: "The game asked your account to send this. Nothing happens until you approve it here.",
+    rows,
+    notes,
     details,
+    approveLabel: "Approve",
     requiresFunds: true,
     requiresHost: true,
   };

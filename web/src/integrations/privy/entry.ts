@@ -1,5 +1,7 @@
 // Buffer must be installed before any browser signing library executes.
 import "../../polyfills";
+import "../../design/tokens.css";
+import "./privy-sign.css";
 import { readPrivyConfig } from "./config";
 import { loadDrawingSessionRecord } from "../../drawing-session";
 import { mountPrivySignPage } from "./sign-page";

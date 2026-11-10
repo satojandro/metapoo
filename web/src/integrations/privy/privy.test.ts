@@ -355,3 +355,67 @@ describe("Privy signing request boundary", () => {
     }
   });
 });
+
+describe("Privy picker entry and plain-language review", () => {
+  it("ships an inline icon and names Privy as the sign-in host, not the game's origin", () => {
+    const manifest = createPrivyManifest(config);
+    // favicon.ico does not exist; the picker rendered a broken image.
+    expect(manifest.icon.startsWith("data:image/svg+xml,")).toBe(true);
+    expect(new URL(manifest.website).hostname).toBe("privy.io");
+  });
+  it("states amounts in NEAR and gas in TGas, keeping exact values under technical details", () => {
+    const review = reviewPrivyRequest(
+      session(tx),
+      config,
+      wallet,
+      host,
+      "wall.testnet",
+    );
+    const rows = Object.fromEntries(review.rows.map((r) => [r.label, r.value]));
+    expect(rows.Sends).toBe("1 NEAR");
+    expect(rows["Gas limit"]).toBe("30 TGas");
+    expect(rows.Calls).toBe("near_deposit on wrap.testnet");
+    expect(review.details.join("\n")).toContain(
+      "1000000000000000000000000 yoctoNEAR",
+    );
+    const free = reviewPrivyRequest(
+      session({
+        ...tx,
+        actions: [
+          { ...tx.actions[0], params: { ...tx.actions[0].params, deposit: "0" } },
+        ],
+      }),
+      config,
+      wallet,
+      host,
+      "wall.testnet",
+    );
+    expect(free.rows.find((r) => r.label === "Sends")?.value).toBe("None");
+  });
+  it("explains the drawing key as a capped allowance in NEAR, not yocto", () => {
+    const key = buildAddFunctionCallKeyParams(
+      "wall.testnet",
+      "ed25519:11111111111111111111111111111111",
+    );
+    const review = reviewPrivyRequest(
+      session({ kind: "signIn", network: "testnet", addFunctionCallKey: key }),
+      config,
+      wallet,
+      host,
+      "wall.testnet",
+      undefined,
+      {
+        ...host,
+        publicKey: key.publicKey,
+        contractId: "wall.testnet",
+        methods: ["draw", "draw_many"],
+        allowance: key.gasAllowance.amount,
+        createdAtMs: Date.now(),
+      },
+    );
+    const text = review.rows.map((r) => r.value).join("\n");
+    expect(text).toContain("Up to 0.25 NEAR");
+    expect(text).not.toContain("yocto");
+    expect(review.details.join("\n")).toContain("Methods: draw, draw_many");
+  });
+});
