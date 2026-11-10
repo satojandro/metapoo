@@ -135,6 +135,8 @@ export interface FundingSnapshot {
   operation?: FundingOperation;
   /** Caller must revalidate before copy/QR too; expiry is not cancellation. */
   canSend: boolean;
+  /** Why the payment address is withheld. Present only when `canSend` is false. */
+  sendBlockedReason?: string;
 }
 
 export interface FundingReadiness {

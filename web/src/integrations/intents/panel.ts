@@ -345,10 +345,14 @@ export function mountIntentsFundingPanel(
       snapshot.phase === "committing" ? "Creating address…" : "Get payment address";
     change.disabled = snapshot.phase === "committing";
     check.hidden = !hasPayment;
+    // An expired, never-funded quote holds nothing to track; refusing a new payment there
+    // left players locked on a dead address with no instructions and no way forward.
     startNew.hidden =
       !options.newContext ||
       !snapshot.operation ||
-      !["funded", "refunded"].includes(snapshot.operation.phase);
+      !["funded", "refunded", "expired_unfunded"].includes(
+        snapshot.operation.phase,
+      );
     if (disabled && !hasPayment) recoverBox.open = true;
 
     reviewRows.replaceChildren();
@@ -405,7 +409,8 @@ export function mountIntentsFundingPanel(
         el(
           "p",
           "mp-intents-fine",
-          "Sending instructions are hidden while this payment is processing, expired, or awaiting account and capability checks. You can keep tracking it.",
+          snapshot.sendBlockedReason ??
+            "Sending instructions are hidden while this payment is processing, expired, or awaiting account and capability checks. You can keep tracking it.",
         ),
         meta,
         idRow,

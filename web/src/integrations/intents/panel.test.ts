@@ -195,7 +195,34 @@ describe("Intents inline panel", () => {
     copy.click();
     expect(clipboard).not.toHaveBeenCalled();
     expect(host.querySelector("img")).toBeNull();
-    expect(host.textContent).toContain("Sending instructions are hidden");
+    // The card now names the gate instead of printing one catch-all sentence.
+    expect(host.textContent).toContain("must not be reused");
+  });
+  it("explains an expired unpaid quote and offers a new payment", async () => {
+    const { host, controller, setTime, setStatus } = app();
+    await controller.loadAssets();
+    const preview = await controller.preview(
+      {
+        assetId: FIXTURE_TOKEN.assetId,
+        amount: "1",
+        refundAddress: FIXTURE_REFUND,
+        refundAddressConfirmed: true,
+      },
+      FIXTURE_CONTEXT,
+    );
+    const committed = await controller.commit(
+      preview.preview!.correlationId,
+      FIXTURE_CONTEXT,
+    );
+    setStatus("PENDING_DEPOSIT");
+    setTime(FIXTURE_TIME + 21 * 60_000);
+    await controller.refresh(committed.operation!.id);
+    await vi.waitFor(() => expect(host.textContent).toContain("must not be reused"));
+    expect(host.querySelector("img")).toBeNull();
+    const startNew = Array.from(host.querySelectorAll("button")).find(
+      (b) => b.textContent === "Start another funding payment",
+    )!;
+    expect(startNew.hidden).toBe(false);
   });
   it("allocates a fresh operation only on explicit new funding after a terminal payment", async () => {
     const { host, controller, newContext, setStatus } = app();

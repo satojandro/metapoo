@@ -205,6 +205,60 @@ describe("Intents funding authority and recovery", () => {
     expect(mismatched.phase).not.toBe("awaiting_deposit");
     expect(mismatched.message).toContain("Status does not match");
   });
+  it("lets a player start over after a quote expires unfunded, keeping the old record trackable", async () => {
+    // Blocking a new payment behind an expired, never-funded quote left the panel with no
+    // address, no form and no way forward.
+    const app = setup();
+    const committed = await app.commit();
+    const id = committed.operation!.id;
+    app.setStatus("PENDING_DEPOSIT");
+    app.setTime(FIXTURE_TIME + 21 * 60_000);
+    const expired = await app.controller.refresh(id);
+    expect(expired.phase).toBe("expired_unfunded");
+    expect(expired.canSend).toBe(false);
+    expect(expired.sendBlockedReason).toContain("expired");
+    expect(expired.sendBlockedReason).toContain("Start a new payment");
+    const reset = app.controller.reset({
+      ...FIXTURE_CONTEXT,
+      operationId: "next-payment",
+    });
+    expect(reset.phase).toBe("editing");
+    expect(reset.operation).toBeUndefined();
+    expect(reset.message).toContain(id);
+    expect(app.storage.load(id)).toBeTruthy();
+  });
+  it("still refuses a new payment while money may be in flight", async () => {
+    const app = setup();
+    const committed = await app.commit();
+    app.setStatus("PROCESSING");
+    const processing = await app.controller.refresh(committed.operation!.id);
+    expect(processing.phase).toBe("processing");
+    expect(() =>
+      app.controller.reset({
+        ...FIXTURE_CONTEXT,
+        operationId: "next-payment",
+      }),
+    ).toThrow("Keep tracking");
+  });
+  it("names the capability gate that keeps a resumed address hidden", async () => {
+    const app = setup();
+    const committed = await app.commit();
+    app.setStatus("PENDING_DEPOSIT");
+    // The gate closes after the operation exists, as it does when evidence is withdrawn.
+    app.policy.unverifiedTestDelivery = false;
+    app.policy.nativeDeliveryEvidence = {
+      reference: "",
+      initializedNamed: false,
+      initializedImplicit: false,
+      uninitializedImplicit: false,
+    };
+    const resumed = await app.controller.resume(
+      committed.operation!.id,
+      FIXTURE_CONTEXT,
+    );
+    expect(resumed.canSend).toBe(false);
+    expect(resumed.sendBlockedReason).toContain("not been verified");
+  });
   it("rejects testnet funding and a nonexistent named account", async () => {
     const app = setup();
     app.setContext({ ...FIXTURE_CONTEXT, networkId: "testnet" });

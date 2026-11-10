@@ -58,6 +58,8 @@ export function createIntentsFundingController(
   let previewToken: IntentsToken | null = null;
   let previewId = "";
   let approvedToSend = "";
+  /** Last capability-gate refusal, so a resumed payment can say why its address is withheld. */
+  let gateReason = "";
   let revision = 0;
   let disposed = false;
   let committing = false;
@@ -98,7 +100,29 @@ export function createIntentsFundingController(
       result.canSend = false;
       result.message = `This payment is for ${op.context.accountId}. Tracking stays available; select that account to see payment instructions.`;
     }
+    if (op && !result.canSend) result.sendBlockedReason = blockedReason(op);
     return result;
+  }
+  /**
+   * Say which gate is closed. Without this the panel can only print one catch-all sentence and
+   * a player stuck on an expired quote has no way to tell expiry from a failed capability check.
+   */
+  function blockedReason(op: FundingOperation): string | undefined {
+    if (!matches(op.context))
+      return `This payment is for ${op.context.accountId}; select that account to see its payment address.`;
+    if (!deps.policy.enabled)
+      return "Cross-chain funding is disabled on this page. Receive native NEAR directly instead.";
+    if (op.phase === "expired_unfunded")
+      return "This quote expired before any payment arrived, so its address must not be reused. Start a new payment to get a fresh address.";
+    if (now() + (deps.policy.sendSafetyMarginMs ?? 60_000) >= expiresAt(op.quote))
+      return "This quote has expired, so its address must not be reused. Start a new payment to get a fresh address.";
+    if (state.phase !== "awaiting_deposit")
+      return state.message;
+    if (approvedToSend !== op.id)
+      return gateReason
+        ? `Sending stays paused: ${gateReason}`
+        : "Account capability checks have not passed yet, so the payment address stays hidden. Tracking continues in the background.";
+    return undefined;
   }
   function emit(update: Partial<FundingSnapshot>): FundingSnapshot {
     if (disposed) return getState();
@@ -312,6 +336,7 @@ export function createIntentsFundingController(
         };
         save(operation);
         approvedToSend = operation.id;
+        gateReason = "";
         previewId = "";
         const result = emit({
           operation,
@@ -359,8 +384,13 @@ export function createIntentsFundingController(
           operation.context = clone(context);
           save(operation);
           approvedToSend = operation.id;
-        } catch {
-          /* Recovery remains read-only while a capability gate is closed. */
+          gateReason = "";
+        } catch (error) {
+          // Read-only recovery is correct, but silence is not: keep the reason for the panel.
+          gateReason =
+            error instanceof Error
+              ? error.message
+              : "Account capability checks have not passed yet.";
         }
       }
       emit({
@@ -553,9 +583,13 @@ export function createIntentsFundingController(
     },
     reset(context: OperationContext) {
       active(context);
+      // A quote that expired with no payment received holds nothing to track, and blocking a new
+      // payment left players stuck on a dead address. Money-in-flight phases stay gated.
       if (
         state.operation &&
-        !["funded", "refunded"].includes(state.operation.phase)
+        !["funded", "refunded", "expired_unfunded"].includes(
+          state.operation.phase,
+        )
       ) {
         throw new Error(
           "Keep tracking the original payment before starting another funding operation",
@@ -565,17 +599,20 @@ export function createIntentsFundingController(
         throw new Error("A new payment needs a fresh recovery id");
       ++revision;
       approvedToSend = "";
+      gateReason = "";
       previewId = "";
       previewContext = null;
       previewToken = null;
       if (timer) clearTimeout(timer);
       pollAttempt = 0;
+      const previous = state.operation?.id;
       return emit({
         operation: undefined,
         preview: undefined,
         phase: "editing",
-        message:
-          "Start a new payment. Your previous payment record is retained.",
+        message: previous
+          ? `Start a new payment. Record ${previous} is retained — track it if you already sent funds to its address.`
+          : "Start a new payment.",
       });
     },
     dispose() {
