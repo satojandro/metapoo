@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApprovedTransactionGateway, validateAcquisitionTransaction, reconcilePendingCapitalAttempt } from "../approved-transactions";
 import { SEND_GAS_FLOOR_YOCTO, validateSendTransaction } from "./plan";
 import type { ApprovedTransactionRequest } from "../types";
@@ -10,6 +10,23 @@ function setup() {
   const deps = {context: () => context, storage, now: Date.now, validateTransaction: (tx: ApprovedTransactionRequest["transactions"][number], r: ApprovedTransactionRequest) => validateSendTransaction(tx,r,policy), readBudget: vi.fn(async () => ({spendableBeforeGasYocto: (BigInt(SEND_GAS_FLOOR_YOCTO)+2000000000010n).toString(), gasPriceYocto: "1", playReserveYocto: "0"})), send: vi.fn(async (): Promise<unknown> => {throw new Error("timeout after possible broadcast");})};
   return {request, deps, gateway: createApprovedTransactionGateway(deps), storage};
 }
+// Happy DOM has no Web Locks, and Node 22 (the CI runtime) has none either, so without this
+// fixture `withCapitalLock` correctly fails closed and every gateway test dies on the guard.
+// Fixture only — the production guard is untouched.
+const originalLocks = Object.getOwnPropertyDescriptor(navigator, "locks");
+beforeEach(() => {
+  Object.defineProperty(navigator, "locks", {
+    configurable: true,
+    value: {
+      request: async (_name: string, _options: unknown, run: (lock: object) => unknown) =>
+        run({ name: "fixture-capital-lock" }),
+    },
+  });
+});
+afterEach(() => {
+  if (originalLocks) Object.defineProperty(navigator, "locks", originalLocks);
+  else Reflect.deleteProperty(navigator, "locks");
+});
 describe("send gateway", () => {
   it("enforces its floor even if a caller supplies zero reserve", async () => {
     const {request, deps, gateway} = setup(); deps.readBudget.mockResolvedValue({spendableBeforeGasYocto: "2000000000010", gasPriceYocto: "1", playReserveYocto: "0"});
