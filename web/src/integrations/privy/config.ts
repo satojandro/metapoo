@@ -36,10 +36,15 @@ export function readPrivyConfig(
   try {
     const appId = String(env.VITE_PRIVY_APP_ID ?? "").trim();
     const clientId = String(env.VITE_PRIVY_APP_CLIENT_ID ?? "").trim();
-    const network = env.VITE_NEAR_NETWORK;
+    const rawNetwork = String(env.VITE_NEAR_NETWORK ?? "").trim();
+    // Mirror src/config.ts: an unset network means testnet. Requiring the variable here made
+    // Privy vanish whenever it happened not to be in the loaded env files, which reads as
+    // "social login is broken". An explicit mock/localnet is still refused, because those are
+    // not networks a wallet can be provisioned on.
+    const network = rawNetwork === "" ? "testnet" : rawNetwork;
     if (
       !appId ||
-      !["mainnet", "testnet"].includes(String(network))
+      !["mainnet", "testnet"].includes(network)
     )
       throw new Error();
     const appOrigin = new URL(origin);

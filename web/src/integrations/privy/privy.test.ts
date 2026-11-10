@@ -94,6 +94,15 @@ describe("Privy configuration and manifest", () => {
     expect(result.config.clientId).toBe("");
     expect(result.config.appId).toBe("app-id");
   });
+  it("defaults an unset network to testnet instead of hiding social login", () => {
+    const withoutNetwork: Record<string, string> = { ...env };
+    delete withoutNetwork.VITE_NEAR_NETWORK;
+    const result = readPrivyConfig(withoutNetwork, config.origin);
+    expect(result.state).toBe("ready");
+    if (result.state !== "ready") throw new Error();
+    expect(result.config.network).toBe("testnet");
+    expect(result.config.rpcUrl).toBe("https://rpc.testnet.near.org/");
+  });
   it("rejects external sign pages, arbitrary routes and mock to mainnet fallback", () => {
     for (const value of [
       "https://attacker.invalid/privy-sign.html",
