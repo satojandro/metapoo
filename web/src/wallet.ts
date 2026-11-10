@@ -136,6 +136,33 @@ export const HIDDEN_WALLET_IDS = [
   "ledger",
 ] as const;
 
+/** Where near-connect persists the wallet id a player last signed in with. */
+export const SELECTED_WALLET_KEY = "selected-wallet";
+
+/**
+ * Ids to exclude from the picker for this visit.
+ *
+ * A wallet the player is already signed in with is never excluded. near-connect filters an
+ * excluded id out of its manifest at construction, and `getConnectedWallet()` looks the stored
+ * `selected-wallet` up in that list — so hiding it would throw "No wallet selected" for a
+ * returning player, and the next `wallet()` call deletes the stored id. They would be signed out
+ * and unable to pick that wallet again, because it is no longer in the picker either.
+ */
+export function pickerExcludedWallets(
+  storage: Pick<Storage, "getItem"> | undefined = typeof window === "undefined"
+    ? undefined
+    : window.localStorage,
+): string[] {
+  let selected: string | null = null;
+  try {
+    selected = storage?.getItem(SELECTED_WALLET_KEY) ?? null;
+  } catch {
+    // Blocked storage must not stop the picker from loading.
+    selected = null;
+  }
+  return HIDDEN_WALLET_IDS.filter((id) => id !== selected);
+}
+
 /** Move one registered wallet to the top of the picker. No-op if it is not registered. */
 export function promoteWallet(
   target: Pick<NearConnector, "wallets" | "events">,
@@ -162,7 +189,7 @@ function ensureConnector(): NearConnector {
       signInWithoutAddKey: true,
       signAndSendTransaction: true,
     },
-    excludedWallets: [...HIDDEN_WALLET_IDS],
+    excludedWallets: pickerExcludedWallets(),
   });
 
   if (PRIVY_ENABLED && typeof window !== "undefined") {
