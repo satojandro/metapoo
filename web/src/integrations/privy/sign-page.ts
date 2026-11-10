@@ -273,10 +273,29 @@ export function mountPrivySignPage(
       if (disposed) return;
       if (user) await prepareReview();
       else renderLogin();
-    } catch {
+    } catch (error) {
+      // Never swallow the cause. Every distinct failure here (SDK init, handshake, wallet
+      // provisioning, RPC) used to collapse into one sentence, so an unsupported chain and a
+      // mistyped origin looked identical to the user and to whoever was debugging it.
+      const reason =
+        error instanceof Error && error.message
+          ? error.message
+          : String(error ?? "unknown error");
+      console.error("[privy-sign] initialization failed:", error);
+      try {
+        doc.documentElement.dataset.privySignError = reason;
+        // Same-origin note to self: the game page can read this to report what went wrong.
+        globalThis.localStorage?.setItem("privy-sign:lastError", reason);
+      } catch {
+        // Diagnostics must never be the thing that breaks the page.
+      }
       say(
         "Sign-in could not be restored. Return to the game and try again. No request was automatically signed.",
       );
+      const detail = doc.createElement("small");
+      detail.id = "privy-sign-error-detail";
+      detail.textContent = `Reason: ${reason}`;
+      content.append(detail);
     }
   })();
   return {
