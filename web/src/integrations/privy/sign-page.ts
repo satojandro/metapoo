@@ -1,3 +1,4 @@
+import { reviewWithdrawalRequest } from "./withdrawal-review";
 import { reviewPrivyRequest, type SigningSession } from "./approval";
 import type { PrivyConfig } from "./config";
 import type { PrivyPageRuntime } from "./runtime";
@@ -111,12 +112,14 @@ export function mountPrivySignPage(
     actions.replaceChildren(cancel);
     status.textContent = "";
   };
+  let confirmationSync: (() => void) | undefined;
   const setBusy = (value: boolean) => {
     busy = value;
     root.setAttribute("aria-busy", String(value));
     root.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
       button.disabled = value;
     });
+    confirmationSync?.();
   };
   const action = (
     label: string,
@@ -160,6 +163,9 @@ export function mountPrivySignPage(
 
   async function prepareReview(): Promise<void> {
     if (!original || disposed) return;
+    // The withdrawal review reads the chain (token metadata, registration, key state), so the
+    // window has to say something before those round trips answer — it used to render nothing.
+    say("Checking this request with the chain…");
     wallet = await ensureNearWallet(runtime, config.network, storage);
     if (disposed) return;
     // Re-handshake with an explicit wallet: upstream's default selects the first NEAR wallet.
@@ -169,14 +175,13 @@ export function mountPrivySignPage(
     if (JSON.stringify(bound.payload) !== JSON.stringify(original.payload))
       throw new Error("Wallet request changed.");
     const host = getPrivyHostIdentity(storage);
-    const review = reviewPrivyRequest(
+    const review = await reviewWithdrawalRequest(
       bound,
       config,
       wallet,
-      host,
+      storage,
       options.boardContractId,
       options.drawingPublicKey,
-      getPrivyPendingDrawingAuthorization(storage),
     );
     if (review.requiresHost && !sameHostIdentity(capturedHost, host))
       throw new Error("Connected account changed.");
@@ -201,6 +206,16 @@ export function mountPrivySignPage(
       technical.append(list);
       content.append(technical);
     }
+    const suffix = el("input", "ps-input");
+    suffix.autocomplete = "off"; suffix.spellcheck = false;
+    const ack = el("input"); ack.type = "checkbox";
+    if (review.confirm) {
+      const label = el("label", "", "Type the last 8 characters of the public key, exactly as your wallet shows them");
+      label.append(suffix);
+      const acknowledgement = el("label", "", review.confirm.acknowledgement);
+      acknowledgement.prepend(ack);
+      content.append(label, acknowledgement);
+    }
     const approve = action(
       review.approveLabel,
       async () => {
@@ -216,15 +231,6 @@ export function mountPrivySignPage(
           currentWallet.address !== wallet.address
         )
           throw new Error("Wallet changed.");
-        reviewPrivyRequest(
-          bound,
-          config,
-          currentWallet,
-          getPrivyHostIdentity(storage),
-          options.boardContractId,
-          options.drawingPublicKey,
-          getPrivyPendingDrawingAuthorization(storage),
-        );
         if (review.requiresFunds) {
           try {
             await runtime.assertReady(currentWallet);
@@ -236,6 +242,15 @@ export function mountPrivySignPage(
             return;
           }
         }
+        const freshReview = await reviewWithdrawalRequest(
+          bound,
+          config,
+          currentWallet,
+          storage,
+          options.boardContractId,
+          options.drawingPublicKey,
+        );
+        if (freshReview.confirm && (!ack.checked || suffix.value.trim() !== freshReview.confirm.suffix)) throw new Error("Confirm the key from your own wallet.");
         if (
           disposed ||
           (review.requiresHost &&
@@ -261,6 +276,12 @@ export function mountPrivySignPage(
         }
       },
     );
+    if (review.confirm) {
+      const sync = () => { approve.disabled = busy || suffix.value.trim() !== review.confirm!.suffix || !ack.checked; };
+      suffix.addEventListener("input", sync); ack.addEventListener("change", sync);
+      confirmationSync = sync;
+      sync();
+    }
     actions.prepend(approve);
   }
 

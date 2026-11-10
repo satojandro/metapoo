@@ -44,7 +44,7 @@ function memory() {
     },
   };
 }
-const tx: ApprovedNearTransaction = {
+const tx: ApprovedNearTransaction & {actions: import("./types").ApprovedFunctionCallAction[]} = {
   receiverId: "wrap.near",
   actions: [
     {

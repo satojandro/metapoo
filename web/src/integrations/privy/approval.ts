@@ -1,3 +1,5 @@
+import { classifySend, decodeSendArgs, type SendPolicy } from "../send/plan";
+import { reviewSelfCustodyKey, privyPublicKey, type PendingSelfCustodyKey } from "./self-custody";
 import {
   DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
   DRAWING_SESSION_METHODS,
@@ -37,6 +39,7 @@ export interface PrivyReview {
   approveLabel: string;
   requiresFunds: boolean;
   requiresHost: boolean;
+  confirm?: {suffix: string; acknowledgement: string};
 }
 const TGAS = 1_000_000_000_000n;
 const formatGas = (gas: string): string => {
@@ -75,6 +78,7 @@ export function reviewPrivyRequest(
   boardContractId: string,
   drawingPublicKey?: string,
   pendingDrawing?: PendingDrawingAuthorization | null,
+  checks?: {sendPolicy?: SendPolicy; pendingCustody?: PendingSelfCustodyKey | null; keyPermission?: unknown; alreadyRegistered?: boolean},
 ): PrivyReview {
   if (session.targetOrigin !== config.origin)
     throw new Error("This application is not allowed to request signatures.");
@@ -194,6 +198,46 @@ export function reviewPrivyRequest(
     transactions.length > 16
   )
     throw new Error("Invalid transaction batch.");
+  // Even a forged drawing-key record must never turn Privy's key into a revocable key.
+  if (/^[0-9a-f]{64}$/.test(wallet.address)) {
+    const own = privyPublicKey(wallet.address);
+    if (transactions.some(value => {
+      const actions = record(value).actions;
+      return Array.isArray(actions) && actions.some(item => {
+        const action = record(item);
+        return action.type === "DeleteKey" && record(action.params).publicKey === own;
+      });
+    })) throw new Error("Privy's sign-in key cannot be removed through this window.");
+  }
+  const send = classifySend(transactions, wallet.address, checks?.sendPolicy ?? {
+    enabled: config.sendEnabled === true, tokens: config.sendTokens ?? [],
+    blockedRecipients: [boardContractId, ...(config.sendBlockedRecipients ?? [])], storageMinimums: {},
+  });
+  if (send) {
+    const symbol = send.token?.symbol ?? "NEAR";
+    const amount = `${formatUnits(send.amount, send.token?.decimals ?? 24)} ${symbol}`;
+    return {
+      eyebrow: `Send ${symbol}`, title: `Send ${amount}`,
+      lede: `This moves ${symbol} out of your Meta Poo account. Transfers can't be undone, so check the recipient.`,
+      rows: [{label: "To", value: send.recipient, mono: true}, {label: "Amount", value: amount},
+        ...(send.token ? [{label: "Token contract", value: send.token.contractId, mono: true}] : []),
+        ...(send.registrationDeposit !== "0" ? [{label: "Recipient registration", value: `${formatUnits(send.registrationDeposit, 24)} NEAR${checks?.alreadyRegistered ? " (already registered; refunded by the token)" : ""}`}] : []),
+        {label: "From", value: wallet.address, mono: true}],
+      notes: ["Double-check the recipient. If it's wrong, Meta Poo can't get it back.",
+        "Network fees come out of your NEAR.",
+        ...(send.registrationDeposit !== "0" ? ["Registration and transfer happen together: if the transfer fails, the registration is undone too and only the network fee is spent."] : [])],
+      details: [`Amount in smallest units: ${send.amount}`, `Network: ${config.network}`,
+        ...(record(transactions[0]).actions as unknown[]).map(value => {
+          const action = record(value), params = record(action.params);
+          return action.type === "Transfer" ? `Transfer: ${params.deposit} yoctoNEAR` : `${params.methodName}: ${JSON.stringify(decodeSendArgs(params.args))}; deposit: ${params.deposit} yoctoNEAR; gas: ${params.gas}`;
+        })],
+      approveLabel: `Send ${amount}`, requiresFunds: true, requiresHost: true,
+    };
+  }
+  if (config.selfCustodyEnabled && host) {
+    const custody = reviewSelfCustodyKey(transactions, host, checks?.pendingCustody ?? null, checks?.keyPermission, drawingPublicKey);
+    if (custody) return custody;
+  }
   const details = [`Account: ${wallet.address}`, `Network: ${config.network}`];
   const rows: PrivyReviewRow[] = [];
   let revokesKey = false;
@@ -279,6 +323,8 @@ export function reviewPrivyRequest(
           `Gas allowance: ${allowance} yoctoNEAR`,
         );
       } else if (action.type === "FunctionCall") {
+        if (params.methodName === "ft_transfer" || (params.methodName === "storage_deposit" && decodeSendArgs(params.args).account_id !== undefined && decodeSendArgs(params.args).account_id !== wallet.address))
+          throw new Error("Unreviewed transfer request.");
         if (
           typeof params.methodName !== "string" ||
           !/^[A-Za-z0-9_]{1,64}$/.test(params.methodName)
@@ -309,7 +355,7 @@ export function reviewPrivyRequest(
   ];
   if (transactions.length > 1)
     notes.push(
-      `This sends ${transactions.length} transactions in order. If a later one fails, the earlier ones still happen.`,
+      `This sends ${transactions.length} transactions at once. If one fails, the others can still happen.`,
     );
   rows.push({ label: "From", value: wallet.address, mono: true });
   return {

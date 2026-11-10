@@ -1,0 +1,16 @@
+.mp-send { display:grid; gap:12px; padding:20px; max-width:440px; margin:auto; }
+.mp-send label { display:grid; gap:6px; }
+.mp-send input,.mp-send select { width:100%; box-sizing:border-box; padding:12px; font:inherit; }
+.mp-send button { padding:12px; font:inherit; cursor:pointer; }
+.mp-send p { overflow-wrap:anywhere; }
+.mp-withdrawal-dialog { max-width:480px; width:calc(100% - 32px); max-height:90dvh; overflow:auto; padding:0; border-radius:12px; }
+.mp-withdrawal-dialog::backdrop { background:#0008; }
+
+.mp-withdrawal-open[hidden] { display:none; }
+.mp-send,.mp-custody,.mp-withdrawal-dialog { color:var(--mp-fg); background:var(--mp-card); font:var(--mp-text-base)/var(--mp-leading) var(--mp-font); color-scheme:dark; }
+.mp-send h2,.mp-custody h2 { margin:0; font-size:26px; letter-spacing:-.8px; }
+.mp-send input,.mp-send select,.mp-custody input { background:var(--mp-bg); color:var(--mp-fg); border:1px solid var(--mp-line); border-radius:var(--mp-radius-md); min-height:var(--mp-hit); }
+.mp-send button,.mp-custody button { border:1px solid var(--mp-line); border-radius:var(--mp-radius-md); background:var(--mp-card-2); color:var(--mp-fg); min-height:var(--mp-hit); }
+.mp-send button[type=submit],.mp-send [data-review] button,.mp-custody [data-add] { background:var(--mp-tag); color:var(--mp-on-tag); font-weight:700; }
+.mp-send button:disabled,.mp-custody button:disabled { opacity:.5; cursor:default; }
+.mp-send input:focus-visible,.mp-send select:focus-visible,.mp-send button:focus-visible,.mp-custody input:focus-visible,.mp-custody button:focus-visible { outline:2px solid var(--mp-focus); outline-offset:2px; }

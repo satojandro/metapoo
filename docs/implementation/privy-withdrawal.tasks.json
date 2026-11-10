@@ -3,7 +3,7 @@
   "kind": "agent_handoff_manifest",
   "executable_orchestrator_config": false,
   "date": "2026-11-11",
-  "status": "specified_not_implemented",
+  "status": "implementation_in_progress",
   "source_revision": "f252aee6a496159f9c5ab0ac4e2c78833870407a",
   "entrypoint": "docs/implementation/2026-11-11-privy-send-spec.md",
   "constraints": [
@@ -30,16 +30,17 @@
         "web/src/integrations/privy/*.test.ts"
       ],
       "deliverables": [
-        "classifySend and reviewed Transfer / ft_transfer / recipient storage_deposit review (spec §4.2-4.6).",
+        "classifySend and reviewed Transfer / ft_transfer / recipient storage_deposit review (spec \u00a74.2-4.6).",
         "Build-time sendTokens allowlist with pinned decimals and sign-page ft_metadata, view_account and storage_balance_of re-checks.",
         "Generic FunctionCall branch rejects unclaimed ft_transfer and third-party storage_deposit; existing self-registrations unchanged.",
-        "Rejection test matrix from spec §8, including wrong deposit, unknown token contract and FullAccess AddKey in every position."
+        "Rejection test matrix from spec \u00a78, including wrong deposit, unknown token contract and FullAccess AddKey in every position."
       ],
       "acceptance": [
         "All pre-existing privy tests pass unchanged; staking, credit, RHEA and drawing reviews snapshot-identical.",
         "A send batch of more than one transaction, or mixing any other action, is rejected before sign().",
         "Multi-transaction note never appears on a send review; registration+transfer shows the atomic note."
-      ]
+      ],
+      "implementation_status": "implemented_pending_full_acceptance"
     },
     {
       "id": "SEND-1",
@@ -62,12 +63,16 @@
       "acceptance": [
         "Acquisition validators still reject non-FunctionCall actions.",
         "Send is refused while its flag is off, on network/epoch change, and when the plan differs from the reviewed request."
-      ]
+      ],
+      "implementation_status": "implemented_pending_integration_acceptance"
     },
     {
       "id": "SEND-2",
       "role": "send_ui_agent",
-      "depends_on": ["SEND-0", "SEND-1"],
+      "depends_on": [
+        "SEND-0",
+        "SEND-1"
+      ],
       "spec": "docs/implementation/2026-11-11-privy-send-spec.md",
       "owned_paths": [
         "web/src/integrations/send/**",
@@ -77,21 +82,26 @@
       ],
       "deliverables": [
         "Send form (asset chips, recipient, amount, Max), in-game review, success / cancelled / failed / unknown states per mockups/2026-11-11-privy-send.html.",
-        "Account-id validation, named and ETH-implicit existence checks, self and trapped-contract blocks (spec §5.2).",
-        "NEP-145 storage_balance_of / storage_balance_bounds planning with inline disclosure (spec §5.3).",
-        "Exact-integer Max with the 0.01 NEAR floor and pre-sign re-read (spec §5.4); reconciliation of unknown outcomes."
+        "Account-id validation, named and ETH-implicit existence checks, self and trapped-contract blocks (spec \u00a75.2).",
+        "NEP-145 storage_balance_of / storage_balance_bounds planning with inline disclosure (spec \u00a75.3).",
+        "Exact-integer Max with the 0.01 NEAR floor and pre-sign re-read (spec \u00a75.4); reconciliation of unknown outcomes."
       ],
       "acceptance": [
         "RPC failures are unknown, never absent or zero; Review stays disabled while unknown.",
         "Outcome success requires receipts plus event/balance evidence; mPOO tax shortfall is disclosed."
-      ]
+      ],
+      "implementation_status": "first_pass_remaining_ui_and_recovery"
     },
     {
       "id": "SEND-TESTNET",
       "role": "integration_and_independent_review",
-      "depends_on": ["SEND-2"],
+      "depends_on": [
+        "SEND-2"
+      ],
       "spec": "docs/implementation/2026-11-11-privy-send-spec.md",
-      "owned_paths": ["docs/research/*-privy-send-evidence.json"],
+      "owned_paths": [
+        "docs/research/*-privy-send-evidence.json"
+      ],
       "deliverables": [
         "Testnet NEAR send to named, existing implicit and fresh implicit accounts; TOILET send to registered and unregistered recipients.",
         "Rejected-in-window, forced receipt failure with registration rollback, and closed-after-sign unknown reconciliation."
@@ -99,38 +109,52 @@
       "release_gates": [
         "Redacted hashes with before/after balances and storage_balance_of.",
         "Desktop and mobile screenshots of every Send state."
-      ]
+      ],
+      "implementation_status": "not_executed_live_evidence_required"
     },
     {
       "id": "SEND-LIVE",
       "role": "integration_and_independent_review",
-      "depends_on": ["SEND-TESTNET"],
+      "depends_on": [
+        "SEND-TESTNET"
+      ],
       "spec": "docs/implementation/2026-11-11-privy-send-spec.md",
-      "owned_paths": ["docs/research/*-mpoo-transfer-tax-evidence.json"],
+      "owned_paths": [
+        "docs/research/*-mpoo-transfer-tax-evidence.json"
+      ],
       "deliverables": [
         "Separately authorized bounded mainnet send of 1 mPOO between two team accounts recording delivered amount and event logs."
       ],
       "release_gates": [
         "VITE_SEND_MPOO_ENABLED stays false until evidence answers whether plain ft_transfer is taxed (spec Q2)."
-      ]
+      ],
+      "implementation_status": "not_executed_live_evidence_required"
     },
     {
       "id": "SEND-HARDEN",
       "role": "privy_feature_agent",
-      "depends_on": ["SEND-0"],
+      "depends_on": [
+        "SEND-0"
+      ],
       "spec": "docs/implementation/2026-11-11-privy-send-spec.md",
-      "owned_paths": ["web/src/integrations/privy/approval.ts", "web/src/integrations/privy/*.test.ts"],
+      "owned_paths": [
+        "web/src/integrations/privy/approval.ts",
+        "web/src/integrations/privy/*.test.ts"
+      ],
       "deliverables": [
         "Proposal and tests for a receiver/method allowlist on the generic FunctionCall branch (spec Q1), pending co-founder decision."
       ],
       "acceptance": [
         "Every flow the game signs today still reviews; an unlisted receiver or method is rejected."
-      ]
+      ],
+      "implementation_status": "proposal_recorded_not_enabled"
     },
     {
       "id": "CUSTODY-0",
       "role": "privy_feature_agent",
-      "depends_on": ["SEND-0"],
+      "depends_on": [
+        "SEND-0"
+      ],
       "spec": "docs/implementation/2026-11-11-privy-self-custody-spec.md",
       "owned_paths": [
         "web/src/integrations/privy/approval.ts",
@@ -143,18 +167,22 @@
         "PendingSelfCustodyKey record (add-full-access | remove-own-key) with 10-minute expiry.",
         "reviewSelfCustodyAddKey and reviewSelfCustodyRemoveKey dispatched before the per-action loop; existing AddKey/DeleteKey branches untouched.",
         "PrivyReview.confirm with masked 8-character suffix typed from the player's wallet plus acknowledgement checkbox; Approve gated on both.",
-        "Rejection matrix from self-custody spec §8."
+        "Rejection matrix from self-custody spec \u00a78."
       ],
       "acceptance": [
         "Diff shows no edits inside the drawing-key AddKey or DeleteKey branches.",
         "DeleteKey of the derived Privy key is rejected in every form.",
         "Masked suffix never rendered; review re-run at Approve."
-      ]
+      ],
+      "implementation_status": "implemented_pending_independent_review"
     },
     {
       "id": "CUSTODY-1",
       "role": "custody_ui_agent",
-      "depends_on": ["CUSTODY-0", "SEND-1"],
+      "depends_on": [
+        "CUSTODY-0",
+        "SEND-1"
+      ],
       "spec": "docs/implementation/2026-11-11-privy-self-custody-spec.md",
       "owned_paths": [
         "web/src/app/self-custody-panel.ts",
@@ -170,28 +198,36 @@
       "acceptance": [
         "RPC failure never renders an empty key list.",
         "Graduation offered only when a player-added FullAccess key has been on chain for the agreed waiting period."
-      ]
+      ],
+      "implementation_status": "first_pass_graduation_not_implemented"
     },
     {
       "id": "CUSTODY-TESTNET",
       "role": "integration_and_independent_review",
-      "depends_on": ["CUSTODY-1"],
+      "depends_on": [
+        "CUSTODY-1"
+      ],
       "spec": "docs/implementation/2026-11-11-privy-self-custody-spec.md",
-      "owned_paths": ["docs/research/*-privy-self-custody-evidence.json"],
+      "owned_paths": [
+        "docs/research/*-privy-self-custody-evidence.json"
+      ],
       "deliverables": [
         "Path A end to end, removal of an added key, graduation through a non-Privy wallet, Privy sign-in after graduation."
       ],
       "release_gates": [
         "Redacted hashes and before/after view_access_key_list; no private material in evidence.",
         "Named external wallet(s) verified for spec Q1 before help copy ships."
-      ]
+      ],
+      "implementation_status": "not_executed_live_evidence_required"
     },
     {
       "id": "CUSTODY-EXPORT-LIVE",
       "role": "privy_feature_agent",
       "depends_on": [],
       "spec": "docs/implementation/2026-11-11-privy-self-custody-spec.md",
-      "owned_paths": ["docs/research/*-privy-near-export-evidence.md"],
+      "owned_paths": [
+        "docs/research/*-privy-near-export-evidence.md"
+      ],
       "deliverables": [
         "Throwaway prototype (not merged into app code) of @privy-io/react-auth exportWallet against a js-sdk-core-created NEAR wallet.",
         "Record: NEAR wallet accepted or not, session reuse, exact key format and import into a NEAR wallet, TEE vs on-device wallet type."
@@ -199,7 +235,8 @@
       "release_gates": [
         "Path B (VITE_PRIVY_EXPORT_ENABLED, isolated privy-export.html) is only specified for build after all four unknowns pass.",
         "No REST export, no app secret, no reimplementation of Privy key assembly."
-      ]
+      ],
+      "implementation_status": "not_executed_live_evidence_required"
     }
   ],
   "handoff_fields": [
@@ -213,5 +250,6 @@
     "remaining_gates",
     "rollback_flag",
     "Learned"
-  ]
+  ],
+  "implementation_checkpoint": "docs/research/2026-11-11-privy-withdrawal-implementation.md"
 }

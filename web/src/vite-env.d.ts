@@ -5,6 +5,10 @@
  * These optional strings configure which contract and network the page uses.
  */
 interface ImportMetaEnv {
+  readonly VITE_SEND_ENABLED?: string;
+  readonly VITE_SEND_MPOO_ENABLED?: string;
+  readonly VITE_MPOO_ID?: string;
+  readonly VITE_SELF_CUSTODY_ENABLED?: string;
   readonly VITE_PRIVY_ENABLED?: string;
   readonly VITE_PRIVY_APP_ID?: string;
   readonly VITE_PRIVY_APP_CLIENT_ID?: string;

@@ -26,7 +26,7 @@ Repository baseline is `main` at `f252aee6a496159f9c5ab0ac4e2c78833870407a` (10 
 Facts this design relies on. Each was checked in source:
 
 1. **The pinned connector already signs these actions.** In `@peerfolio/privy-near-connect` 0.0.8 (npm tarball, `dist/chunk-K2UUKYDB.js`), `toNearAction` maps `Transfer` to `actions.transfer(BigInt(params.deposit))` and `FunctionCall` to `actions.functionCall(...)`. Our approval screen is the only gate. No vendor change is needed.
-2. **Multi-transaction batches are sequential and stop at the first failure.** `AccountWithPrivySigner.signAndSendTransactions` delegates to `@near-js/accounts` `Account.signAndSendTransactions`, which signs and sends each transaction in turn. Earlier transactions stay committed when a later one fails. Re-verify against the installed `@near-js/accounts` at SEND-0.
+2. **Multi-transaction batches are sent concurrently, not sequentially — there is no "earlier" transaction.** `AccountWithPrivySigner.signAndSendTransactions` delegates to `@near-js/accounts` `Account.signAndSendTransactions`, which at 2.5.1 maps the batch through `Promise.all` (`lib/esm/account.js:244`). Every transaction is signed and broadcast; `throwOnFailure` rejects on the first settlement, but the others still execute. So a failure does not undo a transaction that succeeded, and no ordering is promised between them. Send avoids this entirely by being exactly one transaction (§3); §6.6 corrects the review copy that used to claim order.
 3. **Actions inside one transaction are atomic.** A transaction becomes one receipt on its receiver. If any action in that receipt fails, every action's state change in it is reverted, and attached deposits are refunded. Only burnt gas is lost. `storage_deposit` and `ft_transfer` both target the token contract, so they can share one transaction.
 4. **TOILET** (`contracts/toilet`) uses `near-contract-standards` FT and storage management: 18 decimals (`lib.rs:210`), and `storage_balance_bounds().min` is about 0.00125 NEAR (125 bytes × 10¹⁹ yocto/byte). Token account: `VITE_TOILET_ID`.
 5. **mPOO** is `mpoo.nearlytrade.near` on mainnet (`MPOO_ACCOUNT` in `web/src/paint-wallet.ts`). Its decimals are expected to be 18 (RHEA spec §Discovery). `contracts/paid-board/src/revenue.rs` notes that "mPOO's transfer runs its tax check" and budgets 15 TGas per `ft_transfer`. **Whether a plain wallet-to-wallet `ft_transfer` deducts tax is not established.** See gate SEND-LIVE and open question Q2.
@@ -201,9 +201,9 @@ The broadcast may have happened (timeout, closed popup after signing, lost respo
 
 ### 6.6 Partial-failure note behaviour
 
-- Send always produces one transaction. A send batch with more than one transaction is rejected by §4.2, so the existing note ("This sends N transactions in order. If a later one fails, the earlier ones still happen.") never appears on a Send review.
+- Send always produces one transaction. A send batch with more than one transaction is rejected by §4.2, so the multi-transaction note never appears on a Send review.
 - When a send contains registration and transfer, show the atomic note from §4.5 instead.
-- For every other batch (non-Send), the existing multi-transaction note keeps its current wording and condition (`transactions.length > 1`). Acceptance test: a two-transaction staking batch still shows it, and a registration-plus-transfer Send does not.
+- For every other batch (non-Send), the multi-transaction note keeps its condition (`transactions.length > 1`) but its wording follows §2.2: **"This sends N transactions at once. If one fails, the others can still happen."** The old wording claimed order ("in order… the earlier ones still happen") and was false on `@near-js/accounts` 2.5.1. Acceptance test: a two-transaction staking batch still shows the note, and a registration-plus-transfer Send does not.
 
 ## 7. Acceptance criteria
 

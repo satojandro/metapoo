@@ -22,6 +22,7 @@ vi.mock("@hot-labs/near-connect", () => ({
 }));
 vi.mock("./config", () => ({
   CONTRACT_ID: "board.testnet",
+  TOILET_ID: "",
   RPC_URL: "https://rpc.testnet.near.org",
   PAGE_NETWORK: "testnet",
   WALLET_NETWORK: "testnet",

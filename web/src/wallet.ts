@@ -1,3 +1,6 @@
+import { SEND_ENABLED, SEND_POLICY, SELF_CUSTODY_ENABLED } from "./integrations/send/config";
+import { SEND_GAS_FLOOR_YOCTO, validateSendTransaction } from "./integrations/send/plan";
+import { checkSend } from "./integrations/send/checks";
 import { NearConnector } from "@hot-labs/near-connect";
 import { Account as NearAccount } from "@near-js/accounts";
 import { JsonRpcProvider } from "@near-js/providers";
@@ -1080,12 +1083,15 @@ export async function signAndSendApprovedTransactions(
   )
     throw new Error("Acquisition network mismatch");
   if (
-    request.purpose === "mpoo-acquisition"
+    request.purpose === "send" ? !SEND_ENABLED : request.purpose === "mpoo-acquisition"
       ? !RHEA_MPOO_SWAP_ENABLED
       : !INTENTS_FUNDING_ENABLED && !RHEA_MPOO_SWAP_ENABLED
   )
     throw new Error("Acquisition approvals are disabled");
   const rpc = createAcquisitionRpc(RPC_URL);
+  // Snapshot once before reads: the UI cannot swap the approved recipient during preflight.
+  request = structuredClone(request);
+  let sendChecks = request.purpose === "send" ? await checkSend(request.transactions, request.context.accountId, SEND_POLICY, rpc) : null;
   const selectedWallet = await ensureConnector().wallet();
   const gateway = createApprovedTransactionGateway({
     isUnsubmittedRejection: (error) =>
@@ -1095,9 +1101,15 @@ export async function signAndSendApprovedTransactions(
     storage: window.localStorage,
     now: Date.now,
     validateTransaction: (tx, r) =>
-      validateAcquisitionTransaction(tx, r, acquisitionPolicy),
+      r.purpose === "send" ? validateSendTransaction(tx, r, sendChecks!.policy) : validateAcquisitionTransaction(tx, r, acquisitionPolicy),
     async readBudget(context) {
-      if (!/^[1-9]\d*$/.test(ACQUISITION_PLAY_RESERVE_YOCTO))
+      // A key change in flight — or one whose outcome was lost — blocks spending until it is
+      // settled, but it must never block spending forever: the self-custody panel reconciles it
+      // against the chain and offers the explicit override. Point there, not at "refresh".
+      const { custodyAttemptKey } = await import("./integrations/privy/custody-attempt");
+      if (window.localStorage.getItem(custodyAttemptKey(context.networkId, context.accountId)))
+        throw new Error("A key change is unresolved. Open Self-custody, check your keys, then try again.");
+      if (request.purpose !== "send" && !/^[1-9]\d*$/.test(ACQUISITION_PLAY_RESERVE_YOCTO))
         throw new Error("A measured play-gas reserve must be configured");
       const ready = await readConnectedAccountReadiness(context);
       if (ready.state !== "ready")
@@ -1108,7 +1120,7 @@ export async function signAndSendApprovedTransactions(
       return {
         spendableBeforeGasYocto: ready.spendableBeforeGasYocto,
         gasPriceYocto: gas.gas_price,
-        playReserveYocto: ACQUISITION_PLAY_RESERVE_YOCTO,
+        playReserveYocto: request.purpose === "send" ? SEND_GAS_FLOOR_YOCTO : ACQUISITION_PLAY_RESERVE_YOCTO,
       };
     },
     ...(selectedWallet.manifest?.features?.signAndSendTransactions
@@ -1136,10 +1148,7 @@ export async function signAndSendApprovedTransactions(
             return selectedWallet.signAndSendTransactions({
               transactions: txs.map((tx) => ({
                 receiverId: tx.receiverId,
-                actions: tx.actions.map((a) => ({
-                  ...a,
-                  params: { ...a.params },
-                })),
+                actions: [...tx.actions],
               })),
               signerId: context.accountId,
               network: context.networkId,
@@ -1150,6 +1159,15 @@ export async function signAndSendApprovedTransactions(
     async send(tx, context) {
       const wallet = selectedWallet;
       try {
+        if (request.purpose === "send") {
+          sendChecks = await checkSend(request.transactions, context.accountId, SEND_POLICY, rpc);
+          validateSendTransaction(tx, request, sendChecks.policy);
+          if (sendChecks.send?.token) {
+            const {sendView} = await import("./integrations/send/checks");
+            const balance = await sendView(rpc, sendChecks.send.token.contractId, "ft_balance_of", {account_id: context.accountId});
+            if (typeof balance !== "string" || !/^\d+$/.test(balance) || BigInt(balance) < BigInt(sendChecks.send.amount)) throw new Error("Your token balance changed.");
+          }
+        }
         if (
           (await accountIdFromWallet(wallet)) !== context.accountId ||
           !sameIdentity(context, getAcquisitionContext(context.operationId))
@@ -1163,7 +1181,7 @@ export async function signAndSendApprovedTransactions(
       }
       return wallet.signAndSendTransaction({
         receiverId: tx.receiverId,
-        actions: tx.actions.map((a) => ({ ...a, params: { ...a.params } })),
+        actions: [...tx.actions],
         signerId: context.accountId,
         network: context.networkId,
       });
@@ -1286,4 +1304,55 @@ async function assertCheckoutWallet(
     !sameIdentity(context, getAcquisitionContext(context.operationId))
   )
     throw new Error("Wallet changed before checkout approval");
+}
+
+/** Full-access keys use their own narrow approval path, never the drawing signer. */
+export async function signAndSendSelfCustodyKey(context: OperationContext, publicKey: string, kind: "add-full-access" | "remove-own-key" = "add-full-access") {
+  const { parseCustodyPublicKey, privyPublicKey, custodyKeyPermission, setPrivyPendingSelfCustodyKey } = await import("./integrations/privy/self-custody");
+  if (!SELF_CUSTODY_ENABLED) throw new Error("Self-custody is disabled.");
+  const key = parseCustodyPublicKey(publicKey);
+  if (key === privyPublicKey(context.accountId)) throw new Error("Privy's own key cannot be removed here.");
+  const wallet = await ensureConnector().wallet();
+  if (wallet.manifest.id !== PRIVY_WALLET_ID) throw new Error("Use the connected Privy account for this action.");
+  const rpc = createAcquisitionRpc(RPC_URL);
+  const assertCurrent = async () => {
+    if (!sameIdentity(context, getAcquisitionContext(context.operationId)) || await accountIdFromWallet(wallet) !== context.accountId) throw new Error("Connected account changed.");
+  };
+  return withCapitalLock(window.localStorage, async () => {
+    await assertCurrent();
+    if (window.localStorage.getItem(`metapoo:capital:pending:${context.networkId}:${context.accountId}`)) throw new Error("Reconcile the previous payment first.");
+    const permission = await custodyKeyPermission(rpc, context.accountId, key);
+    if (kind === "add-full-access" ? permission !== null : permission !== "FullAccess") throw new Error("Key state changed. Refresh your keys.");
+    const ready = await readConnectedAccountReadiness(context);
+    if (ready.state !== "ready" || !ready.expectedKeyMatches || BigInt(ready.spendableBeforeGasYocto) < BigInt(SEND_GAS_FLOOR_YOCTO)) throw new Error("Fund and verify this account before managing keys.");
+    await assertCurrent();
+    const { getCustodyAttempt, setCustodyAttempt } = await import("./integrations/privy/custody-attempt");
+    if (getCustodyAttempt(window.localStorage, context.networkId, context.accountId)) {
+      setPrivyPendingSelfCustodyKey(null, window.localStorage);
+      throw new Error("A key change is unresolved. Open Self-custody and check your keys before another approval.");
+    }
+    const attempt = {...context, publicKey: key, kind, createdAtMs: Date.now()};
+    setPrivyPendingSelfCustodyKey(attempt, window.localStorage);
+    // Persist the public intent before opening a wallet that might close or redirect.
+    setCustodyAttempt(window.localStorage, context.networkId, context.accountId, attempt);
+    try {
+      const outcome = await wallet.signAndSendTransaction({receiverId: context.accountId, signerId: context.accountId, network: context.networkId, actions: kind === "add-full-access" ? [{type: "AddKey", params: {publicKey: key, accessKey: {permission: "FullAccess"}}}] : [{type: "DeleteKey", params: {publicKey: key}}]});
+      const {transactionHash} = parseTxOutcome(outcome);
+      // Record the hash before the confirmation read: it is the only evidence that can tell a key
+      // change that FAILED on chain apart from one whose outcome was lost — and a failed change
+      // must not keep blocking every later payment.
+      if (transactionHash) setCustodyAttempt(window.localStorage, context.networkId, context.accountId, {...attempt, transactionHash});
+      await assertCurrent();
+      const after = await custodyKeyPermission(rpc, context.accountId, key);
+      const confirmed = kind === "add-full-access" ? after === "FullAccess" : after === null;
+      if (confirmed) setCustodyAttempt(window.localStorage, context.networkId, context.accountId, null);
+      return {confirmed, transactionHash};
+    } catch (error) {
+      if (isPrivyUnsubmittedRejection(error)) setCustodyAttempt(window.localStorage, context.networkId, context.accountId, null);
+      throw error;
+    } finally { setPrivyPendingSelfCustodyKey(null, window.localStorage); }
+  });
+}
+export async function isConnectedPrivyWallet(): Promise<boolean> {
+  try { return (await ensureConnector().wallet()).manifest.id === PRIVY_WALLET_ID; } catch { return false; }
 }

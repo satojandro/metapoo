@@ -1,0 +1,5 @@
+.mp-custody { padding:20px; display:grid; gap:12px; max-width:440px; }
+.mp-custody li { overflow-wrap:anywhere; margin-block:12px; }
+.mp-custody label { display:grid; gap:6px; }
+.mp-custody input { width:100%; box-sizing:border-box; padding:12px; font:inherit; }
+.mp-custody button { padding:10px; font:inherit; }
