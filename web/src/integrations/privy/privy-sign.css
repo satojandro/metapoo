@@ -1,0 +1,136 @@
+/*
+ * The Privy sign-in / approval window (privy-sign.html). Same tokens as the game
+ * (design/tokens.css): dark wall scene, brand yellow for the one action that matters,
+ * monospace for anything the player should compare character by character.
+ */
+:root { color-scheme: dark; font-family: var(--mp-font); background: var(--mp-bg); color: var(--mp-fg); }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 50% 0%, var(--mp-glow), transparent 70%), var(--mp-bg);
+  line-height: var(--mp-leading);
+}
+#privy-root {
+  box-sizing: border-box;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: var(--mp-space-6) var(--mp-space-4) var(--mp-space-7);
+  display: grid;
+  gap: var(--mp-space-4);
+  font-size: var(--mp-text-base);
+  overflow-wrap: anywhere;
+}
+
+/* Brand bar */
+.ps-brand { display: flex; align-items: center; justify-content: space-between; gap: var(--mp-space-3); flex-wrap: wrap; }
+.ps-wordmark { font-size: 24px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; }
+.ps-trust { display: flex; align-items: center; gap: var(--mp-space-2); font: 600 var(--mp-text-xs) var(--mp-mono); color: var(--mp-muted); }
+.ps-secure { display: inline-flex; align-items: center; gap: 6px; }
+.ps-lock { width: 13px; height: 13px; fill: none; stroke: var(--mp-good); stroke-width: 1.6; stroke-linejoin: round; }
+.ps-pill {
+  padding: 2px var(--mp-space-2);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-pill);
+  color: var(--mp-soft);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+/* Card */
+.ps-card {
+  background: var(--mp-card);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  padding: var(--mp-space-6) var(--mp-space-5);
+  display: grid;
+  gap: var(--mp-space-3);
+  box-shadow: 0 18px 40px var(--mp-shadow);
+}
+.ps-eyebrow { margin: 0; color: var(--mp-tag); }
+.ps-eyebrow:empty { display: none; }
+.ps-title { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -.8px; line-height: 1.15; }
+.ps-lede { margin: 0; color: var(--mp-soft); font-size: var(--mp-text-base); }
+.ps-content { display: grid; gap: var(--mp-space-3); margin-top: var(--mp-space-2); }
+.ps-content:empty { display: none; }
+
+/* Buttons */
+.ps-btn { font-size: var(--mp-text-base); padding: var(--mp-space-2) var(--mp-space-5); }
+.ps-btn-wide { width: 100%; }
+.ps-btn-quiet { background: transparent; color: var(--mp-soft); }
+.ps-btn:focus-visible, .ps-input:focus-visible, .ps-link:focus-visible, .ps-technical summary:focus-visible {
+  outline: 2px solid var(--mp-focus);
+  outline-offset: 2px;
+}
+.ps-actions { display: flex; flex-wrap: wrap; gap: var(--mp-space-2); margin-top: var(--mp-space-2); }
+.ps-actions .mp-btn-primary { flex: 1 1 auto; }
+.ps-link {
+  justify-self: start;
+  padding: var(--mp-space-1) 0;
+  background: none;
+  border: 0;
+  color: var(--mp-near);
+  font: inherit;
+  font-size: var(--mp-text-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.ps-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--mp-space-3);
+  margin: 0;
+  font: 600 var(--mp-text-xs) var(--mp-mono);
+  color: var(--mp-muted);
+  text-transform: uppercase;
+  letter-spacing: .14em;
+}
+.ps-divider::before, .ps-divider::after { content: ""; flex: 1; height: 1px; background: var(--mp-line); }
+
+/* Form */
+.ps-field { display: grid; gap: var(--mp-space-1); }
+.ps-field-label { font-size: var(--mp-text-body); font-weight: 700; color: var(--mp-soft); }
+.ps-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--mp-hit);
+  padding: var(--mp-space-2) var(--mp-space-3);
+  background: var(--mp-bg);
+  color: var(--mp-fg);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-md);
+  font: inherit;
+}
+.ps-input::placeholder { color: var(--mp-muted); }
+.ps-code { font: 700 22px var(--mp-mono); letter-spacing: .3em; text-align: center; }
+
+/* What is being approved */
+.ps-facts { margin: 0; display: grid; border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); overflow: hidden; }
+.ps-fact { display: grid; grid-template-columns: minmax(96px, 34%) 1fr; gap: var(--mp-space-3); padding: var(--mp-space-3); background: var(--mp-card-2); }
+.ps-fact + .ps-fact { border-top: 1px solid var(--mp-line); }
+.ps-fact dt { color: var(--mp-muted); font-size: var(--mp-text-body); }
+.ps-fact dd { margin: 0; font-size: var(--mp-text-body); font-weight: 700; }
+.ps-mono { font-family: var(--mp-mono); font-weight: 500; word-break: break-all; }
+.ps-note { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-body); }
+.ps-technical { font-size: var(--mp-text-sm); color: var(--mp-muted); }
+.ps-technical summary { cursor: pointer; padding: var(--mp-space-1) 0; }
+.ps-technical ul { margin: var(--mp-space-2) 0 0; padding-left: var(--mp-space-4); display: grid; gap: var(--mp-space-1); }
+
+/* Status */
+.ps-status { margin: 0; font-size: var(--mp-text-body); color: var(--mp-soft); }
+.ps-status:empty { display: none; }
+.ps-status[data-tone="error"] {
+  padding: var(--mp-space-3);
+  border: 1px solid var(--mp-bad);
+  border-radius: var(--mp-radius-md);
+  color: var(--mp-fg);
+}
+.ps-reason { display: block; font: var(--mp-text-sm) var(--mp-mono); color: var(--mp-muted); }
+
+.ps-foot { margin: 0; text-align: center; font-size: var(--mp-text-sm); color: var(--mp-muted); }
+
+[aria-busy="true"] .ps-btn { cursor: progress; }
+
+@media (max-width: 360px) {
+  .ps-fact { grid-template-columns: 1fr; gap: var(--mp-space-1); }
+}

@@ -38,15 +38,48 @@ export function mountPrivySignPage(
   const cleanup: Array<() => void> = [];
   root.replaceChildren();
   const doc = root.ownerDocument;
-  const heading = doc.createElement("h1");
-  heading.textContent = "Sign in to Meta Poo";
-  const status = doc.createElement("p");
+  const el = <K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    className?: string,
+    text?: string,
+  ): HTMLElementTagNameMap[K] => {
+    const node = doc.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  // Brand bar: the same wordmark as the game, plus who handles sign-in and which network.
+  const brand = el("header", "ps-brand");
+  const wordmark = el("span", "ps-wordmark", "meta poo.");
+  const trust = el("span", "ps-trust");
+  const lock = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  lock.setAttribute("viewBox", "0 0 16 16");
+  lock.setAttribute("class", "ps-lock");
+  lock.setAttribute("aria-hidden", "true");
+  const shackle = doc.createElementNS(lock.namespaceURI, "path");
+  shackle.setAttribute("d", "M5 7V5a3 3 0 0 1 6 0v2");
+  const body = doc.createElementNS(lock.namespaceURI, "rect");
+  for (const [k, v] of Object.entries({ x: "3", y: "7", width: "10", height: "7", rx: "1.5" }))
+    body.setAttribute(k, v);
+  lock.append(shackle, body);
+  const secure = el("span", "ps-secure", "Secure sign-in");
+  secure.prepend(lock);
+  trust.append(
+    secure,
+    el("span", "ps-pill", `NEAR ${config.network}`),
+  );
+  brand.append(wordmark, trust);
+  const card = el("section", "ps-card");
+  const eyebrow = el("p", "mp-eyebrow ps-eyebrow");
+  const heading = el("h1", "ps-title");
+  const lede = el("p", "ps-lede");
+  const content = el("div", "ps-content");
+  const status = el("p", "ps-status");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  const content = doc.createElement("div");
-  const cancel = doc.createElement("button");
+  const actions = el("div", "ps-actions");
+  const cancel = el("button", "mp-btn ps-btn ps-btn-quiet", "Cancel");
   cancel.type = "button";
-  cancel.textContent = "Cancel";
   cancel.addEventListener("click", () => {
     if (!busy) {
       // After invoking the signer, a lost response can still mean funds moved.
@@ -55,9 +88,28 @@ export function mountPrivySignPage(
       options.close();
     }
   });
-  root.append(heading, status, content, cancel);
-  const say = (text: string) => {
-    if (!disposed) status.textContent = text;
+  actions.append(cancel);
+  card.append(eyebrow, heading, lede, content, status, actions);
+  const footer = el(
+    "footer",
+    "ps-foot",
+    "Meta Poo never sees your keys or holds your money. Sign-in and signing are handled by Privy.",
+  );
+  root.append(brand, card, footer);
+  const say = (text: string, tone: "info" | "error" = "info") => {
+    if (disposed) return;
+    status.textContent = text;
+    status.dataset.tone = tone;
+  };
+  const screen = (kicker: string, title: string, intro = "") => {
+    eyebrow.textContent = kicker;
+    heading.textContent = title;
+    lede.textContent = intro;
+    lede.hidden = !intro;
+    content.replaceChildren();
+    // A new screen never carries over the previous screen's Approve/Connect button.
+    actions.replaceChildren(cancel);
+    status.textContent = "";
   };
   const setBusy = (value: boolean) => {
     busy = value;
@@ -69,10 +121,14 @@ export function mountPrivySignPage(
   const action = (
     label: string,
     run: () => Promise<void>,
+    primary = true,
   ): HTMLButtonElement => {
-    const button = doc.createElement("button");
+    const button = el(
+      "button",
+      primary ? "mp-btn mp-btn-primary ps-btn" : "mp-btn ps-btn",
+      label,
+    );
     button.type = "button";
-    button.textContent = label;
     const handler = async () => {
       if (busy || disposed) return;
       setBusy(true);
@@ -80,7 +136,8 @@ export function mountPrivySignPage(
         await run();
       } catch {
         say(
-          "The request could not complete. Check your connection, then retry or return to the game.",
+          "That didn't go through. Check your connection and try again, or close this window and return to the game.",
+          "error",
         );
       } finally {
         if (!disposed) setBusy(false);
@@ -91,9 +148,9 @@ export function mountPrivySignPage(
     return button;
   };
   const field = (label: string, type: string) => {
-    const wrap = doc.createElement("label");
-    wrap.textContent = label;
-    const input = doc.createElement("input");
+    const wrap = el("label", "ps-field");
+    wrap.append(el("span", "ps-field-label", label));
+    const input = el("input", "ps-input");
     input.type = type;
     input.required = true;
     wrap.append(input);
@@ -123,15 +180,29 @@ export function mountPrivySignPage(
     );
     if (review.requiresHost && !sameHostIdentity(capturedHost, host))
       throw new Error("Connected account changed.");
-    heading.textContent = review.title;
-    content.replaceChildren();
-    for (const line of review.details) {
-      const p = doc.createElement("p");
-      p.textContent = line;
-      content.append(p);
+    screen(review.eyebrow, review.title, review.lede);
+    // Every value below comes from the payload that will be signed, as text nodes.
+    const facts = el("dl", "ps-facts");
+    for (const row of review.rows) {
+      const item = el("div", "ps-fact");
+      item.append(
+        el("dt", "", row.label),
+        el("dd", row.mono ? "ps-mono" : "", row.value),
+      );
+      facts.append(item);
+    }
+    content.append(facts);
+    for (const note of review.notes) content.append(el("p", "ps-note", note));
+    if (review.details.length) {
+      const technical = el("details", "ps-technical");
+      technical.append(el("summary", "", "Technical details"));
+      const list = el("ul", "ps-mono");
+      for (const line of review.details) list.append(el("li", "", line));
+      technical.append(list);
+      content.append(technical);
     }
     const approve = action(
-      review.requiresHost ? "Approve" : "Connect account",
+      review.approveLabel,
       async () => {
         if (!bound || !wallet || disposed) return;
         // Re-read identity after every potentially slow provider or RPC step.
@@ -159,7 +230,8 @@ export function mountPrivySignPage(
             await runtime.assertReady(currentWallet);
           } catch {
             say(
-              "Your account, signing key and native NEAR for network fees could not be verified. Check your balance, or try again when the network is available.",
+              "We couldn't confirm your account has NEAR for network fees yet. A brand-new account needs its first NEAR before it can approve anything. Add some, wait a moment, then approve again.",
+              "error",
             );
             return;
           }
@@ -173,72 +245,95 @@ export function mountPrivySignPage(
         }
         // The vendor signs the immutable payload displayed above. No retry follows a signing error.
         say(
-          "Requesting your wallet approval. Do not submit this request again while its outcome is unknown.",
+          "Signing… Keep this window open, and don't retry in the game until it reports back.",
         );
         try {
           signingStarted = true;
           await bound.sign();
-          content.replaceChildren();
-          say(
-            "Wallet response sent to the game. The game will check transaction confirmation.",
-          );
+          screen("Done", "All set");
+          say("Sent to the game. This window closes on its own; the game confirms the result.");
         } catch {
-          content.replaceChildren();
+          screen("Check the game", "We couldn't confirm the result");
           say(
-            "The wallet did not return a confirmed result. Close this window and check the original operation in the game before retrying.",
+            "It may or may not have gone through. Close this window and check the original operation in the game before trying again.",
+            "error",
           );
         }
       },
     );
-    content.append(approve);
-    say(
-      review.requiresFunds
-        ? "You pay network fees from your native NEAR balance."
-        : "Connecting does not send a blockchain transaction.",
-    );
+    actions.prepend(approve);
   }
 
   function renderLogin(): void {
     if (disposed) return;
-    heading.textContent = "Sign in to Meta Poo";
-    content.replaceChildren();
+    screen(
+      "Sign in",
+      "Sign in to start painting",
+      "Use Google or your email. You'll get a NEAR account to go with it: nothing to install, no seed phrase to write down.",
+    );
     const google = action("Continue with Google", async () => {
       options.navigate(await runtime.googleUrl());
     });
-    content.append(google);
-    const email = field("Email address", "email");
+    google.classList.add("ps-btn-wide");
+    content.append(google, el("p", "ps-divider", "or"));
+    const email = field("Email", "email");
     email.autocomplete = "email";
-    content.append(
-      action("Send email code", async () => {
+    email.placeholder = "you@example.com";
+    const sendCode = action(
+      "Email me a code",
+      async () => {
         if (!email.checkValidity()) {
           email.reportValidity();
           return;
         }
-        await runtime.sendEmailCode(email.value.trim());
         const address = email.value.trim();
-        content.replaceChildren();
-        const code = field("Email verification code", "text");
-        code.autocomplete = "one-time-code";
-        code.inputMode = "numeric";
-        content.append(
-          action("Sign in with code", async () => {
-            if (!code.value.trim()) return;
-            await runtime.loginEmail(address, code.value.trim());
-            await prepareReview();
-          }),
-        );
-        say("Check your email for a sign-in code.");
-        code.focus();
-      }),
+        await runtime.sendEmailCode(address);
+        renderCode(address);
+      },
+      false,
     );
-    say(
-      "Use Google or an email code. A new account needs native NEAR before it can authorize drawing or spend.",
+    sendCode.classList.add("ps-btn-wide");
+    content.append(
+      sendCode,
+      el(
+        "p",
+        "ps-note",
+        "Painting needs a little NEAR for network fees. After you sign in, the game shows you how to add some.",
+      ),
     );
+  }
+
+  function renderCode(address: string): void {
+    if (disposed) return;
+    screen(
+      "Sign in",
+      "Check your email",
+      `We sent a 6-digit code to ${address}. Enter it below to finish signing in.`,
+    );
+    const code = field("Code", "text");
+    code.autocomplete = "one-time-code";
+    code.inputMode = "numeric";
+    code.classList.add("ps-code");
+    const submit = action("Sign in", async () => {
+      if (!code.value.trim()) return;
+      await runtime.loginEmail(address, code.value.trim());
+      await prepareReview();
+    });
+    submit.classList.add("ps-btn-wide");
+    const back = el("button", "ps-link", "Use a different email");
+    back.type = "button";
+    const onBack = () => {
+      if (!busy) renderLogin();
+    };
+    back.addEventListener("click", onBack);
+    cleanup.push(() => back.removeEventListener("click", onBack));
+    content.append(submit, back);
+    code.focus();
   }
 
   const ready = (async () => {
     try {
-      say("Connecting to the sign-in service…");
+      screen("Sign in", "Opening secure sign-in…");
       await runtime.initialize();
       if (disposed) return;
       original = await runtime.handshake();
@@ -249,8 +344,10 @@ export function mountPrivySignPage(
         original.targetOrigin !== config.origin ||
         payload?.network !== config.network
       ) {
+        screen("Request refused", "This request can't be signed here");
         say(
-          "This request has a missing or different network, or an untrusted origin. Return to the game.",
+          "It has a missing or different network, or came from a site we don't trust. Nothing was signed. Close this window and return to the game.",
+          "error",
         );
         return;
       }
@@ -289,10 +386,12 @@ export function mountPrivySignPage(
       } catch {
         // Diagnostics must never be the thing that breaks the page.
       }
+      screen("Sign in", "Sign-in couldn't start");
       say(
-        "Sign-in could not be restored. Return to the game and try again. No request was automatically signed.",
+        "Close this window and try again from the game. Nothing was signed.",
+        "error",
       );
-      const detail = doc.createElement("small");
+      const detail = el("small", "ps-reason");
       detail.id = "privy-sign-error-detail";
       detail.textContent = `Reason: ${reason}`;
       content.append(detail);

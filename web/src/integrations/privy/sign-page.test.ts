@@ -168,6 +168,24 @@ describe("standalone Privy approval page", () => {
       "https://accounts.google.com/",
     );
   });
+  it("walks email sign-in through its own code screen and back, without signing", async () => {
+    const { root, runtime, sign, page } = setup(
+      { kind: "signIn", network: "testnet" },
+      null,
+    );
+    await page.ready;
+    const email = root.querySelector<HTMLInputElement>('input[type="email"]')!;
+    email.value = "player@example.com";
+    button(root, "Email me a code").click();
+    await flush();
+    expect(runtime.sendEmailCode).toHaveBeenCalledWith("player@example.com");
+    expect(root.textContent).toContain("Check your email");
+    expect(root.textContent).toContain("player@example.com");
+    button(root, "Use a different email").click();
+    expect(root.textContent).toContain("Sign in to start painting");
+    expect(button(root, "Continue with Google")).toBeDefined();
+    expect(sign).not.toHaveBeenCalled();
+  });
   it("cleans OAuth code/state from the callback URL even when verification fails", async () => {
     const { runtime, page, options } = setup(
       { kind: "signIn", network: "testnet" },

@@ -101,6 +101,20 @@ export function readPrivyConfig(
   }
 }
 
+/**
+ * Picker icon: an envelope on the brand yellow, matching the game's tag colour (design/tokens.css).
+ * Data URI because the selector renders it as a plain <img> outside our CSS.
+ */
+export const PRIVY_PICKER_ICON =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+      '<rect width="64" height="64" rx="14" fill="#f1dc5e"/>' +
+      '<rect x="14" y="20" width="36" height="25" rx="4" fill="none" stroke="#17171a" stroke-width="4"/>' +
+      '<path d="M16 23l16 12 16-12" fill="none" stroke="#17171a" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>' +
+      "</svg>",
+  );
+
 /** Add this entry to the default connector manifest; never replace existing wallets. */
 export function createPrivyManifest(
   config: PrivyConfig,
@@ -111,8 +125,11 @@ export function createPrivyManifest(
     version: PRIVY_PACKAGE_VERSION,
     description:
       "Sign in to a NEAR account with Google or email. You pay your own network fees.",
-    icon: new URL("favicon.ico", config.origin).href,
-    website: config.origin,
+    // Inline so it can never 404 (there is no favicon.ico; the picker showed a broken image).
+    icon: PRIVY_PICKER_ICON,
+    // The picker prints this hostname under the name. "privy.io" tells the player who handles
+    // the sign-in; the game's own origin there read as a second, unexplained site.
+    website: "https://privy.io",
     executor: new URL(executorAsset, config.origin).href,
     type: "sandbox" as const,
     platform: ["web"],

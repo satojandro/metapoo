@@ -124,6 +124,57 @@ export function getWalletSession(): WalletSession {
   return session;
 }
 
+/**
+ * Wallets hidden from the picker (owner, 10 Nov 2026), by near-connect manifest id:
+ * a developer CLI, an EVM bridge, a DAO treasury app, and a hardware wallet. None is how a
+ * player signs in from a browser, and together they crowded the list. Edit freely.
+ */
+export const HIDDEN_WALLET_IDS = [
+  "near-cli",
+  "ethereum-wallets",
+  "trezu-wallet",
+  "ledger",
+] as const;
+
+/** Where near-connect persists the wallet id a player last signed in with. */
+export const SELECTED_WALLET_KEY = "selected-wallet";
+
+/**
+ * Ids to exclude from the picker for this visit.
+ *
+ * A wallet the player is already signed in with is never excluded. near-connect filters an
+ * excluded id out of its manifest at construction, and `getConnectedWallet()` looks the stored
+ * `selected-wallet` up in that list — so hiding it would throw "No wallet selected" for a
+ * returning player, and the next `wallet()` call deletes the stored id. They would be signed out
+ * and unable to pick that wallet again, because it is no longer in the picker either.
+ */
+export function pickerExcludedWallets(
+  storage: Pick<Storage, "getItem"> | undefined = typeof window === "undefined"
+    ? undefined
+    : window.localStorage,
+): string[] {
+  let selected: string | null = null;
+  try {
+    selected = storage?.getItem(SELECTED_WALLET_KEY) ?? null;
+  } catch {
+    // Blocked storage must not stop the picker from loading.
+    selected = null;
+  }
+  return HIDDEN_WALLET_IDS.filter((id) => id !== selected);
+}
+
+/** Move one registered wallet to the top of the picker. No-op if it is not registered. */
+export function promoteWallet(
+  target: Pick<NearConnector, "wallets" | "events">,
+  id: string,
+): void {
+  const index = target.wallets.findIndex((w) => w.manifest.id === id);
+  if (index <= 0) return;
+  const [wallet] = target.wallets.splice(index, 1);
+  target.wallets.unshift(wallet);
+  target.events.emit("selector:walletsChanged", {});
+}
+
 function ensureConnector(): NearConnector {
   if (connector) {
     return connector;
@@ -138,6 +189,7 @@ function ensureConnector(): NearConnector {
       signInWithoutAddKey: true,
       signAndSendTransaction: true,
     },
+    excludedWallets: pickerExcludedWallets(),
   });
 
   if (PRIVY_ENABLED && typeof window !== "undefined") {
@@ -150,6 +202,8 @@ function ensureConnector(): NearConnector {
       if (availability.state !== "ready") return;
       await target.whenManifestLoaded;
       await target.registerWallet(createPrivyManifest(availability.config));
+      // registerWallet appends; most new players have no NEAR wallet, so lead with Privy.
+      promoteWallet(target, PRIVY_WALLET_ID);
     })();
     // Registration failure must not remove ordinary wallets from the selector.
     void connectorReady.catch(() => undefined);
