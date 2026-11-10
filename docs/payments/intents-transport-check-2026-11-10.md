@@ -1,6 +1,13 @@
 # Intents (1Click) browser transport check — 2026-11-10
 
-ACQ-4, Intents step 1. Done from the cloud session; no funds moved (dry quotes only).
+ACQ-4, Intents step 1. No funds moved (dry quotes only).
+
+Run first from a cloud session, then **re-run independently from a Chromium tab on
+`https://metapoo-testnet.vercel.app`** (crypto-builder, 2026-11-10). Every row below reproduced:
+216 tokens, the preflight, the same dry quote (`amountOut` `1384658638547314202334630`, 1.3846 NEAR),
+one `appFees` entry at 20 bps to `5880ad2b…47dd`, and the three server-added defaults verbatim. The
+live response was also run through this repo's own `parseQuote` / `assertQuoteMatches` /
+`providerFeeBps` in a throwaway test (pass), so "our parser accepts it" is checked, not inferred.
 
 **Origin:** `https://metapoo-testnet.vercel.app` (the mainnet page).
 **API:** `https://1click.chaindefuser.com` (`VITE_INTENTS_TRANSPORT=direct`).
