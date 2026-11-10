@@ -196,3 +196,4 @@
   .hiw-cell.is-just, .hiw-log .new { animation: none; }
   .hiw-meter i { transition: none; }
 }
+.hiw-limits > div[hidden] { display: none; }

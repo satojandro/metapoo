@@ -30,7 +30,7 @@ vi.mock("../wallet", () => ({
 }));
 
 import { viewFunction } from "../contract";
-import { formatResetTime, mountBuyCreditsSheet } from "./buy-credits-sheet";
+import { formatResetTime, mountBuyCreditsSheet, openWalletFundingDialog } from "./buy-credits-sheet";
 
 function services(): AppServices {
   return {
@@ -53,6 +53,76 @@ function services(): AppServices {
 
 afterEach(() => {
   vi.mocked(viewFunction).mockReset();
+});
+
+describe("mountBuyCreditsSheet — paying from another chain", () => {
+  function mountWith(openFunding: ((onClosed: () => void) => boolean) | null) {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const sheet = mountBuyCreditsSheet(host, services(), { openFunding });
+    sheet.setVisible(true);
+    sheet.open({ quantity: 12 });
+    const panel = () => host.querySelector<HTMLElement>(".buy-credits-sheet")!;
+    const funding = () => host.querySelector<HTMLElement>("[data-buy=funding]")!;
+    return { host, sheet, panel, funding };
+  }
+
+  it("links to the Paying section of How it works", () => {
+    const { host, sheet } = mountWith(null);
+    expect(host.querySelector<HTMLAnchorElement>(".buy-credits-how a")?.getAttribute("href")).toBe(
+      "/how-it-works#hiw-pay",
+    );
+    sheet.dispose();
+    host.remove();
+  });
+
+  it("hides the offer when this build cannot fund from another chain", () => {
+    const { host, sheet, funding } = mountWith(null);
+    expect(funding().hidden).toBe(true);
+    sheet.dispose();
+    host.remove();
+  });
+
+  it("Add funds closes this window, opens the funding dialog, and comes back after", () => {
+    let closed: (() => void) | null = null;
+    const openFunding = vi.fn((onClosed: () => void) => {
+      closed = onClosed;
+      return true;
+    });
+    const { host, sheet, panel, funding } = mountWith(openFunding);
+    expect(funding().hidden).toBe(false);
+    host.querySelector<HTMLInputElement>("#buy-credits-qty")!.value = "30";
+    host.querySelector<HTMLButtonElement>("[data-buy=add-funds]")!.click();
+    expect(openFunding).toHaveBeenCalledTimes(1);
+    expect(panel().hidden).toBe(true);
+    closed!();
+    expect(panel().hidden).toBe(false);
+    expect(host.querySelector<HTMLInputElement>("#buy-credits-qty")!.value).toBe("30");
+    sheet.dispose();
+    host.remove();
+  });
+
+  it("uses the wallet menu's own Add funds button and reports when its dialog closes", () => {
+    document.body.innerHTML = `<button class="paint-wallet-add-funds"></button><dialog class="mp-funding-dialog"></dialog>`;
+    const clicked = vi.fn();
+    document.querySelector(".paint-wallet-add-funds")!.addEventListener("click", clicked);
+    const onClosed = vi.fn();
+    expect(openWalletFundingDialog(onClosed)).toBe(true);
+    expect(clicked).toHaveBeenCalledTimes(1);
+    document.querySelector("dialog")!.dispatchEvent(new Event("close"));
+    expect(onClosed).toHaveBeenCalledTimes(1);
+    document.body.innerHTML = "";
+    expect(openWalletFundingDialog(onClosed)).toBe(false);
+  });
+
+  it("stays open and points to the wallet menu when there is no funding dialog on the page", () => {
+    const { host, sheet, panel } = mountWith(() => false);
+    host.querySelector<HTMLButtonElement>("[data-buy=add-funds]")!.click();
+    expect(panel().hidden).toBe(false);
+    expect(host.querySelector("[data-buy=status]")!.textContent).toContain("wallet menu");
+    sheet.dispose();
+    host.remove();
+  });
 });
 
 describe("mountBuyCreditsSheet", () => {
