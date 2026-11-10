@@ -287,6 +287,8 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
     boardStage.style.transform = viewTransform.stage.transform;
     positionSelection();
     updatePositionReadout();
+    // The status chip shows px/cell, so every camera move refreshes it, whoever moved it.
+    deps.updateCompactStatus();
     for (const listener of zoomStateListeners) listener();
     notifyChange();
   }

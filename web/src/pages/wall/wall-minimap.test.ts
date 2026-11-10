@@ -30,7 +30,7 @@ describe("visibleCells", () => {
 });
 
 describe("createWallMinimap", () => {
-  function setup(camera: Camera) {
+  function setup(camera: Camera, visible = true) {
     document.body.innerHTML = `<div id="host"></div>`;
     const centred: Array<{ x: number; y: number }> = [];
     const minimap = createWallMinimap({
@@ -40,13 +40,26 @@ describe("createWallMinimap", () => {
       camera: () => camera,
       viewport: () => viewport,
       centerOn: (cell) => centred.push(cell),
-      visible: () => true,
+      visible: () => visible,
     });
     const canvas = minimap.element.querySelector("canvas")!;
     canvas.getBoundingClientRect = () =>
       ({ left: 10, top: 20, width: 128, height: 128, right: 138, bottom: 148, x: 10, y: 20 }) as DOMRect;
     return { minimap, centred };
   }
+
+  it("is decoration to assistive tech: pointer-only, and the wall pans from the keyboard", () => {
+    const { minimap } = setup(paintZoomCamera(viewport, { x: 64, y: 64 }, 20));
+    expect(minimap.element.getAttribute("aria-hidden")).toBe("true");
+    expect(minimap.element.hasAttribute("role")).toBe(false);
+  });
+
+  it("does nothing on a render outside full screen", () => {
+    const { minimap } = setup(paintZoomCamera(viewport, { x: 64, y: 64 }, 20), false);
+    minimap.update();
+    expect(minimap.element.dataset.wholeWall).toBe("true");
+    expect(minimap.element.querySelector<HTMLElement>(".wall-minimap-frame")!.style.width).toBe("");
+  });
 
   it("hides itself when the whole wall is on screen", () => {
     const { minimap } = setup(fitCamera(viewport));

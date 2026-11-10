@@ -66,29 +66,31 @@ export function createWallMinimap(deps: WallMinimapDeps): WallMinimap {
 
   const element = doc.createElement("div");
   element.className = "wall-minimap";
-  element.setAttribute("role", "img");
-  element.setAttribute("aria-label", "Minimap of the whole wall. Tap to move there.");
+  // Pointer-only decoration: the wall already pans from the keyboard, and a control
+  // nobody can focus should not be announced as one.
+  element.setAttribute("aria-hidden", "true");
   element.dataset.wholeWall = "true";
 
   const canvas = doc.createElement("canvas");
   canvas.className = "wall-minimap-canvas";
   canvas.width = BOARD_WIDTH;
   canvas.height = BOARD_HEIGHT;
-  canvas.setAttribute("aria-hidden", "true");
 
   const frame = doc.createElement("div");
   frame.className = "wall-minimap-frame";
-  frame.setAttribute("aria-hidden", "true");
 
   element.append(canvas, frame);
   host.append(element);
   scope.onDispose(() => element.remove());
 
   function update(): void {
+    // Runs on every board render, strokes included: outside full screen do nothing.
+    if (!deps.visible()) return;
     const camera = deps.camera();
     const viewport = deps.viewport();
-    element.dataset.wholeWall = String(showsWholeWall(camera, viewport));
-    if (!deps.visible()) return;
+    const whole = String(showsWholeWall(camera, viewport));
+    if (element.dataset.wholeWall !== whole) element.dataset.wholeWall = whole;
+    if (whole === "true") return;
 
     const ctx = canvas.getContext("2d");
     if (ctx && source.width > 0 && source.height > 0) {

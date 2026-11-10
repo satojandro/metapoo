@@ -4,8 +4,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createWallFullscreen, FULLSCREEN_ROOT_CLASS } from "./wall-fullscreen";
 import { createWallScope } from "./wall-scope";
+import type { Camera } from "../../viewport";
 
-function setup() {
+function setup(camera?: { read(): Camera; restore(camera: Camera): void }) {
   document.body.innerHTML = `
     <div class="wall-page">
       <div id="board-focus" tabindex="0"></div>
@@ -24,6 +25,7 @@ function setup() {
     toggleButton,
     panelButton,
     focusTarget: document.querySelector<HTMLElement>("#board-focus")!,
+    camera,
     onChange: (active) => changes.push(active),
   });
   return { page, toggleButton, panelButton, scope, fullscreen, changes };
@@ -51,7 +53,8 @@ describe("createWallFullscreen", () => {
     expect(page.dataset.fullscreen).toBe("true");
     expect(document.documentElement.classList.contains(FULLSCREEN_ROOT_CLASS)).toBe(true);
     expect(toggleButton.getAttribute("aria-pressed")).toBe("true");
-    expect(toggleButton.getAttribute("aria-label")).toContain("Exit full screen");
+    // The name is stable; aria-pressed alone says it is on.
+    expect(toggleButton.getAttribute("aria-label")).toBe("Full screen");
     expect(panelButton.hidden).toBe(false);
     expect(document.activeElement?.id).toBe("board-focus");
     expect(changes).toEqual([true]);
@@ -79,6 +82,37 @@ describe("createWallFullscreen", () => {
     page.querySelector<HTMLElement>(".buy-credits-sheet")!.hidden = false;
     escape();
     expect(fullscreen.active()).toBe(true);
+  });
+
+  it("leaving puts back the camera the normal page had, whatever full screen did to it", () => {
+    let current: Camera = { cellSize: 3.8, panX: 4, panY: 4 };
+    const restored: Camera[] = [];
+    const { fullscreen } = setup({
+      read: () => current,
+      restore: (camera) => {
+        restored.push(camera);
+        current = camera;
+      },
+    });
+    fullscreen.enter();
+    current = { cellSize: 5.7, panX: 0, panY: 0 }; // the re-fit, then some zooming
+    fullscreen.exit();
+    expect(restored).toEqual([{ cellSize: 3.8, panX: 4, panY: 4 }]);
+  });
+
+  it("Escape with the wallet chooser open leaves the chooser to handle it", () => {
+    const { fullscreen } = setup();
+    fullscreen.enter();
+    const popup = document.createElement("div");
+    popup.className = "hot-connector-popup";
+    popup.style.display = "block";
+    document.body.append(popup);
+    escape();
+    expect(fullscreen.active()).toBe(true);
+    popup.style.display = "none"; // near-connect hides it, then removes it
+    escape();
+    expect(fullscreen.active()).toBe(false);
+    popup.remove();
   });
 
   it("the panel button hides and shows the panel", () => {
