@@ -1161,3 +1161,155 @@
   .wall-page .wall-pulse-happy { margin-left: 0; flex-basis: 100%; }
   .wall-page .wall-panel { height: auto; }
 }
+
+/* ——— Full screen (owner, 7 Nov: an extra mode on top of the page, not a new layout) ———
+   The wall takes the whole window; the panel sits beside it (below it on phone) and
+   can be hidden; the minimap appears once zoomed in. Leaving restores the page. */
+.wall-page .wall-bar .wall-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  background: var(--wall-overlay);
+  color: var(--mp-fg);
+  cursor: pointer;
+}
+.wall-page .wall-bar .wall-icon-btn:hover { background: var(--mp-card-2); }
+.wall-page .wall-bar .wall-icon-btn:focus-visible,
+.wall-page .wall-bar .wall-chip-btn:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
+.wall-page .wall-fullscreen-btn { right: 0; bottom: 52px; }
+.wall-page .wall-fullscreen-btn .icon-exit,
+.wall-page .wall-fullscreen-btn[data-state="on"] .icon-enter { display: none; }
+.wall-page .wall-fullscreen-btn[data-state="on"] .icon-exit { display: block; }
+
+.wall-page .wall-bar .wall-chip-btn {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  background: var(--wall-overlay);
+  color: var(--mp-soft);
+  font: 700 var(--mp-text-md) var(--mp-font);
+  cursor: pointer;
+}
+.wall-page .wall-bar .wall-chip-btn[hidden] { display: none; }
+.wall-page .wall-panel-toggle { top: 48px; right: 0; }
+
+/* The page behind the full-screen wall must not scroll. */
+html.wall-fullscreen-open,
+html.wall-fullscreen-open body { overflow: hidden; overscroll-behavior: none; }
+
+.wall-page[data-fullscreen="true"] > .wall-main {
+  position: fixed;
+  inset: 0;
+  /* Over the shell's header and wallet popover; under near-connect's sign-in popup. */
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--wall-panel-w);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+  box-sizing: border-box;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
+  background: var(--mp-bg);
+}
+.wall-page[data-fullscreen="true"][data-panel="closed"] > .wall-main { grid-template-columns: minmax(0, 1fr); }
+.wall-page[data-fullscreen="true"][data-panel="closed"] .wall-panel { display: none; }
+
+.wall-page[data-fullscreen="true"] .wall-stage {
+  position: relative;
+  top: auto;
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+.wall-page[data-fullscreen="true"] .wall-frame {
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--mp-bg);
+}
+.wall-page[data-fullscreen="true"] .board-focus { height: 100%; border-radius: 0; }
+.wall-page[data-fullscreen="true"] .board-focus:focus-visible { outline-offset: -2px; }
+.wall-page[data-fullscreen="true"] .board-viewport { height: 100%; aspect-ratio: auto; }
+.wall-page[data-fullscreen="true"] .wall-pulse { display: none; }
+.wall-page[data-fullscreen="true"] .wall-bar { inset: 16px; height: auto; }
+.wall-page[data-fullscreen="true"] .wall-foot { left: 16px; bottom: 16px; }
+.wall-page[data-fullscreen="true"] .wall-panel {
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: var(--mp-space-4);
+  border-left: 1px solid var(--mp-line);
+  background: var(--mp-bg);
+}
+
+/* Minimap: bottom left, above the status chip, only in full screen and zoomed in. */
+.wall-page .wall-bar .wall-minimap {
+  display: none;
+  left: 0;
+  bottom: 54px;
+  width: 168px;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  background: var(--mp-card-2);
+  box-shadow: 0 10px 30px var(--mp-shadow);
+  cursor: pointer;
+  touch-action: none;
+}
+.wall-page[data-fullscreen="true"] .wall-bar .wall-minimap:not([data-whole-wall="true"]) { display: block; }
+.wall-page .wall-minimap-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+.wall-page .wall-minimap-frame {
+  position: absolute;
+  box-sizing: border-box;
+  min-width: 4px;
+  min-height: 4px;
+  border: 2px solid var(--mp-fg);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--mp-bg);
+  pointer-events: none;
+}
+
+@media (max-width: 760px) {
+  .wall-page[data-fullscreen="true"] > .wall-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  .wall-page[data-fullscreen="true"] .wall-bar { inset: 12px; height: auto; }
+  .wall-page[data-fullscreen="true"] .wall-foot {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    max-width: calc(100% - 140px);
+    min-height: 36px;
+    margin: 0;
+    padding: 0 4px 0 10px;
+    border: 1px solid var(--mp-line);
+    background: var(--wall-overlay);
+  }
+  .wall-page[data-fullscreen="true"] .wall-foot .wall-runtime-status { display: none; }
+  /* The panel is a sheet under the wall, at most half the screen, scrolling inside. */
+  .wall-page[data-fullscreen="true"] .wall-panel {
+    max-height: 45dvh;
+    margin-inline: 0;
+    padding-top: var(--mp-space-2);
+    border-left: 0;
+    background: var(--mp-card);
+  }
+  .wall-page[data-fullscreen="true"] .wall-panel-body { overflow-y: auto; }
+  .wall-page .wall-bar .wall-minimap { width: 108px; bottom: 50px; }
+  .wall-page .wall-fullscreen-btn { bottom: 50px; }
+}
