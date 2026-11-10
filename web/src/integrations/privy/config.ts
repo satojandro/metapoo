@@ -18,7 +18,16 @@ export type PrivyAvailability =
   | { state: "unavailable"; reason: string }
   | { state: "ready"; config: PrivyConfig };
 
-/** Public IDs are configuration, never provider secrets. Fail closed on ambiguous networks. */
+/**
+ * Public IDs are configuration, never provider secrets. Fail closed on ambiguous networks.
+ *
+ * `clientId` is optional by SDK contract: js-sdk-core inlines it as an `appClientId`
+ * that is only ever read behind a truthiness guard (a `privy-client-id` header and a
+ * `client_id` query param on the embedded-wallet iframe). Without it, requests are
+ * scoped to the app's default settings instead of an app-client profile, which costs
+ * per-environment session duration and per-client origins — not login or wallet creation.
+ * An empty value therefore stays `ready`, and a real app client can be dropped in later.
+ */
 export function readPrivyConfig(
   env: Record<string, unknown>,
   origin: string,
@@ -30,7 +39,6 @@ export function readPrivyConfig(
     const network = env.VITE_NEAR_NETWORK;
     if (
       !appId ||
-      !clientId ||
       !["mainnet", "testnet"].includes(String(network))
     )
       throw new Error();

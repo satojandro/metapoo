@@ -27,10 +27,21 @@ Bitwarden UI to `PRIVY_APP_SECRET_VENEKOVOX` / `PRIVY_APP_SECRET_METAPOO`.
 
 `VITE_PRIVY_APP_CLIENT_ID` is **not** the app ID. It names an *app client*: a per-platform
 settings profile (session duration, allowed origins, cookie enablement) that overrides the
-app's defaults. Create one at Dashboard → Configuration → App settings → **Clients** →
-“Add app client”; the value it returns is the client ID. The SDK type marks `clientId`
-optional, but `src/integrations/privy/config.ts` requires it and fails closed without it, so
-social login stays hidden until the value exists.
+app's defaults. `@peerfolio/privy-near-connect`'s README tells you to create one
+(Dashboard → Configuration → App settings → **Clients** → “Create Client”).
+
+**It is not required.** `js-sdk-core@0.72.0` destructures `clientId` into an internal
+`appClientId` that is read only behind truthiness guards — a `privy-client-id` request header
+and a `client_id` query param on the embedded-wallet iframe. With no client ID the SDK falls
+back to the app's default settings; login and NEAR wallet provisioning are unaffected. Only
+per-environment session duration and per-client origins are lost.
+
+`config.ts` used to treat an empty client ID as fatal, which took the whole connector down for
+a value that is optional by contract. That check is gone (see the comment above
+`readPrivyConfig`), with a test pinning the behaviour, so a real app client can be added later
+without blocking the integration. Verified live: with only the app ID set, "Google or email"
+appears in the wallet picker at `localhost:5173`.
+
 
 ## 2. What changed in the repo
 
@@ -73,14 +84,21 @@ WalletConnect verify, and Cloudflare Turnstile. `frame-ancestors 'none'` is the 
 
 ## 4. Remaining dashboard settings (all require the Privy dashboard)
 
-1. **Allowed origins** — currently only `https://metapoo-testnet.vercel.app`, read back from
-   `GET /v1/apps/{app_id}`. Add `http://localhost:5173` *with the port* so local dev can log
-   in; wildcard preview domains are rejected by Privy on purpose.
-2. **Google OAuth is off** (`google_oauth: false`). The connector is advertised as
-   "Google or email", so either enable it (needs a Google OAuth client and its callback URL)
-   or change the label. Email auth is already on.
-3. **Create the app client** from section 1 and put its value in `VITE_PRIVY_APP_CLIENT_ID`
-   (both `.env` files), then set `VITE_PRIVY_ENABLED=true` where you want it live.
+1. **Allowed origins** — `https://metapoo-testnet.vercel.app`, `http://localhost:5173` and
+   `https://metapoo.xyz` (added 2026-11-10, read back from `GET /v1/apps/{app_id}`).
+   `metapoo.xyz` is allowlisted but **not live**: it resolves to a parking IP
+   (`162.255.119.147`) and `https` times out, so it needs DNS pointed at Vercel before it
+   appears in copy or invites.
+2. **Google OAuth — done 2026-11-10** via Privy's default credentials (Login methods →
+   Socials → Google). `google_oauth` now reads `true`; no Google Cloud project was needed.
+   Own credentials remain optional, for consent-screen branding only, and require
+   `https://auth.privy.io/api/v1/oauth/callback` as the redirect URI.
+
+3. **App client — optional, not a blocker.** Create one from Configuration → App settings →
+   **Clients** if you want per-environment session duration or per-client origins, and put its
+   value in `VITE_PRIVY_APP_CLIENT_ID`. Everything works without it; `VITE_PRIVY_ENABLED` can be
+   flipped today.
+
 4. **NEAR embedded wallets are unproven.** `embedded_wallet_config.mode` is
    `user-controlled-server-wallets-only` with `ethereum`/`solana` entries and no NEAR
    section; whether `create({chain_type: "near"})` is accepted for this app is exactly the
