@@ -11,6 +11,8 @@ export interface IntentsPanelOptions {
   newContext?(): OperationContext | null;
   initialOperationId?: string;
   renderQr?: (address: string) => Promise<string>;
+  /** Owner test mode: delivery is unproven, and the panel says so above every control. */
+  testMode?: boolean;
 }
 
 /** Inline wallet panel: no overlay and no changes to the drawing/session state. */
@@ -97,6 +99,15 @@ export function mountIntentsFundingPanel(
     warning,
     recovery,
   );
+  if (options.testMode) {
+    // Stated before any control, and before the amount is chosen: this route is not proven.
+    const test = document.createElement("p");
+    test.className = "mp-intents-test";
+    test.setAttribute("role", "note");
+    test.textContent =
+      "TEST MODE: native NEAR delivery to this account type is not verified yet. A deposit may arrive as wNEAR or fail, and only a small test amount should be sent. Not for other players.";
+    section.prepend(test);
+  }
   host.append(section);
   let disposed = false;
   let qrRevision = 0;

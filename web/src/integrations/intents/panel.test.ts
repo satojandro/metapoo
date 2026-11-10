@@ -38,7 +38,7 @@ afterEach(() => {
   else Reflect.deleteProperty(navigator, "locks");
 });
 
-function app(enabled = true) {
+function app(enabled = true, testMode = false) {
   let now = FIXTURE_TIME;
   let context = { ...FIXTURE_CONTEXT };
   let providerStatus: FundingStatus["status"] = "PROCESSING";
@@ -90,6 +90,7 @@ function app(enabled = true) {
     mountIntentsFundingPanel(host, controller, {
       getContext: () => context,
       newContext,
+      testMode,
     }),
   );
   return {
@@ -106,6 +107,11 @@ function app(enabled = true) {
 }
 
 describe("Intents inline panel", () => {
+  it("says the route is unproven when the owner runs test mode, and says nothing otherwise", () => {
+    expect(app(true, true).host.textContent).toContain("TEST MODE");
+    expect(app(true, true).host.textContent).toContain("not verified yet");
+    expect(app(true, false).host.textContent).not.toContain("TEST MODE");
+  });
   it("retains read-only recovery when new funding is disabled", () => {
     const { host } = app(false);
     expect(host.textContent).toContain("not enabled");

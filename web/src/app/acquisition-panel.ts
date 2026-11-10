@@ -1,6 +1,7 @@
 import {
   ACQUISITION_PLAY_RESERVE_YOCTO,
   INTENTS_FUNDING_ENABLED,
+  INTENTS_TEST_MODE,
   RHEA_MPOO_SWAP_ENABLED,
   PAGE_NETWORK,
   RPC_URL,
@@ -142,6 +143,7 @@ export function mountAcquisitionPanel(
         nativeDeliveryEvidence: INTENTS_NATIVE_EVIDENCE,
         sourceAllowlist: INTENTS_REVIEWED_SOURCES,
         playReserveYocto: reserve,
+        unverifiedTestDelivery: INTENTS_TEST_MODE,
       },
       reconcileDestination: createDestinationReconciler({
         readTransaction: (hash, recipient) =>
@@ -183,6 +185,7 @@ export function mountAcquisitionPanel(
       mountIntentsFundingPanel(target, controller, {
         getContext: context,
         initialOperationId: intentsRecovery?.context.operationId,
+        testMode: INTENTS_TEST_MODE,
         newContext: () => {
           intentsId = crypto.randomUUID();
           return context();

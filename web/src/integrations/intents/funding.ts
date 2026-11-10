@@ -145,10 +145,14 @@ export function createIntentsFundingController(
           (implicit
             ? proof.initializedImplicit && readiness.expectedKeyMatches === true
             : proof.initializedNamed));
-    if (!proven)
-      throw new Error(
-        "Native NEAR delivery to this account type has not been verified. Receive native NEAR directly for now.",
-      );
+    if (!proven) {
+      // Test mode lets the owner exercise the route before the evidence exists. It does not
+      // claim the route is proven: the panel says exactly what is unverified on every screen.
+      if (!deps.policy.unverifiedTestDelivery)
+        throw new Error(
+          "Native NEAR delivery to this account type has not been verified. Receive native NEAR directly for now.",
+        );
+    }
   }
   async function loadAssets(signal?: AbortSignal): Promise<FundingSnapshot> {
     const ctx = deps.currentContext();

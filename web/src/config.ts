@@ -147,6 +147,11 @@ function defaultRpcUrl(network: NetworkId): string {
 /** Acquisition is opt-in and independent of whether mPOO credit sales are enabled. */
 export const PRIVY_ENABLED = envString("VITE_PRIVY_ENABLED") === "true";
 export const INTENTS_FUNDING_ENABLED = envString("VITE_INTENTS_FUNDING_ENABLED") === "true";
+/**
+ * Owner test switch: run the funding route before its native-delivery evidence exists. It does
+ * not mark anything verified; the panel states on every screen that delivery is unproven.
+ */
+export const INTENTS_TEST_MODE = envString("VITE_INTENTS_TEST_MODE") === "true";
 export const RHEA_MPOO_SWAP_ENABLED = envString("VITE_RHEA_MPOO_SWAP_ENABLED") === "true";
 export const ACQUISITION_PLAY_RESERVE_YOCTO = envString("VITE_ACQUISITION_PLAY_RESERVE_YOCTO");
 

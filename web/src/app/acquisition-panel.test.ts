@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
 vi.mock("../config", () => ({
   ACQUISITION_PLAY_RESERVE_YOCTO: "1000",
   INTENTS_FUNDING_ENABLED: true,
+  INTENTS_TEST_MODE: false,
   RHEA_MPOO_SWAP_ENABLED: false,
   PAGE_NETWORK: "mainnet",
   RPC_URL: "https://rpc.example",

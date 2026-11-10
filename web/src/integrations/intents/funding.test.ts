@@ -138,6 +138,22 @@ describe("Intents funding authority and recovery", () => {
     });
     expect((await other.commit()).message).toContain("not been verified");
   });
+  it("lets the owner run the route in test mode without recording any evidence", async () => {
+    const app = setup({
+      nativeDeliveryEvidence: {
+        reference: "",
+        initializedNamed: false,
+        initializedImplicit: false,
+        uninitializedImplicit: false,
+      },
+      unverifiedTestDelivery: true,
+    });
+    const snapshot = await app.commit();
+    expect(snapshot.canSend).toBe(true);
+    // Test mode is a switch, never a claim: the evidence block is still empty afterwards.
+    expect(app.policy.nativeDeliveryEvidence.reference).toBe("");
+    expect(app.policy.nativeDeliveryEvidence.initializedNamed).toBe(false);
+  });
   it("rejects testnet funding and a nonexistent named account", async () => {
     const app = setup();
     app.setContext({ ...FIXTURE_CONTEXT, networkId: "testnet" });

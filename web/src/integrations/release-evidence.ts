@@ -16,7 +16,15 @@ export const INTENTS_NATIVE_EVIDENCE: FundingPolicy["nativeDeliveryEvidence"] =
  * Record: docs/payments/intents-transport-check-2026-11-10.md
  */
 export const INTENTS_BROWSER_TRANSPORT_VERIFIED = true;
-export const INTENTS_REVIEWED_SOURCES: FundingPolicy["sourceAllowlist"] = [];
+export const INTENTS_REVIEWED_SOURCES: FundingPolicy["sourceAllowlist"] = [
+  {
+    // USDC on Base. Verified on chain 2026-11-10: eth_call symbol() -> "USDC", 1852 bytes of code
+    // at 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913, and /v0/tokens reports decimals 6 for it.
+    assetId:
+      "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
+    blockchain: "base",
+  },
+];
 // Public discovery evidence exists; a complete route and net-output proof do not yet exist.
 export const RHEA_REVIEWED_ROUTE: RheaRouteManifest | null = null;
 

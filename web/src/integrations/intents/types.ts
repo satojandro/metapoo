@@ -141,6 +141,12 @@ export interface FundingPolicy {
   };
   sourceAllowlist: readonly { assetId: string; blockchain: string }[];
   playReserveYocto: string;
+  /**
+   * Owner-only test switch: allow a route whose native-delivery evidence is not yet recorded.
+   * It never fabricates evidence — the panel states plainly that delivery is unproven, and the
+   * value is only ever set from an env flag, never from a query parameter.
+   */
+  unverifiedTestDelivery?: boolean;
   /** Origin-chain confirmation requirements, not a universal ten-minute timer. */
   quoteLifetimeMs?: number;
   sendSafetyMarginMs?: number;

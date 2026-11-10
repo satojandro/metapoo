@@ -10,3 +10,5 @@
 .mp-intents-panel button[hidden] { display: none; }
 .mp-intents-panel :focus-visible { outline: 3px solid var(--mp-accent, #8262ff); outline-offset: 3px; }
 .mp-intents-panel img { display: block; max-width: 100%; height: auto; margin-top: .5rem; }
+/* Owner test mode: the route is unproven, and it must not read as an ordinary warning. */
+.mp-intents-panel .mp-intents-test { margin: 0 0 .75rem; padding: .6rem .75rem; border: 1px solid var(--mp-bad, #c4472f); border-radius: 6px; background: var(--mp-card-2, #1b1c1f); color: var(--mp-fg, #f2f0ea); font-weight: 700; }
