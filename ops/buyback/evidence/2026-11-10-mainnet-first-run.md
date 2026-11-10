@@ -93,13 +93,17 @@ burn sink (20%) are registered and were paid; the team account transfer (10%) fa
 
 Burn sink `000…000` and staking `57590a9e…` were already registered.
 
-**Outcome (verified on chain):** the 15:07 AEDT keeper run distributed the remaining 10% —
-tx [`5iLY26JEnX921ufAvbpqLSdy1hoKpVTBMVUwitJq8kJ2`](https://explorer.near.org/transactions/5iLY26JEnX921ufAvbpqLSdy1hoKpVTBMVUwitJq8kJ2),
+**Outcome (verified on chain):** the 15:07 AEDT keeper run distributed the remaining
+9,179.23 mPOO, split 10 / 20 / 70 of the remainder — team 917.92, burn 1,835.85,
+staking 6,425.46 — tx
+[`5iLY26JEnX921ufAvbpqLSdy1hoKpVTBMVUwitJq8kJ2`](https://explorer.near.org/transactions/5iLY26JEnX921ufAvbpqLSdy1hoKpVTBMVUwitJq8kJ2),
 then `sync_inflow` on the staking contract
 ([`2dwcf2FUBroKvr8RRZ5D7CJDugZCBxSKwStSpcjV6zsJ`](https://explorer.near.org/transactions/2dwcf2FUBroKvr8RRZ5D7CJDugZCBxSKwStSpcjV6zsJ)).
-`get_revenue_state.mpoo_undistributed` = 0; team balance = the exact 10%
-(9179232732399048323193 raw). First complete revenue loop: credits → NEAR → 90% buyback →
-swap → mPOO returned → 10 / 20 / 70 split, every share delivered.
+`get_revenue_state.mpoo_undistributed` = 0. Every distribution splits the whole undistributed
+balance 10 / 20 / 70, so the retry's shares are of the remainder, not of the original total.
+Totals delivered from the first 91,792.33 mPOO: team 917.92, burn 20,194.32, staking pool
+70,680.09. First complete revenue loop: credits → NEAR → 90% buyback → swap → mPOO returned →
+10 / 20 / 70 split, every share delivered.
 
 **Preflight gap (candidate follow-up):** the buyback keeper's preflight checks storage
 registrations only for tokens landing on the buyback account. Neither keeper checks that the

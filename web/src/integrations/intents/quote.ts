@@ -146,6 +146,7 @@ export function validateRefundAddress(chain: string, address: string): void {
       address.length >= 2 &&
       address.length <= 64;
   else if (chain === "stellar") valid = /^G[A-Z2-7]{55}$/.test(address);
+  else if (chain === "tron") valid = /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(address);
   if (!valid)
     throw new Error(
       "Use a supported refund address on the selected source network",
