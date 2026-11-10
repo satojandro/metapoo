@@ -1103,8 +1103,12 @@ export async function signAndSendApprovedTransactions(
     validateTransaction: (tx, r) =>
       r.purpose === "send" ? validateSendTransaction(tx, r, sendChecks!.policy) : validateAcquisitionTransaction(tx, r, acquisitionPolicy),
     async readBudget(context) {
-      if (window.localStorage.getItem(`metapoo:custody:attempt:${context.networkId}:${context.accountId}`))
-        throw new Error("A key change needs reconciliation before spending. Refresh your keys.");
+      // A key change in flight — or one whose outcome was lost — blocks spending until it is
+      // settled, but it must never block spending forever: the self-custody panel reconciles it
+      // against the chain and offers the explicit override. Point there, not at "refresh".
+      const { custodyAttemptKey } = await import("./integrations/privy/custody-attempt");
+      if (window.localStorage.getItem(custodyAttemptKey(context.networkId, context.accountId)))
+        throw new Error("A key change is unresolved. Open Self-custody, check your keys, then try again.");
       if (request.purpose !== "send" && !/^[1-9]\d*$/.test(ACQUISITION_PLAY_RESERVE_YOCTO))
         throw new Error("A measured play-gas reserve must be configured");
       const ready = await readConnectedAccountReadiness(context);
@@ -1322,21 +1326,29 @@ export async function signAndSendSelfCustodyKey(context: OperationContext, publi
     const ready = await readConnectedAccountReadiness(context);
     if (ready.state !== "ready" || !ready.expectedKeyMatches || BigInt(ready.spendableBeforeGasYocto) < BigInt(SEND_GAS_FLOOR_YOCTO)) throw new Error("Fund and verify this account before managing keys.");
     await assertCurrent();
-    setPrivyPendingSelfCustodyKey({...context, publicKey: key, kind, createdAtMs: Date.now()}, window.localStorage);
-    const pendingKey = `metapoo:custody:attempt:${context.networkId}:${context.accountId}`;
-    const previous = window.localStorage.getItem(pendingKey);
-    if (previous) { setPrivyPendingSelfCustodyKey(null, window.localStorage); throw new Error("A key change is unresolved. Refresh and verify that key before another approval."); }
+    const { getCustodyAttempt, setCustodyAttempt } = await import("./integrations/privy/custody-attempt");
+    if (getCustodyAttempt(window.localStorage, context.networkId, context.accountId)) {
+      setPrivyPendingSelfCustodyKey(null, window.localStorage);
+      throw new Error("A key change is unresolved. Open Self-custody and check your keys before another approval.");
+    }
+    const attempt = {...context, publicKey: key, kind, createdAtMs: Date.now()};
+    setPrivyPendingSelfCustodyKey(attempt, window.localStorage);
     // Persist the public intent before opening a wallet that might close or redirect.
-    window.localStorage.setItem(pendingKey, JSON.stringify({publicKey: key, kind, createdAtMs: Date.now()}));
+    setCustodyAttempt(window.localStorage, context.networkId, context.accountId, attempt);
     try {
       const outcome = await wallet.signAndSendTransaction({receiverId: context.accountId, signerId: context.accountId, network: context.networkId, actions: kind === "add-full-access" ? [{type: "AddKey", params: {publicKey: key, accessKey: {permission: "FullAccess"}}}] : [{type: "DeleteKey", params: {publicKey: key}}]});
+      const {transactionHash} = parseTxOutcome(outcome);
+      // Record the hash before the confirmation read: it is the only evidence that can tell a key
+      // change that FAILED on chain apart from one whose outcome was lost — and a failed change
+      // must not keep blocking every later payment.
+      if (transactionHash) setCustodyAttempt(window.localStorage, context.networkId, context.accountId, {...attempt, transactionHash});
       await assertCurrent();
       const after = await custodyKeyPermission(rpc, context.accountId, key);
       const confirmed = kind === "add-full-access" ? after === "FullAccess" : after === null;
-      if (confirmed) window.localStorage.removeItem(pendingKey);
-      return {confirmed, transactionHash: parseTxOutcome(outcome).transactionHash};
+      if (confirmed) setCustodyAttempt(window.localStorage, context.networkId, context.accountId, null);
+      return {confirmed, transactionHash};
     } catch (error) {
-      if (isPrivyUnsubmittedRejection(error)) window.localStorage.removeItem(pendingKey);
+      if (isPrivyUnsubmittedRejection(error)) setCustodyAttempt(window.localStorage, context.networkId, context.accountId, null);
       throw error;
     } finally { setPrivyPendingSelfCustodyKey(null, window.localStorage); }
   });
