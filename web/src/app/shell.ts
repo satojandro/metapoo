@@ -90,6 +90,12 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   walletPanel.innerHTML = `
     <button id="connect-button" class="mp-btn mp-btn-primary shell-connect" type="button">Connect wallet</button>
     <details class="wallet-details"><summary>Wallet</summary>
+    <section id="wallet-account" class="wallet-account" aria-label="Your account" hidden>
+      <h2>Your account</h2>
+      <code class="wallet-account-id" data-account-id></code>
+      <button type="button" class="action secondary wallet-account-copy">Copy address</button>
+      <p class="wallet-account-note" role="status"></p>
+    </section>
     <section id="paint-wallet-panel" aria-label="Paint and wallet balances"></section>
     <section id="toilet-wallet-panel" aria-label="Your TOILET" hidden></section>
     <h2>Connection details</h2>

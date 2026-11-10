@@ -32,6 +32,11 @@ export function mountWalletChrome(
     "#authorize-drawing-session",
   );
 
+  const accountSection = root.querySelector<HTMLElement>("#wallet-account");
+  const accountId = accountSection?.querySelector<HTMLElement>("[data-account-id]") ?? null;
+  const accountCopy = accountSection?.querySelector<HTMLButtonElement>(".wallet-account-copy") ?? null;
+  const accountNote = accountSection?.querySelector<HTMLElement>(".wallet-account-note") ?? null;
+
   const cleanups: Array<() => void> = [];
   const walletDetails = root.querySelector<HTMLDetailsElement>(
     "details.wallet-details",
@@ -61,7 +66,9 @@ export function mountWalletChrome(
     walletDetails.hidden = !showPanel;
     if (!showPanel) walletDetails.open = false;
     if (walletSummaryToggle) {
-      walletSummaryToggle.textContent = connectedAccount ?? "Wallet";
+      walletSummaryToggle.textContent = connectedAccount
+        ? shortAccountLabel(connectedAccount)
+        : "Wallet";
       walletSummaryToggle.title = connectedAccount ?? "";
     }
     if (connectedAccount) {
@@ -85,6 +92,7 @@ export function mountWalletChrome(
       connectButton.textContent = "Connect wallet";
     }
     placeWalletControls(session.accountId);
+    showAccount(session.accountId);
     const notice = describeNetwork(
       session.accountId ? session.networkId : null,
     );
@@ -96,6 +104,44 @@ export function mountWalletChrome(
         ? "Ask the wallet for a draw-only function-call key during Connect"
         : "Configure VITE_CONTRACT_ID first";
     }
+  }
+
+  /** The full account id, readable and copyable: a 64-character implicit id does not fit the header. */
+  function showAccount(account: string | null): void {
+    if (!accountSection || !accountId) return;
+    accountSection.hidden = account === null;
+    if (accountId.textContent !== (account ?? "")) {
+      accountId.textContent = account ?? "";
+      if (accountNote) accountNote.textContent = "";
+    }
+  }
+
+  const onCopyAccount = (): void => {
+    const { accountId: account, networkId } = services.wallet.getSession();
+    if (!account || !accountNote) return;
+    const copied = () => {
+      accountNote.textContent = `Address copied. Send only NEAR on NEAR ${networkId} to it.`;
+    };
+    const fallback = () => {
+      // Select the id so a long-press or Ctrl+C copies it when the clipboard API is refused.
+      if (accountId) {
+        const range = document.createRange();
+        range.selectNodeContents(accountId);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+      accountNote.textContent = "Copy was blocked. The address is selected: copy it from there.";
+    };
+    try {
+      void navigator.clipboard.writeText(account).then(copied, fallback);
+    } catch {
+      fallback();
+    }
+  };
+  if (accountCopy) {
+    accountCopy.addEventListener("click", onCopyAccount);
+    cleanups.push(() => accountCopy.removeEventListener("click", onCopyAccount));
   }
 
   function showOps(ops: readonly OperationRecord[]): void {
@@ -189,6 +235,16 @@ export function mountWalletChrome(
       cleanup();
     }
   };
+}
+
+/**
+ * Header label for an account. Implicit ids (64 hex characters, as Privy creates)
+ * become `cc9a12…d113`; named accounts stay whole and CSS clips them if needed.
+ */
+export function shortAccountLabel(account: string): string {
+  return /^[0-9a-f]{64}$/.test(account)
+    ? `${account.slice(0, 6)}…${account.slice(-4)}`
+    : account;
 }
 
 function mustChild<T extends Element>(root: ParentNode, selector: string): T {

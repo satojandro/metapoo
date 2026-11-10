@@ -45,6 +45,13 @@ summary { cursor: pointer; }
 .wallet-details[open] > #connect-button { margin-top: var(--mp-space-3); }
 .wallet-details p { overflow-wrap: anywhere; }
 .wallet-details .drawing-session-opt-in { display: flex; align-items: center; gap: 6px; color: var(--mp-soft); font-size: var(--mp-text-sm); }
+.wallet-account { display: grid; gap: var(--mp-space-2); margin: 0 0 var(--mp-space-4); }
+.wallet-account[hidden] { display: none; }
+.wallet-account h2 { margin: 0; }
+.wallet-account-id { display: block; padding: 8px 10px; border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); color: var(--mp-fg); font: var(--mp-text-sm)/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; word-break: break-all; user-select: all; -webkit-user-select: all; }
+.wallet-account-copy { justify-self: start; min-height: var(--mp-hit); }
+.wallet-account-note { margin: 0; color: var(--mp-soft); font-size: var(--mp-text-sm); }
+.wallet-account-note:empty { display: none; }
 .wallet-details-toolbar { display: flex; justify-content: flex-end; margin: 0 0 8px; }
 .wallet-details-close { min-height: 36px; padding: 6px 12px; }
 .paint-wallet-values { display: grid; gap: var(--mp-space-3); margin: 14px 0; }
