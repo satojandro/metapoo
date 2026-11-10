@@ -23,6 +23,15 @@ export interface PrivyPageRuntime extends PrivySessionClient {
   dispose(): void;
 }
 
+const PRIVY_SIGNED_OUT_CODE = "missing_or_invalid_token";
+function isSignedOutError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === PRIVY_SIGNED_OUT_CODE
+  );
+}
+
 /** Real SDK adapter. Tests replace this boundary, never the application's wallet authority. */
 export function createPrivyRuntime(config: PrivyConfig): PrivyPageRuntime {
   const client = new Privy({
@@ -34,7 +43,20 @@ export function createPrivyRuntime(config: PrivyConfig): PrivyPageRuntime {
   const abort = new AbortController();
   return {
     initialize: () => client.initialize().then(() => undefined),
-    user: { get: () => client.user.get() },
+    user: {
+      // js-sdk-core@0.72.0 does not return `{ user: null }` for a signed-out visitor: it
+      // throws PrivyApiError `missing_or_invalid_token` ("No tokens found in storage").
+      // Treating that as fatal hid the login form from every first-time player. Only
+      // that code means "signed out"; any other failure still propagates.
+      async get() {
+        try {
+          return await client.user.get();
+        } catch (error) {
+          if (isSignedOutError(error)) return { user: null };
+          throw error;
+        }
+      },
+    },
     async createNearWallet() {
       await createWallet(
         {

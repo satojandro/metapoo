@@ -100,6 +100,24 @@ describe("real SDK adapter boundary", () => {
     runtime.dispose();
   });
 
+  it("reports a signed-out visitor as no user, so the login form renders", async () => {
+    // The real js-sdk-core@0.72.0 throws this for a fresh browser instead of returning
+    // { user: null }; it previously took the sign page straight to "could not be restored".
+    vendor.client.user.get.mockRejectedValueOnce(
+      Object.assign(new Error("No tokens found in storage"), {
+        code: "missing_or_invalid_token",
+        status: 401,
+      }),
+    );
+    await expect(createPrivyRuntime(config).user.get()).resolves.toEqual({
+      user: null,
+    });
+  });
+  it("still surfaces Privy failures that do not mean signed out", async () => {
+    const outage = Object.assign(new Error("Bad gateway"), { status: 502 });
+    vendor.client.user.get.mockRejectedValueOnce(outage);
+    await expect(createPrivyRuntime(config).user.get()).rejects.toBe(outage);
+  });
   it("uses the published NEAR create API and handles OAuthInitResponseBody.url", async () => {
     const runtime = createPrivyRuntime(config);
     await runtime.initialize();
