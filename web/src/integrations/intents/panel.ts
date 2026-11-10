@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import type { OperationContext } from "../types";
 import type { IntentsFundingController } from "./funding";
 import { expiresAt, formatTokenAmount, providerFeeBps } from "./quote";
-import type { FundingSnapshot } from "./types";
+import type { FundingPhase, FundingSnapshot } from "./types";
 import "./panel.css";
 
 export interface IntentsPanelOptions {
@@ -15,105 +15,208 @@ export interface IntentsPanelOptions {
   testMode?: boolean;
 }
 
-/** Inline wallet panel: no overlay and no changes to the drawing/session state. */
+/** Provider chain ids → names a player recognises. Unknown ids fall back to the raw id. */
+const CHAIN_NAMES: Record<string, string> = {
+  arb: "Arbitrum",
+  aptos: "Aptos",
+  avax: "Avalanche",
+  base: "Base",
+  bera: "Berachain",
+  bsc: "BNB Chain",
+  btc: "Bitcoin",
+  eth: "Ethereum",
+  gnosis: "Gnosis",
+  monad: "Monad",
+  near: "NEAR",
+  op: "Optimism",
+  pol: "Polygon",
+  scroll: "Scroll",
+  sol: "Solana",
+  starknet: "Starknet",
+  stellar: "Stellar",
+  sui: "Sui",
+  ton: "TON",
+  tron: "Tron",
+  xlayer: "X Layer",
+  zec: "Zcash",
+};
+export const chainName = (id: string) => CHAIN_NAMES[id] ?? id;
+
+const REFUND_PLACEHOLDER: Record<string, string> = {
+  btc: "bc1…",
+  sol: "Your Solana address",
+  near: "you.near",
+  ton: "UQ…",
+  tron: "T…",
+};
+
+/** What the player sees for each tracked phase: a short label and a tone. */
+const PHASE_LABEL: Partial<
+  Record<FundingPhase, [string, "wait" | "good" | "bad"]>
+> = {
+  awaiting_deposit: ["Waiting for your payment", "wait"],
+  deposit_detected: ["Payment seen", "wait"],
+  processing: ["Converting", "wait"],
+  incomplete_deposit: ["Incomplete payment", "bad"],
+  settled_verifying: ["Checking delivery", "wait"],
+  needs_unwrap: ["Arrived as wNEAR", "bad"],
+  funded: ["Funded", "good"],
+  refunded: ["Refunded", "bad"],
+  failed_needs_review: ["Needs review", "bad"],
+  expired_unfunded: ["Expired", "bad"],
+  identity_changed: ["Different account", "bad"],
+  unavailable: ["Status unavailable", "bad"],
+};
+
+const el = <K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className?: string,
+  text?: string,
+): HTMLElementTagNameMap[K] => {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+const button = (text: string, className: string, type: "button" | "submit" = "button") => {
+  const b = el("button", className, text);
+  b.type = type;
+  return b;
+};
+
+function countdown(ms: number): string {
+  if (ms <= 0) return "Expired";
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(s)} left` : `${m}:${pad(s)} left`;
+}
+
+/** Inline funding panel: no overlay of its own and no changes to the drawing/session state. */
 export function mountIntentsFundingPanel(
   host: HTMLElement,
   controller: IntentsFundingController,
   options: IntentsPanelOptions,
 ): () => void {
-  const section = document.createElement("section");
-  section.className = "mp-intents-panel";
+  const section = el("section", "mp-intents-panel");
   section.setAttribute("aria-label", "Add funds from another network");
-  const title = document.createElement("h3");
-  title.textContent = "Add funds";
-  const status = document.createElement("p");
+
+  const lede = el(
+    "p",
+    "mp-intents-lede",
+    "Pay from a wallet on another network. NEAR Intents converts it and delivers NEAR to your account.",
+  );
+  const status = el("p", "mp-intents-status");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  const form = document.createElement("form");
-  const label = (name: string, control: HTMLElement) => {
-    const element = document.createElement("label");
-    element.append(document.createTextNode(name), control);
-    return element;
+
+  // ---- Step 1: what to send -------------------------------------------------------------
+  const form = el("form", "mp-intents-form");
+  form.noValidate = false;
+  const field = (labelText: string, control: HTMLElement, hint?: HTMLElement) => {
+    const wrap = el("label", "mp-intents-field");
+    wrap.append(el("span", "mp-intents-label", labelText), control);
+    if (hint) wrap.append(hint);
+    return wrap;
   };
-  const assets = document.createElement("select");
+  const assets = el("select", "mp-intents-input");
   assets.required = true;
-  const amount = document.createElement("input");
+  const amount = el("input", "mp-intents-input mp-intents-amount-input");
   amount.inputMode = "decimal";
   amount.required = true;
   amount.autocomplete = "off";
-  const refund = document.createElement("input");
+  amount.placeholder = "0.00";
+  const amountSymbol = el("span", "mp-intents-amount-symbol");
+  const amountWrap = el("span", "mp-intents-amount");
+  amountWrap.append(amount, amountSymbol);
+  const refund = el("input", "mp-intents-input mp-intents-mono");
   refund.required = true;
   refund.autocomplete = "off";
   refund.spellcheck = false;
-  const ownership = document.createElement("input");
+  const refundHint = el(
+    "small",
+    "mp-intents-hint",
+    "If the conversion can't complete, your funds go back here.",
+  );
+  const ownership = el("input");
   ownership.type = "checkbox";
   ownership.required = true;
-  const refreshAssets = document.createElement("button");
-  refreshAssets.type = "button";
-  refreshAssets.textContent = "Refresh supported assets";
-  const preview = document.createElement("button");
-  preview.type = "submit";
-  preview.textContent = "Get a quote";
-  const confirm = document.createElement("button");
-  confirm.type = "button";
-  confirm.textContent = "Get payment address";
-  confirm.hidden = true;
+  const ownershipText = el("span");
+  const ownershipRow = el("label", "mp-intents-check");
+  ownershipRow.append(ownership, ownershipText);
+  const preview = button("Get a quote", "mp-intents-btn mp-intents-primary", "submit");
   form.append(
-    label("Asset and source network", assets),
-    label("Amount to send", amount),
-    label("Refund address on the source network", refund),
-    label("I control this refund address", ownership),
-    refreshAssets,
+    field("You send", assets),
+    field("Amount", amountWrap),
+    field("Refund address", refund, refundHint),
+    ownershipRow,
     preview,
-    confirm,
   );
-  const review = document.createElement("div");
-  const instructions = document.createElement("div");
-  const recovery = document.createElement("form");
-  const recoveryId = document.createElement("input");
+  const retry = button("Try again", "mp-intents-btn");
+  retry.hidden = true;
+
+  // ---- Step 2: the quote ----------------------------------------------------------------
+  const review = el("div", "mp-intents-card mp-intents-review");
+  const reviewRows = el("dl", "mp-intents-rows");
+  const reviewNote = el("p", "mp-intents-fine");
+  const reviewActions = el("div", "mp-intents-actions");
+  const confirm = button("Get payment address", "mp-intents-btn mp-intents-primary");
+  const change = button("Change", "mp-intents-btn");
+  reviewActions.append(confirm, change);
+  review.append(el("h4", "mp-intents-card-title", "Your quote"), reviewRows, reviewNote, reviewActions);
+  review.hidden = true;
+
+  // ---- Step 3: the payment --------------------------------------------------------------
+  const instructions = el("div", "mp-intents-card mp-intents-pay");
+  instructions.hidden = true;
+  const check = button("Check payment status", "mp-intents-btn");
+  check.hidden = true;
+  const startNew = button("Start another funding payment", "mp-intents-btn");
+  startNew.hidden = true;
+  const tracking = el("div", "mp-intents-actions");
+  tracking.append(check, startNew);
+
+  // ---- Recovery, tucked away ------------------------------------------------------------
+  const recoverBox = el("details", "mp-intents-recover");
+  recoverBox.append(el("summary", undefined, "Track an earlier payment"));
+  const recovery = el("form", "mp-intents-recover-form");
+  const recoveryId = el("input", "mp-intents-input mp-intents-mono");
   recoveryId.autocomplete = "off";
   recoveryId.required = true;
-  const resume = document.createElement("button");
-  resume.type = "submit";
-  resume.textContent = "Track saved payment";
-  recovery.append(label("Payment recovery ID", recoveryId), resume);
-  const check = document.createElement("button");
-  check.type = "button";
-  check.textContent = "Check payment status";
-  check.hidden = true;
-  const startNew = document.createElement("button");
-  startNew.type = "button";
-  startNew.textContent = "Start another funding payment";
-  startNew.hidden = true;
-  const warning = document.createElement("p");
-  warning.textContent =
-    "Pay from your external wallet on the exact source network. You pay that network's fee. Funding does not buy credits or mPOO automatically.";
-  section.append(
-    title,
-    status,
-    form,
-    review,
-    instructions,
-    check,
-    startNew,
-    warning,
-    recovery,
+  recoveryId.placeholder = "Recovery ID";
+  recoveryId.setAttribute("aria-label", "Payment recovery ID");
+  const resume = button("Track saved payment", "mp-intents-btn", "submit");
+  recovery.append(recoveryId, resume);
+  recoverBox.append(recovery);
+
+  const warning = el(
+    "p",
+    "mp-intents-fine",
+    "You pay the source network's fee. Funding adds NEAR only — it does not buy paint credits or mPOO automatically.",
   );
+
+  section.append(lede, status, form, retry, review, instructions, tracking, recoverBox, warning);
   if (options.testMode) {
     // Stated before any control, and before the amount is chosen: this route is not proven.
-    const test = document.createElement("p");
-    test.className = "mp-intents-test";
+    const test = el(
+      "p",
+      "mp-intents-test",
+      "TEST MODE: native NEAR delivery to this account type is not verified yet. A deposit may arrive as wNEAR or fail, and only a small test amount should be sent. Not for other players.",
+    );
     test.setAttribute("role", "note");
-    test.textContent =
-      "TEST MODE: native NEAR delivery to this account type is not verified yet. A deposit may arrive as wNEAR or fail, and only a small test amount should be sent. Not for other players.";
     section.prepend(test);
   }
   host.append(section);
+
   let disposed = false;
   let qrRevision = 0;
   let reviewContext: OperationContext | null = null;
   let lastAssets = "";
   let renderedInstructionsKey = "";
+  let expiryNode: HTMLElement | null = null;
+  let expiryAt = 0;
   const getContext = () => options.getContext();
   const renderQr =
     options.renderQr ??
@@ -123,15 +226,47 @@ export function mountIntentsFundingPanel(
         margin: 2,
         errorCorrectionLevel: "M",
       }));
-  const paragraph = (text: string) => {
-    const p = document.createElement("p");
-    p.textContent = text;
-    return p;
+
+  const row = (dl: HTMLElement, term: string, value: string, strong = false) => {
+    const wrap = el("div", strong ? "is-strong" : undefined);
+    wrap.append(el("dt", undefined, term), el("dd", undefined, value));
+    dl.append(wrap);
   };
+  const selectedToken = (snapshot = controller.getState()) =>
+    snapshot.assets.find((t) => t.assetId === assets.value);
+  function syncTokenLabels() {
+    const token = selectedToken();
+    amountSymbol.textContent = token?.symbol ?? "";
+    const chain = token ? chainName(token.blockchain) : "the source network";
+    refund.placeholder = token
+      ? `${REFUND_PLACEHOLDER[token.blockchain] ?? "0x…"} on ${chain}`
+      : "";
+    ownershipText.textContent = `I control this address on ${chain}`;
+  }
+  async function copyFresh(opId: string, text: string, done: string) {
+    const fresh = controller.getState();
+    if (!fresh.canSend || fresh.operation?.id !== opId) {
+      details(fresh);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      status.textContent = done;
+      status.dataset.tone = "good";
+    } catch {
+      status.textContent = "Copy unavailable. Select and copy the details shown.";
+      status.dataset.tone = "bad";
+    }
+  }
+
   function details(snapshot: FundingSnapshot) {
     renderedInstructionsKey = `${snapshot.operation?.id ?? ""}:${snapshot.canSend}:${snapshot.message}`;
     const epoch = ++qrRevision;
     status.textContent = snapshot.message;
+    status.dataset.tone =
+      snapshot.phase === "unavailable" || snapshot.phase === "identity_changed"
+        ? "bad"
+        : "";
     const registry = JSON.stringify(snapshot.assets);
     if (registry !== lastAssets) {
       lastAssets = registry;
@@ -140,121 +275,163 @@ export function mountIntentsFundingPanel(
       for (const token of snapshot.assets) {
         const option = document.createElement("option");
         option.value = token.assetId;
-        option.textContent = `${token.symbol} · ${token.blockchain}`;
+        option.textContent = `${token.symbol} on ${chainName(token.blockchain)}`;
         assets.append(option);
       }
       if (snapshot.assets.some((t) => t.assetId === previous))
         assets.value = previous;
     }
+    syncTokenLabels();
     const busy = ["loading_assets", "previewing", "committing"].includes(
       snapshot.phase,
     );
     const hasPayment = !!snapshot.operation;
+    const disabled = snapshot.phase === "disabled";
     for (const control of [assets, amount, refund, ownership])
-      control.disabled = busy || hasPayment || snapshot.phase === "disabled";
-    refreshAssets.disabled =
-      busy || hasPayment || snapshot.phase === "disabled";
-    preview.disabled =
-      busy ||
-      hasPayment ||
-      !snapshot.assets.length ||
-      snapshot.phase === "disabled";
-    confirm.hidden = snapshot.phase !== "review" || !snapshot.preview;
+      control.disabled = busy || hasPayment || disabled;
+    form.hidden = hasPayment || disabled || !!snapshot.preview;
+    preview.disabled = busy || hasPayment || !snapshot.assets.length || disabled;
+    preview.textContent =
+      snapshot.phase === "previewing"
+        ? "Getting a quote…"
+        : snapshot.phase === "loading_assets"
+          ? "Loading networks…"
+          : "Get a quote";
+    retry.hidden =
+      hasPayment || disabled || busy || snapshot.assets.length > 0;
+    review.hidden = !snapshot.preview || hasPayment;
+    confirm.hidden = snapshot.phase !== "review" && snapshot.phase !== "committing";
     confirm.disabled = busy;
-    check.hidden = !snapshot.operation;
+    confirm.textContent =
+      snapshot.phase === "committing" ? "Creating address…" : "Get payment address";
+    change.disabled = snapshot.phase === "committing";
+    check.hidden = !hasPayment;
     startNew.hidden =
       !options.newContext ||
       !snapshot.operation ||
       !["funded", "refunded"].includes(snapshot.operation.phase);
-    review.replaceChildren();
+    if (disabled && !hasPayment) recoverBox.open = true;
+
+    reviewRows.replaceChildren();
     if (snapshot.preview) {
       const quote = snapshot.preview;
       const token = snapshot.assets.find(
         (t) => t.assetId === quote.quoteRequest.originAsset,
       );
       const fee = providerFeeBps(quote);
-      review.append(
-        paragraph(
-          `You send ${formatTokenAmount(quote.quote.amountIn, token?.decimals ?? 0)} ${token?.symbol ?? "source units"}`,
-        ),
-        paragraph(
-          `Estimated destination amount: ${formatTokenAmount(quote.quote.amountOut, 24)} NEAR equivalent`,
-        ),
-        paragraph(
-          `Minimum destination amount: ${formatTokenAmount(quote.quote.minAmountOut, 24)} NEAR equivalent`,
-        ),
-        paragraph(
-          `Estimated wait: ${Math.ceil(quote.quote.timeEstimate / 60)} minutes. Provider costs are reflected in the quoted output; your source network fee is separate.`,
-        ),
-        paragraph(
-          fee === undefined
-            ? "Provider fee is not itemized in this quote. Review the final quoted output."
-            : `Provider platform fee: ${(fee / 100).toFixed(2)}%, reflected in the quoted output.`,
-        ),
-        paragraph(
-          `Refunds go to ${quote.quoteRequest.refundTo}. Native NEAR delivery is checked before payment instructions are enabled.`,
-        ),
+      row(
+        reviewRows,
+        "You send",
+        `${formatTokenAmount(quote.quote.amountIn, token?.decimals ?? 0)} ${token?.symbol ?? "source units"}${token ? ` on ${chainName(token.blockchain)}` : ""}`,
       );
+      row(
+        reviewRows,
+        "You receive (est.)",
+        `≈ ${formatTokenAmount(quote.quote.amountOut, 24)} NEAR`,
+        true,
+      );
+      row(
+        reviewRows,
+        "Minimum received",
+        `${formatTokenAmount(quote.quote.minAmountOut, 24)} NEAR`,
+      );
+      row(
+        reviewRows,
+        "Provider fee",
+        fee === undefined ? "Included in the quote" : `${(fee / 100).toFixed(2)}%, included`,
+      );
+      row(reviewRows, "Time", `About ${Math.ceil(quote.quote.timeEstimate / 60)} min`);
+      row(reviewRows, "Refunds to", quote.quoteRequest.refundTo);
+      reviewNote.textContent =
+        "Your source network fee is separate. Native NEAR delivery is checked before the payment address is shown.";
     }
+
     instructions.replaceChildren();
+    expiryNode = null;
+    instructions.hidden = !hasPayment;
     if (!snapshot.operation) return;
     const op = snapshot.operation;
     recoveryId.value = op.id;
-    instructions.append(
-      paragraph(`Recovery ID: ${op.id}`),
-      paragraph(
-        `Destination: ${op.context.accountId} on ${op.context.networkId}`,
-      ),
-    );
+    const [label, tone] = PHASE_LABEL[op.phase] ?? [op.phase, "wait"];
+    const badge = el("span", "mp-intents-badge", label);
+    badge.dataset.tone = tone;
+    const head = el("div", "mp-intents-pay-head");
+    head.append(el("h4", "mp-intents-card-title", "Payment"), badge);
+    instructions.append(head);
+    const meta = el("dl", "mp-intents-rows mp-intents-meta");
+    row(meta, "Delivers to", `${op.context.accountId} on ${op.context.networkId}`);
+    const idRow = el("p", "mp-intents-fine mp-intents-mono", `Recovery ID: ${op.id}`);
     if (!snapshot.canSend) {
       instructions.append(
-        paragraph(
+        el(
+          "p",
+          "mp-intents-fine",
           "Sending instructions are hidden while this payment is processing, expired, or awaiting account and capability checks. You can keep tracking it.",
         ),
+        meta,
+        idRow,
       );
       return;
     }
     const q = op.quote.quote;
-    instructions.append(
-      paragraph(
-        `Send exactly ${formatTokenAmount(q.amountIn, op.token.decimals)} ${op.token.symbol} on ${op.token.blockchain}.`,
-      ),
-      paragraph(`Payment address: ${q.depositAddress}`),
-      paragraph(
-        `Send before ${new Date(expiresAt(op.quote)).toLocaleString()}. Do not reuse after expiry.`,
-      ),
+    const chain = chainName(op.token.blockchain);
+    const sendAmount = formatTokenAmount(q.amountIn, op.token.decimals);
+    const big = el("p", "mp-intents-send");
+    big.append(
+      el("span", "mp-intents-send-label", "Send exactly"),
+      el("strong", "mp-intents-send-amount", `${sendAmount} ${op.token.symbol}`),
+      el("span", "mp-intents-send-chain", `on ${chain} — no other network`),
     );
-    if (q.depositMemo)
-      instructions.append(
-        paragraph(
+    const grid = el("div", "mp-intents-pay-grid");
+    const qrSlot = el("div", "mp-intents-qr");
+    const fields = el("div", "mp-intents-pay-fields");
+    const addressBox = el("div", "mp-intents-copyfield");
+    const addressCode = el("code", "mp-intents-mono", q.depositAddress ?? "");
+    const copyAddress = button("Copy", "mp-intents-btn mp-intents-btn-sm");
+    copyAddress.setAttribute("aria-label", "Copy payment address");
+    copyAddress.addEventListener("click", () =>
+      copyFresh(op.id, q.depositAddress!, "Address copied. Check the network and amount in your wallet."),
+    );
+    addressBox.append(addressCode, copyAddress);
+    fields.append(el("span", "mp-intents-label", "Payment address"), addressBox);
+    if (q.depositMemo) {
+      const memoBox = el("div", "mp-intents-copyfield");
+      memoBox.append(el("code", "mp-intents-mono", q.depositMemo));
+      fields.append(
+        el("span", "mp-intents-label", "Memo / tag — required"),
+        memoBox,
+        el(
+          "p",
+          "mp-intents-warn",
           `Mandatory memo/tag: ${q.depositMemo}. Include it or payment may not arrive.`,
         ),
       );
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.textContent = "Copy payment details";
-    copy.addEventListener("click", async () => {
-      const fresh = controller.getState();
-      if (!fresh.canSend || fresh.operation?.id !== op.id) {
-        details(fresh);
-        return;
-      }
-      try {
-        await navigator.clipboard.writeText(
-          `Network: ${op.token.blockchain}\nAsset: ${op.token.symbol} (${op.token.assetId})\nAmount: ${formatTokenAmount(q.amountIn, op.token.decimals)}\nAddress: ${q.depositAddress}${q.depositMemo ? `\nMemo: ${q.depositMemo}` : ""}\nRecipient: ${op.context.accountId}`,
-        );
-        status.textContent =
-          "Payment details copied. Check the source network and memo in your wallet.";
-      } catch {
-        status.textContent =
-          "Copy unavailable. Select and copy the displayed details manually.";
-      }
-    });
-    instructions.append(
-      copy,
-      paragraph(
-        "QR contains the address only. Enter the amount and any mandatory memo separately.",
+    }
+    expiryAt = expiresAt(op.quote);
+    expiryNode = el("p", "mp-intents-expiry");
+    expiryNode.title = `Send before ${new Date(expiryAt).toLocaleString()}. Do not reuse after expiry.`;
+    expiryNode.textContent = countdown(expiryAt - Date.now());
+    fields.append(expiryNode);
+    grid.append(qrSlot, fields);
+    const copy = button("Copy payment details", "mp-intents-btn");
+    copy.addEventListener("click", () =>
+      copyFresh(
+        op.id,
+        `Network: ${op.token.blockchain}\nAsset: ${op.token.symbol} (${op.token.assetId})\nAmount: ${sendAmount}\nAddress: ${q.depositAddress}${q.depositMemo ? `\nMemo: ${q.depositMemo}` : ""}\nRecipient: ${op.context.accountId}`,
+        "Payment details copied. Check the source network and memo in your wallet.",
       ),
+    );
+    instructions.append(
+      big,
+      grid,
+      copy,
+      el(
+        "p",
+        "mp-intents-fine",
+        `QR contains the address only. Enter the amount and any mandatory memo separately. Do not reuse this address after it expires.`,
+      ),
+      meta,
+      idRow,
     );
     void renderQr(q.depositAddress!)
       .then((url) => {
@@ -267,11 +444,11 @@ export function mountIntentsFundingPanel(
           return;
         const img = document.createElement("img");
         img.src = url;
-        img.width = 200;
-        img.height = 200;
+        img.width = 168;
+        img.height = 168;
         img.alt =
           "Deposit address QR; amount and memo must be entered separately";
-        instructions.append(img);
+        qrSlot.append(img);
       })
       .catch(() => {
         /* Copyable text remains the primary payment instruction. */
@@ -282,11 +459,14 @@ export function mountIntentsFundingPanel(
     if (controller.getState().preview) controller.invalidatePreview();
   };
   form.addEventListener("input", invalidate);
+  const onSelect = () => syncTokenLabels();
+  assets.addEventListener("change", onSelect);
   const onPreview = (event: Event) => {
     event.preventDefault();
     const context = getContext();
     if (!context) {
       status.textContent = "Connect your wallet first";
+      status.dataset.tone = "bad";
       return;
     }
     reviewContext = context;
@@ -307,10 +487,15 @@ export function mountIntentsFundingPanel(
       void controller.commit(snapshot.preview.correlationId, reviewContext);
   };
   confirm.addEventListener("click", onConfirm);
-  const onAssets = () => {
+  const onChange = () => {
+    controller.invalidatePreview();
+    amount.focus();
+  };
+  change.addEventListener("click", onChange);
+  const onRetry = () => {
     void controller.loadAssets();
   };
-  refreshAssets.addEventListener("click", onAssets);
+  retry.addEventListener("click", onRetry);
   const onCheck = () => {
     const op = controller.getState().operation;
     if (op) void controller.refresh(op.id);
@@ -328,6 +513,7 @@ export function mountIntentsFundingPanel(
     } catch (error) {
       status.textContent =
         error instanceof Error ? error.message : "New payment unavailable";
+      status.dataset.tone = "bad";
     }
   };
   startNew.addEventListener("click", onNew);
@@ -351,6 +537,7 @@ export function mountIntentsFundingPanel(
     const key = `${snapshot.operation?.id ?? ""}:${snapshot.canSend}:${snapshot.message}`;
     if (snapshot.operation && key !== renderedInstructionsKey)
       details(snapshot);
+    else if (expiryNode) expiryNode.textContent = countdown(expiryAt - Date.now());
   }, 1000);
   return () => {
     disposed = true;
@@ -359,8 +546,10 @@ export function mountIntentsFundingPanel(
     unsubscribe();
     form.removeEventListener("submit", onPreview);
     form.removeEventListener("input", invalidate);
+    assets.removeEventListener("change", onSelect);
     confirm.removeEventListener("click", onConfirm);
-    refreshAssets.removeEventListener("click", onAssets);
+    change.removeEventListener("click", onChange);
+    retry.removeEventListener("click", onRetry);
     check.removeEventListener("click", onCheck);
     recovery.removeEventListener("submit", onResume);
     startNew.removeEventListener("click", onNew);

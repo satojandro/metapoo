@@ -138,7 +138,7 @@ describe("Intents inline panel", () => {
     expect(host.textContent).not.toContain("0x333333");
     await controller.commit(preview.preview!.correlationId, FIXTURE_CONTEXT);
     await vi.waitFor(() => expect(host.querySelector("img")).not.toBeNull());
-    expect(host.textContent).toContain("on base");
+    expect(host.textContent).toContain("on Base");
     expect(host.textContent).toContain("QR contains the address only");
     expect(host.textContent).toContain("Recovery ID: fixture-operation");
     expect(host.querySelector("img")?.alt).toContain("amount and memo");

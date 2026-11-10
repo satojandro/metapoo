@@ -101,14 +101,49 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
   const timer = window.setInterval(focus, 30_000);
   let disposeAcquisition: (() => void) | undefined;
   const hasRecovery = (() => { try { return Object.keys(window.localStorage).some(key => key.startsWith("metapoo:acquisition:v1:")); } catch { return false; } })();
+  let disposeDialog: (() => void) | undefined;
   if (INTENTS_FUNDING_ENABLED || RHEA_MPOO_SWAP_ENABLED || hasRecovery) {
-    void import("./acquisition-panel").then(({ mountAcquisitionPanel }) => {
-      if (!disposed) disposeAcquisition = mountAcquisitionPanel(host, services, refreshNow);
-    }).catch(() => { if (!disposed) status.textContent = "Acquisition controls could not load. Your existing wallet and credits remain available."; });
+    // The funding flow lives in its own dialog, not inline in the wallet dropdown: it is a
+    // multi-step payment, and the dropdown is already long. Mounted on first open, so the
+    // wallet session has normally restored by then.
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "action paint-wallet-add-funds";
+    open.textContent = hasRecovery && !INTENTS_FUNDING_ENABLED ? "Track a funding payment" : "Add funds from another chain";
+    buy.before(open);
+    const dialog = document.createElement("dialog");
+    dialog.className = "mp-funding-dialog";
+    dialog.setAttribute("aria-labelledby", "mp-funding-title");
+    dialog.innerHTML = `<div class="mp-funding-head"><h2 id="mp-funding-title">Add funds</h2>
+      <button type="button" class="mp-funding-close" aria-label="Close">×</button></div>
+      <div class="mp-funding-body"></div>`;
+    document.body.append(dialog);
+    const body = dialog.querySelector<HTMLElement>(".mp-funding-body")!;
+    let mounted = false;
+    const close = () => { if (typeof dialog.close === "function") dialog.close(); else dialog.removeAttribute("open"); };
+    const onOpen = () => {
+      host.closest("details")?.removeAttribute("open");
+      if (typeof dialog.showModal === "function") dialog.showModal(); else dialog.setAttribute("open", "");
+      if (mounted) return;
+      mounted = true;
+      void import("./acquisition-panel").then(({ mountAcquisitionPanel }) => {
+        if (!disposed) disposeAcquisition = mountAcquisitionPanel(body, services, refreshNow);
+      }).catch(() => {
+        mounted = false;
+        if (!disposed) body.textContent = "Funding controls could not load. Your existing wallet and credits remain available.";
+      });
+    };
+    // A click on the backdrop lands on the dialog element itself.
+    const onBackdrop = (event: MouseEvent) => { if (event.target === dialog) close(); };
+    open.addEventListener("click", onOpen);
+    dialog.querySelector(".mp-funding-close")!.addEventListener("click", close);
+    dialog.addEventListener("click", onBackdrop);
+    disposeDialog = () => { open.removeEventListener("click", onOpen); dialog.removeEventListener("click", onBackdrop); close(); dialog.remove(); open.remove(); };
   }
   refreshNow();
   return () => {
     disposeAcquisition?.();
+    disposeDialog?.();
     disposed = true; generation++; controller?.abort(); unsubscribe(); unsubscribeOps();
     window.clearInterval(timer); button.removeEventListener("click", refreshNow);
     window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus);
