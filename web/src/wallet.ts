@@ -124,6 +124,30 @@ export function getWalletSession(): WalletSession {
   return session;
 }
 
+/**
+ * Wallets hidden from the picker (owner, 10 Nov 2026), by near-connect manifest id:
+ * a developer CLI, an EVM bridge, a DAO treasury app, and a hardware wallet. None is how a
+ * player signs in from a browser, and together they crowded the list. Edit freely.
+ */
+export const HIDDEN_WALLET_IDS = [
+  "near-cli",
+  "ethereum-wallets",
+  "trezu-wallet",
+  "ledger",
+] as const;
+
+/** Move one registered wallet to the top of the picker. No-op if it is not registered. */
+export function promoteWallet(
+  target: Pick<NearConnector, "wallets" | "events">,
+  id: string,
+): void {
+  const index = target.wallets.findIndex((w) => w.manifest.id === id);
+  if (index <= 0) return;
+  const [wallet] = target.wallets.splice(index, 1);
+  target.wallets.unshift(wallet);
+  target.events.emit("selector:walletsChanged", {});
+}
+
 function ensureConnector(): NearConnector {
   if (connector) {
     return connector;
@@ -138,6 +162,7 @@ function ensureConnector(): NearConnector {
       signInWithoutAddKey: true,
       signAndSendTransaction: true,
     },
+    excludedWallets: [...HIDDEN_WALLET_IDS],
   });
 
   if (PRIVY_ENABLED && typeof window !== "undefined") {
@@ -150,6 +175,8 @@ function ensureConnector(): NearConnector {
       if (availability.state !== "ready") return;
       await target.whenManifestLoaded;
       await target.registerWallet(createPrivyManifest(availability.config));
+      // registerWallet appends; most new players have no NEAR wallet, so lead with Privy.
+      promoteWallet(target, PRIVY_WALLET_ID);
     })();
     // Registration failure must not remove ordinary wallets from the selector.
     void connectorReady.catch(() => undefined);
