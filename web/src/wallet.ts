@@ -444,28 +444,54 @@ export async function authorizeDrawingSession(
   const retireOldKey =
     replacing !== null && (await isRetirableDrawingKey(accountId, replacing));
   const keypair = await createDrawingSessionKeypair();
-  const outcome = await wallet.signAndSendTransaction({
-    receiverId: accountId,
-    actions: [
+  // The Privy sign page re-checks this key against what the game recorded before it will
+  // review the AddKey, so record it before the popup can open and clear it once the wallet
+  // has answered (a failed or refused approval leaves nothing behind).
+  const selected = await current.getConnectedWallet().catch(() => null);
+  const privyWallet = selected?.wallet?.manifest?.id === PRIVY_WALLET_ID;
+  if (privyWallet && typeof window !== "undefined") {
+    setPrivyPendingDrawingAuthorization(
       {
-        type: "AddKey",
-        params: {
-          publicKey: keypair.publicKey,
-          accessKey: {
-            nonce: 0,
-            permission: {
-              receiverId: CONTRACT_ID,
-              allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
-              methodNames: [...DRAWING_SESSION_METHODS],
+        accountId,
+        networkId: WALLET_NETWORK,
+        sessionEpoch,
+        publicKey: keypair.publicKey,
+        contractId: CONTRACT_ID,
+        methods: DRAWING_SESSION_METHODS,
+        allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+        createdAtMs: Date.now(),
+      },
+      window.localStorage,
+    );
+  }
+  let outcome: Awaited<ReturnType<typeof wallet.signAndSendTransaction>>;
+  try {
+    outcome = await wallet.signAndSendTransaction({
+      receiverId: accountId,
+      actions: [
+        {
+          type: "AddKey",
+          params: {
+            publicKey: keypair.publicKey,
+            accessKey: {
+              nonce: 0,
+              permission: {
+                receiverId: CONTRACT_ID,
+                allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+                methodNames: [...DRAWING_SESSION_METHODS],
+              },
             },
           },
         },
-      },
-      // Same transaction, so a renewal is one approval and never leaves the account
-      // with neither key: both actions land or neither does.
-      ...(retireOldKey ? [{ type: "DeleteKey" as const, params: { publicKey: replacing } }] : []),
-    ],
-  });
+        // Same transaction, so a renewal is one approval and never leaves the account
+        // with neither key: both actions land or neither does.
+        ...(retireOldKey ? [{ type: "DeleteKey" as const, params: { publicKey: replacing } }] : []),
+      ],
+    });
+  } finally {
+    if (privyWallet && typeof window !== "undefined")
+      setPrivyPendingDrawingAuthorization(null, window.localStorage);
+  }
   const parsed = parseTxOutcome(outcome);
   if (parsed.status === "failed") {
     throw new Error(parsed.failureMessage ?? "The wallet refused the AddKey transaction.");

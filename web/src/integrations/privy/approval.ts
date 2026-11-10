@@ -197,6 +197,7 @@ export function reviewPrivyRequest(
   const details = [`Account: ${wallet.address}`, `Network: ${config.network}`];
   const rows: PrivyReviewRow[] = [];
   let revokesKey = false;
+  let addsKey = false;
   for (const value of transactions) {
     const tx = record(value),
       receiver = account(tx.receiverId);
@@ -219,6 +220,64 @@ export function reviewPrivyRequest(
         revokesKey = true;
         rows.push({ label: "Remove", value: "This browser's drawing key" });
         details.push(`Revoke drawing key: ${drawingPublicKey}`);
+      } else if (action.type === "AddKey") {
+        // The drawing session adds its key with a plain AddKey transaction, so this screen
+        // has to review one. Nothing broader may pass: same account, board contract, draw
+        // methods, capped allowance — and the exact key the game recorded before opening
+        // this page, or a compromised game page could ask for a key we cannot describe.
+        if (receiver !== wallet.address)
+          throw new Error("A drawing key can only be added to your own account.");
+        const accessKey = record(params.accessKey),
+          permission = accessKey.permission;
+        if (permission === "FullAccess" || typeof permission !== "object" || permission === null)
+          throw new Error("Only a limited drawing key can be added here.");
+        const fn = record(permission),
+          methods = fn.methodNames,
+          allowance = fn.allowance;
+        if (
+          !boardContractId ||
+          fn.receiverId !== boardContractId ||
+          !Array.isArray(methods) ||
+          methods.length !== DRAWING_SESSION_METHODS.length ||
+          !DRAWING_SESSION_METHODS.every((m) => (methods as unknown[]).includes(m)) ||
+          typeof allowance !== "string" ||
+          !/^\d+$/.test(allowance) ||
+          BigInt(allowance) > BigInt(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO) ||
+          typeof params.publicKey !== "string" ||
+          !/^ed25519:[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(params.publicKey)
+        )
+          throw new Error(
+            "A drawing key must use the board contract, the draw methods and the configured allowance.",
+          );
+        if (
+          !pendingDrawing ||
+          pendingDrawing.accountId !== wallet.address ||
+          pendingDrawing.networkId !== config.network ||
+          pendingDrawing.sessionEpoch !== host?.sessionEpoch ||
+          pendingDrawing.publicKey !== params.publicKey ||
+          pendingDrawing.contractId !== boardContractId ||
+          pendingDrawing.allowance !== DRAWING_SESSION_GAS_ALLOWANCE_YOCTO ||
+          pendingDrawing.methods.length !== DRAWING_SESSION_METHODS.length ||
+          !DRAWING_SESSION_METHODS.every((m) => pendingDrawing.methods.includes(m))
+        )
+          throw new Error(
+            "Drawing authorization does not match the request pending in the game.",
+          );
+        addsKey = true;
+        rows.push(
+          { label: "Adds", value: "A drawing key for this browser" },
+          { label: "Can do", value: "Paint on the Meta Poo wall, nothing else" },
+          {
+            label: "Fees it can spend",
+            value: `Up to ${formatAllowanceNear(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO)}, then it stops`,
+          },
+          { label: "Can't do", value: "Move your NEAR, buy credits or swap tokens" },
+        );
+        details.push(
+          `Add drawing key: ${params.publicKey}`,
+          `Methods: ${DRAWING_SESSION_METHODS.join(", ")}`,
+          `Gas allowance: ${allowance} yoctoNEAR`,
+        );
       } else if (action.type === "FunctionCall") {
         if (
           typeof params.methodName !== "string" ||
@@ -254,9 +313,15 @@ export function reviewPrivyRequest(
     );
   rows.push({ label: "From", value: wallet.address, mono: true });
   return {
-    eyebrow: "Approve transaction",
-    title: revokesKey && rows.length === 2 ? "Remove the drawing key" : "Check and approve",
-    lede: "The game asked your account to send this. Nothing happens until you approve it here.",
+    eyebrow: addsKey ? "Authorize drawing" : "Approve transaction",
+    title: addsKey
+      ? "Let this browser paint for you"
+      : revokesKey && rows.length === 2
+        ? "Remove the drawing key"
+        : "Check and approve",
+    lede: addsKey
+      ? "This adds a drawing key to your account, so you can paint tile by tile without a window like this one each time."
+      : "The game asked your account to send this. Nothing happens until you approve it here.",
     rows,
     notes,
     details,

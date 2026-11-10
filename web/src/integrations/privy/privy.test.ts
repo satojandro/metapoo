@@ -16,6 +16,10 @@ import {
   type PrivySessionClient,
 } from "./session";
 import { buildAddFunctionCallKeyParams } from "../../drawing-session";
+import {
+  DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+  DRAWING_SESSION_METHODS,
+} from "../../drawing-session";
 
 const address = "12".repeat(32),
   other = "34".repeat(32);
@@ -417,5 +421,165 @@ describe("Privy picker entry and plain-language review", () => {
     expect(text).toContain("Up to 0.25 NEAR");
     expect(text).not.toContain("yocto");
     expect(review.details.join("\n")).toContain("Methods: draw, draw_many");
+  });
+});
+
+describe("drawing key added by an ordinary AddKey transaction", () => {
+  const board = "wall.testnet";
+  const addedKey = "ed25519:" + "2".repeat(43);
+  const pending = {
+    accountId: address,
+    networkId: "testnet" as const,
+    sessionEpoch: 1,
+    publicKey: addedKey,
+    contractId: board,
+    methods: [...DRAWING_SESSION_METHODS],
+    allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+    createdAtMs: 1,
+  };
+  const addKeyTransaction = (overrides: Record<string, unknown> = {}) => ({
+    kind: "signAndSendTransaction",
+    network: "testnet",
+    receiverId: address,
+    actions: [
+      {
+        type: "AddKey",
+        params: {
+          publicKey: addedKey,
+          accessKey: {
+            nonce: 0,
+            permission: {
+              receiverId: board,
+              allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+              methodNames: [...DRAWING_SESSION_METHODS],
+            },
+          },
+        },
+      },
+    ],
+    ...overrides,
+  });
+  const review = (
+    payload: unknown,
+    pendingDrawing: typeof pending | null = pending,
+    drawingPublicKey?: string,
+  ) =>
+    reviewPrivyRequest(
+      session(payload),
+      config,
+      wallet,
+      host,
+      board,
+      drawingPublicKey,
+      pendingDrawing,
+    );
+
+  it("reviews it in the same plain language as the sign-in key, not as an unsupported action", () => {
+    const result = review(addKeyTransaction());
+    expect(result.title).toBe("Let this browser paint for you");
+    expect(result.eyebrow).toBe("Authorize drawing");
+    const values = result.rows.map((r) => `${r.label}: ${r.value}`);
+    expect(values).toContain("Adds: A drawing key for this browser");
+    expect(values).toContain("Can do: Paint on the Meta Poo wall, nothing else");
+    expect(values.join("\n")).toContain("Up to 0.25 NEAR");
+    expect(result.details.join("\n")).toContain(`Add drawing key: ${addedKey}`);
+    expect(result.details.join("\n")).toContain("Methods: draw, draw_many");
+  });
+
+  it("refuses without the record the game writes before opening the page", () => {
+    // Otherwise this screen would approve whatever key a compromised game page asked for.
+    expect(() => review(addKeyTransaction(), null)).toThrow(
+      "Drawing authorization does not match the request pending in the game.",
+    );
+  });
+
+  it("refuses a full-access key, a different key, contract, methods or allowance", () => {
+    const fullAccess = addKeyTransaction({
+      actions: [
+        {
+          type: "AddKey",
+          params: { publicKey: addedKey, accessKey: { nonce: 0, permission: "FullAccess" } },
+        },
+      ],
+    });
+    expect(() => review(fullAccess)).toThrow("Only a limited drawing key");
+
+    const otherKey = addKeyTransaction({
+      actions: [
+        {
+          type: "AddKey",
+          params: {
+            publicKey: "ed25519:" + "3".repeat(43),
+            accessKey: {
+              nonce: 0,
+              permission: {
+                receiverId: board,
+                allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
+                methodNames: [...DRAWING_SESSION_METHODS],
+              },
+            },
+          },
+        },
+      ],
+    });
+    expect(() => review(otherKey)).toThrow(
+      "Drawing authorization does not match the request pending in the game.",
+    );
+
+    const wildcardMethods = addKeyTransaction({
+      actions: [
+        {
+          type: "AddKey",
+          params: {
+            publicKey: addedKey,
+            accessKey: {
+              nonce: 0,
+              permission: { receiverId: board, allowance: DRAWING_SESSION_GAS_ALLOWANCE_YOCTO },
+            },
+          },
+        },
+      ],
+    });
+    expect(() => review(wildcardMethods)).toThrow("A drawing key must use the board contract");
+
+    const tooMuchAllowance = addKeyTransaction({
+      actions: [
+        {
+          type: "AddKey",
+          params: {
+            publicKey: addedKey,
+            accessKey: {
+              nonce: 0,
+              permission: {
+                receiverId: board,
+                allowance: "250000000000000000000001",
+                methodNames: [...DRAWING_SESSION_METHODS],
+              },
+            },
+          },
+        },
+      ],
+    });
+    expect(() => review(tooMuchAllowance)).toThrow("A drawing key must use the board contract");
+
+    const otherAccount = addKeyTransaction({ receiverId: other });
+    expect(() => review(otherAccount)).toThrow(
+      "A drawing key can only be added to your own account.",
+    );
+  });
+
+  it("reviews a renewal that adds the new key and retires the old one in the same transaction", () => {
+    const oldKey = "ed25519:" + "4".repeat(43);
+    const renewal = addKeyTransaction({
+      actions: [
+        ...addKeyTransaction().actions,
+        { type: "DeleteKey", params: { publicKey: oldKey } },
+      ],
+    });
+    const result = review(renewal, pending, oldKey);
+    expect(result.title).toBe("Let this browser paint for you");
+    const values = result.rows.map((r) => `${r.label}: ${r.value}`);
+    expect(values).toContain("Adds: A drawing key for this browser");
+    expect(values).toContain("Remove: This browser's drawing key");
   });
 });
