@@ -84,6 +84,16 @@ describe("Privy configuration and manifest", () => {
       readPrivyConfig({ ...env, VITE_PRIVY_APP_ID: "" }, config.origin).state,
     ).toBe("unavailable");
   });
+  it("treats an app client id as optional, like the SDK does", () => {
+    const result = readPrivyConfig(
+      { ...env, VITE_PRIVY_APP_CLIENT_ID: "" },
+      config.origin,
+    );
+    expect(result.state).toBe("ready");
+    if (result.state !== "ready") throw new Error();
+    expect(result.config.clientId).toBe("");
+    expect(result.config.appId).toBe("app-id");
+  });
   it("rejects external sign pages, arbitrary routes and mock to mainnet fallback", () => {
     for (const value of [
       "https://attacker.invalid/privy-sign.html",
