@@ -9,7 +9,13 @@ export const INTENTS_NATIVE_EVIDENCE: FundingPolicy["nativeDeliveryEvidence"] =
     initializedImplicit: false,
     uninitializedImplicit: false,
   };
-export const INTENTS_BROWSER_TRANSPORT_VERIFIED = false;
+/**
+ * Direct transport checked 2026-11-10 from a Chromium tab on https://metapoo-testnet.vercel.app:
+ * /v0/tokens 200, /v0/quote (dry) 201, /v0/status 404 body readable; ACAO `*`, preflight
+ * allows accept,content-type; site CSP connect-src lists the host.
+ * Record: docs/payments/intents-transport-check-2026-11-10.md
+ */
+export const INTENTS_BROWSER_TRANSPORT_VERIFIED = true;
 export const INTENTS_REVIEWED_SOURCES: FundingPolicy["sourceAllowlist"] = [];
 // Public discovery evidence exists; a complete route and net-output proof do not yet exist.
 export const RHEA_REVIEWED_ROUTE: RheaRouteManifest | null = null;
