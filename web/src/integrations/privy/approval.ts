@@ -66,6 +66,39 @@ const atomic = (v: unknown): string => {
   return v;
 };
 
+/** The AddKey that `authorizeDrawingSession` (web/src/wallet.ts) builds, and nothing wider. */
+function assertDrawingKeyAddition(
+  receiver: string,
+  accountId: string,
+  boardContractId: string,
+  params: Record<string, unknown>,
+): void {
+  const refuse = () => {
+    throw new Error("Only a draw-only key for this board can be added here.");
+  };
+  if (receiver !== accountId || !boardContractId) refuse();
+  if (
+    typeof params.publicKey !== "string" ||
+    !/^ed25519:[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(params.publicKey)
+  )
+    refuse();
+  const accessKey = record(params.accessKey);
+  if (accessKey.nonce !== undefined && accessKey.nonce !== 0) refuse();
+  // "FullAccess" is a string; record() rejects it along with anything else non-object.
+  const permission = record(accessKey.permission);
+  const methods = permission.methodNames;
+  const allowance = permission.allowance;
+  if (
+    permission.receiverId !== boardContractId ||
+    !(typeof allowance === "string" || typeof allowance === "bigint") ||
+    String(allowance) !== DRAWING_SESSION_GAS_ALLOWANCE_YOCTO ||
+    !Array.isArray(methods) ||
+    methods.length !== DRAWING_SESSION_METHODS.length ||
+    !DRAWING_SESSION_METHODS.every((m) => methods.includes(m))
+  )
+    refuse();
+}
+
 /** Review exactly the payload which the pinned connector will sign; never execute from its labels. */
 export function reviewPrivyRequest(
   session: SigningSession,
@@ -196,7 +229,8 @@ export function reviewPrivyRequest(
     throw new Error("Invalid transaction batch.");
   const details = [`Account: ${wallet.address}`, `Network: ${config.network}`];
   const rows: PrivyReviewRow[] = [];
-  let revokesKey = false;
+  let revokesKey = false,
+    addsDrawingKey = false;
   for (const value of transactions) {
     const tx = record(value),
       receiver = account(tx.receiverId);
@@ -219,6 +253,23 @@ export function reviewPrivyRequest(
         revokesKey = true;
         rows.push({ label: "Remove", value: "This browser's drawing key" });
         details.push(`Revoke drawing key: ${drawingPublicKey}`);
+      } else if (action.type === "AddKey") {
+        // Only the game's own drawing key: on this account, for this board, draw methods
+        // only, with the bounded allowance. Full-access or unlimited keys never pass.
+        assertDrawingKeyAddition(receiver, wallet.address, boardContractId, params);
+        addsDrawingKey = true;
+        rows.push(
+          { label: "Adds", value: "A drawing key for this browser" },
+          { label: "Can do", value: "Paint on the Meta Poo wall, nothing else" },
+          { label: "Fees it can spend", value: `Up to ${formatAllowanceNear(DRAWING_SESSION_GAS_ALLOWANCE_YOCTO)}, then it stops` },
+          { label: "Can't do", value: "Move your NEAR, buy credits or swap tokens" },
+        );
+        details.push(
+          `Add drawing key: ${String(params.publicKey)}`,
+          `Board contract: ${boardContractId}`,
+          `Methods: ${DRAWING_SESSION_METHODS.join(", ")}`,
+          `Gas allowance: ${DRAWING_SESSION_GAS_ALLOWANCE_YOCTO} yoctoNEAR`,
+        );
       } else if (action.type === "FunctionCall") {
         if (
           typeof params.methodName !== "string" ||
@@ -245,18 +296,28 @@ export function reviewPrivyRequest(
         throw new Error("This wallet request contains an unsupported action.");
     }
   }
-  const notes = [
-    "Network fees come out of your NEAR. You only pay for gas actually used, never more than the limit.",
-  ];
+  const notes = addsDrawingKey
+    ? [
+        "Adding the key is one small transaction; you pay its network fee from your NEAR. You can revoke the key from the game at any time.",
+      ]
+    : [
+        "Network fees come out of your NEAR. You only pay for gas actually used, never more than the limit.",
+      ];
   if (transactions.length > 1)
     notes.push(
       `This sends ${transactions.length} transactions in order. If a later one fails, the earlier ones still happen.`,
     );
   rows.push({ label: "From", value: wallet.address, mono: true });
   return {
-    eyebrow: "Approve transaction",
-    title: revokesKey && rows.length === 2 ? "Remove the drawing key" : "Check and approve",
-    lede: "The game asked your account to send this. Nothing happens until you approve it here.",
+    eyebrow: addsDrawingKey ? "Authorize drawing" : "Approve transaction",
+    title: addsDrawingKey
+      ? "Let this browser paint for you"
+      : revokesKey && rows.length === 2
+        ? "Remove the drawing key"
+        : "Check and approve",
+    lede: addsDrawingKey
+      ? "This adds a drawing key to your account, so you can paint tile by tile without a window like this one each time."
+      : "The game asked your account to send this. Nothing happens until you approve it here.",
     rows,
     notes,
     details,

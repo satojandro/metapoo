@@ -356,6 +356,53 @@ describe("Privy signing request boundary", () => {
   });
 });
 
+describe("drawing key added as its own transaction", () => {
+  const pk = "ed25519:11111111111111111111111111111111";
+  const allowance = "250000000000000000000000";
+  const addKey = (permission: unknown, extra: Record<string, unknown> = {}) => ({
+    kind: "signAndSendTransaction",
+    network: "testnet",
+    receiverId: address,
+    actions: [
+      {
+        type: "AddKey",
+        params: { publicKey: pk, accessKey: { nonce: 0, permission }, ...extra },
+      },
+    ],
+  });
+  const good = { receiverId: "wall.testnet", allowance, methodNames: ["draw", "draw_many"] };
+  const review = (payload: unknown, oldKey?: string) =>
+    reviewPrivyRequest(session(payload), config, wallet, host, "wall.testnet", oldKey);
+
+  it("approves exactly the key authorizeDrawingSession builds", () => {
+    const result = review(addKey(good));
+    expect(result.title).toBe("Let this browser paint for you");
+    expect(result.rows.map((r) => r.value).join("\n")).toContain("Up to 0.25 NEAR");
+    expect(result.details.join("\n")).toContain(`Add drawing key: ${pk}`);
+    expect(result.requiresFunds).toBe(true);
+  });
+  it("approves a renewal that retires the current drawing key in the same transaction", () => {
+    const old = "ed25519:22222222222222222222222222222222";
+    const payload = addKey(good);
+    payload.actions.push({ type: "DeleteKey", params: { publicKey: old } } as never);
+    expect(review(payload, old).title).toBe("Let this browser paint for you");
+  });
+  it("refuses any wider key", () => {
+    for (const payload of [
+      addKey("FullAccess"),
+      addKey({ ...good, allowance: undefined }),
+      addKey({ ...good, allowance: "1000000000000000000000000" }),
+      addKey({ ...good, receiverId: "wrap.testnet" }),
+      addKey({ ...good, methodNames: [] }),
+      addKey({ ...good, methodNames: ["draw", "ft_transfer"] }),
+      { ...addKey(good), receiverId: other },
+      addKey(good, { publicKey: "not-a-key" }),
+    ]) {
+      expect(() => review(payload)).toThrow();
+    }
+  });
+});
+
 describe("Privy picker entry and plain-language review", () => {
   it("ships an inline icon and names Privy as the sign-in host, not the game's origin", () => {
     const manifest = createPrivyManifest(config);
