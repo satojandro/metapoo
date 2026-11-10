@@ -163,6 +163,9 @@ export function mountPrivySignPage(
 
   async function prepareReview(): Promise<void> {
     if (!original || disposed) return;
+    // The withdrawal review reads the chain (token metadata, registration, key state), so the
+    // window has to say something before those round trips answer — it used to render nothing.
+    say("Checking this request with the chain…");
     wallet = await ensureNearWallet(runtime, config.network, storage);
     if (disposed) return;
     // Re-handshake with an explicit wallet: upstream's default selects the first NEAR wallet.

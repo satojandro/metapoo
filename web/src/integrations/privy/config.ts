@@ -1,5 +1,6 @@
 import executorAsset from "./vendor-executor.js?url";
 import type { WalletManifest } from "@hot-labs/near-connect";
+import { MPOO_ACCOUNT } from "../../paint-wallet";
 
 export const PRIVY_WALLET_ID = "metapoo-privy";
 export const PRIVY_PACKAGE_VERSION = "0.0.8";
@@ -98,7 +99,7 @@ export function readPrivyConfig(
         selfCustodyEnabled: env.VITE_SELF_CUSTODY_ENABLED === "true",
         sendTokens: [
           {contractId: String(env.VITE_TOILET_ID ?? ""), symbol: "TOILET", decimals: 18},
-          ...(env.VITE_SEND_MPOO_ENABLED === "true" ? [{contractId: network === "mainnet" ? "mpoo.nearlytrade.near" : String(env.VITE_MPOO_ID ?? ""), symbol: network === "mainnet" ? "mPOO" : "Test mPOO", decimals: 18}] : []),
+          ...(env.VITE_SEND_MPOO_ENABLED === "true" ? [{contractId: network === "mainnet" ? MPOO_ACCOUNT : String(env.VITE_MPOO_ID ?? ""), symbol: network === "mainnet" ? "mPOO" : "Test mPOO", decimals: 18}] : []),
         ].filter(t => t.contractId),
         sendBlockedRecipients: [String(env.VITE_CONTRACT_ID ?? "")].filter(Boolean),
       },

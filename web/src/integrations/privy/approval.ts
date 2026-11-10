@@ -355,7 +355,7 @@ export function reviewPrivyRequest(
   ];
   if (transactions.length > 1)
     notes.push(
-      `This sends ${transactions.length} transactions in order. If a later one fails, the earlier ones still happen.`,
+      `This sends ${transactions.length} transactions at once. If one fails, the others can still happen.`,
     );
   rows.push({ label: "From", value: wallet.address, mono: true });
   return {

@@ -5,13 +5,13 @@ import { estimateGasCeiling, computeSpendableNative } from "../gas-budget";
 import { sameIdentity, type ApprovedNearAction, type ApprovedTransactionRequest, type OperationContext } from "../types";
 import { SEND_POLICY } from "./config";
 import { checkSendRecipient, sendView } from "./checks";
-import { SEND_FT_TRANSFER_GAS, SEND_STORAGE_DEPOSIT_GAS, SEND_NATIVE_GAS, SEND_GAS_FLOOR_YOCTO, SEND_STORAGE_CAP_YOCTO, sendAtomic, sendAccount, sendRecord, parseSendAmount } from "./plan";
+import { SEND_FT_TRANSFER_GAS, SEND_STORAGE_DEPOSIT_GAS, SEND_NATIVE_GAS, SEND_GAS_FLOOR_YOCTO, SEND_STORAGE_CAP_YOCTO, sendAtomic, normalizeRecipient, sendRecord, parseSendAmount } from "./plan";
 export interface SendPlan { request: ApprovedTransactionRequest; recipient: string; symbol: string; decimals: number; amount: string; maximum: string; registration: string; gas: string; tokenBalance?: string }
 export async function planSend(context: OperationContext, asset: string, recipientInput: string, amountInput: string | "MAX"): Promise<SendPlan> {
   const assertCurrent = () => { if (!sameIdentity(context, getAcquisitionContext(context.operationId))) throw new Error("Your connected account changed. Nothing was sent."); };
   assertCurrent();
   if (!SEND_POLICY.enabled) throw new Error("Send is disabled.");
-  const recipient = sendAccount(recipientInput.trim().toLowerCase());
+  const recipient = normalizeRecipient(recipientInput);
   if (recipient === context.accountId) throw new Error("That's your own account. Enter a different recipient.");
   const token = SEND_POLICY.tokens.find(t => t.contractId === asset);
   if (asset !== "NEAR" && !token) throw new Error("This asset is unavailable.");

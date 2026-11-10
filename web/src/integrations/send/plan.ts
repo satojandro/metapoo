@@ -27,6 +27,18 @@ export function sendAccount(value: unknown): string {
   if (typeof value !== "string" || value.length < 2 || value.length > 64 || !/^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/.test(value)) throw new Error("That isn't a NEAR account.");
   return value;
 }
+/**
+ * Accept a case-only correction of a valid account id; never rewrite anything else.
+ * Spec §5.1: an uppercase paste must not silently become a different account, and an input
+ * that is invalid for any reason other than case must be rejected, not repaired.
+ */
+export function normalizeRecipient(input: string): string {
+  const value = input.trim();
+  try { return sendAccount(value); } catch { /* maybe only the case is wrong */ }
+  const lowered = value.toLowerCase();
+  if (lowered === value) return sendAccount(value); // rethrows the original rejection
+  return sendAccount(lowered);
+}
 /** Send args are flat objects. Scan their JSON keys before parsing to reject duplicates,
  * including escaped spellings, which JSON.parse otherwise silently overwrites. */
 export function decodeSendArgs(value: unknown): Record<string, unknown> {
