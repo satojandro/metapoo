@@ -113,6 +113,43 @@ describe("real SDK adapter boundary", () => {
       user: null,
     });
   });
+  it("records whether a signed-out popup had Privy tokens beforehand", async () => {
+    const store = new Map<string, string>([
+      ["privy:token", "a"],
+      ["privy:refresh_token", "r"],
+    ]);
+    const fake = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    // Object.keys(localStorage) lists stored keys; mirror that on the fake.
+    const proxy = new Proxy(fake, {
+      ownKeys: () => [...store.keys()],
+      getOwnPropertyDescriptor: (_t, k) =>
+        store.has(String(k))
+          ? { enumerable: true, configurable: true, value: store.get(String(k)) }
+          : undefined,
+    });
+    vi.stubGlobal("localStorage", proxy);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vendor.client.user.get.mockImplementationOnce(async () => {
+      store.delete("privy:token");
+      store.delete("privy:refresh_token");
+      throw Object.assign(new Error("Invalid refresh token"), {
+        code: "missing_or_invalid_token",
+      });
+    });
+    await createPrivyRuntime(config).user.get();
+    const record = JSON.parse(store.get("privy-sign:lastSignedOut")!);
+    expect(record).toMatchObject({
+      cause: "refresh_rejected",
+      hadAccessToken: true,
+      hadRefreshToken: true,
+    });
+    expect(JSON.stringify(record)).not.toContain('"r"');
+    vi.unstubAllGlobals();
+  });
   it("still surfaces Privy failures that do not mean signed out", async () => {
     const outage = Object.assign(new Error("Bad gateway"), { status: 502 });
     vendor.client.user.get.mockRejectedValueOnce(outage);

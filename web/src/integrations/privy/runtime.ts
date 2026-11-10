@@ -32,6 +32,51 @@ function isSignedOutError(error: unknown): boolean {
   );
 }
 
+export const PRIVY_SIGNED_OUT_DIAGNOSTIC_KEY = "privy-sign:lastSignedOut";
+
+/** Which Privy session keys exist. Presence only: token values never leave the SDK's storage. */
+function privyTokenPresence(): { accessToken: boolean; refreshToken: boolean } {
+  try {
+    const keys = Object.keys(globalThis.localStorage ?? {});
+    return {
+      accessToken: keys.some((k) => /^privy:(.+:)?token$/.test(k)),
+      refreshToken: keys.some((k) => /^privy:(.+:)?refresh_token$/.test(k)),
+    };
+  } catch {
+    return { accessToken: false, refreshToken: false };
+  }
+}
+
+/**
+ * Why the sign page fell back to the login screen. Tokens missing beforehand means they were
+ * never kept or were cleared elsewhere; tokens present means Privy rejected the refresh token.
+ */
+function recordSignedOut(
+  before: { accessToken: boolean; refreshToken: boolean },
+  error: unknown,
+): void {
+  const cause =
+    before.accessToken && before.refreshToken
+      ? "refresh_rejected"
+      : "tokens_missing";
+  const detail = {
+    at: new Date().toISOString(),
+    cause,
+    hadAccessToken: before.accessToken,
+    hadRefreshToken: before.refreshToken,
+    message: error instanceof Error ? error.message : String(error),
+  };
+  console.warn("[privy-sign] signed out:", detail);
+  try {
+    globalThis.localStorage?.setItem(
+      PRIVY_SIGNED_OUT_DIAGNOSTIC_KEY,
+      JSON.stringify(detail),
+    );
+  } catch {
+    // Diagnostics must never be the thing that breaks the page.
+  }
+}
+
 /** Real SDK adapter. Tests replace this boundary, never the application's wallet authority. */
 export function createPrivyRuntime(config: PrivyConfig): PrivyPageRuntime {
   const client = new Privy({
@@ -49,10 +94,15 @@ export function createPrivyRuntime(config: PrivyConfig): PrivyPageRuntime {
       // Treating that as fatal hid the login form from every first-time player. Only
       // that code means "signed out"; any other failure still propagates.
       async get() {
+        // Snapshot before the call: on a rejected refresh token the SDK wipes these keys.
+        const before = privyTokenPresence();
         try {
           return await client.user.get();
         } catch (error) {
-          if (isSignedOutError(error)) return { user: null };
+          if (isSignedOutError(error)) {
+            recordSignedOut(before, error);
+            return { user: null };
+          }
           throw error;
         }
       },
