@@ -40,8 +40,8 @@ Require fixture reviews for every existing flow before enabling that restriction
 
 ## Verification and evidence limits
 
-- Focused withdrawal, Privy and wallet-panel tests passed (78 tests before the final full run).
-- Full suite and build results are recorded in the PR description. Run with `NODE_OPTIONS=--no-experimental-webstorage` on this machine, as documented in the repository traps.
+- Full suite, typecheck and build are verified on the **CI runtime (Node 22.14.0)**, which is the only runtime that counts: `NODE_OPTIONS=--no-experimental-webstorage` on Node 26 fixes the localStorage noise but changes Web Locks availability too, and that is how this branch first looked green while CI was red. At `f78da29`: **109 files / 1072 tests pass**, `tsc --noEmit` clean, `vite build` clean.
+- CI is the gate, not a local run: the suite must be green on `.github/workflows/ci.yml`'s Node 22 pin.
 - New regressions include `requires the masked suffix and checkbox, then rejects an intent cleared during readiness`, `enforces its floor even if a caller supplies zero reserve`, `records uncertainty before broadcast and never automatically repeats a send`, and duplicate-key/registration/metadata rejection cases.
 - Initial test run before implementation failed loading the absent Send planner; the implemented planner then passed. Existing Privy tests were not rewritten to accept new behavior.
 - Local browser smoke check rendered the Send form. The standalone preview initially omitted the application's required polyfills; adding the existing `polyfills.ts` import fixed it. Temporary preview HTML was removed. This is not a mobile/full-state acceptance test.
@@ -53,3 +53,16 @@ Require fixture reviews for every existing flow before enabling that restriction
 The installed `@near-js/accounts` **2.5.1** `lib/esm/account.js:238` uses `Promise.all` inside `signAndSendTransactions`. The pinned Privy connector **0.0.8** delegates to that method. This contradicts PR #103's sequential-batch assumption. Send's one-transaction design avoids that issue. Existing non-Send review copy claiming batches run “in order” needs a separate correction; it was preserved here to keep the specified existing review behavior unchanged. Same-receiver action atomicity is documented in [near-sdk's batch API](https://docs.rs/near-sdk/latest/near_sdk/env/fn.promise_batch_create.html).
 
 The wall disposal fixture also inherited `VITE_TOILET_ID` from a local `.env`, making an optional claim widget add a third subscription. Reproduced on unchanged `b1358d1` with `VITE_TOILET_ID=toilet.testnet`, then pinned the fixture's TOILET configuration to empty. Its subscription checks now describe the two widgets actually under test.
+
+## Review pass (11 November, independent review)
+
+Findings from reviewing this branch against the merged specs, and what changed:
+
+1. **CI was red and the local run could not show it.** `send/gateway.test.ts` walked the real `withCapitalLock`, which fails closed without `navigator.locks`. Node 26 (this machine) ships Web Locks, the CI pin (Node 22) does not, so the suite was green locally and red on CI: 3 failed / 1053 passed on Node 22. The fixture now stubs the lock exactly as `intents/panel.test.ts` does and restores it afterwards; the production guard is untouched. Verified green on Node 22 and on CI at `334b449`.
+2. **A key change that failed on chain blocked every later payment.** `metapoo:custody:attempt:<net>` was cleared only when the intended key state appeared. An attempt that *failed* therefore never cleared it, and `readBudget` refused Send, credit purchases, acquisition and RHEA swaps with "Refresh your keys" — advice that could not clear the marker either. A failed key change wedged the account until localStorage was edited by hand. The marker now carries the transaction hash (recorded before the confirmation read), and `reconcileCustodyAttempt` settles it in order: the key list, then the transaction (a `Failure` clears it, because nothing changed), then an explicit human override for a lost outcome, which re-reads the key first so it can never bury a change that landed. A read failure throws instead of clearing. `f0fe31f`; the regression test fails if the failure branch is removed.
+3. **Recipient input was rewritten silently.** `planSend` lowercased unconditionally, so invalid input became some other account instead of an error. Spec §5.1 allows a case-only correction and nothing else; `normalizeRecipient` implements exactly that, with tests for double dots, a leading separator, a Cyrillic look-alike and an over-length id.
+4. **The batch note claimed an order that does not exist.** The copy now says "at once … if one fails, the others can still happen", and spec §2.2/§6.6 record the measured `Promise.all` behaviour. This supersedes the "needs a separate correction" note above — it is corrected here.
+5. **`mpoo.nearlytrade.near` was hardcoded in two config modules** while `MPOO_ACCOUNT` already existed; both import the constant now.
+6. **The sign window rendered nothing while the review's RPC reads were outstanding**; it now says "Checking this request with the chain…".
+
+Not changed, deliberately: SEND-HARDEN (the generic `FunctionCall` allowlist) is an owner decision under spec Q1 and can break credit checkout and RHEA, which use `ft_transfer_call`; the feature flags stay off; no live gate was executed; no graduation flow was invented while external-wallet compatibility is unverified.
