@@ -1,3 +1,4 @@
+import { mountWithdrawalControls } from "./withdrawal-controls";
 import { TOKEN_PAYMENTS_ENABLED } from "../payment-flags";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL, INTENTS_FUNDING_ENABLED, RHEA_MPOO_SWAP_ENABLED } from "../config";
 import {
@@ -140,8 +141,10 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
     dialog.addEventListener("click", onBackdrop);
     disposeDialog = () => { open.removeEventListener("click", onOpen); dialog.removeEventListener("click", onBackdrop); close(); dialog.remove(); open.remove(); };
   }
+  const disposeWithdrawals = mountWithdrawalControls(host, services, refreshNow);
   refreshNow();
   return () => {
+    disposeWithdrawals();
     disposeAcquisition?.();
     disposeDialog?.();
     disposed = true; generation++; controller?.abort(); unsubscribe(); unsubscribeOps();

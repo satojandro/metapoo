@@ -46,6 +46,8 @@ vi.mock("../../config", async (importOriginal) => {
   return {
     ...actual,
     CONTRACT_ID: "board.behaviour.testnet",
+    // This fixture counts wall + checkout subscriptions, not the optional TOILET claim.
+    TOILET_ID: "",
     PAGE_NETWORK: "testnet",
   };
 });

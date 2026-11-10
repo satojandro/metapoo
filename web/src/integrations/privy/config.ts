@@ -12,6 +12,10 @@ export interface PrivyConfig {
   origin: string;
   signPageUrl: string;
   rpcUrl: string;
+  sendEnabled?: boolean;
+  selfCustodyEnabled?: boolean;
+  sendTokens?: readonly import("../send/plan").SendToken[];
+  sendBlockedRecipients?: readonly string[];
 }
 export type PrivyAvailability =
   | { state: "disabled" }
@@ -90,6 +94,13 @@ export function readPrivyConfig(
         origin: appOrigin.origin,
         signPageUrl: sign.href,
         rpcUrl: rpc.href,
+        sendEnabled: env.VITE_SEND_ENABLED === "true",
+        selfCustodyEnabled: env.VITE_SELF_CUSTODY_ENABLED === "true",
+        sendTokens: [
+          {contractId: String(env.VITE_TOILET_ID ?? ""), symbol: "TOILET", decimals: 18},
+          ...(env.VITE_SEND_MPOO_ENABLED === "true" ? [{contractId: network === "mainnet" ? "mpoo.nearlytrade.near" : String(env.VITE_MPOO_ID ?? ""), symbol: network === "mainnet" ? "mPOO" : "Test mPOO", decimals: 18}] : []),
+        ].filter(t => t.contractId),
+        sendBlockedRecipients: [String(env.VITE_CONTRACT_ID ?? "")].filter(Boolean),
       },
     };
   } catch {

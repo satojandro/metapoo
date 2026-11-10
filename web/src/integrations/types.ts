@@ -5,7 +5,7 @@ export interface OperationContext {
   networkId: "mainnet" | "testnet";
   sessionEpoch: number;
 }
-export interface ApprovedNearAction {
+export interface ApprovedFunctionCallAction {
   type: "FunctionCall";
   params: {
     methodName: string;
@@ -14,13 +14,17 @@ export interface ApprovedNearAction {
     deposit: string;
   };
 }
+export type ApprovedNearAction = ApprovedFunctionCallAction | {
+  type: "Transfer";
+  params: {deposit: string; methodName?: never; args?: never; gas?: never};
+};
 export interface ApprovedNearTransaction {
   receiverId: string;
   actions: readonly ApprovedNearAction[];
 }
 export interface ApprovedTransactionRequest {
   context: OperationContext;
-  purpose: "funding-unwrap" | "mpoo-acquisition";
+  purpose: "funding-unwrap" | "mpoo-acquisition" | "send";
   transactions: readonly ApprovedNearTransaction[];
   approval: {
     summary: string;

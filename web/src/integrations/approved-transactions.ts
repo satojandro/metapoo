@@ -1,3 +1,4 @@
+import { SEND_NATIVE_GAS, SEND_GAS_FLOOR_YOCTO } from "./send/plan";
 import { parseTxOutcome } from "../tx-outcome";
 import {
   assertAtomic,
@@ -48,6 +49,7 @@ export function validateAcquisitionTransaction(
   request: ApprovedTransactionRequest,
   policy: AcquisitionPolicy,
 ): void {
+  if (request.purpose === "send") throw new Error("Send is outside acquisition permissions");
   if (!tx.actions.length || tx.actions.length > 2)
     throw new Error("Unsupported acquisition action count");
   if (
@@ -246,6 +248,7 @@ export function createApprovedTransactionGateway(deps: GatewayDependencies) {
       !request.approval.summary.trim()
     )
       throw new Error("Missing transaction approval");
+    if (request.purpose === "send" && request.transactions.length !== 1) throw new Error("Send must be exactly one transaction");
     request.transactions.forEach((tx) => deps.validateTransaction(tx, request));
     const limit = assertAtomic(request.approval.maxNativeSpendYocto);
     return withCapitalLock(deps.storage, async () => {
@@ -307,7 +310,7 @@ export function createApprovedTransactionGateway(deps: GatewayDependencies) {
               (n, a) =>
                 n +
                 assertAtomic(a.params.deposit) +
-                BigInt(estimateGasCeiling(a.params.gas, budget.gasPriceYocto)),
+                BigInt(estimateGasCeiling(a.type === "Transfer" ? SEND_NATIVE_GAS : a.params.gas, budget.gasPriceYocto)),
               0n,
             ),
           0n,
@@ -315,7 +318,7 @@ export function createApprovedTransactionGateway(deps: GatewayDependencies) {
         if (
           consumed + ceiling > limit ||
           assertAtomic(budget.spendableBeforeGasYocto) <
-            ceiling + assertAtomic(budget.playReserveYocto)
+            ceiling + assertAtomic(request.purpose === "send" ? SEND_GAS_FLOOR_YOCTO : budget.playReserveYocto)
         )
           throw new Error(
             "Insufficient gas reserve or approved spending ceiling",
@@ -408,7 +411,7 @@ export function createApprovedTransactionGateway(deps: GatewayDependencies) {
         const budget = await deps.readBudget(request.context);
         assertCurrent();
         const gasUnits = tx.actions.reduce(
-          (n, a) => n + assertAtomic(a.params.gas),
+          (n, a) => n + assertAtomic(a.type === "Transfer" ? SEND_NATIVE_GAS : a.params.gas),
           0n,
         );
         if (gasUnits > 300_000_000_000_000n)
@@ -423,7 +426,7 @@ export function createApprovedTransactionGateway(deps: GatewayDependencies) {
         if (
           consumed + ceiling > limit ||
           assertAtomic(budget.spendableBeforeGasYocto) <
-            ceiling + assertAtomic(budget.playReserveYocto)
+            ceiling + assertAtomic(request.purpose === "send" ? SEND_GAS_FLOOR_YOCTO : budget.playReserveYocto)
         )
           throw new Error(
             "Insufficient gas reserve or approved spending ceiling",
@@ -582,7 +585,13 @@ export async function reconcilePendingCapitalAttempt(
             };
           }
         ).FunctionCall;
-        const approved = planned.actions[i].params;
+        const plannedAction = planned.actions[i];
+        if (plannedAction.type === "Transfer") {
+          const transfer = (action as {Transfer?: {deposit?: string}}).Transfer;
+          if (!transfer || transfer.deposit !== plannedAction.params.deposit || Object.keys(action as object).length !== 1) return false;
+          continue;
+        }
+        const approved = plannedAction.params;
         if (
           !call ||
           call.method_name !== approved.methodName ||
