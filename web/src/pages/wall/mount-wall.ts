@@ -21,6 +21,8 @@ import { createTileInspector, parseTileHash, type TileInspector } from "./tile-i
 import { createWallInvite, wallStats, type WallInvite } from "./wall-invite";
 import { createWallStory, type WallStory } from "./wall-story";
 import { createWallYours, localHeldStore, type WallYours } from "./wall-yours";
+import { createWallFullscreen } from "./wall-fullscreen";
+import { createWallMinimap } from "./wall-minimap";
 import { mountToiletClaim, toiletConfigured } from "../../app/toilet-claim";
 import { nowNs } from "./wall-views";
 import { BOARD_SERVER_URL, CONTRACT_ID, PAGE_NETWORK } from "../../config";
@@ -260,6 +262,36 @@ export function mountWall(
     panOnly: () => modes.panOnly(),
     tilePainter: () => views?.painter() ?? null,
   });
+
+  // Full screen: the wall takes the window, the panel sits beside it, and a minimap
+  // shows where you are once zoomed in. Layout only; same camera, same paint.
+  // The minimap comes first so nothing below reaches for a binding not yet made.
+  let fullscreenActive = false;
+  const minimap = createWallMinimap({
+    scope,
+    host: boardToolbar,
+    source: canvas,
+    camera: () => camera.camera(),
+    viewport: () => camera.readViewportSize(),
+    centerOn: (cell) =>
+      camera.applyCamera(paintZoomCamera(camera.readViewportSize(), cell, camera.camera().cellSize)),
+    visible: () => fullscreenActive,
+  });
+  createWallFullscreen({
+    scope,
+    page: wallPage,
+    toggleButton: el<HTMLButtonElement>("#wall-fullscreen"),
+    panelButton: el<HTMLButtonElement>("#wall-panel-toggle"),
+    focusTarget: boardFocus,
+    // Leaving puts the normal page's camera back: the smaller viewport alone would
+    // keep the full-screen zoom (review on PR #101).
+    camera: { read: () => camera.camera(), restore: (saved) => camera.applyCamera(saved) },
+    onChange: (active) => {
+      fullscreenActive = active;
+      minimap.update();
+    },
+  });
+  scope.onDispose(camera.onChange(() => minimap.update()));
 
   const wallHint = mountWallHint(el<HTMLElement>("#wall-hint-host"));
 
