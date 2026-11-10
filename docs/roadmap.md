@@ -4,7 +4,7 @@
 in `README.md`. This file holds decisions and work that are **not yet scheduled**.
 Scheduled implementation tasks live in the orchestrator backlog, not here.
 
-Last reviewed: 2026-10-27.
+Last reviewed: 2026-11-10.
 
 ---
 
@@ -120,3 +120,30 @@ tuning is a transaction and a logic change needs no migration. 54 contract tests
 
 Still open: the **frontend price display** (per-cell cost, stroke total, one-line legend — the page
 currently shows a flat price), and one rehearsed migration on testnet state before mainnet money.
+
+## Cross-chain funding (Intents) — shipped in owner test mode, one proof outstanding (2026-11-10)
+
+A player can now pay from another chain and receive NEAR: 18 reviewed routes (USDC, USDT, ETH,
+SOL across Ethereum, Base, Arbitrum, Optimism, Polygon, Avalanche and Solana), a three-step
+dialog (form → quote → payment address with QR and expiry), quote-signature verification, and a
+recovery record for a payment whose outcome is unknown. The route record is
+[`payments/intents-source-allowlist-2026-11-10.md`](payments/intents-source-allowlist-2026-11-10.md).
+
+**The one thing not proven: that a deposit arrives as native NEAR.** A dry quote proves the
+provider will price a route, not that NEAR lands spendable. `INTENTS_NATIVE_EVIDENCE` is empty
+and `VITE_INTENTS_TEST_MODE=true` keeps the flow reachable for the owner only, with the panel
+saying so on every screen. Three real deposits (fresh implicit, initialized implicit, named
+account) are what close it — [brief](payments/intents-native-delivery-test-plan.md).
+
+Open decisions:
+
+| question | options | note |
+|---|---|---|
+| Route count at launch | all 18 vs a short list | 18 is a lot of surface to keep verified; Solana and Arbitrum quote fastest, BSC and Tron are held back by the provider's $1,000 / $100 minimums |
+| Play reserve | 0.25 NEAR today | it is the drawing key's lifetime allowance, chosen as a floor, not measured — revisit after the first deposit |
+| What happens after NEAR lands | stop at "funded" (today) vs continue into buy-credits / mPOO | the panel currently ends at a funded balance and leaves the next step to the player |
+| Refund-address validation | shape checks (today) vs checksum | EVM and Tron validators check the form, not the checksum; a typo'd refund address is only caught by the provider |
+| Test mode | env-only switch | must be off before any player sees the flow; it is not a query parameter and cannot be turned on from the page |
+
+**Recommendation:** run the three deposits before widening anything else. If deposit A arrives as
+wNEAR, the design changes and the route list is the least of it.
