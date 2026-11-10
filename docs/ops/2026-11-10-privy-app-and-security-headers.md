@@ -27,14 +27,20 @@ Bitwarden UI to `PRIVY_APP_SECRET_VENEKOVOX` / `PRIVY_APP_SECRET_METAPOO`.
 
 `VITE_PRIVY_APP_CLIENT_ID` is **not** the app ID. It names an *app client*: a per-platform
 settings profile (session duration, allowed origins, cookie enablement) that overrides the
-app's defaults. `@peerfolio/privy-near-connect`'s README tells you to create one
-(Dashboard → Configuration → App settings → **Clients** → “Create Client”).
+app's defaults. `@peerfolio/privy-near-connect`'s README says "`Clients` tab → Create Client";
+that tab does not exist. The working path, used on 2026-11-10, is
+**App settings → Basics → "Domains and clients" → + Create client** (reported upstream:
+beneviolabs/privy-near-connect#97).
 
 **It is not required.** `js-sdk-core@0.72.0` destructures `clientId` into an internal
 `appClientId` that is read only behind truthiness guards — a `privy-client-id` request header
 and a `client_id` query param on the embedded-wallet iframe. With no client ID the SDK falls
 back to the app's default settings; login and NEAR wallet provisioning are unaffected. Only
 per-environment session duration and per-client origins are lost.
+
+A client was created later the same day (`client-WY6fa…HdJ`, public value, wired into
+`web/.env.production`); the integration had already shipped and signed in without one, which
+is the evidence behind "optional".
 
 `config.ts` used to treat an empty client ID as fatal, which took the whole connector down for
 a value that is optional by contract. That check is gone (see the comment above
