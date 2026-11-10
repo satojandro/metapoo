@@ -27,7 +27,12 @@ export interface FundingQuoteRequest {
   confidentiality?: "public";
   quoteWaitingTimeMs?: 0;
   insured?: false;
-  appFees?: { recipient: string; fee: number }[];
+  appFees?: {
+    recipient: string;
+    fee: number;
+    /** Present on non-dry quotes only: null for a market order, an id for a limit order. */
+    limitOrderId?: string | null;
+  }[];
 }
 
 export interface FundingQuote {

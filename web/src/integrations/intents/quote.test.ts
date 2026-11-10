@@ -11,6 +11,7 @@ import {
 import { parseQuote } from "./client";
 import { verifyQuoteSignature } from "@defuse-protocol/one-click-sdk-typescript";
 import liveDryQuote from "./fixtures/live-dryquote-2026-11-03.json";
+import liveNonDryQuote from "./fixtures/live-nondry-quote-2026-11-10.json";
 import {
   FIXTURE_CONTEXT,
   FIXTURE_REFUND,
@@ -103,6 +104,41 @@ describe("Intents exact payments", () => {
       Object.assign(raw.quoteRequest, extra);
       expect(() => assertQuoteMatches(parseQuote(raw), requested)).toThrow();
     }
+  });
+  it("accepts the live non-dry quote whose platform fee carries a null limitOrderId", () => {
+    // Public, unchanged address-generating response captured from the 1Click API on 10 Nov 2026.
+    // Dry quotes omit `limitOrderId`; only the commit quote carries it, which is why a strict
+    // recipient/fee allowlist failed exactly at the "generate payment address" step.
+    expect(
+      verifyQuoteSignature(
+        liveNonDryQuote as Parameters<typeof verifyQuoteSignature>[0],
+      ),
+    ).toBe(true);
+    const quote = parseQuote(structuredClone(liveNonDryQuote));
+    expect(quote.quote.depositAddress).toBeTruthy();
+    expect(providerFeeBps(quote)).toBe(20);
+    const requested = canonicalQuoteRequest(quote.quoteRequest, false);
+    expect(() => assertQuoteMatches(quote, requested)).not.toThrow();
+    expect(requested).not.toHaveProperty("appFees");
+  });
+  it("still rejects a fee carrying programmable or unbounded extra fields", () => {
+    for (const limitOrderId of [{ evil: true }, "x".repeat(65), 7, "bad id"]) {
+      const raw = structuredClone(liveNonDryQuote);
+      Object.assign(raw.quoteRequest.appFees[0], { limitOrderId });
+      expect(() => providerFeeBps(parseQuote(raw))).toThrow(
+        "Unreviewed provider fee recipient or amount",
+      );
+    }
+    for (const extra of [{ withdrawTo: "attacker.near" }, { feeExtra: 1 }]) {
+      const raw = structuredClone(liveNonDryQuote);
+      Object.assign(raw.quoteRequest.appFees[0], extra);
+      expect(() => providerFeeBps(parseQuote(raw))).toThrow();
+    }
+    const bounded = structuredClone(liveNonDryQuote);
+    Object.assign(bounded.quoteRequest.appFees[0], {
+      limitOrderId: "order_2026-11-10_A",
+    });
+    expect(providerFeeBps(parseQuote(bounded))).toBe(20);
   });
   it("compares normalized historical fee arrays by values rather than object identity", () => {
     const original = parseQuote(structuredClone(liveDryQuote));

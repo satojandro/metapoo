@@ -3,6 +3,25 @@ import type { FundingQuoteRequest, FundingQuote, IntentsToken } from "./types";
 /** Captured in a signature-verified public 1Click dry quote on 3 Nov 2026. */
 export const REVIEWED_PLATFORM_FEE_RECIPIENT =
   "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd";
+/**
+ * Keys the provider may attach to the single reviewed platform fee.
+ * `limitOrderId` appears only on non-dry (address-generating) quotes: null for a
+ * market order, an id for a limit order. Captured live 10 Nov 2026 — dry quotes
+ * omit it, so an allowlist of `recipient`/`fee` alone rejected every request for
+ * a deposit address with "Unreviewed provider fee recipient or amount".
+ */
+const REVIEWED_FEE_FIELDS = new Set(["recipient", "fee", "limitOrderId"]);
+const LIMIT_ORDER_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The limit-order reference is provider metadata, not a fee: null, absent, or a bounded id. */
+function reviewedLimitOrderId(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    (typeof value === "string" && LIMIT_ORDER_ID.test(value))
+  );
+}
+
 const CORE_REQUEST_FIELDS = [
   "dry",
   "swapType",
@@ -30,7 +49,8 @@ export function providerFeeBps(quote: FundingQuote): number | undefined {
   if (
     !fee ||
     typeof fee !== "object" ||
-    Object.keys(fee).some((k) => !["recipient", "fee"].includes(k)) ||
+    Object.keys(fee).some((k) => !REVIEWED_FEE_FIELDS.has(k)) ||
+    !reviewedLimitOrderId((fee as { limitOrderId?: unknown }).limitOrderId) ||
     fee.recipient !== REVIEWED_PLATFORM_FEE_RECIPIENT ||
     !Number.isInteger(fee.fee) ||
     fee.fee < 0 ||
