@@ -30,6 +30,7 @@
 /* ---- Form ---- */
 .mp-intents-form { display: grid; gap: var(--mp-space-4, 16px); }
 .mp-intents-field { display: grid; gap: 6px; min-width: 0; }
+.mp-intents-pick { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: var(--mp-space-3, 12px); }
 .mp-intents-label {
   font: 600 var(--mp-text-xs, 11px) / 1.2 var(--mp-mono, monospace);
   letter-spacing: .12em;

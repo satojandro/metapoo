@@ -38,13 +38,13 @@ afterEach(() => {
   else Reflect.deleteProperty(navigator, "locks");
 });
 
-function app(enabled = true, testMode = false) {
+function app(enabled = true, testMode = false, tokens = [FIXTURE_TOKEN]) {
   let now = FIXTURE_TIME;
   let context = { ...FIXTURE_CONTEXT };
   let providerStatus: FundingStatus["status"] = "PROCESSING";
   const data = new Map<string, string>();
   const client: FundingClient = {
-    tokens: async () => [FIXTURE_TOKEN],
+    tokens: async () => tokens,
     verify: async () => true,
     quote: async (request) => fixtureQuote(request),
     status: async (quote) => fixtureStatus(quote, providerStatus),
@@ -59,7 +59,7 @@ function app(enabled = true, testMode = false) {
       initializedImplicit: false,
       uninitializedImplicit: false,
     },
-    sourceAllowlist: [{ assetId: FIXTURE_TOKEN.assetId, blockchain: "base" }],
+    sourceAllowlist: tokens.map((t) => ({ assetId: t.assetId, blockchain: t.blockchain })),
     playReserveYocto: "1000",
   };
   const controller = createIntentsFundingController({
@@ -112,6 +112,31 @@ describe("Intents inline panel", () => {
     expect(app(true, true).host.textContent).toContain("not verified yet");
     expect(app(true, false).host.textContent).not.toContain("TEST MODE");
   });
+  it("picks an asset first, then a network, with USDT0 listed under USDT", async () => {
+    const token = (symbol: string, blockchain: string, assetId: string) => ({
+      ...FIXTURE_TOKEN, symbol, blockchain, assetId,
+    });
+    const { host } = app(true, false, [
+      token("USDT0", "arb", "usdt-arb"),
+      token("USDC", "sol", "usdc-sol"),
+      token("USDT", "eth", "usdt-eth"),
+      token("USDC", "eth", "usdc-eth"),
+      token("ETH", "base", "eth-base"),
+    ]);
+    const pick = (label: string) =>
+      host.querySelector<HTMLSelectElement>(`select[aria-label='${label}']`)!;
+    const texts = (label: string) =>
+      Array.from(pick(label).options).map((o) => o.textContent);
+    await vi.waitFor(() => expect(texts("Asset")).toEqual(["USDC", "USDT", "ETH"]));
+    expect(texts("Source network")).toEqual(["Ethereum", "Solana"]);
+    pick("Asset").value = "USDT";
+    pick("Asset").dispatchEvent(new Event("change"));
+    expect(texts("Source network")).toEqual(["Ethereum", "Arbitrum (USDT0)"]);
+    pick("Source network").value = "usdt-arb";
+    pick("Source network").dispatchEvent(new Event("change"));
+    expect(host.querySelector(".mp-intents-amount-symbol")?.textContent).toBe("USDT0");
+    expect(host.textContent).toContain("I control this address on Arbitrum");
+  });
   it("retains read-only recovery when new funding is disabled", () => {
     const { host } = app(false);
     expect(host.textContent).toContain("not enabled");
@@ -124,7 +149,9 @@ describe("Intents inline panel", () => {
   it("shows source network, explicit memo warning and address-only QR only after persistence", async () => {
     const { host, controller } = app();
     await vi.waitFor(() =>
-      expect(host.querySelectorAll("option")).toHaveLength(1),
+      expect(
+        host.querySelectorAll("select[aria-label='Source network'] option"),
+      ).toHaveLength(1),
     );
     const preview = await controller.preview(
       {

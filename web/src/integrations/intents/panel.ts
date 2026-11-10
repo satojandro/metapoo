@@ -41,6 +41,15 @@ const CHAIN_NAMES: Record<string, string> = {
   zec: "Zcash",
 };
 export const chainName = (id: string) => CHAIN_NAMES[id] ?? id;
+/** Picker order: majors first. Unlisted chains sort after, alphabetically. */
+const CHAIN_ORDER = ["eth", "base", "arb", "op", "pol", "bsc", "avax", "sol", "tron"];
+const FAMILY_ORDER = ["USDC", "USDT", "ETH", "SOL"];
+/** USDT0 / USD₮0 is how Tether's own USDT is named on some chains; players look for "USDT". */
+const family = (symbol: string) => (/^USD[T₮]0?$/i.test(symbol) ? "USDT" : symbol);
+const rank = (list: string[], key: string) => {
+  const i = list.indexOf(key);
+  return i < 0 ? list.length : i;
+};
 
 const REFUND_PLACEHOLDER: Record<string, string> = {
   btc: "bc1…",
@@ -121,8 +130,13 @@ export function mountIntentsFundingPanel(
     if (hint) wrap.append(hint);
     return wrap;
   };
+  const symbols = el("select", "mp-intents-input");
+  symbols.required = true;
+  symbols.setAttribute("aria-label", "Asset");
   const assets = el("select", "mp-intents-input");
   assets.required = true;
+  assets.setAttribute("aria-label", "Source network");
+  const pickRow = el("div", "mp-intents-pick");
   const amount = el("input", "mp-intents-input mp-intents-amount-input");
   amount.inputMode = "decimal";
   amount.required = true;
@@ -147,8 +161,9 @@ export function mountIntentsFundingPanel(
   const ownershipRow = el("label", "mp-intents-check");
   ownershipRow.append(ownership, ownershipText);
   const preview = button("Get a quote", "mp-intents-btn mp-intents-primary", "submit");
+  pickRow.append(field("You send", symbols), field("Network", assets));
   form.append(
-    field("You send", assets),
+    pickRow,
     field("Amount", amountWrap),
     field("Refund address", refund, refundHint),
     ownershipRow,
@@ -234,6 +249,27 @@ export function mountIntentsFundingPanel(
   };
   const selectedToken = (snapshot = controller.getState()) =>
     snapshot.assets.find((t) => t.assetId === assets.value);
+  /** Network options for the chosen asset; keeps the previous route when it is still offered. */
+  function fillNetworks(snapshot: FundingSnapshot, keep?: string) {
+    const routes = snapshot.assets
+      .filter((t) => family(t.symbol) === symbols.value)
+      .sort(
+        (a, b) =>
+          rank(CHAIN_ORDER, a.blockchain) - rank(CHAIN_ORDER, b.blockchain) ||
+          a.blockchain.localeCompare(b.blockchain),
+      );
+    assets.replaceChildren(
+      ...routes.map((t) => {
+        const option = document.createElement("option");
+        option.value = t.assetId;
+        option.textContent =
+          chainName(t.blockchain) +
+          (family(t.symbol) !== t.symbol ? ` (${t.symbol})` : "");
+        return option;
+      }),
+    );
+    if (keep && routes.some((t) => t.assetId === keep)) assets.value = keep;
+  }
   function syncTokenLabels() {
     const token = selectedToken();
     amountSymbol.textContent = token?.symbol ?? "";
@@ -270,16 +306,19 @@ export function mountIntentsFundingPanel(
     const registry = JSON.stringify(snapshot.assets);
     if (registry !== lastAssets) {
       lastAssets = registry;
-      const previous = assets.value;
-      assets.replaceChildren();
-      for (const token of snapshot.assets) {
-        const option = document.createElement("option");
-        option.value = token.assetId;
-        option.textContent = `${token.symbol} on ${chainName(token.blockchain)}`;
-        assets.append(option);
-      }
-      if (snapshot.assets.some((t) => t.assetId === previous))
-        assets.value = previous;
+      const previous = selectedToken(snapshot) ?? null;
+      const families = [...new Set(snapshot.assets.map((t) => family(t.symbol)))].sort(
+        (a, b) => rank(FAMILY_ORDER, a) - rank(FAMILY_ORDER, b) || a.localeCompare(b),
+      );
+      symbols.replaceChildren(
+        ...families.map((name) => {
+          const option = document.createElement("option");
+          option.value = option.textContent = name;
+          return option;
+        }),
+      );
+      if (previous) symbols.value = family(previous.symbol);
+      fillNetworks(snapshot, previous?.assetId);
     }
     syncTokenLabels();
     const busy = ["loading_assets", "previewing", "committing"].includes(
@@ -287,7 +326,7 @@ export function mountIntentsFundingPanel(
     );
     const hasPayment = !!snapshot.operation;
     const disabled = snapshot.phase === "disabled";
-    for (const control of [assets, amount, refund, ownership])
+    for (const control of [symbols, assets, amount, refund, ownership])
       control.disabled = busy || hasPayment || disabled;
     form.hidden = hasPayment || disabled || !!snapshot.preview;
     preview.disabled = busy || hasPayment || !snapshot.assets.length || disabled;
@@ -461,6 +500,12 @@ export function mountIntentsFundingPanel(
   form.addEventListener("input", invalidate);
   const onSelect = () => syncTokenLabels();
   assets.addEventListener("change", onSelect);
+  const onFamily = () => {
+    fillNetworks(controller.getState());
+    syncTokenLabels();
+    invalidate();
+  };
+  symbols.addEventListener("change", onFamily);
   const onPreview = (event: Event) => {
     event.preventDefault();
     const context = getContext();
@@ -547,6 +592,7 @@ export function mountIntentsFundingPanel(
     form.removeEventListener("submit", onPreview);
     form.removeEventListener("input", invalidate);
     assets.removeEventListener("change", onSelect);
+    symbols.removeEventListener("change", onFamily);
     confirm.removeEventListener("click", onConfirm);
     change.removeEventListener("click", onChange);
     retry.removeEventListener("click", onRetry);
