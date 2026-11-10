@@ -187,14 +187,20 @@ export function createIntentsFundingController(
     ctx: OperationContext,
     signal?: AbortSignal,
   ): Promise<FundingSnapshot> {
-    const seq = ++revision;
+    let seq = ++revision;
     previewId = "";
     try {
       active(ctx);
       if (!input.refundAddressConfirmed)
         throw new Error("Confirm that you control the refund address");
-      if (!assetsAt || now() - assetsAt > 60_000)
-        throw new Error("Refresh supported assets before requesting a quote");
+      if (!assetsAt || now() - assetsAt > 60_000) {
+        // A player filling the form for over a minute is normal. Re-read the registry for them
+        // rather than refusing and asking them to find a refresh button.
+        await loadAssets(signal);
+        if (!assetsAt || now() - assetsAt > 60_000) return getState();
+        seq = ++revision;
+        active(ctx);
+      }
       const token = state.assets.find((t) => t.assetId === input.assetId);
       if (!token) throw new Error("Select a supported source asset");
       const request = makeQuoteRequest(

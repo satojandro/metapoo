@@ -60,6 +60,10 @@ describe("Intents exact payments", () => {
   it("rejects an address from the wrong source chain", () => {
     expect(() => validateRefundAddress("base", "alice.near")).toThrow();
     expect(() => validateRefundAddress("btc", FIXTURE_REFUND)).toThrow();
+    expect(() =>
+      validateRefundAddress("tron", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"),
+    ).not.toThrow();
+    expect(() => validateRefundAddress("tron", FIXTURE_REFUND)).toThrow();
   });
   it("verifies the real captured browser dry quote and accepts only its bounded provider defaults", () => {
     // Public, unchanged response captured by the parent from localhost; no deposit address exists.

@@ -154,6 +154,16 @@ describe("Intents funding authority and recovery", () => {
     expect(app.policy.nativeDeliveryEvidence.reference).toBe("");
     expect(app.policy.nativeDeliveryEvidence.initializedNamed).toBe(false);
   });
+  it("re-reads a stale asset registry for the player instead of refusing the quote", async () => {
+    // Before: a player who took over a minute to fill the form got "Refresh supported assets
+    // before requesting a quote" and had to find a button for it.
+    const app = setup();
+    await app.controller.loadAssets();
+    app.setTime(FIXTURE_TIME + 5 * 60_000);
+    const snapshot = await app.controller.preview(app.input, FIXTURE_CONTEXT);
+    expect(snapshot.phase).toBe("review");
+    expect(app.client.tokens).toHaveBeenCalledTimes(2);
+  });
   it("rejects testnet funding and a nonexistent named account", async () => {
     const app = setup();
     app.setContext({ ...FIXTURE_CONTEXT, networkId: "testnet" });

@@ -53,6 +53,7 @@ vi.mock("../integrations/intents/funding", () => ({
   createIntentsFundingController: () => ({
     invalidatePreview: state.invalidate,
     loadAssets: state.loadAssets,
+    getState: () => ({ assets: [] }),
     dispose: state.dispose,
   }),
 }));
@@ -134,5 +135,17 @@ describe("acquisition parent identity notifications", () => {
     cleanup = undefined;
     expect(app.unsubscribe).toHaveBeenCalledTimes(1);
     expect(state.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-reads funding assets when the wallet session restores after mount", () => {
+    // Production: the panel mounts before restoreWalletSession() resolves, so the first read
+    // fails with "Connect a wallet before adding funds" and the asset list stayed empty.
+    state.accountId = null;
+    const app = mount();
+    expect(state.loadAssets).toHaveBeenCalledTimes(1);
+    state.accountId = "alice.near";
+    state.epoch = 2;
+    app.notify();
+    expect(state.loadAssets).toHaveBeenCalledTimes(2);
   });
 });

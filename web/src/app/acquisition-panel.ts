@@ -44,15 +44,20 @@ export function mountAcquisitionPanel(
   const root = document.createElement("section");
   root.className = "mp-acquisition";
   host.append(root);
-  const title = document.createElement("h3");
-  title.textContent = "Add funds and get mPOO";
+  // Secondary path: players who already hold NEAR elsewhere just send it. Appended last.
+  const direct = document.createElement("div");
+  direct.className = "mp-acquisition-direct";
+  const directTitle = document.createElement("p");
+  directTitle.className = "mp-acquisition-direct-title";
+  directTitle.textContent = "Already have NEAR?";
   const receive = document.createElement("p");
   const copy = document.createElement("button");
   copy.type = "button";
+  copy.className = "mp-intents-btn";
   copy.textContent = "Copy NEAR receive address";
   const note = document.createElement("p");
   note.setAttribute("role", "status");
-  root.append(title, receive, copy, note);
+  direct.append(directTitle, receive, copy, note);
   let intentsId = crypto.randomUUID(),
     rheaId = crypto.randomUUID(),
     previousIdentity = "",
@@ -74,7 +79,7 @@ export function mountAcquisitionPanel(
       previousIdentity = identity;
     }
     receive.textContent = session.accountId
-      ? `Receive native NEAR at ${session.accountId} on ${session.networkId}. Keep some NEAR for network fees.`
+      ? `Send native NEAR straight to ${session.accountId} on ${session.networkId}. Keep some NEAR for network fees.`
       : "Connect a wallet to see its NEAR receive address.";
     copy.disabled = !session.accountId || session.networkId !== PAGE_NETWORK;
     if (changed) identityListeners.forEach((listener) => listener());
@@ -180,7 +185,13 @@ export function mountAcquisitionPanel(
           onBalancesChanged();
       },
     });
-    identityListeners.push(() => controller.invalidatePreview());
+    identityListeners.push(() => {
+      controller.invalidatePreview();
+      // The wallet session usually restores after this panel mounts. The mount-time asset read
+      // then fails with "Connect a wallet" and, before this, nothing ever read the registry again.
+      if (context() && !controller.getState().operation)
+        void controller.loadAssets();
+    });
     cleanups.push(
       mountIntentsFundingPanel(target, controller, {
         getContext: context,
@@ -314,6 +325,7 @@ export function mountAcquisitionPanel(
           : "Real mPOO is on NEAR mainnet. This game is using a different network.";
     cleanups.push(mountRheaPanel(target, runtime));
   }
+  root.append(direct);
   refreshIdentity();
   return () => {
     disposed = true;
