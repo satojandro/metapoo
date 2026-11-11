@@ -5,6 +5,7 @@ import { checkSend } from "../send/checks";
 import { createAcquisitionRpc } from "../rpc";
 import { sendRecord } from "../send/plan";
 import { getPrivyPendingSelfCustodyKey, custodyKeyPermission } from "./self-custody";
+
 /** Both the first render and the approval click perform independent chain reads. */
 export async function reviewWithdrawalRequest(session: SigningSession, config: PrivyConfig, wallet: PrivyNearWallet, storage: SessionStorage, board: string, drawingKey?: string) {
   const payload = sendRecord(session.payload);
