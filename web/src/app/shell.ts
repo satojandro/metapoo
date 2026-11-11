@@ -4,6 +4,7 @@
 
 import { createBetaBanner } from "./beta-banner";
 import { mountPaintWalletPanel } from "./paint-wallet-panel";
+import type { PageId } from "./page-registry";
 import { createSiteFooter } from "./site-footer";
 import { mountToiletClaim, toiletConfigured } from "./toilet-claim";
 import type { ParsedRoute } from "./routes";
@@ -22,7 +23,8 @@ export interface ShellHandles {
   dispose: () => void;
 }
 
-const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: string }> = [
+/** Primary nav routes. The labels are also the page names used in the tab title. */
+export const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: PageId }> = [
   { href: "/wall", label: "Wall", match: "wall" },
   { href: "/how-it-works", label: "How it works", match: "how" },
   { href: "/agents", label: "Agents", match: "agents" },
@@ -30,6 +32,30 @@ const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: string }> =
   { href: "/stake", label: "Stake", match: "stake" },
   { href: "/money", label: "Where the money goes", match: "money" },
 ];
+
+const NAV_LABELS = new Map<PageId, string>(NAV_ITEMS.map((item) => [item.match, item.label]));
+
+/**
+ * The name a route's tab shows, keyed by page id. Nav routes take it from
+ * NAV_ITEMS so renaming the nav renames the tab; /admin and the not-found page
+ * are not in the nav, so they are named here. Home and the wall are the same page.
+ */
+export const PAGE_NAMES: Readonly<Record<PageId, string>> = {
+  home: NAV_LABELS.get("wall")!,
+  wall: NAV_LABELS.get("wall")!,
+  how: NAV_LABELS.get("how")!,
+  agents: NAV_LABELS.get("agents")!,
+  toilet: NAV_LABELS.get("toilet")!,
+  stake: NAV_LABELS.get("stake")!,
+  money: NAV_LABELS.get("money")!,
+  admin: "Board settings",
+  "not-found": "Nothing painted here",
+};
+
+/** Browser-tab title for a route: `<Page> · Meta Poo`. */
+export function pageTitle(pageId: PageId): string {
+  return `${PAGE_NAMES[pageId]} · Meta Poo`;
+}
 
 /**
  * Build shell DOM into `host` and mount persistent wallet chrome.

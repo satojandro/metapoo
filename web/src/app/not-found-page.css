@@ -1,0 +1,7 @@
+/* /nope — the one rule the reused /admin hero classes do not already express.
+   Every other primary link CTA on the site (`/how-it-works`, `/toilet`) removes
+   the anchor underline in its own stylesheet; admin-page.css is not this page's
+   to edit, so the page-specific rule lives here. Colours stay in tokens. */
+.not-found .admin-head-actions > a.mp-btn-primary {
+  text-decoration: none;
+}

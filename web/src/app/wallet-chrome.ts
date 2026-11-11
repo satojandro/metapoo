@@ -7,6 +7,7 @@ import { CONTRACT_ID, PAGE_NETWORK } from "../config";
 import { isContractConfigured } from "../contract";
 import { listRecoverableAcquisitions } from "../integrations/operation-store";
 import { describeNetwork } from "../network";
+import { shortAccount } from "../shared/short-account";
 import type { AppServices } from "./services";
 import type { OperationRecord } from "./operations";
 
@@ -67,7 +68,7 @@ export function mountWalletChrome(
     if (!showPanel) walletDetails.open = false;
     if (walletSummaryToggle) {
       walletSummaryToggle.textContent = connectedAccount
-        ? shortAccountLabel(connectedAccount)
+        ? shortAccount(connectedAccount)
         : "Wallet";
       walletSummaryToggle.title = connectedAccount ?? "";
     }
@@ -235,16 +236,6 @@ export function mountWalletChrome(
       cleanup();
     }
   };
-}
-
-/**
- * Header label for an account. Implicit ids (64 hex characters, as Privy creates)
- * become `cc9a12…d113`; named accounts stay whole and CSS clips them if needed.
- */
-export function shortAccountLabel(account: string): string {
-  return /^[0-9a-f]{64}$/.test(account)
-    ? `${account.slice(0, 6)}…${account.slice(-4)}`
-    : account;
 }
 
 function mustChild<T extends Element>(root: ParentNode, selector: string): T {

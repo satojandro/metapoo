@@ -67,7 +67,7 @@
 .rev h3 { font-size: 17px; font-weight: 800; }
 .rev-figure { font-size: clamp(30px, 6vw, 40px); font-weight: 900; letter-spacing: -1px; line-height: 1.05; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .rev-unit { font-size: 15px; font-weight: 700; letter-spacing: 0; color: var(--rev-muted); }
-.rev-explain { color: var(--mp-soft-2); font-size: 14px; }
+.rev-explain { color: var(--mp-soft-2); font-size: 14px; overflow-wrap: anywhere; }
 .rev-small { font-size: 13px; color: var(--rev-muted); }
 .rev-split { margin: 0; display: grid; gap: 0; border-top: 1px solid var(--rev-line); }
 .rev-split > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--rev-line); }

@@ -9,6 +9,7 @@
 import { explorerUrl } from "@shared/board-rules.ts";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
 import { isContractConfigured } from "../contract";
+import { shortAccount } from "../shared/short-account";
 import { isUserRejection, parseTxOutcome } from "../tx-outcome";
 import { signAndSendDistribution } from "../wallet";
 import { createAccountBalanceReader } from "./admin-settings";
@@ -23,7 +24,7 @@ import {
   type LedgerSource,
 } from "./buyback-ledger";
 import type { PageContext, PageDispose } from "./page-registry";
-import { REVENUE_FLOW_SVG } from "./revenue-flow-svg";
+import { revenueFlowSvg } from "./revenue-flow-svg";
 import {
   accountExplorerUrl,
   countdown,
@@ -128,7 +129,7 @@ const TEMPLATE = `
   <div class="rev-notice" data-rev="notice" hidden></div>
 
   <figure class="rev-flow">
-    ${REVENUE_FLOW_SVG}
+    <div data-rev="flow">${revenueFlowSvg(false)}</div>
     <figcaption><b>NEAR</b> splits 10% to the team and 90% to the buyback, which turns it into mPOO. <b>mPOO</b> — bought back or paid for credits directly — splits 10% team, 70% TOILET stakers, 20% burned.</figcaption>
   </figure>
 
@@ -219,10 +220,6 @@ const TEMPLATE = `
   </section>
 </article>`;
 
-function shortAccount(account: string): string {
-  return account.length > 32 ? `${account.slice(0, 8)}…${account.slice(-8)}` : account;
-}
-
 export function mountRevenuePage(
   root: HTMLElement,
   ctx: PageContext,
@@ -239,6 +236,7 @@ export function mountRevenuePage(
   };
 
   let snapshot: RevenueSnapshot | null = null;
+  let flowStaking: boolean | null = null;
   let ledger: LedgerSnapshot | null = null;
   let ledgerLoading = false;
   let ledgerStale = false;
@@ -354,6 +352,12 @@ export function mountRevenuePage(
     );
   }
 
+  function renderFlow(stakingSet: boolean): void {
+    if (flowStaking === stakingSet) return;
+    flowStaking = stakingSet;
+    $("flow").innerHTML = revenueFlowSvg(stakingSet);
+  }
+
   function renderClock(): void {
     if (snapshot?.kind !== "live") return;
     const s = snapshot.state;
@@ -392,8 +396,11 @@ export function mountRevenuePage(
     setAmount("mpoo-burn", m.burn, MPOO_DECIMALS, 6);
     setAmount("reserve", s.mpooStakerReserve, MPOO_DECIMALS);
     $("reserve-explain").textContent = s.stakingContract
-      ? `The stakers’ 70%, forwarded to ${s.stakingContract} with each mPOO split.`
+      ? `The stakers’ 70%, forwarded to ${shortAccount(s.stakingContract)} with each mPOO split.`
       : "The stakers’ 70% of every mPOO split, held on the board until the TOILET staking contract exists. Nobody can spend it, the owner included. When staking opens, it’s forwarded with the next split.";
+    // The diagram carries the same fact as the card above it, so it is redrawn from the
+    // board's own signal instead of a string frozen at build time.
+    renderFlow(s.stakingContract !== null);
     if (snapshot.burned === null) {
       $("burned").textContent = "Unavailable";
       $("burned").title = "The burn address balance could not be read. Retry later.";

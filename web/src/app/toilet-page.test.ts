@@ -87,6 +87,19 @@ it("states the decided staking rules and never promises a return", () => {
   expect(text).not.toMatch(/30 days|APR|APY|guaranteed/i);
 });
 
+it("links to /stake once the board has a staking contract, and names it briefly", async () => {
+  const staking = "fcd66acf" + "0".repeat(48) + "3076f59e";
+  const t = setup({ load: async () => ({ ...LIVE, stakingContract: staking }) });
+  await vi.waitFor(() => expect(t.root.querySelector("[data-tlt-live-h]")!.textContent).toMatch(/Staking is open/));
+  const link = t.root.querySelector<HTMLAnchorElement>("[data-tlt-live-p] a")!;
+  expect(link.getAttribute("href")).toBe("/stake");
+  expect(link.textContent).toBe("Stake your TOILET →");
+  expect(t.root.textContent).not.toMatch(/controls land on this page next/);
+  const note = t.root.querySelector<HTMLElement>("[data-tlt-reserve-note]")!;
+  expect(note.textContent).toBe("Forwarded to fcd66acf…3076f59e with each distribution.");
+  expect(note.title).toBe(staking);
+});
+
 it("works as a labelled preview with no board", () => {
   const load = vi.fn(async () => LIVE);
   const t = setup({ configured: false, board: "", toilet: "", load });

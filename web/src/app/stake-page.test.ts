@@ -136,6 +136,16 @@ it("signed out: pool shows, position asks to connect, nothing can be sent", asyn
   expect(t.btn("claim").disabled).toBe(true);
 });
 
+it("renders step 3 of the money flow as one row, so no line starts with a comma", async () => {
+  const t = await setup();
+  const step = t.root.querySelectorAll<HTMLElement>(".stk-flow li")[2];
+  // `.stk-flow li` is a grid (stake-page.css): every element or run of text inside it is
+  // its own row, so a clause left outside the bold starts a row with ", ".
+  const rows = [...step.childNodes].map(node => node.textContent!.trim()).filter(Boolean);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatch(/^[A-Za-z0-9]/);
+});
+
 it("explains a board without a staking contract", async () => {
   const root = document.createElement("div");
   document.body.append(root);

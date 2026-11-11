@@ -28,6 +28,7 @@ import { parseEmission, perCellDay } from "../../app/toilet";
 import type { WallScope } from "./wall-scope";
 import type { WallStats } from "./wall-invite";
 import { formatAgo } from "./tile-inspector";
+import { shortAccount } from "../../shared/short-account";
 import { topPainters, type PainterRow, type ViewTunables } from "./wall-views";
 
 const count = (n: number) => n.toLocaleString("en-US");
@@ -410,7 +411,10 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
           const name = document.createElement("span");
           name.className = "wall-turf-name";
           const nameText = row.you ? `${row.account} (you)` : row.account;
-          name.append(document.createTextNode(nameText), spoken(","));
+          // Short in the row, whole in the title and in the spoken label.
+          const nameDisplay = row.you ? `${shortAccount(row.account)} (you)` : shortAccount(row.account);
+          name.title = row.account;
+          name.append(document.createTextNode(nameDisplay), spoken(","));
           const tiles = document.createElement("span");
           tiles.className = "wall-turf-tiles";
           const tilesText = `${count(row.tiles)} tile${row.tiles === 1 ? "" : "s"}`;
@@ -455,8 +459,11 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
           const what = document.createElement("span");
           what.className = "wall-recent-what";
           const who = document.createElement("b");
-          const whoText = stroke.artist === deps.viewer() ? "You" : stroke.artist;
+          const isYou = stroke.artist === deps.viewer();
+          // The short form is what fits; the title and the label keep the whole id.
+          const whoText = isYou ? "You" : shortAccount(stroke.artist);
           who.textContent = whoText;
+          who.title = stroke.artist;
           what.append(who, document.createTextNode(` painted ${count(stroke.tiles)} tile${stroke.tiles === 1 ? "" : "s"}`));
           const when = document.createElement("time");
           const age = nowNsValue - BigInt(stroke.atNs);
@@ -466,7 +473,7 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
           button.append(sw, what, when);
           button.setAttribute(
             "aria-label",
-            `${whoText} painted ${count(stroke.tiles)} tile${stroke.tiles === 1 ? "" : "s"}, ${ago}`,
+            `${isYou ? "You" : stroke.artist} painted ${count(stroke.tiles)} tile${stroke.tiles === 1 ? "" : "s"}, ${ago}`,
           );
           // Plain listener: the button is replaced on the next render and goes with it.
           button.addEventListener("click", () => deps.flyTo(stroke.cell));

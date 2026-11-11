@@ -455,7 +455,7 @@ describe("wall behaviour: paid board", () => {
     // Legend comes from get_tunables alone.
     await vi.waitFor(() =>
       expect(text(root, "#repaint-legend")).toBe(
-        "Fresh cells cost more to repaint. Wait an hour and it is 1 credit again.",
+        "Fresh tiles cost more to repaint. Wait an hour and it is 1 credit again.",
       ),
     );
 
@@ -521,7 +521,7 @@ describe("wall behaviour: paid board", () => {
     // Said once (owner, 7 Nov): the tally keeps only the size and cost, the block has
     // no second Buy credits button, and it can be closed.
     expect(Array.from(root.querySelectorAll("#result button")).map((b) => b.textContent)).toEqual(["×"]);
-    expect(text(root, "#stroke-total")).toBe("this stroke: 1 cell · 4 credits");
+    expect(text(root, "#stroke-total")).toBe("this stroke: 1 tile · 4 credits");
     root.querySelector<HTMLButtonElement>("#result .result-dismiss")!.click();
     expect(root.querySelector("#result")!.childElementCount).toBe(0);
     expect(root.querySelector<HTMLElement>(".buy-credits-sheet")!.hidden).toBe(false);
@@ -603,31 +603,31 @@ describe("wall behaviour: camera", () => {
     const zoomOut = root.querySelector<HTMLButtonElement>("#zoom-out")!;
 
     // A 512 px viewport fits the 128-cell board at 3.875 px/cell (8 px inset).
-    expect(readout()).toBe("Zoom 100% · Cell: none selected");
+    expect(readout()).toBe("Zoom 100% · Tile: none selected");
     expect(fit.disabled).toBe(true);
     api.paintZoom();
-    expect(readout()).toBe("Zoom 516% · Cell: none selected");
+    expect(readout()).toBe("Zoom 516% · Tile: none selected");
     expect(text(document.body, "#compact-status")).toContain("~20.0 px/cell");
     expect(fit.disabled).toBe(false);
     const stage = root.querySelector<HTMLElement>("#board-stage")!;
     expect(stage.style.width).toBe("2560px");
 
     fit.click();
-    expect(readout()).toBe("Zoom 100% · Cell: none selected");
+    expect(readout()).toBe("Zoom 100% · Tile: none selected");
     expect(text(document.body, "#compact-status")).toContain("~3.9 px/cell");
     expect(fit.disabled).toBe(true);
     expect(zoomOut.disabled).toBe(true);
     expect(zoomIn.disabled).toBe(false);
 
     zoomIn.click();
-    expect(readout()).toBe("Zoom 115% · Cell: none selected");
+    expect(readout()).toBe("Zoom 115% · Tile: none selected");
     expect(fit.disabled).toBe(false);
 
     const focus = root.querySelector<HTMLElement>("#board-focus")!;
     focus.dispatchEvent(new KeyboardEvent("keydown", { key: "0", bubbles: true }));
-    expect(readout()).toBe("Zoom 100% · Cell: none selected");
+    expect(readout()).toBe("Zoom 100% · Tile: none selected");
     focus.dispatchEvent(new KeyboardEvent("keydown", { key: "+", bubbles: true }));
-    expect(readout()).toBe("Zoom 125% · Cell: none selected");
+    expect(readout()).toBe("Zoom 125% · Tile: none selected");
     dispose();
   });
 
@@ -640,7 +640,7 @@ describe("wall behaviour: camera", () => {
     touch(viewport, "pointerdown", 1, 48, 87);
     touch(viewport, "pointerup", 1, 48, 87);
     expect(text(root, "#selection-summary")).toContain("Selected square x=10, y=20");
-    expect(text(root, ".position-readout")).toBe("Zoom 100% · Cell (10, 20)");
+    expect(text(root, ".position-readout")).toBe("Zoom 100% · Tile (10, 20)");
     const ring = root.querySelector<HTMLElement>("#selection-ring")!;
     expect(ring.hidden).toBe(false);
     expect(ring.style.left).toBe("46.75px");

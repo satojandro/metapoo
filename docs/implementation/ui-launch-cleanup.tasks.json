@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "kind": "agent_handoff_manifest",
+  "executable_orchestrator_config": false,
+  "date": "2026-11-11",
+  "status": "spec_for_owner_review",
+  "source_revision": "5833e99fe0b32af8f088da715fecb2383afa9054",
+  "entrypoint": "docs/implementation/2026-11-11-ui-launch-cleanup-spec.md",
+  "review": "docs/2026-11-11-ui-launch-review.md",
+  "constraints": [
+    "Batch 1 only: A1, A2, A5, A6, B2, C3. Batches 2-5 and C5-C9 are out of scope; do not fix them opportunistically.",
+    "Task 1 (the layout check) lands before any fix, so the defect is measured rather than asserted.",
+    "One shortening helper: web/src/shared/short-account.ts. Delete the two existing private copies rather than adding a third.",
+    "Do not read contract state inside the revenue-flow SVG builder; pass the staking-set flag in as a parameter.",
+    "No contract change, no config/env change, no new dependency, no contract deployment, no live spending.",
+    "Full account ids stay in title/aria-label; only prose and card text is shortened.",
+    "Per-route social cards need prerendering and are not part of this batch; say so in the PR body.",
+    "The phone is an emulated 390x844 viewport; never report a physical-device result this batch cannot produce."
+  ],
+  "tasks": [
+    {
+      "id": "UI1-CHECK",
+      "role": "web",
+      "depends_on": [],
+      "spec": "docs/implementation/2026-11-11-ui-launch-cleanup-spec.md",
+      "owned_paths": [
+        "web/scripts/layout-check.mjs"
+      ],
+      "deliverables": [
+        "Route list instead of a single URL: /, /toilet, /how-it-works, /money, /wall, /stake, /nope, at 1440x900 and 390x844.",
+        "Horizontal-overflow assertion per page and size: documentElement.scrollWidth <= innerWidth + 1, and the same for body.",
+        "On failure, name the widest element and its scrollWidth; exit non-zero with one line per failing page/size.",
+        "The existing board-overlap and board-cut-off assertions are unchanged."
+      ],
+      "acceptance": [
+        "Fails on unfixed main at the five routes the review names, with widths in the same order of magnitude.",
+        "Passes / and /nope only if they genuinely fit.",
+        "Pre-fix output pasted in the PR body."
+      ],
+      "implementation_status": "not_started"
+    },
+    {
+      "id": "UI1-IDS",
+      "role": "web",
+      "depends_on": [
+        "UI1-CHECK"
+      ],
+      "spec": "docs/implementation/2026-11-11-ui-launch-cleanup-spec.md",
+      "owned_paths": [
+        "web/src/shared/short-account.ts",
+        "web/src/shared/short-account.test.ts",
+        "web/src/app/wallet-chrome.ts",
+        "web/src/app/revenue-panel-page.ts",
+        "web/src/app/toilet-page.ts",
+        "web/src/app/how-it-works-page.ts",
+        "web/src/app/stake-page.ts",
+        "web/src/app/*.css"
+      ],
+      "deliverables": [
+        "shortAccount(): first 8 ... last 8, unchanged at 20 chars or fewer so named accounts survive; unit-tested at the 64-char, named, 20-char and short boundaries.",
+        "wallet-chrome.ts:244 and revenue-panel-page.ts:222 both delegate to it; the private copies are gone.",
+        "Applied at toilet-page.ts:319-320, how-it-works-page.ts:347-348, stake-page.ts:207,211 with the full id kept in title.",
+        "min-width: 0 + overflow-wrap: anywhere on the grid children that hold those lines, added beside the existing rules."
+      ],
+      "acceptance": [
+        "UI1-CHECK passes on all seven routes at both sizes.",
+        "Pre-fix and post-fix widths side by side in the PR body.",
+        "Full ids still readable in aria-label and title."
+      ],
+      "implementation_status": "not_started"
+    },
+    {
+      "id": "UI1-COPY",
+      "role": "web",
+      "depends_on": [],
+      "spec": "docs/implementation/2026-11-11-ui-launch-cleanup-spec.md",
+      "owned_paths": [
+        "web/src/app/how-it-works-page.ts",
+        "web/src/app/toilet-page.ts",
+        "web/src/app/revenue-flow-svg.ts"
+      ],
+      "deliverables": [
+        "how-it-works: the hiw-next section at :251-256 is deleted; nothing replaces it.",
+        "toilet: with a staking contract set, 'The staking controls land on this page next.' becomes a 'Stake your TOILET ->' link to /stake; the not-set branch keeps its copy.",
+        "revenue-flow-svg: the stakers' 70% label follows a staking-set parameter (forwarded / held) instead of a hardcoded string."
+      ],
+      "acceptance": [
+        "With staking set, no page says staking is coming or that the stakers' share is held.",
+        "With none set, all three still say so.",
+        "A test covers both branches of the diagram label; no test is deleted to make this pass."
+      ],
+      "implementation_status": "not_started"
+    },
+    {
+      "id": "UI1-IDENTITY",
+      "role": "web",
+      "depends_on": [],
+      "spec": "docs/implementation/2026-11-11-ui-launch-cleanup-spec.md",
+      "owned_paths": [
+        "web/index.html",
+        "web/src/main.ts",
+        "web/src/app/shell.ts",
+        "web/public/favicon.svg",
+        "web/public/og.png"
+      ],
+      "deliverables": [
+        "Head: description, og:title/description/image/url/type, twitter:card=summary_large_image with title/description/image, and rel=icon.",
+        "Absolute og:image and og:url against https://metapoo-testnet.vercel.app, stated in one place with a note that a real domain changes it.",
+        "document.title = '<Page> . Meta Poo' in main.ts next to shell.setActiveNav (main.ts:30), from a map keyed by route.pageId reusing NAV_ITEMS labels; not-found -> 'Nothing painted here . Meta Poo'.",
+        "favicon.svg in palette token colours; og.png at 1200x630 captured from the real wall via Playwright, with the capture command in the PR body."
+      ],
+      "acceptance": [
+        "Every route has a distinct tab title.",
+        "og:image is an absolute URL that resolves 200 image/png on the alias.",
+        "/favicon.svg is served.",
+        "The PR body states that per-route social cards need prerendering and are not in this batch."
+      ],
+      "implementation_status": "not_started"
+    },
+    {
+      "id": "UI1-404",
+      "role": "web",
+      "depends_on": [],
+      "spec": "docs/implementation/2026-11-11-ui-launch-cleanup-spec.md",
+      "owned_paths": [
+        "web/src/app/not-found-page.ts",
+        "web/src/app/not-found-page.test.ts",
+        "web/src/pages/register-default-pages.ts"
+      ],
+      "deliverables": [
+        "A mounted page replacing createStubPage at register-default-pages.ts:25-31.",
+        "Heading 'Nothing painted here.', one line 'That page isn't on the wall.', one primary button 'Go to the wall' -> /wall.",
+        "The existing /admin signed-out hero classes are reused; no second hero is built."
+      ],
+      "acceptance": [
+        "/nope renders the styled page and not the stub.",
+        "UI1-CHECK still passes on /nope.",
+        "Test asserts the heading and the button href."
+      ],
+      "implementation_status": "not_started"
+    },
+    {
+      "id": "UI1-TILE",
+      "role": "web",
+      "depends_on": [],
+      "spec": "docs/implementation/2026-11-11-ui-launch-cleanup-spec.md",
+      "owned_paths": [
+        "web/src/pages/wall/repaint-price.ts",
+        "web/src/pages/wall/camera-controller.ts",
+        "web/src/pages/wall/*.test.ts"
+      ],
+      "deliverables": [
+        "formatStrokeTotal says tile/tiles, not cell/cells.",
+        "The camera readout says 'Tile: none selected' and the same in its selected branch.",
+        "The three tests asserting the old strings are updated; the suite is grepped for other player-facing 'cell' assertions."
+      ],
+      "acceptance": [
+        "No player-readable string in either file says cell.",
+        "Code and data identifiers may keep 'cell'."
+      ],
+      "implementation_status": "not_started"
+    },
+    {
+      "id": "UI1-COMMA",
+      "role": "web",
+      "depends_on": [],
+      "spec": "docs/implementation/2026-11-11-ui-launch-cleanup-spec.md",
+      "owned_paths": [
+        "web/src/app/stake-page.ts",
+        "web/src/app/stake-page.test.ts"
+      ],
+      "deliverables": [
+        "Step 3 at stake-page.ts:156 is one sentence in one grid row: 'a little every moment' moves inside the bold.",
+        "A test asserts step 3's text begins with a letter or digit, not punctuation."
+      ],
+      "acceptance": [
+        "No line on /stake begins with a comma."
+      ],
+      "implementation_status": "not_started"
+    }
+  ],
+  "handoff_fields": [
+    "exact_base_and_head",
+    "changed_paths",
+    "pre_and_post_measurements_per_finding",
+    "test_commands_and_results",
+    "browser_evidence",
+    "explicitly_unverified",
+    "remaining_gates",
+    "Learned"
+  ],
+  "verification_commands": [
+    "cd web && npx vitest run",
+    "cd web && npx tsc --noEmit",
+    "cd web && npx vite build",
+    "cd web && npx vite --port 5174   # then: node scripts/layout-check.mjs http://localhost:5174"
+  ]
+}

@@ -110,7 +110,7 @@ export function repaintLegend(tunables: RepaintTunables): string {
   const wait = formatWait(BigInt(tunables.repaint_mid_ns));
   const base = tunables.repaint_base_credits;
   const unit = base === 1 ? "credit" : "credits";
-  return `Fresh cells cost more to repaint. Wait ${wait} and it is ${base} ${unit} again.`;
+  return `Fresh tiles cost more to repaint. Wait ${wait} and it is ${base} ${unit} again.`;
 }
 
 function formatWait(ns: bigint): string {
@@ -149,7 +149,7 @@ export function formatCellPrice(input: {
 
 /** Shown before Place paint or a drag is sent. */
 export function formatStrokeTotal(cellCount: number, credits: number): string {
-  const cells = cellCount === 1 ? "1 cell" : `${cellCount} cells`;
+  const cells = cellCount === 1 ? "1 tile" : `${cellCount} tiles`;
   const unit = credits === 1 ? "credit" : "credits";
   return `this stroke: ${cells} · ${credits} ${unit}`;
 }
@@ -316,7 +316,7 @@ export async function quoteRepaint(input: {
     priced.length === 0
       ? ""
       : totalCredits === 0 && freeCells === priced.length
-        ? `${priced.length === 1 ? "This cell is" : `All ${priced.length} cells are`} free for you`
+        ? `${priced.length === 1 ? "This tile is" : `All ${priced.length} tiles are`} free for you`
         : formatStrokeTotal(priced.length, totalCredits);
   return {
     ok: true,
