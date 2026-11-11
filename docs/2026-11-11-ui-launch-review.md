@@ -6,8 +6,11 @@ time. Findings are ordered by what a first-time player would hit.
 **Status 11 Nov: sections A–H are *surfaces*, not phases.** The phases are the five-numbered
 "Suggested order" at the foot of this document and they cut across the letters. Batch 1 (A1, A2, A5,
 A6, B2, C3) shipped in `59b259c` (PR #108); batch 2 (A3, D, E, F) in `cf776c1` (PR #109). Batches
-3–5 are open. One finding was left deliberately open: `/wall` and `/` still scroll 12 px sideways at
-390 px because the phone footer bleeds edge to edge — see the backlog's `UI-WALL-BLEED`.
+3–5 are open. Follow-up commit `2bba357` closed the review's six items: `/stake` did overflow — at 360 px,
+not 390 — the 404 needed the page frame, the share tags now build from `VITE_SITE_URL`, `Connect wallet` is
+primary again, the paint confirmation claims only what the settlement proves, and the funded card drops an
+amount it cannot prove. The 12 px wall-footer bleed is closed too, so the layout check is now green at
+1440 / 360 / 390 and can go into CI.
 
 Two of this document's diagnoses were wrong and were corrected by measuring: `/money`'s overflow was
 not the accounts table (already shortened) but `p.rev-explain`, and `/wall`'s was not prose but the
