@@ -1,7 +1,8 @@
 # Wallet approval copy — proposed for owner sign-off
 
-Status: **proposal, not approved.** Nothing in this document is implemented. It exists so the
-wording a player reads in their wallet can be signed off once, before the G + SEND-HARDEN PR.
+Status: **§2, §3.1 (as amended), §3.2 (as shortened) and §3.3 approved by the owner, 11 November 2026.**
+The G + SEND-HARDEN work may start from this wording. The panel structure it describes already
+landed in PR #111; the copy itself is not written yet.
 Date: 11 November 2026. Base: `main` at `016521f`.
 
 Review basis: UI launch review section **G** (approval window) and **A4** (Send, Self-custody).
@@ -33,7 +34,7 @@ before rewriting — each one was a false statement a player would have read:
    TOILET → staking with `msg: "stake"`. It must be matched on (token contract, receiver, msg),
    never on the method name alone.
 
-## 2. Approved-wording table (proposed)
+## 2. Approved-wording table — approved 11 November 2026
 
 Every row is derived **inside the sign page from the transaction itself** — deposit, `min_credits`,
 `max_credits`, cell count, `amount`. No label the game passes in may caption the transaction.
@@ -78,25 +79,47 @@ Multi-transaction approvals keep the existing note: *if one fails, the others ca
 
 ### 3.1 Adding a full-access key (Self-custody) — the highest-stakes approval in the app
 
-| element | proposed text |
+| element | approved text (11 Nov) |
 |---|---|
 | eyebrow | `Add your own key` |
 | title | **Give your wallet full control** |
-| rows | **Adds** · a full-access key you control (`ed25519:3sF9…kQ2`) — **Can do** · sign anything for this account, including moving every token — **Privy's key** · stays, so both keys can sign — **Meta Poo** · cannot remove your key; only your wallet can |
+| rows | **Adds** · a full-access key you control (`ed25519:3sF9…kQ2`) — **Can do** · sign anything for this account, including moving every token — **Privy's key** · stays, so both keys can sign — **Meta Poo** · can't recover this key if you lose it |
 | note | Network fees come out of your NEAR. You only pay for gas actually used, never more than the limit. |
 | button | **Add full-access key** |
 | Technical details | unchanged: the public key, method, gas limit, arguments |
 
 Why this shape: the title says who ends up in control; the "Can do" row is the risk in one clause; the
 two remaining rows answer the two questions a player actually has — does my normal sign-in stop
-working (no), and can the game undo this (no).
+working (no), and can the game help me if I lose the key (no).
 
-### 3.2 Self-custody panel intro (two sentences: what it is, what it risks)
+**Amended on approval:** my fourth row said "Meta Poo cannot remove your key; only your wallet can".
+The owner struck it: Privy's key is *also* full-access, and any full-access key can delete another, so
+the chain does not enforce that promise. The replacement — "can't recover this key if you lose it" —
+is true and matches the sentence already in the panel.
 
-> **Self-custody adds a second, full-access key that you control, so the account and everything in it
-> stay reachable with your own wallet even if Privy is unavailable. Nothing moves between wallets —
-> but a full-access key can sign anything, including moving every token, so keep it somewhere only you
-> can reach.**
+### 3.2 Self-custody panel intro (two sentences: what it is, what it risks) — approved as shortened
+
+> **Self-custody adds a second full-access key that you control, so you can reach this account from
+> your own wallet. A full-access key can sign anything, including moving every token — keep it where
+> only you can reach it.**
+
+The owner shortened my draft: "Nothing moves between wallets" was doing work the second sentence
+already does, and the risk belongs in the same breath as the capability.
+
+### 3.3 Key rows and steps in the panel — approved 11 November 2026
+
+These went into PR #111's structure review as new wallet copy and were not signed at the time; they
+are approved now, and the code was changed to match in the same PR:
+
+| where | approved text |
+|---|---|
+| a drawing key | **Limited access — can paint here and spend your credits** |
+| any other limited key | **Limited access — one contract only** |
+| the three numbered steps | as written: create a key you control → paste its public key (never a private key or phrase) → approve in your wallet |
+
+My earlier lines ("can only paint here", "can't move funds") were wrong in both directions: a painting
+key also spends the account's credits, and no one can promise what a limited key does on a contract
+this app doesn't control.
 
 `VITE_SELF_CUSTODY_ENABLED` stays off until both 3.1 and 3.2 are approved. The panel's structure
 (labelled key rows, numbered steps, in-panel confirmation) lands first, under the flag, with the
@@ -118,12 +141,11 @@ existing sentence still in place.
 1. Sign off on §2's rows and the two buttons that carry a **total** (first NEAR purchase, first mPOO
    purchase) — those are the two places the wording changed most from my first draft.
 2. Sign off on §3.1 and §3.2.
-3. The mPOO token is external (`mpoo.nearlytrade.near`, `web/README.md:48`) with **no source in
-   `contracts/`**, so its refundability is **not established in the repo**. The code already reads the
-   amount at runtime (`storage_balance_bounds` → `mpooStorageMin`, `staking.ts:163-172`), which is why
-   the table shows `<amount read from the token>`; the row makes **no refund claim**. Settling
-   refundability needs the token's source or a `storage_unregister` probe — say which you want before
-   that row ships.
-4. `claim_toilet` currently sends a `toilet` argument that the contract signature does not have
-   (`wallet.ts:1011`); it is silently ignored. The approval copy will not mention it, but the dead
-   argument should be removed in a follow-up rather than captioned.
+3. **Answered (owner, 11 Nov):** probe `storage_unregister` on `mpoo.nearlytrade.near`; if the token
+   does not expose it, ship the row with **no refund claim**, as drafted. The token is external
+   (`mpoo.nearlytrade.near`, `web/README.md:48`) with no source in `contracts/`, and the amount already
+   comes from `storage_balance_bounds` at runtime (`staking.ts:163-172`), which is why the cell reads
+   `<amount read from the token>`.
+4. **Answered (owner, 11 Nov):** `claim_toilet` sends a `toilet` argument the contract signature does
+   not have (`wallet.ts:1011`); it is silently ignored. Remove it in a follow-up, **not** in the G PR —
+   and the copy never mentions it.
