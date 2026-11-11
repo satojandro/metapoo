@@ -239,6 +239,18 @@ it("a ledger read that fails shows Unavailable, never zero, and each figure fail
   expect(t2.text("ledger-waiting")).toBe("Unavailable");
 });
 
+it("labels the stakers' 70% by whether the board has a staking contract", async () => {
+  const without = setup({ load: async () => live() });
+  await flush();
+  expect(without.q('[data-rev="flow"]').textContent).toMatch(/held on the board/);
+  expect(without.q('[data-rev="flow"]').textContent).not.toMatch(/forwarded to the staking/);
+
+  const withStaking = setup({ load: async () => live({ stakingContract: "staking.metapoo.testnet" }) });
+  await flush();
+  expect(withStaking.q('[data-rev="flow"]').textContent).toMatch(/forwarded to the staking/);
+  expect(withStaking.q('[data-rev="flow"]').textContent).not.toMatch(/held on the board/);
+});
+
 it("an incomplete index scan is shown as a lower bound", async () => {
   const t = setup({
     load: async () => live(),

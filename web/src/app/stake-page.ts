@@ -9,6 +9,7 @@
 
 import { explorerUrl } from "@shared/board-rules.ts";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
+import { shortAccount } from "../shared/short-account";
 import { isUserRejection, parseTxOutcome } from "../tx-outcome";
 import { signAndSendClaimRewards, signAndSendStake, signAndSendUnstake } from "../wallet";
 import type { PageContext, PageDispose } from "./page-registry";
@@ -153,7 +154,7 @@ const TEMPLATE = `
       <ol class="stk-flow">
         <li><b>Painters buy credits</b> in NEAR or mPOO. The NEAR is swapped for mPOO.</li>
         <li><b>Each split</b> sends ${MPOO_SPLIT.stakers}% of the mPOO to the stakers’ pool, burns ${MPOO_SPLIT.burn}% and pays ${MPOO_SPLIT.team}% to the team.</li>
-        <li><b>The pool pays out <span data-s="dripPct">10%</span> of itself a day</b>, a little every moment, split by locked TOILET.</li>
+        <li><span><b>The pool pays out <span data-s="dripPct">10%</span> of itself a day, a little every moment</b>, split by locked TOILET.</span></li>
         <li><b>You claim</b> your mPOO whenever you like.</li>
       </ol>
       <p class="stk-fine">The daily payout smooths what arrives; it doesn’t grow it. A busy week fills the pool, and the pool spreads it over the following days. <a href="/money">See every split on Where the money goes →</a></p>
@@ -202,13 +203,19 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
 
   function renderSource(): void {
     const el = $("source");
-    if (!deps.configured) { el.textContent = "This page isn’t connected to a board."; return; }
+    // Short ids keep the line inside a phone; the full ones stay on hover.
+    if (!deps.configured) { el.textContent = "This page isn’t connected to a board."; el.title = ""; return; }
     const l = live();
-    if (!l && !failed && !snap) { el.textContent = `Reading ${deps.board} on ${deps.network}…`; return; }
+    if (!l && !failed && !snap) {
+      el.textContent = `Reading ${shortAccount(deps.board)} on ${deps.network}…`;
+      el.title = deps.board;
+      return;
+    }
     const when = updatedAt === null ? "" : ` · updated ${new Date(updatedAt).toLocaleTimeString()}`;
     el.textContent = l
-      ? `Read live from ${l.staking} and ${l.config.board} on ${deps.network}${when}.`
-      : `Read from ${deps.board} on ${deps.network}${when}.`;
+      ? `Read live from ${shortAccount(l.staking)} and ${shortAccount(l.config.board)} on ${deps.network}${when}.`
+      : `Read from ${shortAccount(deps.board)} on ${deps.network}${when}.`;
+    el.title = l ? `${l.staking} and ${l.config.board}` : deps.board;
   }
 
   function renderNotice(): void {

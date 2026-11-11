@@ -2,7 +2,8 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mountWalletChrome, shortAccountLabel } from "./wallet-chrome";
+import { mountWalletChrome } from "./wallet-chrome";
+import { shortAccount } from "../shared/short-account";
 import type { AppServices } from "./services";
 
 const IMPLICIT = "cc9a" + "0".repeat(56) + "d113";
@@ -40,15 +41,15 @@ afterEach(() => {
 
 describe("wallet account block", () => {
   it("shortens only 64-hex implicit ids in the header", () => {
-    expect(shortAccountLabel(IMPLICIT)).toBe("cc9a00…d113");
-    expect(shortAccountLabel("alice.near")).toBe("alice.near");
+    expect(shortAccount(IMPLICIT)).toBe("cc9a0000…0000d113");
+    expect(shortAccount("alice.near")).toBe("alice.near");
   });
 
   it("shows the full id and copies it", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const { root, dispose } = mount(IMPLICIT);
-    expect(root.querySelector("summary")!.textContent).toBe("cc9a00…d113");
+    expect(root.querySelector("summary")!.textContent).toBe("cc9a0000…0000d113");
     expect(root.querySelector("summary")!.title).toBe(IMPLICIT);
     expect(root.querySelector<HTMLElement>("#wallet-account")!.hidden).toBe(false);
     expect(root.querySelector("[data-account-id]")!.textContent).toBe(IMPLICIT);

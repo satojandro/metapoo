@@ -9,7 +9,7 @@
 .stk-head h2 { font-size: var(--mp-text-h1); line-height: 1.05; font-weight: 900; letter-spacing: -1px; color: var(--mp-tag); }
 .stk-head h2:focus { outline: none; }
 .stk-lede { color: var(--mp-soft); font-size: var(--mp-text-lead); }
-.stk-source { font: var(--mp-text-sm)/1.5 var(--mp-mono); color: var(--mp-muted); overflow-wrap: anywhere; }
+.stk-source { font: var(--mp-text-sm)/1.5 var(--mp-mono); color: var(--mp-muted); min-width: 0; overflow-wrap: anywhere; }
 
 .stk-notice { border: 1px solid var(--mp-line); border-left: 3px solid var(--mp-near); background: var(--mp-card); border-radius: var(--mp-radius-md); padding: 14px 16px; display: grid; gap: 6px; max-width: 72ch; }
 .stk-notice[data-tone="bad"] { border-left-color: var(--mp-bad); }

@@ -160,15 +160,12 @@
 .hiw-split [data-c="burn"] { background: var(--mp-burn); }
 .hiw-split [data-c="team"] { background: var(--mp-team); }
 
-/* Owner limits and what's next */
+/* Owner limits */
 .hiw-limits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--mp-space-5) var(--mp-space-4); }
 .hiw-limits > div { border-top: 2px solid var(--mp-line); padding-top: var(--mp-space-3); display: grid; gap: 6px; align-content: start; }
 .hiw-limits h4 { font-size: var(--mp-text-base); font-weight: 800; }
 .hiw-limits p { color: var(--mp-soft); font-size: var(--mp-text-body); }
-.hiw-next { border: 1px dashed var(--mp-line); border-radius: var(--mp-radius-lg); padding: var(--mp-space-5); display: grid; gap: var(--mp-space-2); max-width: 78ch; }
-.hiw-next h4 { font-size: 19px; font-weight: 900; }
-.hiw-next p { color: var(--mp-soft); font-size: var(--mp-text-body); }
-.hiw-foot { font-size: var(--mp-text-md); color: var(--mp-muted); max-width: 78ch; }
+.hiw-foot { font-size: var(--mp-text-md); color: var(--mp-muted); max-width: 78ch; min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 860px) {
   .hiw-hero, .hiw-hype-top, .hiw-play, .hiw-hype-cols { grid-template-columns: minmax(0, 1fr); }
