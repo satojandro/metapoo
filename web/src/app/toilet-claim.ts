@@ -6,6 +6,7 @@
 
 import { explorerUrl } from "@shared/board-rules.ts";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL, TOILET_ID } from "../config";
+import { connectWallet } from "../shared/connect-wallet";
 import { isUserRejection, parseTxOutcome } from "../tx-outcome";
 import { signAndSendClaimToilet } from "../wallet";
 import { createRpcView, formatAmount, formatExact } from "./revenue-panel";
@@ -68,6 +69,8 @@ export function mountToiletClaim(
   let snapshot: ToiletSnapshot | null = null;
   let failed = false;
   let busy = false;
+  /** Signed out: the button is a Connect control, not a claim control (UI review C1). */
+  let connecting = false;
   let generation = 0;
   let disposed = false;
 
@@ -107,6 +110,7 @@ export function mountToiletClaim(
     });
     button.disabled = !state.enabled;
     button.textContent = state.label;
+    connecting = state.connect === true;
     $("hint").textContent = snapshot?.kind === "not-yet"
       ? "This board was deployed before TOILET existed, so it doesn’t pay any."
       : state.hint;
@@ -131,6 +135,10 @@ export function mountToiletClaim(
   }
 
   async function claim(): Promise<void> {
+    if (connecting) {
+      connectWallet(() => void services.wallet.connect());
+      return;
+    }
     if (button.disabled) return;
     const result = $("result");
     busy = true;

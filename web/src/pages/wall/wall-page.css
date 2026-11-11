@@ -443,14 +443,6 @@
   cursor: pointer;
   transform: none;
 }
-.wall-page .wall-primary:disabled,
-.wall-page .wall-panel .action.place:disabled {
-  border-color: var(--mp-line);
-  background: var(--mp-card-2);
-  color: var(--mp-muted);
-  opacity: 1;
-  cursor: not-allowed;
-}
 .wall-page .wall-primary:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
 .wall-page .wall-panel .place-reason { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-sm); }
 .wall-page .wall-panel .place-reason:empty { display: none; }

@@ -107,7 +107,6 @@ describe("claimButtonState", () => {
     [{ example: true }, /Example/],
     [{ toilet: "" }, /token address/],
     [{ busy: true }, /wallet/],
-    [{ accountId: null }, /Connect/],
     [{ walletNetwork: "mainnet" }, /Switch your wallet to testnet/],
     [{ paused: true }, /paused/],
     [{ pending: null }, /Couldn’t read/],
@@ -116,6 +115,13 @@ describe("claimButtonState", () => {
     const s = claimButtonState({ ...ready, ...change });
     expect(s.enabled).toBe(false);
     expect(s.hint).toMatch(hint);
+  });
+  it("offers Connect instead of a dead Claim button when signed out (UI review C1)", () => {
+    const s = claimButtonState({ ...ready, accountId: null });
+    expect(s.enabled).toBe(true);
+    expect(s.connect).toBe(true);
+    expect(s.label).toBe("Connect wallet");
+    expect(s.hint).toMatch(/Connect a wallet/);
   });
 });
 

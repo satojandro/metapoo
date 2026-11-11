@@ -154,7 +154,6 @@ summary { cursor: pointer; }
 .action:hover:not(:disabled) { background: var(--mp-soft-btn-hover); transform: translateY(-1px); }
 .action.secondary { background: var(--mp-card-2); color: var(--mp-fg); border-color: var(--mp-line); }
 .action.secondary:hover:not(:disabled) { background: var(--mp-line); }
-.action:disabled { opacity: .45; }
 
 /* ——— The board's own pieces (positions come from the camera) ——— */
 .board-focus { border: 0; background: var(--mp-card-2); }

@@ -442,10 +442,7 @@ canvas {
   color: var(--focus);
 }
 
-.action:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
+/* Disabled buttons take the one treatment in design/tokens.css. */
 
 @media (max-width: 800px) {
   body {

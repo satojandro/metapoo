@@ -118,7 +118,22 @@
   cursor: pointer;
 }
 .mp-btn:hover { border-color: var(--mp-muted); }
-.mp-btn:disabled { opacity: .45; cursor: not-allowed; }
+/*
+ * One disabled treatment for every button on the site (UI review C1). Dimming the
+ * whole button turned the yellow primary a murky olive, and each surface had its own
+ * opacity, so "not available" looked like "broken". A neutral surface that keeps the
+ * button's geometry reads as unavailable and stays legible.
+ */
+.mp-btn:disabled,
+.action:disabled {
+  background: var(--mp-card-2);
+  border-color: var(--mp-line);
+  color: var(--mp-muted);
+  opacity: 1;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
 .mp-btn-primary { background: var(--mp-tag); color: var(--mp-on-tag); border-color: var(--mp-tag); }
 .mp-btn-primary:hover { border-color: var(--mp-tag); filter: brightness(1.05); }
 

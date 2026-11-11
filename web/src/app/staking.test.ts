@@ -113,6 +113,13 @@ describe("buttons", () => {
     expect(lockState({ ...base, amount: E18, account: acct({ registered: false }), storageMin: 1n }).hint).toMatch(/two transactions/);
     expect(lockState({ ...base, amount: E18, account: acct({ wallet: 0n }), storageMin: 1n }).hint).toMatch(/no TOILET yet/);
     expect(lockState({ ...base, accountId: null, amount: E18, account: null, storageMin: 1n }).hint).toMatch(/Connect/);
+    // Signed out is not a dead end: the same button becomes Connect (UI review C1).
+    const signedOut = lockState({ ...base, accountId: null, amount: E18, account: null, storageMin: 1n });
+    expect(signedOut.enabled).toBe(true);
+    expect(signedOut.connect).toBe(true);
+    expect(signedOut.label).toBe("Connect wallet");
+    expect(unlockState({ ...base, accountId: null, amount: E18, account: null, exitTaxBps: 1000 }).connect).toBe(true);
+    expect(claimRewardsState({ ...base, accountId: null, account: null }).connect).toBe(true);
     expect(lockState({ ...base, live: false, amount: E18, account: acct(), storageMin: 1n }).enabled).toBe(false);
   });
   it("unlock: names the burn on the button before signing", () => {

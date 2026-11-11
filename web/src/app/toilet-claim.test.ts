@@ -69,7 +69,9 @@ it("reports a refused mint even though the transaction succeeded", async () => {
 it("asks a signed-out visitor to connect and never shows a zero", async () => {
   const t = await setup({}, { accountId: null, networkId: null });
   expect(t.text("balance")).toBe("Connect a wallet");
-  expect(t.button.disabled).toBe(true);
+  // C1: a dead Claim button is replaced by a working Connect, not disabled.
+  expect(t.button.disabled).toBe(false);
+  expect(t.button.textContent).toBe("Connect wallet");
   expect(t.text("hint")).toMatch(/Connect/);
 });
 

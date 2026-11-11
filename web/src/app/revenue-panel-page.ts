@@ -9,6 +9,7 @@
 import { explorerUrl } from "@shared/board-rules.ts";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
 import { isContractConfigured } from "../contract";
+import { connectWallet } from "../shared/connect-wallet";
 import { shortAccount } from "../shared/short-account";
 import { isUserRejection, parseTxOutcome } from "../tx-outcome";
 import { signAndSendDistribution } from "../wallet";
@@ -244,6 +245,8 @@ export function mountRevenuePage(
   let failed = false;
   let updatedAt: number | null = null;
   const busy: Record<DistributionKind, boolean> = { near: false, mpoo: false };
+  /** Signed out with something waiting: that button is a Connect control (UI review C1). */
+  const connectable: Record<DistributionKind, boolean> = { near: false, mpoo: false };
   let generation = 0;
   let disposed = false;
 
@@ -376,6 +379,7 @@ export function mountRevenuePage(
       });
       buttons[kind].disabled = !state.enabled;
       buttons[kind].textContent = state.label;
+      connectable[kind] = state.connect === true;
       $(`${kind}-hint`).textContent = state.hint;
     }
   }
@@ -545,6 +549,10 @@ export function mountRevenuePage(
   }
 
   async function distribute(kind: DistributionKind): Promise<void> {
+    if (connectable[kind]) {
+      connectWallet(() => void services.wallet.connect());
+      return;
+    }
     if (buttons[kind].disabled || deps.example) return;
     const result = $(`${kind}-result`);
     busy[kind] = true;

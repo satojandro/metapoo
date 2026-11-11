@@ -9,6 +9,7 @@
 
 import { explorerUrl } from "@shared/board-rules.ts";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
+import { connectWallet } from "../shared/connect-wallet";
 import { shortAccount } from "../shared/short-account";
 import { isUserRejection, parseTxOutcome } from "../tx-outcome";
 import { signAndSendClaimRewards, signAndSendStake, signAndSendUnstake } from "../wallet";
@@ -189,6 +190,8 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
   let failed = false;
   let updatedAt: number | null = null;
   const busy = { lock: false, unlock: false, claim: false };
+  /** Signed out: that action's button is a Connect control (UI review C1). */
+  const connectable = { lock: false, unlock: false, claim: false };
   let generation = 0;
   let disposed = false;
 
@@ -294,6 +297,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     const claim = claimRewardsState({ ...actionInput(), busy: busy.claim, account: a });
     btn("claim").disabled = !claim.enabled;
     btn("claim").textContent = claim.label;
+    connectable.claim = claim.connect === true;
     $("claimHint").textContent = a && !a.mpooRegistered && a.mpooStorageMin !== null && a.pendingRewards > 0n
       ? `${claim.hint} It costs ${near(a.mpooStorageMin)}, once.`
       : claim.hint;
@@ -306,6 +310,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     const state = lockState({ ...actionInput(), busy: busy.lock, amount, account: a, storageMin: l?.config.storageMin ?? 0n });
     btn("lock").disabled = !state.enabled;
     btn("lock").textContent = state.label;
+    connectable.lock = state.connect === true;
     $("lockHint").textContent = state.hint;
     const note = $("registerNote");
     note.hidden = !(l && a && !a.registered);
@@ -329,6 +334,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     const state = unlockState({ ...actionInput(), busy: busy.unlock, amount, account: a, exitTaxBps: rate });
     btn("unlock").disabled = !state.enabled;
     btn("unlock").textContent = state.label;
+    connectable.unlock = state.connect === true;
     $("unlockHint").textContent = state.hint;
     const keep = 100 - rate / 100;
     $("barKeep").style.width = `${keep}%`;
@@ -432,6 +438,10 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
   }
 
   async function run(kind: "lock" | "unlock" | "claim", key: string, send: () => Promise<void>): Promise<void> {
+    if (connectable[kind]) {
+      connectWallet(() => void services.wallet.connect());
+      return;
+    }
     if (btn(kind).disabled || busy[kind]) return;
     busy[kind] = true;
     $(key).replaceChildren();

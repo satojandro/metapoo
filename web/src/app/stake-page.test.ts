@@ -132,8 +132,10 @@ it("signed out: pool shows, position asks to connect, nothing can be sent", asyn
   const t = await setup({ load: vi.fn(async () => live(null)) }, { accountId: null, networkId: null });
   expect(t.s("pool")).toBe("10,000");
   expect(t.s("wallet")).toBe("Connect a wallet");
-  expect(t.btn("lock").disabled).toBe(true);
-  expect(t.btn("claim").disabled).toBe(true);
+  // C1: signed out, the primary actions are Connect controls, not dead buttons.
+  expect(t.btn("lock").disabled).toBe(false);
+  expect(t.btn("lock").textContent).toBe("Connect wallet");
+  expect(t.btn("claim").disabled).toBe(false);
 });
 
 it("renders step 3 of the money flow as one row, so no line starts with a comma", async () => {

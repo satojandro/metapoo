@@ -246,12 +246,14 @@ export interface ActionState {
   enabled: boolean;
   label: string;
   hint: string;
+  /** Signed out: the button says "Connect wallet" and stays pressable (UI review C1). */
+  connect?: true;
 }
 
 function gate(input: ActionInput, label: string): ActionState | null {
   if (!input.live) return { enabled: false, label, hint: "Staking isn’t open on this board yet." };
   if (input.busy) return { enabled: false, label: "Waiting for wallet…", hint: "Confirm or cancel in your wallet." };
-  if (!input.accountId) return { enabled: false, label, hint: "Connect a wallet to stake." };
+  if (!input.accountId) return { enabled: true, label: "Connect wallet", hint: "Connect a wallet to stake.", connect: true };
   if (input.walletNetwork !== input.pageNetwork) {
     return { enabled: false, label, hint: `Switch your wallet to ${input.pageNetwork}.` };
   }
