@@ -62,8 +62,12 @@
 .mp-custody-confirm p { margin: 0; color: var(--mp-soft); font-size: var(--mp-text-md); }
 .mp-custody-confirm button { justify-self: start; }
 /* Destructive reuses the token that already means loss, rather than a new colour. */
-.mp-custody-danger { background: var(--mp-bad); border-color: var(--mp-bad); color: var(--mp-on-tag); }
-.mp-custody-danger:hover { border-color: var(--mp-bad); filter: brightness(1.05); }
+.mp-custody button { border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); color: var(--mp-fg); min-height: var(--mp-hit); }
+.mp-custody button:disabled { opacity: .5; cursor: default; }
+.mp-custody input:focus-visible, .mp-custody button:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
+/* Destructive, and now unopposed: the Send sheet no longer styles this panel's buttons. */
+.mp-custody .mp-custody-danger { background: var(--mp-bad); border-color: var(--mp-bad); color: var(--mp-on-tag); }
+.mp-custody .mp-custody-danger:hover { border-color: var(--mp-bad); filter: brightness(1.05); }
 
 .mp-custody-steps {
   margin: 0;

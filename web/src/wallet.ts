@@ -1238,6 +1238,26 @@ export async function supportsAcquisitionBatchRegistrations(): Promise<boolean> 
   return wallet.manifest?.features?.signAndSendTransactions === true;
 }
 
+/**
+ * Whether a previous acquisition's outcome is still uncertain for this account.
+ *
+ * The reconciliation itself lives here, not in a panel: the marker is the only thing that
+ * decides whether the next payment is allowed, so a surface that offers the recovery control
+ * must be able to ask this question without knowing the key format (review of PR #111).
+ */
+export function hasPendingAcquisition(context: OperationContext): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return (
+      window.localStorage.getItem(
+        `metapoo:capital:pending:${context.networkId}:${context.accountId}`,
+      ) !== null
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Status-only recovery remains available after logout; it never requests a signature. */
 export async function reconcilePendingAcquisition(
   context: OperationContext,

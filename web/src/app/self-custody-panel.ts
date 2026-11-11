@@ -76,13 +76,20 @@ export function mountSelfCustodyPanel(root: HTMLElement): () => void {
       if (key === own && full) privyPresent = true; else if (full) otherFull++;
       const fn = !full ? sendRecord(sendRecord(permission).FunctionCall) : null;
       const name = key === own ? "Privy (your sign-in)" : full ? "Your key" : fn?.receiver_id === CONTRACT_ID ? "Drawing key" : "Other limited key";
-      const { group, action } = keyRow(name, full ? "Full access" : fn?.receiver_id === CONTRACT_ID ? "Limited access — can only paint here" : "Limited access — can't move funds", key);
+      // Copy approved 11 Nov (sign-off doc §3.3): a drawing key also spends the account's
+      // credits, and any other limited key is only known to be scoped to one contract.
+      const { group, action } = keyRow(name, full ? "Full access" : fn?.receiver_id === CONTRACT_ID ? "Limited access — can paint here and spend your credits" : "Limited access — one contract only", key);
       if (full && key !== own && key.startsWith("ed25519:")) {
         const trigger = actionButton("Remove this key"); trigger.setAttribute("data-remove", "");
         trigger.onclick = () => askToRemove(action, trigger, async () => {
           const current = getAcquisitionContext(crypto.randomUUID()); if (!current || !sameIdentity(context, current)) throw new Error("Account changed.");
           const outcome = await signAndSendSelfCustodyKey(current, key, "remove-own-key");
-          if (!disposed) status.textContent = outcome.confirmed ? "Key removed on chain." : "Key change unresolved. Check your keys again before trying another change.";
+          if (disposed) return;
+          // Refresh first, then say what happened: the removed key used to stay on screen with
+          // its confirmation still open (review of PR #111, item 7).
+          const message = outcome.confirmed ? "Key removed on chain." : "Key change unresolved. Check your keys again before trying another change.";
+          await refresh();
+          if (!disposed) status.textContent = message;
         });
         action.append(trigger);
       }

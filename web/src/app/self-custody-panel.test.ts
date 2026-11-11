@@ -78,9 +78,9 @@ describe("the key list", () => {
       await tick();
       const [, painting, other] = rows(host);
       expect(painting.querySelector("dt")?.textContent).toBe("Drawing key");
-      expect(painting.textContent).toContain("Limited access — can only paint here");
+      expect(painting.textContent).toContain("Limited access — can paint here and spend your credits");
       expect(other.querySelector("dt")?.textContent).toBe("Other limited key");
-      expect(other.textContent).toContain("Limited access — can't move funds");
+      expect(other.textContent).toContain("Limited access — one contract only");
       // A limited key is not removable from this panel.
       expect(other.querySelector("[data-remove]")).toBeNull();
     } finally { dispose(); }
@@ -182,5 +182,32 @@ describe("adding a key", () => {
       expect(status).not.toContain(pasted);
       expect(host.textContent).not.toContain(pasted);
     } finally { dispose(); }
+  });
+
+  it("refreshes the list after a confirmed removal, keeping the result line", async () => {
+    const { host, dispose } = mount();
+    try {
+      await tick();
+      host.querySelector<HTMLButtonElement>("[data-remove]")!.click();
+      expect(host.querySelector("[data-confirm-remove]")).not.toBeNull();
+      // The chain now reports the key gone, which is what refresh() must show.
+      state.keys = [fullAccess(OWN_KEY)];
+      host.querySelector<HTMLButtonElement>("[data-confirm-remove]")!.click();
+      await vi.waitFor(() => expect(state.sign).toHaveBeenCalled());
+      await vi.waitFor(() => expect(host.querySelector("[data-confirm-remove]")).toBeNull());
+      await vi.waitFor(() => expect(rows(host)).toHaveLength(1));
+      expect(host.querySelector('[role="status"]')?.textContent).toBe("Key removed on chain.");
+    } finally { dispose(); }
+  });
+
+  it("ships the destructive style unopposed by the send sheet's rules", async () => {
+    const { readFileSync } = await import("node:fs");
+    const send = readFileSync("src/app/send-sheet.css", "utf8");
+    const custody = readFileSync("src/app/self-custody.css", "utf8");
+    // The shared rule that beat .mp-custody-danger on specificity is gone...
+    expect(send).not.toContain(".mp-custody button");
+    // ...and the destructive rule now lives at equal-or-higher specificity.
+    expect(custody).toContain(".mp-custody .mp-custody-danger");
+    expect(custody).toContain("var(--mp-bad)");
   });
 });

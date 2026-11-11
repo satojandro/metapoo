@@ -28,7 +28,10 @@
 .mp-send input,.mp-send select,.mp-custody input { background:var(--mp-bg); color:var(--mp-fg); border:1px solid var(--mp-line); border-radius:var(--mp-radius-md); min-height:var(--mp-hit); }
 .mp-send input,.mp-send select { width:100%; box-sizing:border-box; padding:var(--mp-space-3); font:inherit; }
 .mp-send select { width:auto; }
-.mp-send button,.mp-custody button { border:1px solid var(--mp-line); border-radius:var(--mp-radius-md); background:var(--mp-card-2); color:var(--mp-fg); min-height:var(--mp-hit); }
+.mp-send button { border:1px solid var(--mp-line); border-radius:var(--mp-radius-md); background:var(--mp-card-2); color:var(--mp-fg); min-height:var(--mp-hit); }
 .mp-send .mp-btn-primary,.mp-send [data-review] .mp-btn-primary,.mp-custody [data-add] { background:var(--mp-tag); border-color:var(--mp-tag); color:var(--mp-on-tag); font-weight:700; }
-.mp-send button:disabled,.mp-custody button:disabled { opacity:.5; cursor:default; }
-.mp-send input:focus-visible,.mp-send select:focus-visible,.mp-send button:focus-visible,.mp-custody input:focus-visible,.mp-custody button:focus-visible { outline:2px solid var(--mp-focus); outline-offset:2px; }
+.mp-send button:disabled { opacity:.5; cursor:default; }
+.mp-send input:focus-visible,.mp-send select:focus-visible,.mp-send button:focus-visible { outline:2px solid var(--mp-focus); outline-offset:2px; }
+
+/* The review's Send button matches Review's width, so the panel has one action column. */
+.mp-send .mp-btn { width: 100%; }

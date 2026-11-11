@@ -11,6 +11,9 @@ import type { OperationContext } from "../integrations/types";
 const planSend = vi.fn();
 const submitSend = vi.fn();
 const reconcile = vi.fn(async (_context: OperationContext) => true);
+// The marker lives in storage in the real app; happy-dom here has no localStorage, so the
+// probe is a state flag and the sheet still cannot read the key format itself.
+const pendingState = vi.hoisted(() => ({ has: false }));
 
 vi.mock("../integrations/send/controller", () => ({
   planSend: (...args: unknown[]) => planSend(...args),
@@ -34,6 +37,7 @@ vi.mock("../wallet", () => ({
     sessionEpoch: 1,
   }),
   reconcilePendingAcquisition: (context: OperationContext) => reconcile(context),
+  hasPendingAcquisition: () => pendingState.has,
 }));
 
 import { mountSendSheet } from "./send-sheet";
@@ -126,6 +130,7 @@ function review(form: HTMLFormElement) {
 }
 
 afterEach(() => {
+  pendingState.has = false;
   mounted?.();
   mounted = undefined;
   document.body.replaceChildren();
@@ -139,7 +144,7 @@ describe("Send sheet — a payment, not a developer form", () => {
     planSend.mockResolvedValue(plan());
     const { host, form } = mount();
     const balance = host.querySelector<HTMLElement>("[data-balance]")!;
-    expect(balance.textContent).toBe("Available balance unavailable");
+    expect(balance.textContent).toBe("");
 
     fill(form, "recipient", "bob.testnet");
     fill(form, "amount", "1");
@@ -189,7 +194,7 @@ describe("Send sheet — a payment, not a developer form", () => {
     expect(values[2]).toBe("0.0021 NEAR");
     expect(values[3]).toBe("0.00125 NEAR");
     // Registration is priced in NEAR: never added to a token amount as if units matched.
-    expect(values[4]).toBe("1.5 TOILET plus a small network fee");
+    expect(values[4]).toBe("1.5 TOILET + 0.00125 NEAR setup, plus a small network fee");
     expect(host.querySelector("[data-review]")!.textContent).not.toMatch(/Network fee ceiling:|Recipient registration:/);
   });
 
@@ -260,7 +265,7 @@ describe("Send sheet — a payment, not a developer form", () => {
     review(form);
 
     await vi.waitFor(() => expect(host.querySelector('[role="status"]')!.textContent).toBe("Balance unavailable — retry."));
-    expect(host.querySelector("[data-balance]")!.textContent).toBe("Available balance unavailable");
+    expect(host.querySelector("[data-balance]")!.textContent).toBe("");
     expect(host.querySelector<HTMLButtonElement>(".mp-send-submit")!.disabled).toBe(false);
   });
 
@@ -335,5 +340,55 @@ describe("Send sheet — a payment, not a developer form", () => {
       expect(host.querySelector('[role="status"]')!.textContent).toBe("Balance or fees changed. Review again."),
     );
     expect(submitSend).not.toHaveBeenCalled();
+  });
+
+  it("totals a token send with its NEAR setup instead of dropping the row above it", async () => {
+    planSend.mockResolvedValue(tokenPlan());
+    const { form } = mount();
+    fill(form, "recipient", "bob.testnet");
+    fill(form, "amount", "1.5");
+    review(form);
+    await vi.waitFor(() => expect(form.querySelector(".mp-send-lines")).not.toBeNull());
+    const total = [...form.querySelectorAll(".mp-send-lines div")].find(
+      (row) => row.querySelector("dt")?.textContent === "Total",
+    );
+    expect(total?.querySelector("dd")?.textContent).toBe(
+      "1.5 TOILET + 0.00125 NEAR setup, plus a small network fee",
+    );
+  });
+
+  it("shows the reconcile control on mount when the account has an unresolved transfer", () => {
+    pendingState.has = true;
+    const first = mount();
+    expect(first.host.querySelector<HTMLButtonElement>("[data-reconcile]")!.hidden).toBe(false);
+    mounted?.();
+    mounted = undefined;
+    // Closing the dialog unmounts the sheet; reopening it must still offer the control.
+    const second = mount();
+    expect(second.host.querySelector<HTMLButtonElement>("[data-reconcile]")!.hidden).toBe(false);
+    pendingState.has = false;
+  });
+
+  it("hides the reconcile control once the marker is gone", async () => {
+    pendingState.has = true;
+    planSend.mockResolvedValue(plan());
+    const { host, form } = mount();
+    const pending = host.querySelector<HTMLButtonElement>("[data-reconcile]")!;
+    expect(pending.hidden).toBe(false);
+    pendingState.has = false;
+    form.querySelector<HTMLButtonElement>("[data-max]")!.click();
+    await vi.waitFor(() => expect(pending.hidden).toBe(true));
+  });
+
+  it("keeps Close usable while a read or a wallet prompt is in flight", async () => {
+    let release: (value: SendPlan) => void = () => {};
+    planSend.mockImplementation(() => new Promise<SendPlan>((resolve) => { release = resolve; }));
+    const { host, form } = mount();
+    fill(form, "recipient", "bob.testnet");
+    form.querySelector<HTMLButtonElement>("[data-max]")!.click();
+    await vi.waitFor(() => expect(form.querySelector<HTMLButtonElement>("[data-max]")!.disabled).toBe(true));
+    expect(host.querySelector<HTMLButtonElement>("[data-close]")!.disabled).toBe(false);
+    release(plan());
+    await vi.waitFor(() => expect(form.querySelector<HTMLButtonElement>("[data-max]")!.disabled).toBe(false));
   });
 });
