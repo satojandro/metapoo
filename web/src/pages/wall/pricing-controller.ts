@@ -111,6 +111,14 @@ export interface PricingController {
   /** After a paint settles, re-read the price for `cell`. */
   repriceCell(cell: Cell): void;
   /**
+   * The dock's headline, after the chain confirmed a paint: "On the wall. −1
+   * credit, 11 left." It replaces the stroke summary, because a stroke that has
+   * landed is no longer about to be placed, and it goes quiet on its own.
+   */
+  announcePainted(spend: number | null): void;
+  /** Nothing is about to be placed and nothing just was: empty the headline. */
+  clearStrokeHeadline(): void;
+  /**
    * The board's tunables for the wall views (Price / Age), from the same session
    * cache the quotes use. Null on a board without paid pricing or when the read fails.
    */
@@ -149,12 +157,9 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       if (scope.isDisposed()) return;
       // The cached balance, not just the dock text: the next tap checks it.
       if (balance !== undefined) applyChainBalance(balance, ++readEpoch);
-      creditsBalance.textContent =
-        balance === null
-          ? "Credits: not registered · 0"
-          : balance === undefined
-            ? "Credits: …"
-            : `Credits: ${balance}`;
+      writeCredits(balance);
+      // A purchase that lands makes the last shortfall information stale.
+      if (balance !== undefined) setShortfall(false);
     },
     // FE-4: every purchase outcome re-reads credits from chain here, so the
     // dock and the cached tap balance never trust the sheet's own numbers.
@@ -194,6 +199,60 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
   buyCreditsButton.addEventListener("click", () => {
     buyCreditsSheet.open();
   });
+
+  /**
+   * A preview quote prices the tile under the cursor or the mouse. It must never
+   * write the dock's headline: that line describes only the stroke about to be
+   * placed. On 11 Nov the panel showed two prices for one tile — the Tile card's
+   * "Cover it for 1 credit" and a headline left over from the tile just painted —
+   * with nothing saying which was which. The badge (`#cell-price`), the legend and
+   * the cost cache are all a preview needs.
+   */
+  const previewStrokeTotal = document.createElement("p");
+  const previewChrome: RepaintChrome = { ...repaintChrome, strokeTotal: previewStrokeTotal };
+
+  let headlineTimer: ReturnType<typeof setTimeout> | undefined;
+  function stopHeadlineTimer(): void {
+    if (headlineTimer !== undefined) clearTimeout(headlineTimer);
+    headlineTimer = undefined;
+  }
+  scope.onDispose(stopHeadlineTimer);
+
+  function writeHeadline(text: string, state: "ready" | "confirmed" | "unavailable" | ""): void {
+    stopHeadlineTimer();
+    repaintChrome.strokeTotal.textContent = text;
+    repaintChrome.strokeTotal.dataset.state = state;
+  }
+
+  /**
+   * Buying is the next step when the stroke costs more than the balance. The dock
+   * reads this flag to promote "Buy more" to the one primary action; it is a
+   * suggestion, not a gate — the send-time quote stays the only authority.
+   */
+  function setShortfall(short: boolean): void {
+    if (short) creditsDock.dataset.shortfall = "true";
+    else delete creditsDock.dataset.shortfall;
+  }
+
+  /**
+   * The credits figure. `null` means the account was never registered, which is
+   * zero credits, not unknown; `undefined` means the read has not answered yet.
+   */
+  function writeCredits(balance: bigint | null | undefined): void {
+    if (balance === undefined) {
+      creditsBalance.textContent = "…";
+      creditsBalance.dataset.state = "unknown";
+      return;
+    }
+    creditsBalance.textContent = balance === null ? "0" : String(balance);
+    creditsBalance.dataset.state = "known";
+  }
+
+  /** No figure to show: "—" hides the unit, so nothing claims a number. */
+  function writeCreditsUnknown(): void {
+    creditsBalance.textContent = "—";
+    creditsBalance.dataset.state = "unknown";
+  }
 
   function cellKey(cell: Cell): string {
     return `${cell.x},${cell.y}`;
@@ -284,9 +343,10 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       repaintChrome.legend.hidden = true;
       repaintChrome.legend.textContent = "";
       repaintChrome.badge.textContent = "";
-      repaintChrome.strokeTotal.textContent = "";
+      writeHeadline("", "");
       repaintChrome.onQuote?.(null);
       creditsDock.hidden = true;
+      setShortfall(false);
       buyCreditsSheet.setVisible(false);
       deps.syncSubmitEnabled();
       return;
@@ -307,25 +367,28 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
     buyCreditsSheet.setVisible(true);
     const walletAccount = scope.walletAccount();
     if (!walletAccount) {
-      creditsBalance.textContent = "Credits: connect wallet";
+      writeCreditsUnknown();
+      creditsBalance.title = "Connect a wallet to see your credits.";
       chainCredits = null;
       creditsKnown = false;
       reservations.clear();
+      setShortfall(false);
       buyCreditsButton.disabled = true;
       buyCreditsSheet.setCredits(undefined);
       return;
     }
+    creditsBalance.title = "";
     buyCreditsButton.disabled = false;
-    creditsBalance.textContent = "Credits: …";
+    writeCredits(undefined);
     try {
       const balance = await readCredits(walletAccount);
       if (scope.isDisposed()) return;
-      creditsBalance.textContent =
-        balance === null ? "Credits: not registered · 0" : `Credits: ${balance}`;
+      writeCredits(balance);
       buyCreditsSheet.setCredits(balance);
     } catch {
       if (scope.isDisposed()) return;
-      creditsBalance.textContent = "Credits: unavailable — retry";
+      writeCreditsUnknown();
+      creditsBalance.title = "Your credits could not be read. Try again.";
     }
   }
 
@@ -345,12 +408,13 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
     }
     if (!quote.ok) {
       priceUnavailable = true;
-      showPriceUnavailable(repaintChrome);
+      // Legend-only read: it may report the failure, never the stroke headline.
+      showPriceUnavailable(previewChrome);
       deps.syncSubmitEnabled();
       return;
     }
     priceUnavailable = false;
-    showRepaintQuote(repaintChrome, quote);
+    showRepaintQuote(previewChrome, quote);
     deps.syncSubmitEnabled();
   }
 
@@ -394,13 +458,15 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       if (!quote.ok) {
         pricedCellKey = null;
         priceUnavailable = true;
-        showPriceUnavailable(repaintChrome);
+        showPriceUnavailable(previewChrome);
         deps.syncSubmitEnabled();
         return;
       }
       priceUnavailable = false;
       rememberCosts(quote);
-      showRepaintQuote(repaintChrome, quote);
+      // Preview only: this tile is what the Tile card is about. The headline is
+      // still the stroke about to be placed, or the one just placed.
+      showRepaintQuote(previewChrome, quote);
       clearRecoveredPriceError();
       deps.syncSubmitEnabled();
     }).finally(() => {
@@ -502,6 +568,9 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       // still holding credits (queued taps, or executed but not yet re-read).
       const have = availableCredits(options.reservation);
       const shortfall = creditShortfall(have, quote.totalCredits);
+      // Buying is the way forward while the quoted stroke is out of reach; the
+      // dock promotes "Buy more" to its one primary action on this flag.
+      setShortfall(shortfall !== null);
       if (shortfall) {
         // Say it once (owner, 7 Nov). The tally keeps the stroke's size and cost; the
         // block says why nothing was sent and can be closed; the buy sheet opens, and
@@ -550,6 +619,7 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       }
       const shortfall = creditShortfall(have, needed);
       if (shortfall) {
+        setShortfall(true);
         fillBlock(result, "Not enough credits", shortfall);
       }
       openBuyCredits(needed, have);
@@ -557,6 +627,7 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       return null;
     }
     // Price the badge in the background. It must never block the paint.
+    setShortfall(false);
     requestCellPrice(cell);
     return reserve(needed);
   }
@@ -648,6 +719,31 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
     confirmRequote,
     availableCredits: () => availableCredits(),
     knownCost,
+    announcePainted(spend) {
+      // The headline is the dock's loudest line and this is the moment the
+      // product exists for (owner, 11 Nov). It replaces the stroke summary: a
+      // stroke that has landed is not one about to be placed.
+      let text: string;
+      if (spend === null) {
+        text = "On the wall.";
+      } else if (spend === 0) {
+        text = "On the wall. Free for you.";
+      } else {
+        // A settled paint is spent even before the balance read that drops its
+        // reservation, so `availableCredits` already answers "left" correctly.
+        const left = availableCredits();
+        const credits = `−${spend} ${spend === 1 ? "credit" : "credits"}`;
+        text = left === null ? `On the wall. ${credits}.` : `On the wall. ${credits}, ${Number(left)} left.`;
+      }
+      writeHeadline(text, "confirmed");
+      // A few seconds as the headline, then the quiet line under the button
+      // says it until the next stroke.
+      headlineTimer = setTimeout(() => {
+        headlineTimer = undefined;
+        if (!scope.isDisposed()) writeHeadline("", "");
+      }, 6_000);
+    },
+    clearStrokeHeadline: () => writeHeadline("", ""),
     repriceCell(cell) {
       if (paidBoard()) {
         pricedCellKey = null;

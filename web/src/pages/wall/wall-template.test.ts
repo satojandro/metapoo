@@ -111,6 +111,23 @@ describe("wallPageHtml", () => {
     expect(css).toMatch(/data-phase="confirmed"\]\) \.result > :not\(a\)\s*\{\s*display:\s*none/);
   });
 
+  it("shows credits as a figure with a Buy more button, and one short paint hint (F4, F7)", () => {
+    const root = document.createElement("div");
+    root.innerHTML = wallPageHtml();
+    const dock = root.querySelector("#credits-dock")!;
+    // The number stands alone; the unit is a sibling so a dash can drop it.
+    expect(root.querySelector("#credits-balance")?.textContent).toBe("…");
+    expect(dock.querySelector(".credits-unit")?.textContent).toBe("credits");
+    expect(root.querySelector("#buy-credits-button")?.textContent).toBe("Buy more");
+    expect(root.querySelector("#buy-credits-button")?.classList.contains("mp-btn")).toBe(true);
+    // The hint fits one line; Space-drag moved into the Move tooltip.
+    const hint = root.querySelector('.wall-gesture-hint[data-for-mode="paint"]')!;
+    expect(hint.textContent).toBe("Tap or drag to paint");
+    const move = root.querySelector("#wall-move")!;
+    expect(move.getAttribute("title")).toMatch(/Space/);
+    expect(root.textContent).not.toContain("Space-drag to move");
+  });
+
   it("labels the network it is configured for, and claims no fee", () => {
     const root = document.createElement("div");
     root.innerHTML = wallPageHtml("mainnet");

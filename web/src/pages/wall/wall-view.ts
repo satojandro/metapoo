@@ -83,6 +83,12 @@ export interface WallView {
    */
   setPaletteLength(paletteLength: number): void;
   applyRoutePaintingContext(): void;
+  /**
+   * One beat on the tile the ring is on, after it was painted. Called only when
+   * the painted cell is the selected one: a pulse on a different tile would say
+   * the wrong tile was painted.
+   */
+  pulseSelection(): void;
 }
 
 /**
@@ -414,6 +420,32 @@ export function createWallView(deps: WallViewDeps): WallView {
     buttons[next]!.focus();
   });
 
+  /** `wall-page` carries the presentation flags; `pageRoot` is where the page was mounted. */
+  function page(): HTMLElement | null {
+    return pageRoot.querySelector<HTMLElement>(".wall-page");
+  }
+
+  /**
+   * One beat on the tile just painted (owner, 11 Nov: the confirmation is the
+   * moment the product exists for). The ring already sits on that tile, so a
+   * short pulse is enough — no new overlay, no second positioning path.
+   */
+  let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+  function pulseSelection(): void {
+    const root = page();
+    if (!root) return;
+    if (pulseTimer !== undefined) clearTimeout(pulseTimer);
+    root.dataset.paintedPulse = "true";
+    pulseTimer = setTimeout(() => {
+      pulseTimer = undefined;
+      if (root.isConnected) delete root.dataset.paintedPulse;
+    }, 900);
+  }
+  scope.onDispose(() => {
+    if (pulseTimer !== undefined) clearTimeout(pulseTimer);
+    pulseTimer = undefined;
+  });
+
   function setFlow(phase: UiPhase): void {
     uiPhase = phase;
     const labels: Record<UiPhase, string> = {
@@ -422,7 +454,7 @@ export function createWallView(deps: WallViewDeps): WallView {
       editing: "Choose a colour, then Paint this tile.",
       wallet_prompt: "Approve or reject in your wallet.",
       submitted: "Sent. Waiting for the wall to confirm.",
-      confirmed: "Painted. Your square is on the wall.",
+      confirmed: "Painted. Your tile is on the wall.",
       confirmation_delayed: "Still waiting for confirmation. It won't be sent again automatically.",
       overwritten: "Painted, then someone painted over it.",
       failed: "That didn't go through. You can try again.",
@@ -433,6 +465,12 @@ export function createWallView(deps: WallViewDeps): WallView {
     // shell chrome remains a compact duplicate for navigation-wide visibility.
     drawState.textContent = labels[phase];
     drawState.dataset.phase = phase;
+    // The over-the-art hint says how to paint. Once a stroke has actually been
+    // placed it has done its job, and the top of the wall is worth more than a
+    // repeated instruction (owner, 11 Nov).
+    if (phase === "submitted" || phase === "confirmed") {
+      page()?.setAttribute("data-painted", "true");
+    }
   }
 
   return {
@@ -457,6 +495,7 @@ export function createWallView(deps: WallViewDeps): WallView {
     buildPalette,
     setPaletteLength,
     applyRoutePaintingContext,
+    pulseSelection,
   };
 }
 
@@ -521,7 +560,8 @@ export function fillResultWithLink(
     link.href = explorer;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = "Open transaction in explorer";
+    link.className = "result-tx-link";
+    link.textContent = "View transaction";
     result.append(link);
   }
   addDismiss(result);

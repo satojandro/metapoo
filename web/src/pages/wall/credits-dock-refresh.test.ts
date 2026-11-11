@@ -169,7 +169,7 @@ describe("credits dock refresh after paint", () => {
     });
 
     await vi.waitFor(() => {
-      expect(root.querySelector("#credits-balance")?.textContent).toMatch(/Credits: 10/);
+      expect(root.querySelector("#credits-balance")?.textContent).toBe("10");
     });
 
     expect(api).not.toBeNull();
@@ -185,7 +185,7 @@ describe("credits dock refresh after paint", () => {
     await api!.kickDrain();
 
     await vi.waitFor(() => {
-      expect(root.querySelector("#credits-balance")?.textContent).toMatch(/Credits: 9/);
+      expect(root.querySelector("#credits-balance")?.textContent).toBe("9");
     });
 
     dispose();
