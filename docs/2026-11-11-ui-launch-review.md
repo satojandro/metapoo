@@ -1,7 +1,17 @@
 # UI launch review — 11 Nov 2026
 
 One pass over every public page and every wallet surface, to replace filing UI issues one at a
-time. Findings are ordered by what a first-time player would hit. Nothing here is fixed yet.
+time. Findings are ordered by what a first-time player would hit.
+
+**Status 11 Nov: sections A–H are *surfaces*, not phases.** The phases are the five-numbered
+"Suggested order" at the foot of this document and they cut across the letters. Batch 1 (A1, A2, A5,
+A6, B2, C3) shipped in `59b259c` (PR #108); batch 2 (A3, D, E, F) in `cf776c1` (PR #109). Batches
+3–5 are open. One finding was left deliberately open: `/wall` and `/` still scroll 12 px sideways at
+390 px because the phone footer bleeds edge to edge — see the backlog's `UI-WALL-BLEED`.
+
+Two of this document's diagnoses were wrong and were corrected by measuring: `/money`'s overflow was
+not the accounts table (already shortened) but `p.rev-explain`, and `/wall`'s was not prose but the
+full painter ids in "Right now" and "Who holds the wall". `/stake` never overflowed at 390 px.
 
 ## How this was checked
 
