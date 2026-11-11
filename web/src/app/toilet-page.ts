@@ -8,6 +8,7 @@
 
 import { PALETTE } from "@shared/palette.ts";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL, TOILET_ID } from "../config";
+import { shortAccount } from "../shared/short-account";
 import type { PageContext, PageDispose } from "./page-registry";
 import { createRpcView, formatAmount, MPOO_DECIMALS, MPOO_SPLIT } from "./revenue-panel";
 import {
@@ -313,21 +314,33 @@ export function mountToiletPage(root: HTMLElement, ctx: PageContext, overrides: 
     } else if (liveChip.getAttribute("aria-pressed") === "true") {
       pickYears(DEFAULT_YEARS);
     }
-    q("[data-tlt-source]").textContent = !deps.configured
+    const source = q("[data-tlt-source]");
+    source.textContent = !deps.configured
       ? "This preview isn’t connected to a board, so live numbers are hidden."
       : !loaded
-        ? `Reading ${deps.board} on ${deps.network}…`
-        : `Live numbers read from ${deps.board}${deps.toilet ? ` and ${deps.toilet}` : ""} on ${deps.network}. Anything they couldn’t confirm is left out, never guessed.`;
+        ? `Reading ${shortAccount(deps.board)} on ${deps.network}…`
+        : `Live numbers read from ${shortAccount(deps.board)}${deps.toilet ? ` and ${shortAccount(deps.toilet)}` : ""} on ${deps.network}. Anything they couldn’t confirm is left out, never guessed.`;
+    // The short form fits a phone; the full ids stay on hover for anyone checking them.
+    source.title = deps.configured ? [deps.board, deps.toilet].filter(Boolean).join(" and ") : "";
     // The board publishes its staking contract once `set_staking_contract` has been called.
     // Read it: claiming is live as soon as emission is, and staking is live as soon as this is set.
     const staking = snapshot.stakingContract ?? null;
     q("[data-tlt-live-h]").textContent = staking ? "Earning is live. Staking is open." : "Earning is live. Staking opens next.";
-    q("[data-tlt-live-p]").textContent = staking
-      ? `Paint with credits and your tiles start earning straight away. Staking is live on this board at ${staking}, funded and collecting the stakers’ share of the mPOO the stall takes in. The staking controls land on this page next.`
-      : "Paint with credits and your tiles start earning straight away. Claim whenever you like: nothing is lost by waiting. Staking opens on this page once the staking contract is live.";
-    q("[data-tlt-reserve-note]").textContent = staking
-      ? `Forwarded to ${staking} with each distribution.`
+    const liveP = q("[data-tlt-live-p]");
+    if (staking) {
+      liveP.textContent = `Paint with credits and your tiles start earning straight away. Staking is live on this board at ${shortAccount(staking)}, funded and collecting the stakers’ share of the mPOO the stall takes in. `;
+      const stakeLink = document.createElement("a");
+      stakeLink.href = "/stake";
+      stakeLink.textContent = "Stake your TOILET →";
+      liveP.append(stakeLink);
+    } else {
+      liveP.textContent = "Paint with credits and your tiles start earning straight away. Claim whenever you like: nothing is lost by waiting. Staking opens on this page once the staking contract is live.";
+    }
+    const reserveNote = q("[data-tlt-reserve-note]");
+    reserveNote.textContent = staking
+      ? `Forwarded to ${shortAccount(staking)} with each distribution.`
       : "Held on the board until staking opens. Nobody can spend it, the owner included.";
+    reserveNote.title = staking ?? "";
     whale();
     resetMeter();
   }

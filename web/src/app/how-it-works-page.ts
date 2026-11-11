@@ -8,6 +8,7 @@
 
 import { PALETTE } from "@shared/palette.ts";
 import { CONTRACT_ID, INTENTS_FUNDING_ENABLED, PAGE_NETWORK, RPC_URL } from "../config";
+import { shortAccount } from "../shared/short-account";
 import type { PageContext, PageDispose } from "./page-registry";
 import { MPOO_SPLIT, NEAR_SPLIT, createRpcView } from "./revenue-panel";
 import {
@@ -249,13 +250,6 @@ const TEMPLATE = `
     </div>
   </section>
 
-  <section class="hiw-next" aria-labelledby="hiw-next-h">
-    <p class="mp-eyebrow">Coming next</p>
-    <h4 id="hiw-next-h">Tiles that earn TOILET</h4>
-    <p>Tiles you paint with credits will earn TOILET for as long as they survive on the wall. Stake TOILET and you take a share of everything the stall earns. Earning switches on in a later round.</p>
-    <p><a href="/toilet">How TOILET works →</a></p>
-  </section>
-
   <p class="hiw-foot" data-hiw-source role="status"></p>
 </article>`;
 
@@ -344,8 +338,10 @@ export function mountHowItWorksPage(root: HTMLElement, _ctx: PageContext, overri
     source.textContent = !deps.configured
       ? "This preview isn’t connected to a board, so live numbers are hidden. The sample wall and the practice wall are examples."
       : !loaded
-        ? `Reading ${deps.board} on ${deps.network}…`
-        : `Numbers read live from ${deps.board} on ${deps.network}. Anything the board couldn’t confirm is left out, never guessed. The sample wall and the practice wall are examples.`;
+        ? `Reading ${shortAccount(deps.board)} on ${deps.network}…`
+        : `Numbers read live from ${shortAccount(deps.board)} on ${deps.network}. Anything the board couldn’t confirm is left out, never guessed. The sample wall and the practice wall are examples.`;
+    // The short form keeps the line inside a 390 px phone; the full id stays on hover.
+    source.title = deps.configured ? deps.board : "";
     prices = practicePrices(snapshot.tiers);
     freeStart = { first: snapshot.freeFirstPerAccount ?? 25, happy: snapshot.happyHour?.cap ?? 100 };
     q("[data-hiw-practice-source]").textContent = snapshot.tiers

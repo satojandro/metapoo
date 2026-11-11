@@ -1,9 +1,16 @@
 /**
  * The split as a small flow diagram. Two drawings of the same graph: a wide one for
  * desktop and a tall one for phones (CSS picks one), so the labels stay readable at
- * 390 px instead of scaling down to 8 px. Static markup only; no live data inside.
+ * 390 px instead of scaling down to 8 px. Static markup only: the one fact it depends on,
+ * whether the board has a staking contract, is passed in rather than read here.
  * Line thickness is proportional to each share.
  */
+
+/** Where the stakers' 70% sits: forwarded once the board has a staking contract. */
+function stakerLabel(stakingSet: boolean, lines: 2 | 3): string[] {
+  if (!stakingSet) return lines === 2 ? ["held on the board", "until staking opens"] : ["70%", "held until", "staking opens"];
+  return lines === 2 ? ["forwarded to the staking", "contract"] : ["70%", "forwarded to the", "staking contract"];
+}
 
 interface Node {
   x: number; y: number; w: number; h: number;
@@ -33,14 +40,14 @@ function markers(prefix: string): string {
     .join("")}</defs>`;
 }
 
-const WIDE = (() => {
+function wide(stakingSet: boolean): string {
   const A: Node = { x: 10, y: 52, w: 200, h: 56, title: "NEAR paid for credits", tone: "near" };
   const T1: Node = { x: 290, y: 10, w: 180, h: 46, title: "Team · 10%", tone: "team" };
   const B: Node = { x: 290, y: 92, w: 180, h: 62, title: "Buyback · 90%", sub: ["swaps NEAR for mPOO"], tone: "near" };
   const C: Node = { x: 10, y: 236, w: 200, h: 56, title: "mPOO paid for credits", tone: "mpoo" };
   const P: Node = { x: 530, y: 160, w: 170, h: 70, title: "mPOO on the board", sub: ["waiting for a split"], tone: "mpoo" };
   const T2: Node = { x: 780, y: 56, w: 170, h: 46, title: "Team · 10%", tone: "team" };
-  const S: Node = { x: 780, y: 140, w: 170, h: 74, title: "TOILET stakers · 70%", sub: ["held on the board", "until staking opens"], tone: "stake" };
+  const S: Node = { x: 780, y: 140, w: 170, h: 74, title: "TOILET stakers · 70%", sub: stakerLabel(stakingSet, 2), tone: "stake" };
   const X: Node = { x: 780, y: 248, w: 170, h: 60, title: "Burned · 20%", sub: ["to the burn address"], tone: "burn" };
   const edges = [
     edge("w", "M210 72 C250 72 250 33 284 33", "team", 10),
@@ -54,16 +61,16 @@ const WIDE = (() => {
   return `<svg class="rf rf-wide" viewBox="0 0 960 320" role="img" aria-labelledby="rf-wide-t">`
     + `<title id="rf-wide-t">NEAR paid for credits splits 10% to the team and 90% to the buyback account, which swaps it for mPOO. That mPOO and mPOO paid for credits split 10% to the team, 70% to TOILET stakers and 20% burned.</title>`
     + markers("w") + edges.join("") + [A, T1, B, C, P, T2, S, X].map(node).join("") + `</svg>`;
-})();
+}
 
-const TALL = (() => {
+function tall(stakingSet: boolean): string {
   const A: Node = { x: 10, y: 8, w: 200, h: 52, title: "NEAR paid for credits", tone: "near" };
   const T1: Node = { x: 236, y: 70, w: 114, h: 46, title: "Team · 10%", tone: "team" };
   const B: Node = { x: 10, y: 108, w: 200, h: 60, title: "Buyback · 90%", sub: ["swaps NEAR for mPOO"], tone: "near" };
   const C: Node = { x: 236, y: 206, w: 114, h: 62, title: "mPOO paid", sub: ["for credits"], tone: "mpoo" };
   const P: Node = { x: 10, y: 214, w: 200, h: 62, title: "mPOO on the board", sub: ["waiting for a split"], tone: "mpoo" };
   const T2: Node = { x: 4, y: 352, w: 106, h: 62, title: "Team", sub: ["10%"], tone: "team" };
-  const S: Node = { x: 122, y: 352, w: 116, h: 92, title: "Stakers", sub: ["70%", "held until", "staking opens"], tone: "stake" };
+  const S: Node = { x: 122, y: 352, w: 116, h: 92, title: "Stakers", sub: stakerLabel(stakingSet, 3), tone: "stake" };
   const X: Node = { x: 250, y: 352, w: 106, h: 62, title: "Burned", sub: ["20%"], tone: "burn" };
   const edges = [
     edge("t", "M210 34 C250 34 293 34 293 64", "team", 10),
@@ -77,7 +84,9 @@ const TALL = (() => {
   return `<svg class="rf rf-tall" viewBox="0 0 360 450" role="img" aria-labelledby="rf-tall-t">`
     + `<title id="rf-tall-t">NEAR paid for credits splits 10% to the team and 90% to the buyback account, which swaps it for mPOO. That mPOO and mPOO paid for credits split 10% to the team, 70% to TOILET stakers and 20% burned.</title>`
     + markers("t") + edges.join("") + [A, T1, B, C, P, T2, S, X].map(node).join("") + `</svg>`;
-})();
+}
 
-/** Both drawings; CSS shows one. */
-export const REVENUE_FLOW_SVG = WIDE + TALL;
+/** Both drawings; CSS shows one. `stakingSet` is the board's own signal, passed in by the page. */
+export function revenueFlowSvg(stakingSet: boolean): string {
+  return wide(stakingSet) + tall(stakingSet);
+}
