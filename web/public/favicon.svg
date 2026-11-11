@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" role="img" aria-label="Meta Poo">
+  <!-- Palette colours only: Ink ground (index 0) as the grout, one Marigold tile (index 3). -->
+  <rect width="16" height="16" rx="3" fill="#1c1917" />
+  <rect x="4" y="4" width="8" height="8" fill="#e0a100" />
+</svg>

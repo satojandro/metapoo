@@ -6,7 +6,7 @@ import "./style.css";
 import "./wall-design.css";
 import { createAppServices } from "./app/services";
 import { createRouter } from "./app/router";
-import { mountShell } from "./app/shell";
+import { mountShell, pageTitle } from "./app/shell";
 import { registerDefaultPages } from "./pages/register-default-pages";
 
 /**
@@ -28,6 +28,9 @@ const router = createRouter({
   services,
   onRouteChange: (route) => {
     shell.setActiveNav(route);
+    // Browser tab only. The share preview stays the one static card declared in
+    // index.html: per-route cards would need prerendering, which this app has not.
+    document.title = pageTitle(route.pageId);
     // The router replaces the outlet's children on every navigation, so the
     // footer is re-appended here rather than mounted once.
     shell.placeFooter(route);
