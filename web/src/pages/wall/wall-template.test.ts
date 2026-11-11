@@ -55,7 +55,7 @@ describe("wallPageHtml", () => {
     for (const selector of ["#start-painting", "#dock-primary", "#draw-button", "#draw-state", "#result"]) {
       expect(foot?.querySelector(selector), selector).not.toBeNull();
     }
-    for (const view of ["art", "price", "age", "turf"]) {
+    for (const view of ["art", "fresh", "turf"]) {
       expect(root.querySelector(`[data-wall-view="${view}"]`), view).not.toBeNull();
     }
     expect(about?.contains(root.querySelector("#palette"))).toBe(false);

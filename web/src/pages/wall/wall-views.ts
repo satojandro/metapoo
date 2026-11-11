@@ -1,11 +1,15 @@
 /**
- * Art / Price / Age / Turf (Phase 1 step 2).
+ * Art / Fresh / Turf (Phase 1 step 2; one view fewer since UI review B1).
  *
- * Four ways to colour the same live wall. They only change how the renderer paints
+ * Three ways to colour the same live wall. They only change how the renderer paints
  * a tile; they never change the board data, the camera or what a paint costs.
- * Price uses the board's own tunables (`get_tunables`, the pricing controller's
+ *
+ * "Price" and "Age" were the same picture twice: age decides price, so the two views
+ * differed only in how they drew the same three bands (B1). They are one view, Fresh,
+ * coloured by the board's own tunables (`get_tunables`, the pricing controller's
  * session cache) with the contract's own rule: age < young window costs the young
- * rate, age < mid window the mid rate, otherwise (and blank) the base rate.
+ * rate, age < mid window the mid rate, otherwise (and blank) the base rate. The one
+ * legend says both facts at once: what the band costs and how long it lasts.
  * A failed read shows "price unavailable", never a guessed number.
  */
 
@@ -15,7 +19,7 @@ import type { TilePainter } from "../../render-board";
 import { emptyHexAt } from "../../render-board";
 import type { WallScope } from "./wall-scope";
 
-export type WallViewMode = "art" | "price" | "age" | "turf";
+export type WallViewMode = "art" | "fresh" | "turf";
 
 /** The repaint fields of `get_tunables`. Numbers or digit strings, as the chain sends them. */
 export interface ViewTunables {
@@ -35,7 +39,6 @@ const MINUTE_NS = 60_000_000_000n;
 /** Shown when the board's windows aren't known yet: age only, never a price. */
 const DEFAULT_YOUNG_NS = 10n * MINUTE_NS;
 const DEFAULT_MID_NS = 60n * MINUTE_NS;
-const DAY_NS = 24n * 60n * MINUTE_NS;
 
 export function nowNs(nowMs: number = Date.now()): bigint {
   return BigInt(Math.floor(nowMs)) * 1_000_000n;
@@ -229,24 +232,6 @@ function hslToHex(h: number, s: number, l: number): string {
   return "#" + [f(0), f(8), f(4)].map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
 }
 
-/** Age colour: wet → drying → dry → a day old fades toward the wall. */
-export function ageColor(age: bigint, tunables: ViewTunables | null, palette: ViewPalette): string {
-  const young = tunables ? big(tunables.repaint_young_ns) : DEFAULT_YOUNG_NS;
-  const mid = tunables ? big(tunables.repaint_mid_ns) : DEFAULT_MID_NS;
-  const faded = mixHex(palette.old, "#2a2b2e", 0.45);
-  const stops: Array<[bigint, string]> = [[0n, palette.wet], [young, palette.drying], [mid, palette.old], [DAY_NS, faded]];
-  for (let i = 1; i < stops.length; i += 1) {
-    const [t1, c1] = stops[i - 1];
-    const [t2, c2] = stops[i];
-    if (age <= t2) {
-      const span = t2 - t1;
-      const f = span > 0n ? Number(((age - t1) * 1000n) / span) / 1000 : 1;
-      return mixHex(c1, c2, Math.max(0, Math.min(1, f)));
-    }
-  }
-  return faded;
-}
-
 /* ---------- The painter the renderer uses ---------- */
 
 export interface PainterInput {
@@ -264,7 +249,7 @@ export interface PainterInput {
 export function tilePainterFor(input: PainterInput): TilePainter | null {
   const { mode, now, tunables, free, viewer, palette } = input;
   if (mode === "art") return null;
-  if (mode === "price") {
+  if (mode === "fresh") {
     // Blank tiles stay quiet unless they're free for you: the wall shouldn't turn green.
     const blankTint = blankIsFree(free) ? palette.free : palette.dry;
     const blankMix = blankIsFree(free) ? 0.28 : 0.1;
@@ -277,15 +262,6 @@ export function tilePainterFor(input: PainterInput): TilePainter | null {
       empty: (x, y) => (tunables ? mixHex(emptyHexAt(x, y), blankTint, blankMix) : null),
     };
   }
-  if (mode === "age") {
-    return {
-      painted: (pixel) => {
-        const age = tileAgeNs(pixel.lastWriteTimestampNs, now);
-        return age === null ? palette.old : ageColor(age, tunables, palette);
-      },
-      empty: () => null,
-    };
-  }
   // Turf: every painter their own colour, yours in yellow.
   return {
     painted: (pixel) => {
@@ -295,6 +271,14 @@ export function tilePainterFor(input: PainterInput): TilePainter | null {
     },
     empty: () => null,
   };
+}
+
+/** "under 10 min" / "under an hour": a window in the units a player thinks in. */
+function within(ns: number | string | bigint): string {
+  const minutes = Number(BigInt(ns) / MINUTE_NS);
+  if (minutes < 60) return `under ${minutes} min`;
+  const hours = minutes / 60;
+  return hours === 1 ? "under an hour" : `under ${hours} h`;
 }
 
 /* ---------- Legends ---------- */
@@ -311,36 +295,29 @@ export function legendFor(input: PainterInput & { pixels: readonly PixelView[] }
   painters: PainterRow[];
 } {
   const { mode, tunables, free, palette, pixels, viewer } = input;
-  if (mode === "price") {
-    if (!tunables) {
-      return { title: "Cost to cover", items: [], note: "Price unavailable. The wall couldn’t read its repaint prices.", painters: [] };
-    }
+  if (mode === "fresh") {
+    // One legend for one picture (B1): the band, what covering a tile in it costs, and
+    // how long the band lasts. With no tunables the window is still true (it is the
+    // board's default 10/60 minutes) and the price is not, so it is left out — never
+    // guessed. The note says why the figures are missing.
     const credit = (n: number) => `${n} credit${n === 1 ? "" : "s"}`;
+    const youngLabel = tunables ? ` · ${credit(tunables.repaint_young_credits)}` : "";
+    const midLabel = tunables ? ` · ${credit(tunables.repaint_mid_credits)}` : "";
+    const baseLabel = tunables ? ` · ${credit(tunables.repaint_base_credits)}` : "";
     const items: LegendItem[] = [
-      { label: `${credit(tunables.repaint_young_credits)} · wet`, color: palette.wet },
-      { label: `${credit(tunables.repaint_mid_credits)} · drying`, color: palette.drying },
-      { label: `${credit(tunables.repaint_base_credits)} · dry`, color: palette.dry },
+      { label: `Wet${youngLabel} · ${within(tunables ? tunables.repaint_young_ns : DEFAULT_YOUNG_NS)}`, color: palette.wet },
+      { label: `Drying${midLabel} · ${within(tunables ? tunables.repaint_mid_ns : DEFAULT_MID_NS)}`, color: palette.drying },
+      { label: `Dry${baseLabel}`, color: palette.dry },
       blankIsFree(free)
         ? { label: "Blank · free for you", color: mixHex("#1d1e21", palette.free, 0.28) }
-        : { label: `Blank · ${credit(tunables.repaint_base_credits)}`, color: mixHex("#1d1e21", palette.dry, 0.1) },
+        : { label: `Blank${tunables ? ` · ${credit(tunables.repaint_base_credits)}` : ""}`, color: mixHex("#1d1e21", palette.dry, 0.1) },
     ];
-    const note = blankIsFree(free)
-      ? `You have ${free.kind === "yes" ? free.remaining : 0} free first paints for blank tiles.`
-      : "Fresh paint costs more to cover, so new work gets a moment on the wall.";
-    return { title: "Cost to cover", items, note, painters: [] };
-  }
-  if (mode === "age") {
-    return {
-      title: "Paint age",
-      items: [
-        { label: "Wet", color: palette.wet },
-        { label: "Drying", color: palette.drying },
-        { label: "Dry", color: palette.old },
-        { label: "A day or more", color: mixHex(palette.old, "#2a2b2e", 0.45) },
-      ],
-      note: "Colours shift as paint dries.",
-      painters: [],
-    };
+    const note = !tunables
+      ? "Prices are unavailable right now. The bands still show how fresh each tile is."
+      : blankIsFree(free)
+        ? `You have ${free.kind === "yes" ? free.remaining : 0} free first paints for blank tiles.`
+        : "Fresh paint costs more to cover, so new work gets a moment on the wall.";
+    return { title: "Fresh", items, note, painters: [] };
   }
   if (mode === "turf") {
     const painters = topPainters(pixels, viewer, 5);
@@ -552,8 +529,12 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
     palette = readViewPalette();
     turfCache = null;
     update();
-    if (mode === "price" || mode === "age") void ensureTunables();
-    if (mode === "price") void ensureFree();
+    // Fresh is the only mode that needs prices: the bands and the legend both come
+    // from the board's tunables, and free first paints tint the blank tiles.
+    if (mode === "fresh") {
+      void ensureTunables();
+      void ensureFree();
+    }
   }
 
   for (const chip of chips) {
@@ -561,17 +542,17 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
     chip.removeAttribute("title");
     scope.listen(chip, "click", () => {
       const view = chip.dataset.wallView as WallViewMode | undefined;
-      if (view === "art" || view === "price" || view === "age" || view === "turf") setMode(view);
+      if (view === "art" || view === "fresh" || view === "turf") setMode(view);
     });
   }
 
-  // Wet paint dries: keep Price and Age honest without re-reading the board.
+  // Wet paint dries: keep Fresh honest without re-reading the board.
   const setTimer = deps.setInterval ?? ((fn: () => void, ms: number) => window.setInterval(fn, ms));
   const clearTimer = deps.clearInterval ?? ((handle: unknown) => window.clearInterval(handle as number));
   const timer = setTimer(() => {
     if (scope.isDisposed() || mode === "art" || mode === "turf") return;
     if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-    if (mode === "price") void ensureFree();
+    if (mode === "fresh") void ensureFree();
     if (!tunables) void ensureTunables();
     update();
   }, deps.tickMs ?? 15_000);
@@ -588,13 +569,13 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
     free: () => free,
     colorOf: (account, you) => (you ? palette.you : turfColors().get(account) ?? turfColor(account)),
     refresh: () => {
-      if (!tunables && (primed || mode === "price" || mode === "age")) void ensureTunables();
+      if (!tunables && (primed || mode === "fresh")) void ensureTunables();
       if (mode !== "art") renderLegend();
     },
     onWalletChanged: () => {
       free = { kind: "unknown" };
       freeFor = null;
-      if (mode === "price") void ensureFree(true);
+      if (mode === "fresh") void ensureFree(true);
       else if (mode !== "art") update();
     },
     prime: () => {

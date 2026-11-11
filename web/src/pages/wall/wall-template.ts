@@ -59,8 +59,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
               </div>
               <div class="mp-seg mp-seg-small wall-views" role="group" aria-label="Wall view">
                 <button type="button" data-wall-view="art" aria-pressed="true" title="The picture as painted">Art</button>
-                <button type="button" data-wall-view="price" aria-pressed="false" title="What each tile costs to cover">Price</button>
-                <button type="button" data-wall-view="age" aria-pressed="false" title="How recently each tile was painted">Age</button>
+                <button type="button" data-wall-view="fresh" aria-pressed="false" title="How fresh each tile is, and what covering it costs">Fresh</button>
                 <button type="button" data-wall-view="turf" aria-pressed="false" title="Who holds the most tiles">Turf</button>
               </div>
               <!-- Full screen: the wall takes the window; the panel floats and can hide. -->
@@ -183,7 +182,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             <div class="paint-dock wall-dock-foot" data-wall-card="paint">
               <div class="wall-tally">
                 <div class="wall-cost">
-                  <!-- The Price view's key explains wet paint; this copy stays for screen readers. -->
+                  <!-- The Fresh view's key explains wet paint; this copy stays for screen readers. -->
                   <p id="repaint-legend" class="repaint-legend visually-hidden" hidden></p>
                   <p id="cell-price" class="cell-price visually-hidden" role="status" aria-live="polite"></p>
                   <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
