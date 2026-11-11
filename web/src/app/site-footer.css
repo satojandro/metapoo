@@ -1,0 +1,76 @@
+/*
+ * Site footer: one wrapping row of outbound links under every public page.
+ *
+ * It lives inside `.page-outlet`, so it scrolls with the page and costs the wall
+ * no height. Tokens only (see ./README.md): no literal colours, no icon assets.
+ */
+
+.site-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--mp-space-2) var(--mp-space-4);
+  margin-top: var(--mp-space-8);
+  padding: var(--mp-space-4) 0 var(--mp-space-6);
+  border-top: 1px solid var(--mp-line);
+  font: var(--mp-text-sm) var(--mp-mono);
+  color: var(--mp-muted);
+}
+
+.site-foot-brand {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--mp-soft);
+}
+
+.site-foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mp-space-1) var(--mp-space-3);
+  min-width: 0;
+}
+
+.site-foot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--mp-hit);
+  padding: 0 var(--mp-space-1);
+  color: var(--mp-muted);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.site-foot-link:hover,
+.site-foot-link:focus-visible {
+  color: var(--mp-tag);
+  border-bottom-color: var(--mp-tag);
+}
+
+.site-foot-link:focus-visible {
+  outline: 2px solid var(--mp-focus);
+  outline-offset: 2px;
+}
+
+/* The markets pair reads as a different kind of link, so it is not mistaken for community. */
+.site-foot-link[data-social-link="mpoo-chart"],
+.site-foot-link[data-social-link="toilet-chart"] {
+  color: var(--mp-soft-2);
+}
+
+.site-foot-mark {
+  font-size: var(--mp-text-xs);
+  line-height: 1;
+  opacity: .75;
+}
+
+@media (max-width: 480px) {
+  .site-foot {
+    gap: var(--mp-space-2);
+    margin-top: var(--mp-space-7);
+  }
+  .site-foot-links { gap: 0 var(--mp-space-2); }
+}
