@@ -13,8 +13,9 @@
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!--
-      Share card. Production origin is https://metapoo-testnet.vercel.app — the
-      two absolute URLs below must change with the domain when the app moves.
+      Share card. The origin comes from VITE_SITE_URL at build time, so moving domain is
+      one variable rather than an edit here — and the build fails if it is unset, because
+      a crawler cannot resolve a relative og:image.
       One card covers every route: a tab title set in the client (main.ts) does
       not change a share preview, and per-route cards would need prerendering.
     -->
@@ -24,15 +25,15 @@
       property="og:description"
       content="A public tile wall on NEAR. Paint tiles with credits, paint over anyone's, and every stroke is recorded on chain."
     />
-    <meta property="og:url" content="https://metapoo-testnet.vercel.app" />
-    <meta property="og:image" content="https://metapoo-testnet.vercel.app/og.png" />
+    <meta property="og:url" content="%VITE_SITE_URL%" />
+    <meta property="og:image" content="%VITE_SITE_URL%/og.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Meta Poo" />
     <meta
       name="twitter:description"
       content="A public tile wall on NEAR. Paint tiles with credits, paint over anyone's, and every stroke is recorded on chain."
     />
-    <meta name="twitter:image" content="https://metapoo-testnet.vercel.app/og.png" />
+    <meta name="twitter:image" content="%VITE_SITE_URL%/og.png" />
     <title>Meta Poo</title>
   </head>
   <body>

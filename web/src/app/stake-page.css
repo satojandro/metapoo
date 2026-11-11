@@ -32,6 +32,16 @@
 
 /* Panels */
 .stk-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--mp-space-4); align-items: start; }
+/* Nothing in these cards may set a floor wider than the screen. At 360 px (a common
+   Android width, and one the layout check never used to load) the lock/position cards
+   carried a ~347 px min-content inside a 336 px column and pushed the page sideways.
+   Grid and flex children default to `min-width: auto`, which is the floor; the wrap
+   is what lets a label and its value sit on two lines instead of overflowing. */
+.stk-grid > *, .stk-live > * { min-width: 0; }
+.stk-panel { min-width: 0; }
+.stk-input { min-width: 0; }
+.stk-rows > div { min-width: 0; flex-wrap: wrap; }
+.stk-rows > div > * { min-width: 0; overflow-wrap: anywhere; }
 .stk-panel { gap: 14px; }
 .stk-panel h3 { font-size: var(--mp-text-h3); font-weight: 800; }
 .stk-rows { margin: 0; display: grid; }

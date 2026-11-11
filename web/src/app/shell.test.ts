@@ -40,6 +40,9 @@ describe("app shell", () => {
     const connect = host.querySelector<HTMLButtonElement>("#connect-button")!;
     const details = host.querySelector<HTMLDetailsElement>("details.wallet-details")!;
     expect(connect.textContent).toBe("Connect wallet");
+    // Connecting is the first-time player's main call to action: it stays the primary
+    // button. Disconnect, once connected, is not (review, 11 Nov).
+    expect(connect.classList.contains("mp-btn-primary")).toBe(true);
     expect(details.hidden).toBe(true);
     expect(details.contains(connect)).toBe(false);
     // The status line is duplicated in the paint dock; the shell copy is screen-reader only.

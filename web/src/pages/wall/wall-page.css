@@ -612,6 +612,17 @@
     border-width: 1px 0 0;
     border-radius: 0;
   }
+  /* The footer above bleeds to the screen edge on purpose (thumb reach, owner 6 Nov).
+     Its box lands exactly on the outlet's padding edge, and `#page-outlet` is
+     `overflow-x: auto`, so that bled box read as 12 px of scrollable overflow — the
+     last thing failing the layout check (11 Nov review). Clipping the outlet's x axis
+     removes the scroll without hiding anything from the player: nothing is painted
+     past the window, and a child genuinely wider than it still trips the check's
+     "reaches past the window" test. `clip` rather than `hidden` so the page keeps
+     scrolling vertically and does not become a scroll container. */
+  .app-shell > .page-outlet:has(> .wall-page) {
+    overflow-x: clip;
+  }
   .wall-page .wall-panel-foot .wall-primary { min-height: var(--mp-hit); }
   .wall-page .wall-panel-foot #wall-back-to-look { min-height: 28px; }
   .wall-page .wall-card { padding: var(--mp-space-3); background: var(--mp-bg); }

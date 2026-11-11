@@ -1,7 +1,15 @@
-/* /nope — the one rule the reused /admin hero classes do not already express.
-   Every other primary link CTA on the site (`/how-it-works`, `/toilet`) removes
-   the anchor underline in its own stylesheet; admin-page.css is not this page's
-   to edit, so the page-specific rule lives here. Colours stay in tokens. */
+/* /nope — the 404 reuses the /admin hero's inner classes. What it does NOT reuse is
+   the `.admin` page frame, because `.admin a` repaints every link cyan and would
+   override the primary button's ink text. This is that frame's contribution, and
+   nothing else: the column width and the page gutter, so the heading is not jammed
+   against the header rule at the page edge. */
+.not-found {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-block: var(--mp-space-6) var(--mp-space-8);
+  padding-inline: var(--mp-space-4);
+}
+
 .not-found .admin-head-actions > a.mp-btn-primary {
   text-decoration: none;
 }

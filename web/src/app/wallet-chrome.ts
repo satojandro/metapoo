@@ -88,6 +88,9 @@ export function mountWalletChrome(
       ? `Account ${shortAccount(session.accountId)} · contract ${contract}`
       : `Not connected · contract ${contract}`;
     connectButton.textContent = session.accountId ? "Disconnect" : "Connect wallet";
+    // One control, two meanings: connecting is the first-time player's main call to
+    // action and stays primary; disconnecting is not an action to recommend.
+    connectButton.classList.toggle("mp-btn-primary", !session.accountId);
     placeWalletControls(session.accountId);
     showAccount(session.accountId);
     const notice = describeNetwork(

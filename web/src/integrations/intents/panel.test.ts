@@ -94,11 +94,13 @@ function app(
     currentContext: () => context,
     readReadiness: async () => ({ state: "ready", expectedKeyMatches: true }),
     reconcileDestination: async () =>
-      seed?.fundedYocto
+      // `fundedYocto: ""` is the "delivered but the amount was never proven" case:
+      // the delivery reconciles, and evidence carries no amount to print.
+      seed?.fundedYocto !== undefined
         ? {
             state: "verified_native",
             transactionHash: "tx-funded",
-            amountYocto: seed.fundedYocto,
+            ...(seed.fundedYocto ? { amountYocto: seed.fundedYocto } : {}),
             spendableBeforeGasYocto: "5000",
           }
         : { state: "pending" },
@@ -371,6 +373,21 @@ describe("Intents panel — a funded payment", () => {
     expect(unreachable(host, ".mp-intents-recover")).toBe(true);
     expect(unreachable(host, ".mp-intents-form")).toBe(true);
     expect(unreachable(host, ".mp-intents-pay")).toBe(true);
+  });
+
+  it("says no amount rather than an amount it cannot prove", async () => {
+    // No reconciled Transfer, so there is no figure to show. The card still says NEAR
+    // arrived — it just drops the row instead of printing a label with nothing beside it.
+    const { host, controller, setStatus } = await commitAndFund({
+      data: new Map<string, string>(),
+      fundedYocto: "",
+    });
+    setStatus("SUCCESS");
+    await controller.refresh(FIXTURE_CONTEXT.operationId);
+    await vi.waitFor(() => expect(unreachable(host, ".mp-intents-success")).toBe(false));
+    expect(controller.getState().operation?.phase).toBe("funded");
+    expect(host.querySelector(".mp-intents-success")!.textContent).not.toContain("Received");
+    expect(visibleButtons(host)).toEqual(["Done"]);
   });
 
   it("Done ends the payment and puts the form back", async () => {

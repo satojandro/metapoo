@@ -122,7 +122,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   // One header row: short address, copy, Close. The full 64-character id is only ever a
   // title (hover) and the clipboard payload, never a second box on screen.
   walletPanel.innerHTML = `
-    <button id="connect-button" class="mp-btn shell-connect" type="button">Connect wallet</button>
+    <button id="connect-button" class="mp-btn mp-btn-primary shell-connect" type="button">Connect wallet</button>
     <details class="wallet-details"><summary>Wallet</summary>
     <div class="wallet-account-head">
       <span id="wallet-account" class="wallet-account" hidden>

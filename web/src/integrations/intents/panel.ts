@@ -334,12 +334,10 @@ export function mountIntentsFundingPanel(
   function renderFunded(op: FundingOperation): void {
     successRows.replaceChildren();
     const received = op.evidence?.amountYocto;
-    row(
-      successRows,
-      "Received",
-      received ? `${formatTokenAmount(received, 24)} NEAR` : "NEAR",
-      true,
-    );
+    // Only claim an amount that was reconciled from the native Transfer. Without
+    // proof, show no row at all rather than a label with nothing beside it — the
+    // card's own title already says NEAR arrived.
+    if (received) row(successRows, "Received", `${formatTokenAmount(received, 24)} NEAR`, true);
   }
 
   function details(snapshot: FundingSnapshot) {

@@ -506,7 +506,9 @@ describe("wall behaviour: paid board", () => {
     // The confirmation replaces the stroke summary in the dock's headline, and
     // says what it cost and what is left (F1, F3). The exact remainder depends on
     // which balance read lands first, so only its shape is pinned.
-    expect(text(root, "#stroke-total")).toMatch(/^On the wall\. −2 credits, \d+ left\.$/);
+    // The credit COUNT is not stated any more: the caller passes the stroke's
+    // maxCredits ceiling, not what the chain charged (review, 11 Nov).
+    expect(text(root, "#stroke-total")).toMatch(/^On the wall\. \d+ left\.$/);
     expect(text(root, "#result")).toContain("Paint confirmed");
     expect(root.querySelector<HTMLButtonElement>("#draw-button")!.disabled).toBe(false);
     // The pre-submit quote put the cell price on screen.

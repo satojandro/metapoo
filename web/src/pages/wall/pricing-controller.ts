@@ -731,9 +731,15 @@ export function createPricingController(deps: PricingControllerDeps): PricingCon
       } else {
         // A settled paint is spent even before the balance read that drops its
         // reservation, so `availableCredits` already answers "left" correctly.
+        //
+        // The credit COUNT is deliberately not stated: every caller passes the
+        // stroke's `maxCredits` ceiling, not what the chain charged. A tile that
+        // dried between quote and confirmation is charged more than it was
+        // quoted, so "−1 credit" can be a lie until the balance read lands. What
+        // is left is read from that settlement, so it is the one figure safe to
+        // show. (Deriving the true charge from the balance delta is the follow-up.)
         const left = availableCredits();
-        const credits = `−${spend} ${spend === 1 ? "credit" : "credits"}`;
-        text = left === null ? `On the wall. ${credits}.` : `On the wall. ${credits}, ${Number(left)} left.`;
+        text = left === null ? "On the wall." : `On the wall. ${Number(left)} left.`;
       }
       writeHeadline(text, "confirmed");
       // A few seconds as the headline, then the quiet line under the button

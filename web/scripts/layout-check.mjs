@@ -50,6 +50,9 @@ const routes = ["/", "/toilet", "/how-it-works", "/money", "/wall", "/stake", "/
 const boardRoutes = new Set(["/", "/wall"]);
 const sizes = [
   { name: "desktop", width: 1440, height: 900, mobile: false },
+  // 360 is the common Android width and the one this check was missing: `/stake`
+  // held a 347 px min-content in a 336 px column and nothing here ever loaded it.
+  { name: "phone-360", width: 360, height: 800, mobile: true },
   { name: "phone", width: 390, height: 844, mobile: true },
 ];
 

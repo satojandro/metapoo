@@ -610,11 +610,15 @@ export function mountBuyCreditsSheet(
       return;
     }
     const wanted = opts?.quantity;
-    resetForm(
-      wanted && Number.isInteger(wanted) && wanted > 0 ? wanted : DEFAULT_QUANTITY,
-    );
-    // Reopening means the last confirmation is old news; never leave it over the form.
-    dismissToast();
+    // A payment waiting on the wallet keeps the sheet's own state: reopening it must
+    // not wipe the status the player needs, nor the quantity they chose.
+    if (!buying) {
+      resetForm(
+        wanted && Number.isInteger(wanted) && wanted > 0 ? wanted : DEFAULT_QUANTITY,
+      );
+      // Reopening means the last confirmation is old news; never leave it over the form.
+      dismissToast();
+    }
     sheet.hidden = false;
     if (!CONTRACT_ID) {
       priceEl.textContent = "Paid painting not available yet";
