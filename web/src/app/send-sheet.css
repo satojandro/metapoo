@@ -1,16 +1,34 @@
-.mp-send { display:grid; gap:12px; padding:20px; max-width:440px; margin:auto; }
-.mp-send label { display:grid; gap:6px; }
-.mp-send input,.mp-send select { width:100%; box-sizing:border-box; padding:12px; font:inherit; }
-.mp-send button { padding:12px; font:inherit; cursor:pointer; }
-.mp-send p { overflow-wrap:anywhere; }
-.mp-withdrawal-dialog { max-width:480px; width:calc(100% - 32px); max-height:90dvh; overflow:auto; padding:0; border-radius:12px; }
-.mp-withdrawal-dialog::backdrop { background:#0008; }
+.mp-send { display:grid; gap:var(--mp-space-4); padding:var(--mp-space-5); max-width:440px; margin:auto; font-size:var(--mp-text-body); }
+.mp-send-header { display:flex; align-items:center; justify-content:space-between; gap:var(--mp-space-3); }
+.mp-send-header h2 { margin:0; font-size:var(--mp-text-h3); letter-spacing:-.2px; }
+.mp-send-field { display:grid; gap:var(--mp-space-2); }
+.mp-send-label { font-size:var(--mp-text-body); color:var(--mp-soft); }
+.mp-send-asset { display:flex; align-items:center; gap:var(--mp-space-3); }
+.mp-send-asset select { flex:0 0 auto; }
+.mp-send-balance { flex:1 1 auto; text-align:right; font-size:var(--mp-text-body); color:var(--mp-muted); overflow-wrap:anywhere; }
+.mp-send-amount { position:relative; display:block; }
+.mp-send-amount input { padding-inline-end:76px; }
+.mp-send-max { position:absolute; inset-inline-end:var(--mp-space-2); top:50%; transform:translateY(-50%); min-height:0; padding:var(--mp-space-1) var(--mp-space-2); border:0; border-radius:var(--mp-radius-sm); background:none; color:var(--mp-muted); font:inherit; font-size:var(--mp-text-body); text-decoration:underline; text-underline-offset:2px; cursor:pointer; }
+.mp-send-max:hover { color:var(--mp-fg); }
+.mp-send button { padding:var(--mp-space-3); font:inherit; cursor:pointer; }
+.mp-send .mp-send-max { padding:var(--mp-space-1) var(--mp-space-2); }
+.mp-send p { margin:0; overflow-wrap:anywhere; }
+.mp-send-note,.mp-send-status { font-size:var(--mp-text-body); line-height:var(--mp-leading); color:var(--mp-soft); }
+.mp-send-lines { display:grid; gap:var(--mp-space-2); margin:0; padding:var(--mp-space-3); border:1px solid var(--mp-line); border-radius:var(--mp-radius-md); background:var(--mp-card-2); font-size:var(--mp-text-body); }
+.mp-send-lines > div { display:flex; align-items:baseline; justify-content:space-between; gap:var(--mp-space-3); }
+.mp-send-lines dt { color:var(--mp-soft); }
+.mp-send-lines dd { margin:0; text-align:right; color:var(--mp-fg); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.mp-send-lines > div:last-child dt,.mp-send-lines > div:last-child dd { color:var(--mp-fg); font-weight:700; }
+.mp-withdrawal-dialog { max-width:480px; width:calc(100% - 32px); max-height:90dvh; overflow:auto; padding:0; border-radius:var(--mp-radius-lg); }
+.mp-withdrawal-dialog::backdrop { background:var(--mp-shadow); }
 
 .mp-withdrawal-open[hidden] { display:none; }
-.mp-send,.mp-custody,.mp-withdrawal-dialog { color:var(--mp-fg); background:var(--mp-card); font:var(--mp-text-base)/var(--mp-leading) var(--mp-font); color-scheme:dark; }
-.mp-send h2,.mp-custody h2 { margin:0; font-size:26px; letter-spacing:-.8px; }
+.mp-send,.mp-custody,.mp-withdrawal-dialog { color:var(--mp-fg); background:var(--mp-card); font:var(--mp-text-body)/var(--mp-leading) var(--mp-font); color-scheme:dark; }
+.mp-custody h2 { margin:0; font-size:26px; letter-spacing:-.8px; }
 .mp-send input,.mp-send select,.mp-custody input { background:var(--mp-bg); color:var(--mp-fg); border:1px solid var(--mp-line); border-radius:var(--mp-radius-md); min-height:var(--mp-hit); }
+.mp-send input,.mp-send select { width:100%; box-sizing:border-box; padding:var(--mp-space-3); font:inherit; }
+.mp-send select { width:auto; }
 .mp-send button,.mp-custody button { border:1px solid var(--mp-line); border-radius:var(--mp-radius-md); background:var(--mp-card-2); color:var(--mp-fg); min-height:var(--mp-hit); }
-.mp-send button[type=submit],.mp-send [data-review] button,.mp-custody [data-add] { background:var(--mp-tag); color:var(--mp-on-tag); font-weight:700; }
+.mp-send .mp-btn-primary,.mp-send [data-review] .mp-btn-primary,.mp-custody [data-add] { background:var(--mp-tag); border-color:var(--mp-tag); color:var(--mp-on-tag); font-weight:700; }
 .mp-send button:disabled,.mp-custody button:disabled { opacity:.5; cursor:default; }
 .mp-send input:focus-visible,.mp-send select:focus-visible,.mp-send button:focus-visible,.mp-custody input:focus-visible,.mp-custody button:focus-visible { outline:2px solid var(--mp-focus); outline-offset:2px; }
