@@ -12,9 +12,14 @@
      fits one screen and sits centred. */
   --wall-panel-w: 380px;
   --wall-gap: var(--mp-space-6);
-  /* The pulse strip under the wall takes its height out of the wall's (owner, 7 Nov:
-     removing the beta banner later gives it back). */
-  --wall-pulse-h: 46px;
+  /* The strip under the wall takes its height out of the wall's (owner, 7 Nov:
+     removing the beta banner later gives it back). It now carries two rows: the
+     freshness / network line and the pulse. The budget is their sum — the pulse rule
+     below subtracts the freshness row, so the pulse keeps the 46px it always had.
+     Anything less and the wall gives up less than the strip occupies, so the
+     composition runs past the window and the board is cut (UI review B7). */
+  --wall-foot-h: 24px;
+  --wall-pulse-h: 70px;
   --wall-size: max(320px, min(
     calc(100dvh - 140px - var(--beta-banner-h, 0px) - var(--wall-pulse-h)),
     calc(min(100vw, 1600px) - 72px - var(--wall-panel-w) - var(--wall-gap) - 16px)
@@ -35,8 +40,10 @@
   align-items: start;
 }
 
-/* ——— The stage: the framed wall, with its controls floating over the corners ——— */
+/* ——— The stage: the framed wall, its corner controls, the strip under it ——— */
 .wall-page .wall-stage {
+  /* The view tabs are positioned against the stage, outside the frame (UI review B7). */
+  position: relative;
   display: block;
   width: var(--wall-size);
   min-width: 0;
@@ -115,7 +122,6 @@
   pointer-events: none;
 }
 .wall-page .wall-bar > * { position: absolute; pointer-events: auto; }
-.wall-page .wall-bar .mp-seg { background: var(--wall-overlay); }
 
 .wall-page .wall-chip {
   margin: 0;
@@ -132,7 +138,7 @@
   display: flex;
   align-items: center;
   gap: var(--mp-space-2, 8px);
-  max-width: calc(100% - 260px);
+  max-width: 100%;
   pointer-events: none;
 }
 .wall-page .wall-bar-lead > * { pointer-events: auto; min-width: 0; }
@@ -142,7 +148,18 @@
 .wall-page[data-moving="true"] .wall-gesture-hint[data-for-mode="paint"] { display: none; }
 .wall-page[data-moving="true"] .wall-gesture-hint[data-for-mode="moving"] { display: block; }
 
-.wall-page .wall-views { top: 0; right: 0; }
+/* The view tabs are a caption on the picture, so on a wide wall they keep the top-right
+   corner — but they are positioned against the stage, not the toolbar, so the toolbar
+   holds only the pointer controls (UI review B7). */
+.wall-page .wall-views {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  /* Above the frame's toolbar layer: the tabs are the one control that must stay
+     clickable over the art. */
+  z-index: 2;
+  background: var(--wall-overlay);
+}
 
 /* Move on every pointer: a mouse has space-drag too, but Move is the visible way to
    browse and inspect tiles in Paint mode without a tap painting them. */
@@ -200,27 +217,24 @@
   white-space: nowrap;
 }
 
-/* Freshness, refresh, the hovered tile and the network: one chip, bottom left. */
+/* Freshness, refresh, the hovered tile and the network: one quiet line under the wall,
+   above the pulse, instead of a chip pinned over the art's bottom-left corner. It sits
+   in normal flow so the strip's height budget (--wall-pulse-h) covers it; keep it a
+   single 24px row, because every pixel here is a pixel off the board (UI review B7). */
 .wall-page .wall-foot {
-  position: absolute;
-  left: 26px;
-  bottom: 26px;
-  max-width: calc(100% - 210px);
   display: flex;
   align-items: center;
   gap: var(--mp-space-2);
-  min-height: 42px;
-  box-sizing: border-box;
-  padding: 0 4px 0 12px;
-  border: 1px solid var(--mp-line);
-  border-radius: var(--mp-radius-lg);
-  background: var(--wall-overlay);
+  min-height: 24px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 2px;
   color: var(--mp-muted);
-  font: 600 var(--mp-text-sm)/1.3 var(--mp-mono);
+  font: 600 var(--mp-text-sm)/1.2 var(--mp-mono);
 }
 .wall-page .wall-foot p { margin: 0; white-space: nowrap; }
-.wall-page .board-freshness { font: inherit; color: inherit; letter-spacing: 0; text-transform: none; }
-.wall-page .wall-runtime-status { order: 4; padding: 0 8px; border-left: 1px solid var(--mp-line); border: 0; background: none; color: var(--mp-muted); font: inherit; letter-spacing: .06em; text-transform: uppercase; }
+.wall-page .board-freshness { font: inherit; color: inherit; letter-spacing: 0; text-transform: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wall-page .wall-runtime-status { order: 4; margin-left: auto; padding: 0; border: 0; background: none; color: var(--mp-muted); font: inherit; letter-spacing: .06em; text-transform: uppercase; }
 .wall-page .hover-summary {
   min-width: 0;
   overflow: hidden;
@@ -236,8 +250,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  /* 24px: the row's height, so the button sets the row height and never grows it. */
+  width: 24px;
+  height: 24px;
   flex: none;
   padding: 0;
   border: 0;
@@ -568,7 +583,16 @@
   .wall-page .wall-move { padding: 6px 12px; min-height: 40px; }
   .wall-page .wall-bar #zoom-in,
   .wall-page .wall-bar #zoom-out { display: none; }
-  /* On a small wall the status line sits under it instead of over it. */
+  /* On a 360 px wall the tabs covered the top-right of the picture, so on phone they
+     join the freshness line in the strip under the wall (UI review B7). */
+  .wall-page .wall-views {
+    position: static;
+    /* Block-level so the stage does not pick up a line box's descender space. */
+    display: flex;
+    width: fit-content;
+    margin-top: 5px;
+  }
+  /* The status line is a tight row under the wall, with the tabs above it. */
   .wall-page .wall-foot {
     position: static;
     max-width: none;
@@ -1023,10 +1047,12 @@
 
 /* ——— The wall's story (owner, 7 Nov): fill, happy hour, earnings, holders, rules ——— */
 /* The pulse strip under the wall: the How it works fill meter, and the wall's state
-   in one line. Its height is --wall-pulse-h, which the wall gives up. */
+   in one line. Its height is what --wall-pulse-h has left after the freshness row
+   (--wall-foot-h) and its own top gap, so the strip's total matches the budget the
+   wall gives up (UI review B7). */
 .wall-page .wall-pulse {
   box-sizing: border-box;
-  height: calc(var(--wall-pulse-h) - var(--mp-space-2));
+  height: calc(var(--wall-pulse-h) - var(--wall-foot-h) - var(--mp-space-2));
   margin-top: var(--mp-space-2);
   display: grid;
   align-content: center;
@@ -1213,9 +1239,13 @@
   .wall-page > .wall-yours { grid-template-columns: minmax(0, 1fr); margin: var(--mp-space-6) 0 0; padding: var(--mp-space-4); }
 }
 
-/* Phone: the pulse rides under the wall in the sticky stage; one tight line. */
+/* Phone: the pulse rides under the wall in the sticky stage; one tight line. The strip
+   budget is three rows on phone — the view tabs (they left the wall's corner), the
+   freshness row and the pulse — measured at 119px at 390px wide, so the stage, which is
+   sticky and cannot be scrolled past, stays a wall plus a thumb's worth of controls
+   (UI review B7). */
 @media (max-width: 760px) {
-  .wall-page { --wall-pulse-h: 34px; }
+  .wall-page { --wall-pulse-h: 120px; }
   .wall-page .wall-pulse { height: auto; gap: 4px; margin-top: 4px; padding-bottom: 2px; }
   .wall-page .wall-meter { height: 4px; }
   /* The panel's height is free on phone, so the strip may take a second line. */
@@ -1302,7 +1332,21 @@ html.wall-fullscreen-open body { overflow: hidden; overscroll-behavior: none; }
 .wall-page[data-fullscreen="true"] .board-viewport { height: 100%; aspect-ratio: auto; }
 .wall-page[data-fullscreen="true"] .wall-pulse { display: none; }
 .wall-page[data-fullscreen="true"] .wall-bar { inset: 16px; height: auto; }
-.wall-page[data-fullscreen="true"] .wall-foot { left: 16px; bottom: 16px; }
+/* Full screen hides the pulse, so the freshness line has no strip to sit in. It goes
+   back to the corner chip it was, pinned to the stage's bottom-left: the wall owns the
+   window there and there is nowhere else for it (UI review B7). The view tabs keep their
+   own corner, which in full screen is the window's. */
+.wall-page[data-fullscreen="true"] .wall-views { position: absolute; top: 16px; right: 16px; margin-top: 0; }
+.wall-page[data-fullscreen="true"] .wall-foot {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  max-width: calc(100% - 32px);
+  padding: 0 var(--mp-space-1) 0 var(--mp-space-3);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-lg);
+  background: var(--wall-overlay);
+}
 .wall-page[data-fullscreen="true"] .wall-panel {
   height: auto;
   /* Full screen stretches the panel beside the wall; the page's own cap would

@@ -47,9 +47,38 @@ describe("wallPageHtml", () => {
     expect(root.querySelector("#wall-mode-look")).toBeNull();
     expect(root.querySelector("#wall-mode-paint")).toBeNull();
     expect(root.querySelector(".wall-dock")?.closest(".wall-panel")).not.toBeNull();
-    // The wall's controls float over it, inside the frame.
-    expect(root.querySelector(".wall-frame .wall-bar [data-wall-view]")).not.toBeNull();
-    expect(root.querySelector(".wall-frame #refresh-board")).not.toBeNull();
+    // B7: the art keeps only the pointer controls. Freshness, the network label and the
+    // view tabs are stage children under the frame, so they cost the wall no artwork.
+    const stage = root.querySelector(".wall-stage")!;
+    const frame = root.querySelector(".wall-frame")!;
+    for (const selector of [
+      ".wall-views",
+      "[data-wall-view]",
+      "#board-freshness",
+      "#refresh-board",
+      "#hover-summary",
+      ".wall-runtime-status",
+    ]) {
+      const node = root.querySelector(selector);
+      expect(node, selector).not.toBeNull();
+      expect(stage.contains(node), selector).toBe(true);
+      expect(frame.contains(node), selector).toBe(false);
+    }
+    // What stays over the art: Move, full screen and the panel toggle.
+    for (const selector of ["#wall-move", "#wall-fullscreen", "#wall-panel-toggle"]) {
+      expect(root.querySelector(`.wall-bar ${selector}`), selector).not.toBeNull();
+    }
+    // The strip's order: frame, the tabs, the freshness row, then the pulse.
+    const follows = (first: Element | null, second: Element | null) =>
+      first !== null &&
+      second !== null &&
+      (first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const views = stage.querySelector(".wall-views");
+    const footRow = stage.querySelector(".wall-foot");
+    const pulse = stage.querySelector("[data-wall-pulse]");
+    expect(follows(frame, views)).toBe(true);
+    expect(follows(views, footRow)).toBe(true);
+    expect(follows(footRow, pulse)).toBe(true);
     // The primary action, its status and its result sit in the pinned footer.
     const foot = root.querySelector(".wall-panel-foot");
     for (const selector of ["#start-painting", "#dock-primary", "#draw-button", "#draw-state", "#result"]) {
