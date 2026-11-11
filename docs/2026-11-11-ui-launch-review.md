@@ -110,6 +110,20 @@ the model.
 | G2 | "From" prints the full 64-character account on every approval. | Shorten in the row; full id in Technical details. |
 | G3 | **Send sheet**: confirmed as described in A4. Also, the dialog's "Close" is an unstyled grey chip in the top-left corner, outside the panel. | Standard header row with a Close button, as on Buy credits. |
 
+## H. Stake and TOILET while connected (owner screenshots, 11 Nov)
+
+**Stake is in good shape and should be left structurally alone.** The stat grid, "Your position"
+and the live preview under the amount ("Your share after this 2.19% · Your cut of today's payout
+≈ 153.89 mPOO") do exactly what the page needs. C2 only applies signed-out. Remaining nits:
+
+| # | What is wrong | Fix |
+|---|---|---|
+| H1 | **MAX fills twelve decimals** (`607.683444099601`) while the button beside it says "Lock 607.6834 TOILET" and the TOILET page shows the same balance as `607.68`. | Display four decimals in the field (keep the exact amount internally), and use one precision for TOILET across both pages. |
+| H2 | "Your wallet signs one transaction with 1 yoctoNEAR attached." under both buttons. | Same as E7. |
+| H3 | The "Read live from" block prints two 64-character ids and a wall-clock time above the stats. | Same as C7; move it to the foot of the page. |
+| H4 | **TOILET page, desktop: an id is cut off mid-string** in the "mPOO waiting for stakers" cell ("Forwarded to 57590a9e…c1b5763e" runs out of the cell). Same cause as A1, visible without a phone. | Shorten the id. |
+| H5 | **TOILET page says "0 mPOO waiting for stakers" in large type** while Stake shows 70,245 mPOO in the pool. The zero is correct (nothing is waiting on the board; it has been forwarded) but reads as "stakers get nothing". | Show the pool figure here ("mPOO in the stakers' pool") with a link to Stake; the waiting amount belongs on Where the money goes. |
+
 ## Suggested order
 
 1. **A1, A2, A5, A6, B2, C3** — small, mechanical, no design decision needed. One PR.
