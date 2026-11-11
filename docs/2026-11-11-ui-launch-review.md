@@ -65,10 +65,31 @@ time. Findings are ordered by what a first-time player would hit. Nothing here i
 - Add funds is solid. Two notes: "Native NEAR delivery is checked before the payment address is
   shown" is internal reasoning the player does not need, and the refund address should be shortened.
 
+## E. Account panel (owner screenshots, logged-in wallet, 11 Nov)
+
+The panel is one long scroll of nine unrelated blocks, three of them with a yellow button. It is
+the place a player goes to answer "what do I have?", and it answers with developer output.
+
+| # | What is wrong | Fix |
+|---|---|---|
+| E1 | **A third word for the same thing.** "Price per pixel", "0.0025 NEAR / pixel", "Paint pixels available · 4 pixels" (`paint-wallet-panel.ts:22-23`). The wall says tiles and credits. | "Price per credit" and "Paint credits · 4". With B2 this leaves one vocabulary: you paint *tiles* with *credits*. |
+| E2 | **NEAR balance shows 24 decimals**: `1.065470563726758755741822 NEAR`, labelled "NEAR available · before gas". | Four decimals, cut not rounded ("1.0654 NEAR"), label "NEAR in your wallet". |
+| E3 | **"mPOO in wallet" has no value** — the label sits over an empty line. | Show "0 mPOO" or a "…" while loading, and hide the row when the board is not selling for mPOO. |
+| E4 | **The panel talks about itself**: "Buy credits from the paint dock on the wall. This panel only shows balances." | Replace the sentence with a "Buy credits" button that opens the sheet. |
+| E5 | **Two ways to get NEAR, styled as rivals.** A yellow "Add funds from another chain" and a pink "Buy NEAR ↗" with the note "Credits are bought with NEAR on this board. Opens near.com to get NEAR from other chains" — which describes what the yellow button already does in-app. | One primary "Add funds"; "Buy NEAR ↗" as a text link beneath it. Pink is used nowhere else as a button colour (same as D). |
+| E6 | **"Send" and "Self-custody" float between sections** with no heading or explanation, touching each other. | Give them a "Move funds out" heading and one line each. Self-custody stays hidden until A4 is done. |
+| E7 | **Chain jargon on the claim**: "Your wallet signs. You attach 1 yoctoNEAR and pay gas; the TOILET lands in your wallet." (`toilet.ts:210`; the same wording is on Stake, `staking.ts:275-308`). | "One approval in your wallet, plus a small network fee." |
+| E8 | **"Connection details" prints the account and the contract twice**, in full, as sentences; then "Operations: No in-flight wallet operations. Leaving a page does not drop a broadcast transaction."; then a debug line: `mainnet · cc9ad…  · ~9.3 px/cell · updated 30s ago block 223997487. · no app fee`. | Collapse all three into one closed "Technical details" disclosure at the bottom. Show Operations above it only when something is actually pending. |
+| E9 | **Disconnect is a yellow primary button**, the same weight as Claim and Add funds. | Secondary style, last in the panel. |
+| E10 | **Header layout**: the account chip and "Close" sit on separate rows, and the full 64-character address is repeated directly under the short one. "Updated 12:27:47" is a wall-clock time. | One header row: short address, copy icon, Close. Drop the second address box. "Updated just now". |
+
+Suggested order of blocks: address · balances (credits, NEAR, mPOO, TOILET) · Buy credits / Add
+funds · Claim TOILET · Move funds out · links · Technical details · Disconnect.
+
 ## Suggested order
 
 1. **A1, A2, A5, A6, B2, C3** — small, mechanical, no design decision needed. One PR.
-2. **A3** (#98, #105) with **D** — the payment sheets, one PR, needs a real-wallet test.
+2. **A3** (#98, #105) with **D** and **E** — the payment sheets and the account panel, one PR, needs a real-wallet test.
 3. **B1** (#99), **B3, B4, B7–B9, C1, C2, C4, C10** — wall and shared-component tidy. One PR.
 4. **A4** — Send and Self-custody rewrite. Touches wallet copy, so it needs owner sign-off on the wording.
 5. **B5, B6** — check on a physical phone first.
