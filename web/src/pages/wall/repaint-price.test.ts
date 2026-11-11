@@ -39,7 +39,7 @@ const DEFAULT_TUNABLES: RepaintTunables = {
   repaint_base_credits: 1,
 };
 
-const LEGEND = "Fresh cells cost more to repaint. Wait an hour and it is 1 credit again.";
+const LEGEND = "Fresh tiles cost more to repaint. Wait an hour and it is 1 credit again.";
 
 function mount(): { root: HTMLElement; chrome: RepaintChrome } {
   const root = document.createElement("div");
@@ -95,8 +95,8 @@ describe("repaint price", () => {
     const { root, chrome } = mount();
     showRepaintQuote(chrome, quote);
 
-    expect(chrome.strokeTotal.textContent).toBe("this stroke: 2 cells · 8 credits");
-    expect(chrome.strokeTotal.textContent).not.toBe("this stroke: 2 cells · 2 credits");
+    expect(chrome.strokeTotal.textContent).toBe("this stroke: 2 tiles · 8 credits");
+    expect(chrome.strokeTotal.textContent).not.toBe("this stroke: 2 tiles · 2 credits");
     expect(chrome.badge.textContent).toBe("repaint 2 min ago · 4 credits");
     expect(chrome.submit.disabled).toBe(false);
     expect(root.querySelector("#stroke-total")?.textContent).toContain("8 credits");
@@ -124,7 +124,7 @@ describe("repaint price", () => {
     }
     const { chrome } = mount();
     showRepaintQuote(chrome, quote);
-    expect(chrome.strokeTotal.textContent).toBe("this stroke: 2 cells · 5 credits");
+    expect(chrome.strokeTotal.textContent).toBe("this stroke: 2 tiles · 5 credits");
     expect(chrome.badge.textContent).toBe("repaint 2 min ago · 4 credits");
   });
 
@@ -201,7 +201,7 @@ describe("repaint price", () => {
       return;
     }
     expect(quote.cells[0]?.line).toBe("unpainted · 1 credit");
-    expect(quote.strokeText).toBe("this stroke: 1 cell · 1 credit");
+    expect(quote.strokeText).toBe("this stroke: 1 tile · 1 credit");
     expect(creditShortfall(0n, quote.totalCredits)).toMatch(/needs 1 credit/);
     expect(creditShortfall(0n, quote.totalCredits)).toMatch(/Nothing was submitted/);
     expect(creditShortfall(1n, quote.totalCredits)).toBeNull();
@@ -237,7 +237,7 @@ describe("repaint price", () => {
     expect(cellCost).not.toHaveBeenCalled();
     expect(pixel).toHaveBeenCalledTimes(2);
     expect(quote.totalCredits).toBe(2);
-    expect(quote.strokeText).toBe("this stroke: 2 cells · 2 credits");
+    expect(quote.strokeText).toBe("this stroke: 2 tiles · 2 credits");
   });
 });
 

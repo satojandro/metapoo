@@ -253,14 +253,14 @@ export function createCameraController(deps: CameraControllerDeps): CameraContro
     const zoomPercent = Math.max(1, Math.round((camera.cellSize / fitCellSize) * 100));
     const selected = selection.selected();
     const cellLabel = selected
-      ? `Cell (${selected.x}, ${selected.y})`
-      : "Cell: none selected";
+      ? `Tile (${selected.x}, ${selected.y})`
+      : "Tile: none selected";
     positionReadout.textContent = `Zoom ${zoomPercent}% · ${cellLabel}`;
     positionReadout.setAttribute(
       "aria-label",
       selected
-        ? `Zoom ${zoomPercent} percent of whole-wall view. Selected cell: column ${selected.x}, row ${selected.y}.`
-        : `Zoom ${zoomPercent} percent of whole-wall view. No cell selected.`,
+        ? `Zoom ${zoomPercent} percent of whole-wall view. Selected tile: column ${selected.x}, row ${selected.y}.`
+        : `Zoom ${zoomPercent} percent of whole-wall view. No tile selected.`,
     );
   }
 
