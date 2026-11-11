@@ -10,6 +10,7 @@
 import { explorerUrl } from "@shared/board-rules.ts";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
 import { connectWallet } from "../shared/connect-wallet";
+import { sinceLabel } from "../shared/relative-time";
 import { shortAccount } from "../shared/short-account";
 import { isUserRejection, parseTxOutcome } from "../tx-outcome";
 import { signAndSendClaimRewards, signAndSendStake, signAndSendUnstake } from "../wallet";
@@ -70,7 +71,6 @@ const TEMPLATE = `
     <p class="mp-eyebrow">TOILET staking</p>
     <h2 id="stk-title" data-route-heading="true">Stake TOILET. Get paid in mPOO.</h2>
     <p class="stk-lede">${MPOO_SPLIT.stakers}% of every mPOO the wall earns goes to the stakers’ pool. The pool pays out a share of itself every day, split by how much TOILET each staker has staked. Paint tiles to earn TOILET, stake it here, claim mPOO whenever you like.</p>
-    <p class="stk-source" data-s="source" role="status"></p>
   </header>
 
   <div class="stk-notice" data-s="notice" hidden></div>
@@ -164,6 +164,8 @@ const TEMPLATE = `
       <p class="stk-fine">The daily payout smooths what arrives; it doesn’t grow it. A busy week fills the pool, and the pool spreads it over the following days. <a href="/money">See every split on Where the money goes →</a></p>
     </section>
 
+    <p class="stk-source" data-s="source" role="status"></p>
+
     <section class="stk-sec" aria-labelledby="stk-trust-h">
       <h3 id="stk-trust-h">Nobody can change these rules</h3>
       <p class="stk-fine">The staking contract has no owner, no admin and no upgrade. The payout rate and the tax are fixed in its code. A bug can’t be patched; it would take a new contract.</p>
@@ -218,11 +220,12 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
       el.title = deps.board;
       return;
     }
-    const when = updatedAt === null ? "" : ` · updated ${new Date(updatedAt).toLocaleTimeString()}`;
+    // C7: a wall-clock time was precise, unreadable and wide; the exact stamp stays on hover.
+    const when = updatedAt === null ? "" : ` · updated ${sinceLabel(updatedAt)}`;
     el.textContent = l
       ? `Read live from ${shortAccount(l.staking)} and ${shortAccount(l.config.board)} on ${deps.network}${when}.`
       : `Read from ${shortAccount(deps.board)} on ${deps.network}${when}.`;
-    el.title = l ? `${l.staking} and ${l.config.board}` : deps.board;
+    el.title = `${l ? `${l.staking} and ${l.config.board}` : deps.board}${updatedAt === null ? "" : ` — read at ${new Date(updatedAt).toLocaleTimeString()}`}`;
   }
 
   function renderNotice(): void {
