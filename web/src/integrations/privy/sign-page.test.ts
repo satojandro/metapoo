@@ -24,17 +24,19 @@ const host = {
   networkId: "testnet" as const,
   sessionEpoch: 1,
 };
+// A request the app actually sends. The old fixture was `near_deposit` on wrap.testnet, which
+// the approval window now refuses because nothing in the game sends it (approval copy, 11 Nov).
 const payload = {
   kind: "signAndSendTransaction",
   network: "testnet",
-  receiverId: "wrap.testnet",
+  receiverId: "wall.testnet",
   actions: [
     {
       type: "FunctionCall",
       params: {
-        methodName: "near_deposit",
-        args: {},
-        deposit: "1",
+        methodName: "buy_credits_near",
+        args: JSON.stringify({ min_credits: "10" }),
+        deposit: "25000000000000000000000",
         gas: "30000000000000",
       },
     },
@@ -88,6 +90,9 @@ function setup(
   pages.push(page);
   return { root, runtime, sign, page, options };
 }
+/** The approve action, whatever its label says for this transaction. */
+const approveButton = (root: HTMLElement) =>
+  root.querySelector<HTMLButtonElement>("[data-approve]") ?? undefined;
 const button = (root: HTMLElement, label: string) =>
   Array.from(root.querySelectorAll("button")).find(
     (b) => b.textContent === label,
@@ -99,10 +104,12 @@ describe("standalone Privy approval page", () => {
     await page.ready;
     expect(sign).not.toHaveBeenCalled();
     expect(runtime.handshake).toHaveBeenLastCalledWith(wallet);
-    button(root, "Approve").click();
-    await flush();
-    expect(runtime.assertReady).toHaveBeenCalledWith(wallet);
-    expect(sign).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(approveButton(root)).toBeDefined());
+    approveButton(root)!.click();
+    // The review now reads the contract facts the approved copy needs, so the click's work is
+    // asynchronous: wait for it rather than assuming one tick.
+    await vi.waitFor(() => expect(runtime.assertReady).toHaveBeenCalledWith(wallet));
+    await vi.waitFor(() => expect(sign).toHaveBeenCalledTimes(1));
   });
   it("rejects account changes while readiness checks are pending", async () => {
     const { root, runtime, sign, page } = setup();
@@ -114,7 +121,7 @@ describe("standalone Privy approval page", () => {
           finish = resolve;
         }),
     );
-    button(root, "Approve").click();
+    approveButton(root)!.click();
     await flush();
     setPrivyHostIdentity({ ...host, sessionEpoch: 2 }, localStorage);
     finish();
@@ -126,7 +133,7 @@ describe("standalone Privy approval page", () => {
     await page.ready;
     localStorage.setItem("drawing-secret", "untouched");
     vi.mocked(runtime.user.get).mockResolvedValue({ user: null });
-    button(root, "Approve").click();
+    approveButton(root)!.click();
     await flush();
     expect(sign).not.toHaveBeenCalled();
     expect(localStorage.getItem("drawing-secret")).toBe("untouched");
@@ -137,12 +144,13 @@ describe("standalone Privy approval page", () => {
     sign.mockRejectedValue(
       new Error("RPC response lost after possible broadcast"),
     );
-    const approve = button(root, "Approve");
+    await vi.waitFor(() => expect(approveButton(root)).toBeDefined());
+    const approve = approveButton(root)!;
     approve.click();
     approve.click();
-    await flush();
+    await vi.waitFor(() => expect(sign).toHaveBeenCalledTimes(1));
     expect(sign).toHaveBeenCalledTimes(1);
-    expect(button(root, "Approve")).toBeUndefined();
+    expect(approveButton(root)).toBeUndefined();
     expect(root.textContent).toContain("original operation");
   });
   it("rejects missing network before provisioning or showing auth buttons", async () => {
@@ -220,10 +228,10 @@ describe("standalone Privy approval page", () => {
     );
     await page.ready;
     expect(root.textContent).toContain("Authorize drawing");
-    button(root, "Approve").click();
+    approveButton(root)!.click();
     await flush();
     expect(sign).toHaveBeenCalledTimes(1);
-    expect(button(root, "Approve")).toBeUndefined();
+    expect(approveButton(root)).toBeUndefined();
   });
   it("rechecks that pending AddKey still belongs to the current host epoch before signing", async () => {
     const key = buildAddFunctionCallKeyParams(
@@ -249,7 +257,7 @@ describe("standalone Privy approval page", () => {
       { ...pending, sessionEpoch: 2 },
       localStorage,
     );
-    button(root, "Approve").click();
+    approveButton(root)!.click();
     await flush();
     expect(sign).not.toHaveBeenCalled();
   });
@@ -267,7 +275,7 @@ describe("standalone Privy approval page", () => {
     const { root, runtime, sign, page, options } = setup();
     await page.ready;
     sign.mockRejectedValue(new Error("Lost response after possible broadcast"));
-    button(root, "Approve").click();
+    approveButton(root)!.click();
     await flush();
     button(root, "Cancel").click();
     expect(sign).toHaveBeenCalledOnce();
@@ -285,7 +293,7 @@ describe("standalone Privy approval page", () => {
           finish = resolve;
         }),
     );
-    button(root, "Approve").click();
+    approveButton(root)!.click();
     await flush();
     button(root, "Cancel").dispatchEvent(new Event("click"));
     expect(runtime.rejectBeforeBroadcast).not.toHaveBeenCalled();

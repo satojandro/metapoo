@@ -57,21 +57,32 @@ function memory() {
 function session(payload: unknown): SigningSession {
   return { payload, targetOrigin: config.origin, sign: vi.fn() };
 }
+// A transaction the app actually sends: 10 credits for 0.025 NEAR on the board (the approved
+// caption table, 11 Nov). The old fixture was a `near_deposit` on wrap.testnet — an action the
+// game never sends, which the approval window now refuses on purpose.
 const tx = {
   kind: "signAndSendTransaction",
   network: "testnet",
-  receiverId: "wrap.testnet",
+  receiverId: "wall.testnet",
   actions: [
     {
       type: "FunctionCall",
       params: {
-        methodName: "near_deposit",
-        args: {},
-        deposit: "1000000000000000000000000",
+        methodName: "buy_credits_near",
+        args: JSON.stringify({ min_credits: "10" }),
+        deposit: "25000000000000000000000",
         gas: "30000000000000",
       },
     },
   ],
+};
+const facts = {
+  stakingContractId: null,
+  toiletTokenId: "toilet.testnet",
+  mpooTokenId: "mpoo.testnet",
+  pricePerCreditYocto: "2500000000000000000000",
+  mpooPerCredit: null,
+  unstakeBurnBps: null,
 };
 
 describe("Privy configuration and manifest", () => {
@@ -322,10 +333,11 @@ describe("Privy signing request boundary", () => {
       wallet,
       host,
       "wall.testnet",
+      undefined,
+      null,
+      { facts },
     );
-    expect(result.details.join("\n")).toContain(
-      "1000000000000000000000000 yoctoNEAR",
-    );
+    expect(result.details.join("\n")).toContain("25000000000000000000000 yoctoNEAR");
     expect(request.sign).not.toHaveBeenCalled();
   });
   it("rejects sponsorship, full-access additions, arbitrary key deletion and invalid gas", () => {
@@ -374,14 +386,16 @@ describe("Privy picker entry and plain-language review", () => {
       wallet,
       host,
       "wall.testnet",
+      undefined,
+      null,
+      { facts },
     );
     const rows = Object.fromEntries(review.rows.map((r) => [r.label, r.value]));
-    expect(rows.Sends).toBe("1 NEAR");
-    expect(rows["Gas limit"]).toBe("30 TGas");
-    expect(rows.Calls).toBe("near_deposit on wrap.testnet");
-    expect(review.details.join("\n")).toContain(
-      "1000000000000000000000000 yoctoNEAR",
-    );
+    expect(review.title).toBe("Buy 10 credits");
+    expect(rows.Pay).toBe("0.025 NEAR");
+    expect(rows.To).toBe("the Meta Poo wall");
+    expect(review.approveLabel).toBe("Pay 0.025 NEAR");
+    expect(review.details.join("\n")).toContain("25000000000000000000000 yoctoNEAR");
     const free = reviewPrivyRequest(
       session({
         ...tx,
@@ -393,8 +407,12 @@ describe("Privy picker entry and plain-language review", () => {
       wallet,
       host,
       "wall.testnet",
+      undefined,
+      null,
+      { facts },
     );
-    expect(free.rows.find((r) => r.label === "Sends")?.value).toBe("None");
+    // A zero deposit is still a purchase of zero credits: the row says what is paid, plainly.
+    expect(free.rows.find((r) => r.label === "Pay")?.value).toBe("0 NEAR");
   });
   it("explains the drawing key as a capped allowance in NEAR, not yocto", () => {
     const key = buildAddFunctionCallKeyParams(
@@ -580,6 +598,6 @@ describe("drawing key added by an ordinary AddKey transaction", () => {
     expect(result.title).toBe("Let this browser paint for you");
     const values = result.rows.map((r) => `${r.label}: ${r.value}`);
     expect(values).toContain("Adds: A drawing key for this browser");
-    expect(values).toContain("Remove: This browser's drawing key");
+    expect(values).toContain("Remove: This browser's painting key");
   });
 });

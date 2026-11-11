@@ -276,6 +276,8 @@ export function mountPrivySignPage(
         }
       },
     );
+    // A stable handle for tests and assistive tooling: the label changes per action.
+    approve.setAttribute("data-approve", "");
     if (review.confirm) {
       const sync = () => { approve.disabled = busy || suffix.value.trim() !== review.confirm!.suffix || !ack.checked; };
       suffix.addEventListener("input", sync); ack.addEventListener("change", sync);

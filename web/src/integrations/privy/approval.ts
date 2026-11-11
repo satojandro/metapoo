@@ -1,4 +1,5 @@
 import { classifySend, decodeSendArgs, type SendPolicy } from "../send/plan";
+import { reviewContractIntent, type ApprovalFacts } from "./intents";
 import { reviewSelfCustodyKey, privyPublicKey, type PendingSelfCustodyKey } from "./self-custody";
 import {
   DRAWING_SESSION_GAS_ALLOWANCE_YOCTO,
@@ -78,7 +79,14 @@ export function reviewPrivyRequest(
   boardContractId: string,
   drawingPublicKey?: string,
   pendingDrawing?: PendingDrawingAuthorization | null,
-  checks?: {sendPolicy?: SendPolicy; pendingCustody?: PendingSelfCustodyKey | null; keyPermission?: unknown; alreadyRegistered?: boolean},
+  checks?: {
+    sendPolicy?: SendPolicy;
+    pendingCustody?: PendingSelfCustodyKey | null;
+    keyPermission?: unknown;
+    alreadyRegistered?: boolean;
+    /** Chain facts the approved approval copy reads; every one is optional and never guessed. */
+    facts?: Omit<ApprovalFacts, "walletAddress" | "boardContractId">;
+  },
 ): PrivyReview {
   if (session.targetOrigin !== config.origin)
     throw new Error("This application is not allowed to request signatures.");
@@ -234,6 +242,19 @@ export function reviewPrivyRequest(
       approveLabel: `Send ${amount}`, requiresFunds: true, requiresHost: true,
     };
   }
+  // The approved captions (owner, 11 Nov): every action the game sends is mapped here from the
+  // transaction itself, and anything unpapped is refused rather than captioned generically.
+  const intent = reviewContractIntent(transactions, {
+    walletAddress: wallet.address,
+    boardContractId,
+    stakingContractId: checks?.facts?.stakingContractId ?? null,
+    toiletTokenId: checks?.facts?.toiletTokenId ?? "",
+    mpooTokenId: checks?.facts?.mpooTokenId ?? "",
+    pricePerCreditYocto: checks?.facts?.pricePerCreditYocto ?? null,
+    mpooPerCredit: checks?.facts?.mpooPerCredit ?? null,
+    unstakeBurnBps: checks?.facts?.unstakeBurnBps ?? null,
+  });
+  if (intent) return intent;
   if (config.selfCustodyEnabled && host) {
     const custody = reviewSelfCustodyKey(transactions, host, checks?.pendingCustody ?? null, checks?.keyPermission, drawingPublicKey);
     if (custody) return custody;
@@ -262,7 +283,7 @@ export function reviewPrivyRequest(
         )
           throw new Error("Only the current drawing key can be revoked here.");
         revokesKey = true;
-        rows.push({ label: "Remove", value: "This browser's drawing key" });
+        rows.push({ label: "Remove", value: "This browser's painting key" });
         details.push(`Revoke drawing key: ${drawingPublicKey}`);
       } else if (action.type === "AddKey") {
         // The drawing session adds its key with a plain AddKey transaction, so this screen
@@ -323,29 +344,10 @@ export function reviewPrivyRequest(
           `Gas allowance: ${allowance} yoctoNEAR`,
         );
       } else if (action.type === "FunctionCall") {
-        if (params.methodName === "ft_transfer" || (params.methodName === "storage_deposit" && decodeSendArgs(params.args).account_id !== undefined && decodeSendArgs(params.args).account_id !== wallet.address))
-          throw new Error("Unreviewed transfer request.");
-        if (
-          typeof params.methodName !== "string" ||
-          !/^[A-Za-z0-9_]{1,64}$/.test(params.methodName)
-        )
-          throw new Error("Invalid contract method.");
-        const gas = atomic(params.gas),
-          deposit = atomic(params.deposit);
-        if (BigInt(gas) <= 0n || BigInt(gas) > 300_000_000_000_000n)
-          throw new Error("Invalid gas limit.");
-        const args = params.args;
-        if (!(args instanceof Uint8Array)) record(args);
-        rows.push(
-          { label: "Calls", value: `${params.methodName} on ${receiver}`, mono: true },
-          { label: "Sends", value: formatDeposit(deposit) },
-          { label: "Gas limit", value: formatGas(gas) },
-        );
-        details.push(
-          `${receiver} → ${params.methodName}`,
-          `Attached deposit: ${deposit} yoctoNEAR; gas limit: ${gas}`,
-          `Arguments: ${args instanceof Uint8Array ? new TextDecoder().decode(args) : JSON.stringify(args)}`,
-        );
+        // Every contract call is captioned by ./intents.ts or refused there. Reaching this
+        // branch means the batch mixed a key action with an unmapped call: refuse, do not
+        // invent a "Calls X on Y" line (owner sign-off, 11 Nov).
+        throw new Error("This action is not supported in the approval window.");
       } else
         throw new Error("This wallet request contains an unsupported action.");
     }
