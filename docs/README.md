@@ -15,6 +15,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | what is decided vs still open? | [`00-shared-decisions.md`](00-shared-decisions.md), [`roadmap.md`](roadmap.md) |
 | what blocks mainnet, in what order? | [`2026-10-29-code-audit.md`](2026-10-29-code-audit.md); work orders in [`implementation/2026-11-01-work-queue.md`](implementation/2026-11-01-work-queue.md) |
 | how should the site look and feel? | [`2026-10-29-whole-site-design-review.md`](2026-10-29-whole-site-design-review.md) |
+| what UI work is left before launch? | [`2026-11-11-ui-launch-review.md`](2026-11-11-ui-launch-review.md) |
 | how should a judgement call be made? | [`2026-10-14-product-judgment.md`](2026-10-14-product-judgment.md) |
 
 ## Payments (the money path)
@@ -52,6 +53,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | wall journey (PR #87): what shipped, owner decisions, full-screen hybrid, handover | [`learning/2026-11-07-wall-journey.md`](learning/2026-11-07-wall-journey.md): start here for the next wall session |
 | agents painting: `/agents` for humans, `/skill.md` for the agent | [`implementation/2026-11-09-agents-page-spec.md`](../docs/implementation/2026-11-09-agents-page-spec.md): built 10 Nov in `web/src/app/agents-page.ts`; the skill is [`../web/public/skill.md`](../web/public/skill.md), corrected from two live agent runs |
 | Privy players moving funds out: Send (NEAR, TOILET, mPOO) and a self-custody panel | [`implementation/2026-11-11-privy-send-spec.md`](implementation/2026-11-11-privy-send-spec.md) and [`implementation/2026-11-11-privy-self-custody-spec.md`](implementation/2026-11-11-privy-self-custody-spec.md), mockups in [`implementation/mockups/`](implementation/mockups/), tasks in [`implementation/privy-withdrawal.tasks.json`](implementation/privy-withdrawal.tasks.json): specs for review, 11 Nov, not built |
+| reasons to come back: away summary and alerts, sponsored first paint, names, Hall of Fame and timelapse, agents | [`implementation/2026-11-11-return-and-growth-spec.md`](implementation/2026-11-11-return-and-growth-spec.md): specs for owner review, 11 Nov, not built; the AI curator is deliberately excluded |
 | board server: a port of Berry Fast (indexer, Valkey, region blob, WebSocket) | [`implementation/2026-11-07-board-server-berry-fast-port.md`](implementation/2026-11-07-board-server-berry-fast-port.md): draft for owner review, not built; no contract change |
 | outbound links: X, Telegram, GitHub, and the mPOO chart | [`implementation/2026-11-11-social-links-spec.md`](implementation/2026-11-11-social-links-spec.md): phase 1 built 11 Nov in `web/src/social-links.ts` + `web/src/app/site-footer.ts`; TOILET chart stays unlinked until a pool exists |
 | wall page front-end: what is broken, and the plan | [`2026-11-02-wall-frontend-audit.md`](2026-11-02-wall-frontend-audit.md): audit 2 Nov, plan awaiting owner approval |
