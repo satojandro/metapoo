@@ -33,6 +33,15 @@ export function formatUnits(value: string, decimals: number): string {
   const fraction = padded.slice(-decimals).replace(/0+$/, "");
   return padded.slice(0, -decimals) + (fraction ? `.${fraction}` : "");
 }
+/**
+ * A wallet balance in the four decimals a player reads. Cut, never rounded: a rounded-up
+ * balance would claim NEAR the wallet does not have when it is spent to the last yocto.
+ */
+export function walletAmount(value: string): string {
+  const [whole, fraction = ""] = value.split(".");
+  const cut = fraction.slice(0, 4).replace(/0+$/, "");
+  return cut ? `${whole}.${cut}` : whole;
+}
 export function availableNear(amount: string, locked: string, bytes: number, byteCost: string): string {
   if (!Number.isSafeInteger(bytes) || bytes < 0) throw new Error("Invalid storage");
   const total = units(amount) + units(locked);
@@ -63,10 +72,11 @@ async function view(rpc: Rpc, account: string, method: string, args: Record<stri
 
 export async function loadPaintWallet(rpc: Rpc, board: string, network: string, account: string | null): Promise<PaintWalletSnapshot> {
   const result: PaintWalletSnapshot = {
-    price: "Planned: 0.0025 NEAR / pixel", credits: "Paid painting not available yet",
+    price: "Planned: 0.0025 NEAR", credits: "Paid painting not available yet",
     near: account ? "Unavailable — retry" : "Connect wallet to view",
     mpoo: account ? "Unavailable — retry" : "Connect wallet to view",
-    note: "Buy credits from the paint dock when this board is paid. Balances here stay read-only.",
+    // The panel says what the player has; how to buy is its Buy credits button, not a sentence.
+    note: "",
   };
   // NEAR can load even if the board or token read fails.
   const nearRead = (async () => {
@@ -75,7 +85,7 @@ export async function loadPaintWallet(rpc: Rpc, board: string, network: string, 
       const state = record(await rpc("query", {request_type: "view_account", account_id: account, finality: "final"}));
       const config = record(await rpc("EXPERIMENTAL_protocol_config", {block_id: state.block_hash}));
       const runtime = record(config.runtime_config);
-      result.near = `${availableNear(String(state.amount), String(state.locked), state.storage_usage as number, String(runtime.storage_amount_per_byte))} NEAR`;
+      result.near = `${walletAmount(availableNear(String(state.amount), String(state.locked), state.storage_usage as number, String(runtime.storage_amount_per_byte)))} NEAR`;
     } catch { /* Retain an explicit unavailable value; never display a fake zero. */ }
   })();
   let token = network === "mainnet" ? MPOO_ACCOUNT : "";
@@ -89,10 +99,9 @@ export async function loadPaintWallet(rpc: Rpc, board: string, network: string, 
         if (network === "mainnet" && config.mpoo_token !== MPOO_ACCOUNT) throw new Error("Unexpected mPOO token");
         if (units(config.near_per_credit) <= 0n || units(config.mpoo_per_credit) <= 0n) throw new Error("Invalid price");
         token = config.mpoo_token;
-        result.price = `${formatUnits(String(config.near_per_credit),24)} NEAR / pixel`;
+        result.price = `${formatUnits(String(config.near_per_credit),24)} NEAR`;
         result.credits = account ? "Unavailable — retry" : "Connect wallet to view";
-        result.note =
-          "Buy credits from the paint dock on the wall. This panel only shows balances.";
+        result.note = "";
       } else {
         result.note = "This board does not use paint credits.";
       }
@@ -109,7 +118,7 @@ export async function loadPaintWallet(rpc: Rpc, board: string, network: string, 
       if (!config || !account) return;
       try {
         const balance = await view(rpc, board, "get_credits", {account_id: account});
-        result.credits = balance === null ? "Not registered · 0 credits" : `${units(balance)} pixels`;
+        result.credits = balance === null ? "Not registered · 0 credits" : `${units(balance)} credits`;
       } catch { result.credits = "Unavailable — retry"; }
     })(),
     (async () => {
@@ -125,7 +134,7 @@ export async function loadPaintWallet(rpc: Rpc, board: string, network: string, 
         // Validate metadata even if disconnected; it also formats the price.
         formatUnits("0", decimals);
         const label = network === "mainnet" ? "mPOO" : "test token";
-        if (config) result.price += ` · ${formatUnits(String(config.mpoo_per_credit), decimals)} ${label} / pixel`;
+        if (config) result.price += ` · ${formatUnits(String(config.mpoo_per_credit), decimals)} ${label}`;
         if (account) result.mpoo = `${formatUnits(String(await view(rpc, token, "ft_balance_of", {account_id: account})),decimals)} ${label}`;
       } catch { if (config) result.price += " · mPOO price unavailable"; }
     })(),

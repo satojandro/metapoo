@@ -45,24 +45,53 @@ summary { cursor: pointer; }
 .wallet-details[open] > #connect-button { margin-top: var(--mp-space-3); }
 .wallet-details p { overflow-wrap: anywhere; }
 .wallet-details .drawing-session-opt-in { display: flex; align-items: center; gap: 6px; color: var(--mp-soft); font-size: var(--mp-text-sm); }
-.wallet-account { display: grid; gap: var(--mp-space-2); margin: 0 0 var(--mp-space-4); }
+/* One header row: short account, copy icon, Close. */
+.wallet-account-head { display: flex; align-items: center; gap: var(--mp-space-2); margin: 0 0 var(--mp-space-3); min-width: 0; }
+.wallet-account { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wallet-account[hidden] { display: none; }
-.wallet-account h2 { margin: 0; }
-.wallet-account-id { display: block; padding: 8px 10px; border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); color: var(--mp-fg); font: var(--mp-text-sm)/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; word-break: break-all; user-select: all; -webkit-user-select: all; }
-.wallet-account-copy { justify-self: start; min-height: var(--mp-hit); }
-.wallet-account-note { margin: 0; color: var(--mp-soft); font-size: var(--mp-text-sm); }
+.wallet-account-id { color: var(--mp-fg); font: var(--mp-text-sm)/1.3 var(--mp-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: all; -webkit-user-select: all; }
+.wallet-account-copy { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--mp-line); border-radius: var(--mp-radius-sm); background: var(--mp-card-2); color: var(--mp-muted); cursor: pointer; }
+.wallet-account-copy:hover { color: var(--mp-fg); border-color: var(--mp-muted); }
+.wallet-account-head .wallet-details-close { margin-left: auto; min-height: 32px; padding: 4px 10px; }
+.wallet-account-note { margin: 0 0 var(--mp-space-3); color: var(--mp-soft); font-size: var(--mp-text-sm); }
 .wallet-account-note:empty { display: none; }
 .wallet-details-toolbar { display: flex; justify-content: flex-end; margin: 0 0 8px; }
 .wallet-details-close { min-height: 36px; padding: 6px 12px; }
-.paint-wallet-values { display: grid; gap: var(--mp-space-3); margin: 14px 0; }
-.paint-wallet-values > div { display: grid; gap: 3px; }
+/* Balances read as label/value rows, like "Your TOILET" below. */
+.paint-wallet-values { display: grid; margin: 10px 0 var(--mp-space-2); border-top: 1px solid var(--mp-line); }
+.paint-wallet-values > div { display: flex; justify-content: space-between; gap: var(--mp-space-3); padding: 9px 0; border-bottom: 1px solid var(--mp-line); }
+.paint-wallet-values > div[hidden] { display: none; }
 .paint-wallet-values dt { color: var(--mp-muted); font-size: var(--mp-text-sm); }
-.paint-wallet-values dd { margin: 0; font-size: var(--mp-text-body); overflow-wrap: anywhere; }
-#paint-wallet-panel .paint-wallet-buy { display: inline-flex; margin-top: 10px; text-decoration: none; min-height: var(--mp-hit); align-items: center; }
-#paint-wallet-panel .paint-wallet-refresh { min-height: var(--mp-hit); }
+.paint-wallet-values dd { margin: 0; font: 600 var(--mp-text-body) var(--mp-mono); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.paint-wallet-status-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--mp-space-3); margin: 0; }
+.paint-wallet-status { color: var(--mp-muted); font-size: var(--mp-text-xs); }
+.paint-wallet-refresh { border: 0; background: none; color: var(--mp-near); font: 700 var(--mp-text-xs) var(--mp-font); padding: 4px 0; cursor: pointer; }
+.paint-wallet-refresh:hover { text-decoration: underline; }
+.paint-wallet-note { margin: var(--mp-space-2) 0 0; color: var(--mp-soft); font-size: var(--mp-text-sm); overflow-wrap: anywhere; }
+.paint-wallet-note:empty { display: none; }
+.paint-wallet-actions { display: flex; flex-wrap: wrap; gap: var(--mp-space-2); margin: var(--mp-space-4) 0 0; }
+.paint-wallet-actions .paint-wallet-buy-credits { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; min-height: var(--mp-hit); text-decoration: none; }
+.paint-wallet-actions .paint-wallet-add-funds { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; min-height: var(--mp-hit); }
+/* The second way to get NEAR is a line of text under the first, never a rival button. */
+.paint-wallet-buy-near { flex: 1 1 100%; display: inline-flex; color: var(--mp-near); font-size: var(--mp-text-sm); text-decoration: underline; text-underline-offset: 2px; }
+.paint-wallet-price { display: flex; flex-wrap: wrap; gap: 4px var(--mp-space-2); margin: var(--mp-space-3) 0 0; color: var(--mp-muted); font-size: var(--mp-text-sm); }
+.paint-wallet-price [data-value="price"], .paint-wallet-market-note { color: var(--mp-soft); font-size: var(--mp-text-xs); }
+.paint-wallet-market-note:empty { display: none; }
+.paint-wallet-market-note { margin: var(--mp-space-2) 0 0; overflow-wrap: anywhere; }
 #paint-wallet-panel p { overflow-wrap: anywhere; }
-#paint-wallet-panel .paint-wallet-add-funds { display: flex; width: 100%; justify-content: center; margin-top: 10px; background: var(--mp-tag); border-color: var(--mp-tag); color: var(--mp-on-tag); }
-#paint-wallet-panel .paint-wallet-add-funds:hover:not(:disabled) { background: var(--mp-tag); filter: brightness(1.06); }
+.wallet-move-funds { display: grid; gap: var(--mp-space-3); margin: var(--mp-space-4) 0 0; }
+.wallet-move-funds[hidden] { display: none; }
+.wallet-move-row { display: grid; justify-items: start; gap: 4px; }
+.wallet-move-row[hidden] { display: none; }
+.wallet-move-row p { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-sm); }
+.wallet-links { display: grid; gap: 6px; margin: var(--mp-space-4) 0 0; font-size: var(--mp-text-sm); }
+.wallet-links a { color: var(--mp-near); }
+/* The panel's own heading only: "Your TOILET" and the claim block style themselves. */
+#paint-wallet-panel h2 { font-size: var(--mp-text-h3); margin: 0 0 var(--mp-space-2); }
+.ops-recovery[hidden] { display: none; }
+.wallet-technical { margin: var(--mp-space-4) 0 0; padding-top: var(--mp-space-2); border-top: 1px solid var(--mp-line); }
+.wallet-technical > summary { color: var(--mp-muted); font-size: var(--mp-text-sm); }
+.wallet-technical p { margin: 6px 0 0; color: var(--mp-muted); font: var(--mp-text-xs)/1.4 var(--mp-mono); overflow-wrap: anywhere; }
 /* Funding dialog: its own surface, not a section of the wallet dropdown. */
 .mp-funding-dialog { box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; overflow: hidden; border: 1px solid var(--mp-line); border-radius: var(--mp-radius-lg); background: var(--mp-card); color: var(--mp-fg); box-shadow: 0 24px 70px var(--mp-shadow); }
 .mp-funding-dialog[open] { display: flex; flex-direction: column; }

@@ -91,7 +91,10 @@ describe("claimButtonState", () => {
     toilet: "t.testnet", paused: false, busy: false, example: false,
   };
   it("enables only when everything lines up", () => {
-    expect(claimButtonState(ready).enabled).toBe(true);
+    const s = claimButtonState(ready);
+    expect(s.enabled).toBe(true);
+    // Chain jargon (yoctoNEAR, gas, signing) belongs in Technical details, not here.
+    expect(s.hint).toBe("One approval in your wallet, plus a small network fee.");
   });
   it("explains the board's 1.00 TOILET floor instead of inviting a ClaimBelowMinimum failure", () => {
     const s = claimButtonState({ ...ready, pending: 195_000_000_000_000_000n });

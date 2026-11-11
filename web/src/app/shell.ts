@@ -119,37 +119,41 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   const walletPanel = document.createElement("section");
   walletPanel.className = "wallet-chrome";
   walletPanel.setAttribute("aria-label", "Wallet");
+  // One header row: short address, copy, Close. The full 64-character id is only ever a
+  // title (hover) and the clipboard payload, never a second box on screen.
   walletPanel.innerHTML = `
-    <button id="connect-button" class="mp-btn mp-btn-primary shell-connect" type="button">Connect wallet</button>
+    <button id="connect-button" class="mp-btn shell-connect" type="button">Connect wallet</button>
     <details class="wallet-details"><summary>Wallet</summary>
-    <section id="wallet-account" class="wallet-account" aria-label="Your account" hidden>
-      <h2>Your account</h2>
-      <code class="wallet-account-id" data-account-id></code>
-      <button type="button" class="action secondary wallet-account-copy">Copy address</button>
-      <p class="wallet-account-note" role="status"></p>
-    </section>
+    <div class="wallet-account-head">
+      <span id="wallet-account" class="wallet-account" hidden>
+        <code class="wallet-account-id" data-account-id></code>
+        <button type="button" class="wallet-account-copy" aria-label="Copy address" title="Copy address"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><rect x="5.5" y="5.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor"/><path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1" fill="none" stroke="currentColor"/></svg></button>
+      </span>
+    </div>
+    <p class="wallet-account-note" role="status"></p>
     <section id="paint-wallet-panel" aria-label="Paint and wallet balances"></section>
     <section id="toilet-wallet-panel" aria-label="Your TOILET" hidden></section>
-    <h2>Connection details</h2>
-    <p id="wallet-summary"></p>
-    <p id="network-summary"></p>
-    <p class="wallet-money-link"><a href="/money">Where the money goes →</a></p>
-    <p class="wallet-toilet-link"><a href="/toilet">What TOILET is for →</a></p>
-    <p class="wallet-stake-link"><a href="/stake">Stake TOILET →</a></p>
+    <section id="wallet-move-funds" aria-label="Move funds out"></section>
+    <nav class="wallet-links" aria-label="More about the board">
+      <a href="/money">Where the money goes →</a>
+      <a href="/toilet">What TOILET is for →</a>
+      <a href="/stake">Stake TOILET →</a>
+    </nav>
     <label class="drawing-session-opt-in" for="authorize-drawing-session">
       <input id="authorize-drawing-session" type="checkbox" disabled />
       Also allow painting without a popup each time
     </label>
+    <section id="ops-recovery" class="ops-recovery" aria-label="Operation recovery" hidden></section>
+    <details class="wallet-technical"><summary>Technical details</summary>
+      <p id="wallet-summary"></p>
+      <p id="network-summary"></p>
+    </details>
     </details>
     <p id="wallet-error" class="result" role="status"></p>
   `;
 
-  const opsPanel = document.createElement("section");
-  opsPanel.id = "ops-recovery";
-  opsPanel.className = "ops-recovery";
-  opsPanel.setAttribute("aria-label", "Operation recovery");
-
-  walletPanel.querySelector("details")?.append(opsPanel, compactStatus);
+  const opsPanel = walletPanel.querySelector<HTMLElement>("#ops-recovery")!;
+  walletPanel.querySelector("details")?.append(compactStatus);
   chromeRow.append(walletPanel);
 
   const outlet = document.createElement("div");
@@ -169,16 +173,12 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
 
   const walletDetails = walletPanel.querySelector<HTMLDetailsElement>("details.wallet-details")!;
   const detailsClose = wireWalletDetailsClose(walletDetails);
-  // The primary nav is hidden on phones; this link is the phone route to /money.
-  walletPanel.querySelector(".wallet-money-link a")?.addEventListener("click", () => {
-    walletDetails.open = false;
-  });
-  walletPanel.querySelector(".wallet-toilet-link a")?.addEventListener("click", () => {
-    walletDetails.open = false;
-  });
-  walletPanel.querySelector(".wallet-stake-link a")?.addEventListener("click", () => {
-    walletDetails.open = false;
-  });
+  // The primary nav is hidden on phones; these links are the phone routes to each page.
+  for (const link of walletPanel.querySelectorAll<HTMLAnchorElement>(".wallet-links a")) {
+    link.addEventListener("click", () => {
+      walletDetails.open = false;
+    });
+  }
 
   const paintWalletDispose = mountPaintWalletPanel(
     walletPanel.querySelector<HTMLElement>("#paint-wallet-panel")!, services,

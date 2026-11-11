@@ -45,19 +45,31 @@ describe("wallet account block", () => {
     expect(shortAccount("alice.near")).toBe("alice.near");
   });
 
-  it("shows the full id and copies it", async () => {
+  it("shows the short id and copies the full one", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const { root, dispose } = mount(IMPLICIT);
     expect(root.querySelector("summary")!.textContent).toBe("cc9a0000…0000d113");
     expect(root.querySelector("summary")!.title).toBe(IMPLICIT);
     expect(root.querySelector<HTMLElement>("#wallet-account")!.hidden).toBe(false);
-    expect(root.querySelector("[data-account-id]")!.textContent).toBe(IMPLICIT);
+    // One header row: the 64-character id is the title only, never a second line of text.
+    const shown = root.querySelector("[data-account-id]")!;
+    expect(shown.textContent).toBe("cc9a0000…0000d113");
+    expect((shown as HTMLElement).title).toBe(IMPLICIT);
     root.querySelector<HTMLButtonElement>(".wallet-account-copy")!.click();
     await Promise.resolve();
     await Promise.resolve();
     expect(writeText).toHaveBeenCalledWith(IMPLICIT);
     expect(root.querySelector(".wallet-account-note")!.textContent).toContain("Address copied");
+    dispose();
+  });
+
+  it("keeps identifiers short in Technical details and says nothing about idle operations", () => {
+    const { root, dispose } = mount(IMPLICIT);
+    const summary = root.querySelector("#wallet-summary")!.textContent!;
+    expect(summary).toContain("cc9a0000…0000d113");
+    expect(summary).not.toContain(IMPLICIT);
+    expect(root.querySelector("#wallet-summary")!.textContent).not.toMatch(/Connected account:/);
     dispose();
   });
 
