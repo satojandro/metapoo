@@ -88,6 +88,8 @@ try {
           for (const el of document.body.querySelectorAll("*")) {
             const cs = getComputedStyle(el);
             if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) === 0) continue;
+            // Content of a closed <details> has boxes but is not on screen.
+            if (el.closest("details:not([open])") && el.tagName !== "SUMMARY") continue;
             const r = el.getBoundingClientRect();
             // Under 2 px is a screen-reader-only or collapsed box, not content.
             if (r.width < 2 || r.height < 2 || el.clientWidth < 2) continue;

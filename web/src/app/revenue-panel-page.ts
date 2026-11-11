@@ -396,7 +396,7 @@ export function mountRevenuePage(
     setAmount("mpoo-burn", m.burn, MPOO_DECIMALS, 6);
     setAmount("reserve", s.mpooStakerReserve, MPOO_DECIMALS);
     $("reserve-explain").textContent = s.stakingContract
-      ? `The stakers’ 70%, forwarded to ${s.stakingContract} with each mPOO split.`
+      ? `The stakers’ 70%, forwarded to ${shortAccount(s.stakingContract)} with each mPOO split.`
       : "The stakers’ 70% of every mPOO split, held on the board until the TOILET staking contract exists. Nobody can spend it, the owner included. When staking opens, it’s forwarded with the next split.";
     // The diagram carries the same fact as the card above it, so it is redrawn from the
     // board's own signal instead of a string frozen at build time.
