@@ -1,6 +1,6 @@
 /**
  * Wall page markup: the framed wall with its controls floating over the corners, one
- * side panel (a bottom sheet on phone) and the collapsed About / details. The panel is
+ * side panel (a bottom sheet on phone) and the collapsed Contract details. The panel is
  * a scrolling body plus a pinned footer, so the primary action and its result are
  * always on screen. Signed out the page is Look; signed in it is Paint (no toggle).
  * Wallet chrome lives on the app shell so it survives navigation.
@@ -128,7 +128,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                   popup for every square. The key can only paint on this wall, and
                   on a paid wall painting will spend your paint credits.
                   It cannot send NEAR or tokens from your wallet. You can revoke it
-                  any time under About / details.
+                  any time under Contract details, at the foot of this page.
                 </p>
                 <button id="unlock-paint-button" class="mp-btn action unlock" type="button">
                   Unlock painting — one approval
@@ -239,7 +239,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
       </section>
 
         <details class="wall-advanced about wall-about">
-          <summary>About / details <span aria-hidden="true">＋</span></summary>
+          <summary>Contract details <span aria-hidden="true">＋</span></summary>
           <aside class="side wall-details-content">
             <section data-wall-detail="instructions">
               <h2>How to paint</h2>

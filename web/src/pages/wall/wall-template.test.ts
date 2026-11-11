@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { wallPageHtml } from "./wall-template";
 
 describe("wallPageHtml", () => {
-  it("keeps the wall primary and implementation detail in a collapsed About panel", () => {
+  it("keeps the wall primary and implementation detail behind one Contract details link", () => {
     const root = document.createElement("div");
     root.innerHTML = wallPageHtml();
 
@@ -15,7 +15,7 @@ describe("wallPageHtml", () => {
     expect(board).not.toBeNull();
     expect(about).not.toBeNull();
     expect(about?.open).toBe(false);
-    expect(about?.firstElementChild?.textContent).toMatch(/About \/ details/);
+    expect(about?.firstElementChild?.textContent).toMatch(/Contract details/);
     expect(
       board!.compareDocumentPosition(about!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);

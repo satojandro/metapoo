@@ -40,7 +40,7 @@ export function strokeBlockedReason(gate: StrokeGate): string | null {
     return "Pick a colour first — drag painting needs one.";
   }
   if (!gate.contractOk) {
-    return "The board's on-chain metadata does not match this page, so painting is disabled. See About / details.";
+    return "The board's on-chain metadata does not match this page, so painting is disabled. See Contract details.";
   }
   if (!gate.priceOk) {
     return "price unavailable. The repaint cost could not be read, so this stroke was not submitted.";

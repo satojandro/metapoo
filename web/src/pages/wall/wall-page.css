@@ -539,6 +539,22 @@
 
 /* About / details keeps its own styles; give it room under the composition. */
 .wall-page > .wall-about { margin-top: var(--mp-space-6); }
+/* B8: "About / details" was a full-width bar at the foot of the page. It is one text
+   link now — the contract facts a curious player might want, not a second footer. */
+.wall-page .wall-about { border-top: 0; padding: 0; }
+.wall-page .wall-about > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--mp-hit);
+  padding: 0;
+  color: var(--mp-muted);
+  font: var(--mp-text-sm) var(--mp-mono);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.wall-page .wall-about > summary:hover { color: var(--mp-fg); }
+.wall-page .wall-about > summary span { font-size: var(--mp-text-xs); text-decoration: none; }
 
 /* ——— Phone: the wall on top at full width, the panel as a bottom sheet ——— */
 @media (max-width: 760px) {

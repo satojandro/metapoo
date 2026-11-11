@@ -142,7 +142,7 @@ export function mountWall(
   directPaintToggle.setAttribute("aria-describedby", tapToPaintAnnouncement.id);
 
   // One-approval unlock. This is the visible entry point to the drawing
-  // session; the authorise/revoke panel stays in About / details for people
+  // session; the authorise/revoke panel stays under Contract details for people
   // who want the details, but nobody should have to find it to start painting.
   const paintUnlock = el("#paint-unlock");
   const paintUnlocked = el("#paint-unlocked");

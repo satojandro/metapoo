@@ -5,6 +5,7 @@
 import { createBetaBanner } from "./beta-banner";
 import { mountPaintWalletPanel } from "./paint-wallet-panel";
 import type { PageId } from "./page-registry";
+import { BETA_GUIDE_URL } from "../config";
 import { createSiteFooter } from "./site-footer";
 import { mountToiletClaim, toiletConfigured } from "./toilet-claim";
 import type { ParsedRoute } from "./routes";
@@ -225,7 +226,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   // The footer sits *inside* the scrolling outlet, after the page content, so it
   // cannot take height from the wall. The router clears the outlet on every
   // navigation, so this re-appends the same element rather than rebuilding it.
-  const siteFooter = createSiteFooter();
+  const siteFooter = createSiteFooter({ guideUrl: BETA_GUIDE_URL });
 
   function placeFooter(route: ParsedRoute): void {
     if (route.pageId === "admin") {
