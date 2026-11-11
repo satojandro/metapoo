@@ -127,12 +127,16 @@ describe("inspector content", () => {
 });
 
 describe("Tile card", () => {
-  function setup(selected: { x: number; y: number } | null, hovered: () => { x: number; y: number } | null = () => null) {
+  function setup(
+    selected: { x: number; y: number } | null,
+    hovered: () => { x: number; y: number } | null = () => null,
+    pixel: (cell: { x: number; y: number }) => PixelView | null | undefined = (cell) => (cell.x === 9 ? null : painted(30)),
+  ) {
     document.body.innerHTML = `<section class="wall-inspect"><p class="summary"></p><div id="host" hidden></div></section>`;
     const scope = createWallScope();
     const paintOver = vi.fn();
     const prime = vi.fn();
-    const cachedPixel = vi.fn((cell: { x: number; y: number }) => (cell.x === 9 ? null : painted(30)));
+    const cachedPixel = vi.fn(pixel);
     const inspector = createTileInspector({
       scope,
       card: document.querySelector<HTMLElement>(".wall-inspect")!,
@@ -174,6 +178,28 @@ describe("Tile card", () => {
     // Owner, 7 Nov: inviting people to one tile made no sense and cost panel space.
     expect(host.querySelector(".tile-copy")).toBeNull();
     expect(host.textContent).not.toMatch(/Copy link/);
+  });
+
+  it("shows a 64-character painter id short — first 8, ellipsis, last 8 — and never whole (B4)", () => {
+    // An implicit account, the shape Privy creates: 64 hex characters. Printed
+    // whole it ran across three lines in a phone-width card, so the card shows
+    // `fcd66acf…3076f59e` and keeps the whole id in `title` and the link's label.
+    const id = `fcd66acf${"0".repeat(48)}3076f59e`;
+    expect(id).toHaveLength(64);
+    setup({ x: 3, y: 4 }, undefined, () => painted(30, id));
+    const host = document.querySelector<HTMLElement>("#host")!;
+    const painter = host.querySelector<HTMLElement>(".tile-painter")!;
+    const link = painter.querySelector<HTMLAnchorElement>("a")!;
+
+    expect(painter.textContent).toBe("fcd66acf…3076f59e");
+    expect(painter.textContent).toHaveLength(17);
+
+    // Short is not hidden: hover and a screen reader still get the whole id.
+    expect(link.title).toBe(id);
+    expect(link.getAttribute("aria-label")).toContain(id);
+
+    // The guard: no rendered text on the card may carry the id whole again.
+    expect(host.textContent ?? "").not.toContain(id);
   });
 
   it("shortens a 64-character painter id, keeping the whole one in reach (F6)", () => {
