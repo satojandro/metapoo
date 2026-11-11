@@ -1,0 +1,60 @@
+/**
+ * @vitest-environment happy-dom
+ */
+import { describe, expect, it } from "vitest";
+import { createSiteFooter } from "./site-footer";
+import { MPOO_CHART_URL } from "../social-links";
+
+describe("site footer", () => {
+  it("renders the brand and one link per destination, in order", () => {
+    const footer = createSiteFooter({ env: {} });
+    expect(footer.tagName).toBe("FOOTER");
+    expect(footer.querySelector(".site-foot-brand")?.textContent).toBe("meta poo.");
+    const links = [...footer.querySelectorAll<HTMLAnchorElement>("a")];
+    expect(links.map((a) => a.dataset.socialLink)).toEqual([
+      "x",
+      "telegram",
+      "github",
+      "mpoo-chart",
+    ]);
+    expect(links.map((a) => a.querySelector(".site-foot-label")?.textContent)).toEqual([
+      "X",
+      "Telegram",
+      "GitHub",
+      "$mPOO chart",
+    ]);
+    expect(links[3].getAttribute("href")).toBe(MPOO_CHART_URL);
+  });
+
+  it("opens every link in a new tab without handing over the opener", () => {
+    const footer = createSiteFooter({ env: {} });
+    for (const a of footer.querySelectorAll<HTMLAnchorElement>("a")) {
+      expect(a.target).toBe("_blank");
+      expect(a.rel).toBe("noopener noreferrer");
+      expect(a.getAttribute("aria-label")).toMatch(/opens in a new tab/);
+      // The arrow is decoration; the label is what a screen reader reads.
+      expect(a.querySelector(".site-foot-mark")?.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
+  it("carries no heading, so it can never take the route's focus target", () => {
+    const footer = createSiteFooter({ env: {} });
+    expect(footer.querySelector("h1, h2, h3")).toBeNull();
+    expect(footer.querySelector("nav")?.getAttribute("aria-label")).toBe(
+      "Meta Poo on other platforms",
+    );
+  });
+
+  it("omits the TOILET chart while no pair exists", () => {
+    const footer = createSiteFooter({ env: { VITE_DEXSCREENER_TOILET_URL: "" } });
+    expect(footer.querySelector('[data-social-link="toilet-chart"]')).toBeNull();
+  });
+
+  it("shows the TOILET chart when a pair URL is configured", () => {
+    const footer = createSiteFooter({
+      env: { VITE_DEXSCREENER_TOILET_URL: "https://dexscreener.com/near/toilet-pair" },
+    });
+    const toilet = footer.querySelector<HTMLAnchorElement>('[data-social-link="toilet-chart"]');
+    expect(toilet?.href).toBe("https://dexscreener.com/near/toilet-pair");
+  });
+});

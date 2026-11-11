@@ -35,6 +35,11 @@ interface ImportMetaEnv {
   readonly VITE_BETA_BANNER?: string;
   readonly VITE_BETA_GUIDE_URL?: string;
   readonly VITE_BETA_REPORT_URL?: string;
+  /**
+   * TOILET's Dexscreener pair URL. Empty hides the footer's TOILET chart entry:
+   * no TOILET pool is indexed yet, and a search page is not a market.
+   */
+  readonly VITE_DEXSCREENER_TOILET_URL?: string;
 }
 
 interface ImportMeta {

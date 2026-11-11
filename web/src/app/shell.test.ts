@@ -10,6 +10,7 @@ vi.mock("../contract", async (importOriginal) => {
 });
 import { createAppServices } from "./services";
 import { mountShell } from "./shell";
+import { matchRoute } from "./routes";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -80,6 +81,45 @@ describe("app shell", () => {
     expect(banner.classList.contains("beta-banner")).toBe(true);
     expect(banner.nextElementSibling?.classList.contains("app-shell-top")).toBe(true);
     expect(host.classList.contains("has-beta-banner")).toBe(true);
+    shell.dispose();
+  });
+
+  it("places the site footer inside the scrolling outlet, last, so it costs the wall no height", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shell = mountShell(host, createAppServices());
+    shell.placeFooter(matchRoute("/wall"));
+
+    const outlet = host.querySelector(".page-outlet")!;
+    expect(outlet.lastElementChild?.classList.contains("site-foot")).toBe(true);
+    // Sibling of the header, not of the outlet: a footer bar outside the outlet
+    // would shrink every route, including the wall.
+    expect(host.querySelector(".app-shell-top + .page-outlet")).not.toBeNull();
+    shell.dispose();
+  });
+
+  it("re-appends the footer after the router replaces the outlet, without duplicating it", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shell = mountShell(host, createAppServices());
+
+    shell.placeFooter(matchRoute("/wall"));
+    shell.outlet.replaceChildren(document.createElement("div"));
+    shell.placeFooter(matchRoute("/money"));
+    shell.placeFooter(matchRoute("/money"));
+
+    expect(shell.outlet.querySelectorAll(".site-foot")).toHaveLength(1);
+    expect(shell.outlet.lastElementChild?.classList.contains("site-foot")).toBe(true);
+    shell.dispose();
+  });
+
+  it("keeps the owner console free of the public footer", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shell = mountShell(host, createAppServices());
+
+    shell.placeFooter(matchRoute("/admin"));
+    expect(shell.outlet.querySelector(".site-foot")).toBeNull();
     shell.dispose();
   });
 });

@@ -4,6 +4,7 @@
 
 import { createBetaBanner } from "./beta-banner";
 import { mountPaintWalletPanel } from "./paint-wallet-panel";
+import { createSiteFooter } from "./site-footer";
 import { mountToiletClaim, toiletConfigured } from "./toilet-claim";
 import type { ParsedRoute } from "./routes";
 import { mountWalletChrome, type WalletChromeDispose } from "./wallet-chrome";
@@ -13,6 +14,11 @@ import type { AppServices } from "./services";
 export interface ShellHandles {
   outlet: HTMLElement;
   setActiveNav: (route: ParsedRoute) => void;
+  /**
+   * Re-append the site footer after the router has replaced the outlet's
+   * children. Call once per route change, after `setActiveNav`.
+   */
+  placeFooter: (route: ParsedRoute) => void;
   dispose: () => void;
 }
 
@@ -169,9 +175,26 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     }
   }
 
+  // The footer sits *inside* the scrolling outlet, after the page content, so it
+  // cannot take height from the wall. The router clears the outlet on every
+  // navigation, so this re-appends the same element rather than rebuilding it.
+  const siteFooter = createSiteFooter();
+
+  function placeFooter(route: ParsedRoute): void {
+    if (route.pageId === "admin") {
+      // The owner console is an operator surface: no shopfront chrome on it.
+      siteFooter.remove();
+      return;
+    }
+    if (outlet.lastElementChild !== siteFooter) {
+      outlet.append(siteFooter);
+    }
+  }
+
   return {
     outlet,
     setActiveNav,
+    placeFooter,
     dispose() {
       paintWalletDispose();
       toiletDispose();

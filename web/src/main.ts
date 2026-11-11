@@ -28,6 +28,9 @@ const router = createRouter({
   services,
   onRouteChange: (route) => {
     shell.setActiveNav(route);
+    // The router replaces the outlet's children on every navigation, so the
+    // footer is re-appended here rather than mounted once.
+    shell.placeFooter(route);
   },
 });
 
