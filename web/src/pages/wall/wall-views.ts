@@ -17,6 +17,7 @@ import { paletteColor } from "@shared/palette.ts";
 import type { PixelView } from "@shared/types.ts";
 import type { TilePainter } from "../../render-board";
 import { emptyHexAt } from "../../render-board";
+import { shortAccount } from "../../shared/short-account";
 import type { WallScope } from "./wall-scope";
 
 export type WallViewMode = "art" | "fresh" | "turf";
@@ -453,7 +454,12 @@ export function createWallViews(deps: WallViewsDeps): WallViews {
         rank.textContent = `${row.rank}`;
         const name = document.createElement("span");
         name.className = "wall-turf-name";
-        name.textContent = row.you ? `${row.account} (you)` : row.account;
+        // B4: the Turf ranking was the last wall list still printing 64 characters.
+        // Short form on screen, the whole id on hover (and in the row's aria-label).
+        const short = shortAccount(row.account);
+        name.textContent = row.you ? `${short} (you)` : short;
+        name.title = row.account;
+        li.setAttribute("aria-label", row.you ? `${row.account}, you, ${row.tiles} tiles` : `${row.account}, ${row.tiles} tiles`);
         const tiles = document.createElement("span");
         tiles.className = "wall-turf-tiles";
         tiles.textContent = `${row.tiles} tile${row.tiles === 1 ? "" : "s"}`;
