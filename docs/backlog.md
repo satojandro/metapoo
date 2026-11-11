@@ -124,15 +124,16 @@ gone, FE-3 is partly done, the REV-G admin copy and FE-TOILET's token note are s
 Source: the [UI launch review](2026-11-11-ui-launch-review.md) (its sections **A–H are surfaces**, ordered by
 what a first-time player hits; the *phases* are the five-numbered "Suggested order" at its end, which cut
 across the letters) and the [return/growth specs](implementation/2026-11-11-return-and-growth-spec.md).
-Both docs merged in `bc414d3` (PR #107). Batches 1 and 2 are **on `main` and shipped**:
+Both docs merged in `bc414d3` (PR #107). Batches 1–3 are **on `main` and shipped**:
 
 | batch | merge | what |
 |---|---|---|
 | **1** — A1, A2, A5, A6, B2, C3 | **`59b259c`** (PR #108) | phone overflow, stale copy, page identity, styled 404, "tile" in the dock and readout |
 | **2** — A3, D, E, F | **`cf776c1`** (PR #109) | payments end with a result, account panel, connected paint panel |
+| **3** — B1, B3, B4, B7–B9, C1, C2, C4, C10 | **`b15b31f`** (PR #110) | one Fresh view, overlays off the art, Stake, one disabled style, Contract details, footer report link, phone nav |
 
-Both merged with **10/10 CI checks green** on Node 22 (the version `ci.yml` pins); on the merged tree
-`npx vitest run` = **1123 tests in 113 files**, `tsc` and `vite build` clean. Re-derive the whole section:
+All three merged with **CI green** on Node 22 (the version `ci.yml` pins); on the merged tree
+`npx vitest run` = **1130 tests in 114 files**, `tsc` and `vite build` clean. Re-derive the whole section:
 
 ```bash
 grep -c "hiw-next" web/src/app/how-it-works-page.ts          # 0 = A2 done
@@ -140,6 +141,13 @@ ls web/src/app/not-found-page.ts                             # exists = A6 done
 grep -c "og:image" web/index.html                            # 1 = A5 done
 grep -rc "NEAR arrived\|Paint credits\|On the wall\." web/src --include=*.ts | grep -v ":0"   # A3/E/F done
 grep -n "shortAccount" web/src/pages/wall/wall-story.ts      # :415, :464 = B4 done
+grep -c "Paint without approving every stroke" web/src/app/shell.ts        # 1 = B3 done
+grep -c 'data-wall-view="fresh"' web/src/pages/wall/wall-template.ts       # 1 = B1 done
+grep -c "Contract details" web/src/pages/wall/wall-template.ts             # 3 = B8 done (summary + the two sentences that point at it)
+grep -c 'data-footer-link' web/src/app/site-footer.ts                      # 1 = B9 done (report; guide is conditional)
+grep -c 'connectWallet' web/src/app/stake-page.ts                          # 3 = C1/C2 done
+grep -c 'data-act="lock">Stake TOILET' web/src/app/stake-page.ts           # 1 = C4 done
+grep -c 'app-nav-short' web/src/app/shell.ts                               # 1 = C10 done
 ```
 
 ### Shipped
@@ -148,10 +156,11 @@ grep -n "shortAccount" web/src/pages/wall/wall-story.ts      # :415, :464 = B4 d
 |---|---|
 | **UI-1** = A1, A2, A5, A6, B2, C3 | `59b259c`. A1: measured at 390 px on the deployed alias **before** — `/toilet` 553, `/how-it-works` 443, `/money` 497, `/wall` 488, `/` 488 — and after, all 390. **`/stake` never overflowed** (the review's 381 px does not reproduce). The gate (`web/scripts/layout-check.mjs`) was rewritten first: it read `documentElement.scrollWidth`, which stays at the window width while `#page-outlet` (`overflow-x: auto`) scrolls inside, so it could not have caught this. A2: `hiw-next` deleted, "Stake your TOILET →", the SVG label follows the staking state. A5: description + OG/Twitter + `favicon.svg` + `web/public/og.png` (1200×630, captured from the live wall). A6: `not-found-page.ts` reuses the `/admin` hero. B2: dock and readout say tile. |
 | **UI-2** = A3, D, E1–E10, F1–F7 | `cf776c1`. A3: confirmed purchase closes the sheet with one toast and updates the dock (#98); funded deposit shows `NEAR arrived` / `Received <amount>` / one `Done` (#105) — the amount comes from the reconciled Transfer, never the quote. Uncertain states (`confirmation_delayed`, `processing`, `deposit_detected`, `failed_needs_review`) are pinned by test as unchanged. D: site type scale, cost rows, "You have 0 credits", "One-time account setup", "Total · X NEAR, plus a small network fee", `.mp-btn-primary`. E: one header row, `Paint credits` / `NEAR in your wallet` cut to 4 decimals, one yellow primary, "One approval in your wallet, plus a small network fee", one closed Technical details, Disconnect secondary and last. F: the dock describes only the stroke about to be placed, `On the wall. −1 credit, N left.`, `Painted. Your tile is on the wall.`, credits as a figure with `Buy more`, one-line hint. |
-| **B4** (pulled forward) | Two of its three cases were the *actual* cause of A1's `/wall` overflow: `wall-story.ts:415` (Who holds the wall) and `:464` (Right now) printed the full 64-char painter id inside `nowrap`. Both now `shortAccount()`, full id in `title` and aria-label — done in `8e1064b`. **The third case is still open**: the tile inspector on a phone. |
+| **UI-3** = B1, B3, B4, B7, B8, B9, C1, C2, C4, C10 | `b15b31f` (PR #110), spec [`implementation/2026-11-11-ui-batch-3-spec.md`](implementation/2026-11-11-ui-batch-3-spec.md). B1 (#99): Art · **Fresh** · Turf; one legend from the board's tunables (`Wet · 4 credits · under 10 min`, `Drying · 2 credits · under an hour`, `Dry · 1 credit`); with tunables unread the windows stay and the credits are omitted, never guessed; `ageColor()` removed with the Age view. B3: the painting-key opt-in now says what it grants and what it cannot do. B4: inspector regression test + Turf ranking shortened. B7: freshness/network row and (on phone) the view tabs leave the artwork — measured with Playwright on `/wall`: view tabs over the board at 390 px **184×41 → 0×0**, freshness row at 1440 px **407×42 → 0×0**, board still 1:1 (338² phone, 610² desktop; the 24 px desktop strip comes out of `--wall-pulse-h` 46 → 70 by design). B8: "Contract details" is one text link. B9: footer report + conditional guide. C1: one disabled treatment in `design/tokens.css` (the three opacities that turned the yellow primary olive are gone) and "Connect wallet" replaces dead Claim / Stake / Distribute, routed through `shared/connect-wallet.ts`; an empty split stays disabled. C2: `/stake` signed-out values are "—" with one real Connect and Claim hidden. C4: Stake / Unstake in every player-readable string (ids unchanged). C10: "Money" below 600 px, full name kept as `aria-label` and tab title. **Verification:** Node 22.20.0 — 1130 tests in 114 files, `tsc` and `vite build` clean; layout gate identical to `origin/main` except the B7 move (the 12 px `/wall`-at-390 scroll was a separate fix, see UI-WALL-BLEED) |
+| **B4** (pulled forward) | Two of its three cases were the *actual* cause of A1's `/wall` overflow: `wall-story.ts:415` (Who holds the wall) and `:464` (Right now) printed the full 64-char painter id inside `nowrap`. Both now `shortAccount()`, full id in `title` and aria-label — done in `8e1064b`. **The third case is closed in batch 3**: the tile inspector already shortened ids and now has the regression test (`912604b`: 17-character text, whole id only in `title`/`aria-label`, card `textContent` may not contain 64 characters), and the same pass found the Turf ranking still printing them (`wall-views.ts`, fixed in `6001a04`). |
 | **H4** | The TOILET "forwarded to `<id>`" cell is shortened (`toilet-page.ts:321`, `8e1064b`). |
 | **UI-WALL-BLEED** | The 12 px sideways scroll on `/wall` and `/` at 390 px | **Closed in `2bba357`.** The phone footer bleeds to the screen edge on purpose (thumb reach, owner 6 Nov) and its box lands exactly on `#page-outlet`'s padding edge, which `overflow-x: auto` reported as 12 px of scrollable overflow. The wall route's outlet now clips its x axis: the scroll is gone, nothing is hidden, and content genuinely wider than the window still trips the check's "past the window" branch. Gate: **exit 0, "all routes fit" at 1440, 360 and 390** |
-| **B9, partly** | A site footer exists and is live (`site-footer.ts`, PR #106 / `e62143c`) with the social links and the report link. Terms and contact are **not** there — the review's "no terms, no contact" half is unverified and untreated. |
+| **B9** | Footer delivered in two steps: the element and social links (PR #106 / `e62143c`), then **"Report a problem" → `GITHUB_ISSUES_URL` and a "Guide" entry only when `VITE_BETA_GUIDE_URL` is set** (`73054b9`, batch 3; tests pin both branches). **Still untreated:** terms and a contact address — there is no terms page, and inventing one is a copy decision, not a tidy-up. |
 
 | **UI-REVIEW-FIXES** | The six items from the 11 Nov review of #108/#109 | **`2bba357`.** `/stake` did overflow — at **360 px**, not 390 (a 347 px min-content in a 336 px box cut off MAX and Lock); fixed in CSS and the gate now loads 360 px too, which is why it was invisible. The 404 got the `.admin` frame's column width and gutter without its cyan link rule. Share tags build from `VITE_SITE_URL`, and the **build fails** if it is unset. The header's `Connect wallet` is primary again (yellow, measured) while Disconnect stays secondary. The paint confirmation states only what the settlement proves (`On the wall. N left.`) instead of the `maxCredits` ceiling. A funded payment with no provable amount drops the `Received` row. Reopening the buy sheet mid-payment no longer wipes its status. 1126 tests in 114 files, tsc and build clean | — |
 
@@ -159,7 +168,6 @@ grep -n "shortAccount" web/src/pages/wall/wall-story.ts      # :415, :464 = B4 d
 
 | id | work | evidence that it is missing | size |
 |---|---|---|---|
-| **UI-3** | A4? no — **B1, B3, B4 (inspector), B7, B8, C1, C2, C4, C10**; C5–C9 ride along with whichever PR touches the file | B3 still renders "Also allow painting without a popup each time" (`shell.ts:144`); C4 still says Lock/Unlock (`stake-page.ts`, 11 hits; `staking.ts`, 8); C7 still prints a wall-clock time (`revenue-panel-page.ts:268`, `stake-page.ts:214` — `toLocaleTimeString()`); B8 still has the "About / details" bar (`wall-template.ts:131`); C2 still prints "Connect a wallet" as a value twice in `stake-page.ts`. **B1 and B7 not re-checked this pass** — the view tabs carry no `data-view` attribute to grep | **M** |
 | **UI-4** | A4 + G, together with **SEND-HARDEN** | `send-sheet.ts` still shows a permanent "Check pending transfer"; the Self-custody panel still opens on a raw key list. G1's list *is* SEND-HARDEN's allowlist. **Needs owner sign-off on wallet approval wording before work starts** (AGENT.md ask-first) | **L** |
 | **UI-5** | B5, B6 | **B5 is now a launch blocker, confirmed on a phone by the 11 Nov review:** entering paint mode shows none of the 16 colours — they sit below the fold behind the "Connect wallet to paint" bar, identical on `main` before these batches. Needs a real device to verify the fix. B6 (say a wallet is needed before the first tap) is still unstarted | **S** |
 | **UI-6** | C6 — decide whether How it works or TOILET owns the rules | Not a launch blocker | **S** |
