@@ -86,12 +86,36 @@ the place a player goes to answer "what do I have?", and it answers with develop
 Suggested order of blocks: address · balances (credits, NEAR, mPOO, TOILET) · Buy credits / Add
 funds · Claim TOILET · Move funds out · links · Technical details · Disconnect.
 
+## F. Paint panel while connected (owner screenshots, 11 Nov)
+
+| # | What is wrong | Fix |
+|---|---|---|
+| F1 | **The panel shows two prices for one tile.** With a blank tile selected, the Tile card says "Cover it for 1 credit" while the dock directly below says "This stroke: 1 cell · 4 credits". The dock is still describing the tile just painted (now wet, so 4 to repaint); the card describes the tile under the cursor. Nothing says which is which. | The dock describes only the stroke about to be placed. Once a stroke confirms, clear the summary; the confirmation line replaces it. |
+| F2 | **A fourth word for a tile**: "Painted. Your square is on the wall." So far: tile (wall), cell (dock), pixel (account panel), square (confirmation). | "Painted. Your tile is on the wall." Closes B2 and E1 together: *tile* and *credit*, nothing else. |
+| F3 | **The confirmation is the quietest thing on the panel**: small green text under a stale stroke summary, then "Open transaction in explorer". This is the moment the product exists for. | Make it the dock's headline for a few seconds ("On the wall. −1 credit, 11 left."), pulse the tile on the wall, and reduce the explorer link to a small "View transaction". |
+| F4 | **Buying is a small text link**: "Credits: 12 Buy". | "12 credits" as the figure, with a proper secondary "Buy more" button; make it the primary action when the stroke costs more than the balance. |
+| F5 | **Dead space.** A third of the panel between the Tile card and the dock is empty, and the Colour card keeps an empty strip where the opt-in checkbox was. | Let the dock sit directly under the Tile card; collapse the empty strip. |
+| F6 | **"Painted by" prints the full 64-character id** across three lines as a link. | Shorten (B4). |
+| F7 | **The hint wraps to two lines over the art**: "Tap or drag to paint · Space-drag to move", beside a "Move" button, beside the four view tabs. The top fifth of the wall is under controls. | One short hint ("Tap or drag to paint"), dismissed after the first stroke; "Space-drag to move" belongs in a tooltip on Move. See B7. |
+
+## G. Privy approval window and Send (owner screenshots, 11 Nov)
+
+The **Send** approval is the best screen in the product: a title that says exactly what happens
+("Send 0.5 NEAR"), three labelled rows, one warning, a button that repeats the amount. Use it as
+the model.
+
+| # | What is wrong | Fix |
+|---|---|---|
+| G1 | **Buying credits gets the generic window**: title "Check and approve", then `Calls: buy_credits_near on fcd66acf…` (64 characters over four lines), "Sends 0.025 NEAR", "Gas limit 30 TGas". A player cannot tell this is the purchase they just asked for. | Give each action the game itself sends the Send treatment: "Buy 10 credits" / Pay 0.025 NEAR / To: the Meta Poo wall / button "Pay 0.025 NEAR". Same for painting, claiming TOILET, staking and adding the painting key. Method name, contract id and gas limit move into "Technical details", which already exists. **This is the same list SEND-HARDEN needs** (the allowlist of receivers and methods the game uses), so do them together. It changes wallet approval copy, so it needs owner sign-off under AGENT.md. |
+| G2 | "From" prints the full 64-character account on every approval. | Shorten in the row; full id in Technical details. |
+| G3 | **Send sheet**: confirmed as described in A4. Also, the dialog's "Close" is an unstyled grey chip in the top-left corner, outside the panel. | Standard header row with a Close button, as on Buy credits. |
+
 ## Suggested order
 
 1. **A1, A2, A5, A6, B2, C3** — small, mechanical, no design decision needed. One PR.
-2. **A3** (#98, #105) with **D** and **E** — the payment sheets and the account panel, one PR, needs a real-wallet test.
+2. **A3** (#98, #105) with **D**, **E** and **F** — the payment sheets, the account panel and the connected paint panel, one PR, needs a real-wallet test.
 3. **B1** (#99), **B3, B4, B7–B9, C1, C2, C4, C10** — wall and shared-component tidy. One PR.
-4. **A4** — Send and Self-custody rewrite. Touches wallet copy, so it needs owner sign-off on the wording.
+4. **A4** and **G** — Send, Self-custody and the approval window, together with SEND-HARDEN. Touches wallet copy, so it needs owner sign-off on the wording.
 5. **B5, B6** — check on a physical phone first.
 
 C5–C9 can ride along with whichever PR touches the file.
