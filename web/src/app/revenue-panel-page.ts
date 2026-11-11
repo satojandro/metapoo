@@ -10,6 +10,7 @@ import { explorerUrl } from "@shared/board-rules.ts";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
 import { isContractConfigured } from "../contract";
 import { connectWallet } from "../shared/connect-wallet";
+import { sinceLabel } from "../shared/relative-time";
 import { shortAccount } from "../shared/short-account";
 import { isUserRejection, parseTxOutcome } from "../tx-outcome";
 import { signAndSendDistribution } from "../wallet";
@@ -268,8 +269,11 @@ export function mountRevenuePage(
       source.textContent = `Reading ${deps.contractId} on ${deps.network}…`;
       return;
     }
-    const when = updatedAt === null ? "" : ` · updated ${new Date(updatedAt).toLocaleTimeString()}`;
-    source.textContent = `Read live from ${deps.contractId} on ${deps.network}${when}.`;
+    // C7: "updated 1:16:25 AM" was a wall-clock time beside a 64-character id — precise,
+    // unreadable and twice as wide as the fact it carries.
+    const when = updatedAt === null ? "" : ` · updated ${sinceLabel(updatedAt)}`;
+    source.textContent = `Read live from ${shortAccount(deps.contractId)} on ${deps.network}${when}.`;
+    source.title = `${deps.contractId}${updatedAt === null ? "" : ` — read at ${new Date(updatedAt).toLocaleTimeString()}`}`;
   }
 
   function renderNotice(): void {

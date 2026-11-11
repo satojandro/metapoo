@@ -265,3 +265,13 @@ it("an incomplete index scan is shown as a lower bound", async () => {
   expect(t.text("ledger-source")).toMatch(/lower bounds/);
   expect(t.text("ledger-waiting")).toBe("Unavailable");
 });
+
+it("shortens the contract id and stamps the read relatively (C7)", async () => {
+  const t = setup({ load: async () => live() });
+  await flush();
+  const source = t.text("source");
+  expect(source).not.toMatch(/\d{1,2}:\d{2}:\d{2}/);
+  expect(source).toMatch(/Read live from .+ on testnet/);
+  // A 64-character id is shortened; a short one is left alone (shortAccount's rule).
+  if (source.length > 90) expect(source).toContain("…");
+});
