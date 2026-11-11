@@ -29,7 +29,7 @@ time. Findings are ordered by what a first-time player would hit. Nothing here i
 
 | # | What is wrong | Fix |
 |---|---|---|
-| B1 | **Price and Age are the same picture** (#99): age decides price, and both views colour tiles in the same three bands. | One view, "Fresh", with one legend: wet · 4 credits · under 10 min, drying · 2 · under an hour, dry · 1. |
+| B1 | **Price and Age are the same picture** (#99): age decides price, so Price (three bands: 4, 2, 1 credits) and Age (a wet-to-dry scale) show the same thing two ways. | One view, "Fresh", with one legend: wet · 4 credits · under 10 min, drying · 2 · under an hour, dry · 1. |
 | B2 | **"Cell" and "tile" are both used.** The page says tile everywhere except the paint dock ("This stroke: 1 cell · 1 credit") and the screen-reader readout ("Cell: none selected"). | "Tile" everywhere a player can read it. |
 | B3 | **"Also allow painting without a popup each time"** is the first thing under the palette and does not say what it does, what it costs, or that it is safe. | "Paint without approving every stroke" with one line beneath: "Adds a painting key that can only paint here. It can't move your funds. Turn it off any time." |
 | B4 | **Long account ids dominate "Right now" and "Who holds the wall".** The top painter is a 64-character id cut off mid-string; the tile inspector on phone prints all 64 characters across three lines. | Shorten to first 8 … last 8 everywhere, full id on tap or hover. Same rule as A1. |
@@ -47,7 +47,7 @@ time. Findings are ordered by what a first-time player would hit. Nothing here i
 | C2 | Stake | "Connect a wallet" appears five times as a *value* in coloured text (Your share, Your cut, three rows in Your position), plus twice more as a hint. It looks like five links and none is clickable. | Show "—" for the values and one real Connect button in the position card. |
 | C3 | Stake | Stray punctuation in step 3: the heading ends, then the body starts ", a little every moment" (`stake-page.ts:156`). | Move the comma clause into the sentence. |
 | C4 | Stake, TOILET | **Two words for one action**: the nav and TOILET page say "Stake", the Stake page says "Lock / Unlock", and TOILET says "burned when you unstake". | Pick one. "Stake / Unstake" matches the nav and the page name. |
-| C5 | TOILET | The hard-cap figure "1,000,000,000" renders at about 10 px under its own label — the one number the section is about. | Use the stat style the rest of the page uses. |
+| C5 | TOILET | The hard-cap figure "1,000,000,000" renders at 14 px with tight letter-spacing, smaller than the paragraph beneath it — the one number the section is about. | Use the stat style the rest of the page uses. |
 | C6 | TOILET, How it works | Both are long (4,300 and 4,800 px on desktop) and both explain the tiers, the 70/20/10 split and the loop. TOILET carries three separate calculators. | Not a launch blocker. After launch, let How it works own the rules and TOILET own the earning, and cut the whale calculator down or move it behind a disclosure. |
 | C7 | Money, Stake | "updated 1:16:25 AM" is a wall-clock time in monospace beside a 64-character id. | "Updated just now" / "2 min ago", and shorten the id. |
 | C8 | Money | The page leads with two cards that both read "0 … Nothing is waiting, so there is nothing to send" and two dead "Distribute now" buttons, while the interesting numbers (burned so far, bought back) are below. | Lead with the totals; put the two pending-split cards second. |
