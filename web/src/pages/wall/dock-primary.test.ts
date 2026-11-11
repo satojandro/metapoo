@@ -24,6 +24,20 @@ describe("dockPrimaryState", () => {
     expect(dockPrimaryState({ ...READY, credits: null }).kind).toBe("place");
   });
 
+  it("promotes buying when the stroke costs more than the balance (F4)", () => {
+    // Twelve credits is plenty for a one-credit tile: painting stays the action.
+    expect(dockPrimaryState(READY).kind).toBe("place");
+    expect(dockPrimaryState({ ...READY, shortfall: true })).toEqual({
+      kind: "buy",
+      label: "Buy more credits",
+      disabled: false,
+    });
+    // Zero credits already says "Buy credits"; the shortfall adds no second voice.
+    expect(dockPrimaryState({ ...READY, credits: 0, shortfall: true }).label).toBe("Buy credits");
+    // Never before a wallet exists.
+    expect(dockPrimaryState({ ...READY, connected: false, shortfall: true }).kind).toBe("connect");
+  });
+
   it("asks for a colour before anything can be painted", () => {
     expect(dockPrimaryState({ ...READY, colourChosen: false })).toEqual({
       kind: "pick-colour",
@@ -53,14 +67,14 @@ describe("dockPrimaryState", () => {
 });
 
 describe("parseCreditsLine", () => {
-  it("reads the pricing controller's credits line", () => {
-    expect(parseCreditsLine("Credits: 12")).toBe(12);
-    expect(parseCreditsLine("Credits: 0")).toBe(0);
-    expect(parseCreditsLine("Credits: not registered · 0")).toBe(0);
+  it("reads the dock's credits figure", () => {
+    // F4: the dock shows the number alone, with the unit beside it.
+    expect(parseCreditsLine("12")).toBe(12);
+    expect(parseCreditsLine("0")).toBe(0);
   });
 
   it("treats anything else as unknown", () => {
-    for (const line of ["Credits: …", "Credits: connect wallet", "Credits: unavailable — retry", "", null]) {
+    for (const line of ["—", "…", "", null, "Credits: 12", "12 credits"]) {
       expect(parseCreditsLine(line), String(line)).toBeNull();
     }
   });

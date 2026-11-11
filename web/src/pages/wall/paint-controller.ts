@@ -43,8 +43,12 @@ export interface PaintControllerDeps extends PaintSessionDom {
     PricingController,
     | "paidBoard" | "priceUnavailable" | "allowGestureRetry" | "ensurePaidQuote" | "admitTap"
     | "refreshCreditsDock" | "repriceCell" | "settle" | "release" | "confirmRequote"
+    | "announcePainted" | "clearStrokeHeadline"
   >;
-  view: Pick<WallView, "selected" | "setSelected" | "selectedColor" | "setFlow" | "showSelection">;
+  view: Pick<
+    WallView,
+    "selected" | "setSelected" | "selectedColor" | "setFlow" | "showSelection" | "pulseSelection"
+  >;
   render(): void;
 }
 
@@ -441,6 +445,11 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         board.rememberPixel(submitResult.pixel, submitResult.observedBlockHeight);
         clearPendingPaint(pendingPaints, frozen.x, frozen.y);
         deps.render();
+        // The dock's headline is the confirmation now (owner, 11 Nov): the tile
+        // that just landed is not one about to be painted, so its stroke summary
+        // is spent. The ring is on this tile, so it gets one beat.
+        pricing.announcePainted(priced.maxCredits);
+        view.pulseSelection();
         view.setFlow("confirmed");
         showResult();
         view.showSelection();
@@ -452,6 +461,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         recordResult("confirmation_delayed");
         markPending(frozen, submitResult.transactionId, "confirmation_delayed");
         deps.render();
+        pricing.clearStrokeHeadline();
         view.setFlow("confirmation_delayed");
         showResult();
         view.showSelection();
@@ -464,6 +474,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         board.rememberPixel(submitResult.pixel, submitResult.observedBlockHeight);
         clearPendingPaint(pendingPaints, frozen.x, frozen.y);
         deps.render();
+        pricing.clearStrokeHeadline();
         view.setFlow("overwritten");
         showResult();
         view.showSelection();
@@ -474,6 +485,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       recordResult("failed");
       clearPendingPaint(pendingPaints, frozen.x, frozen.y);
       deps.render();
+      pricing.clearStrokeHeadline();
       if (submitResult.status === "failed" && submitResult.keyLow) {
         session.promptKeyRenewal();
       }
@@ -595,6 +607,10 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
         } else clearPendingPaint(pendingPaints, cell.x, cell.y);
       }
       fillBlock(result, outcome.status === "confirmed" ? "Stroke confirmed" : "Stroke stopped", strokeResultCopy(stroke.state, outcome));
+      // A confirmed stroke replaces the stroke summary with the confirmation; a
+      // stopped one leaves no summary behind either (owner, 11 Nov).
+      if (outcome.status === "confirmed") pricing.announcePainted(priced.maxCredits);
+      else pricing.clearStrokeHeadline();
       view.setFlow(outcome.status === "confirmed" ? "confirmed" : "confirmation_delayed");
       // Stroke execution and latest ownership are distinct; do not reuse the
       // single-cell label that promises a matching confirming read.
@@ -906,6 +922,17 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
       deps.render();
       view.setFlow(settled.status === "confirmed" ? "confirmed"
         : settled.status === "confirmation_delayed" ? "confirmation_delayed" : "failed");
+      if (settled.status === "confirmed") {
+        // What this batch actually cost, so the headline can say what is left.
+        // A free board has no credits: the headline just says it is up.
+        pricing.announcePainted(
+          pricing.paidBoard()
+            ? (priced.chunkMaxCredits ?? []).reduce((sum, chunk) => sum + chunk, 0)
+            : null,
+        );
+      } else {
+        pricing.clearStrokeHeadline();
+      }
       if (n === 1) {
         // A lone tap reads like the single paint it is: its transaction link, and
         // the square stays selected, as the single-draw path showed.
@@ -913,6 +940,7 @@ export function createPaintController(deps: PaintControllerDeps): PaintControlle
           explorerUrl(first.networkId, transactionId));
         view.setSelected({ x: first.x, y: first.y });
         if (settled.status !== "failed") view.showSelection();
+        if (settled.status === "confirmed") view.pulseSelection();
       } else {
         fillBlock(result, settled.title, settled.message);
       }

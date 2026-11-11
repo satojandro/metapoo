@@ -86,6 +86,8 @@ function setup(options: { metaOk?: boolean } = {}) {
     confirmRequote: vi.fn(async (): Promise<number | null> => null),
     refreshCreditsDock: vi.fn(async () => undefined),
     repriceCell: vi.fn(),
+    announcePainted: vi.fn(),
+    clearStrokeHeadline: vi.fn(),
   };
   const view = {
     selected: () => selected,
@@ -93,6 +95,7 @@ function setup(options: { metaOk?: boolean } = {}) {
     selectedColor: () => selectedColor,
     setFlow: vi.fn((next: UiPhase) => { phase = next; }),
     showSelection: vi.fn(),
+    pulseSelection: vi.fn(),
   };
   const toggle = el<HTMLInputElement>("toggle");
   const paint = createPaintController({

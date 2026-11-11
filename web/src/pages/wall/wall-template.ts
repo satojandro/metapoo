@@ -47,12 +47,14 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             <!-- Controls float over the wall's corners so the wall gets the height. -->
             <div class="board-toolbar wall-bar" role="toolbar" aria-label="Wall controls">
               <!-- Move sits beside the hint on every pointer: it is how you browse and
-                   ask about tiles in Paint mode without painting them (owner, 7 Nov). -->
+                   ask about tiles in Paint mode without painting them (owner, 7 Nov).
+                   Space-drag belongs in this tooltip, not in the hint: the hint has to
+                   fit one line or it costs the top of the wall (owner, 11 Nov). -->
               <div class="wall-bar-lead">
                 <button id="wall-move" class="wall-move" type="button" aria-pressed="false" hidden
-                  title="Drag moves the wall and a tap shows a tile, instead of painting">Move</button>
+                  title="Drag moves the wall, and a tap shows a tile instead of painting. While painting, hold Space and drag to move.">Move</button>
                 <p class="wall-chip wall-gesture-hint" data-for-mode="look">Tap a tile to see who painted it</p>
-                <p class="wall-chip wall-gesture-hint" data-for-mode="paint">Tap or drag to paint · Space-drag to move</p>
+                <p class="wall-chip wall-gesture-hint" data-for-mode="paint">Tap or drag to paint</p>
                 <p class="wall-chip wall-gesture-hint" data-for-mode="moving">Drag to move · tap a tile to see it · nothing paints</p>
               </div>
               <div class="mp-seg mp-seg-small wall-views" role="group" aria-label="Wall view">
@@ -187,9 +189,16 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                   <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
                   <p id="stroke-earn" class="stroke-earn" hidden></p>
                 </div>
+                <!-- The figure you have, then the way to get more. "Credits: 12 Buy"
+                     read as a label with a text link where the number should be
+                     (owner, 11 Nov). The unit is a sibling so the figure can stand
+                     alone; CSS hides it while the figure is not a number. -->
                 <div id="credits-dock" class="credits-dock" hidden>
-                  <p id="credits-balance" class="credits-balance" role="status" aria-live="polite">Credits: …</p>
-                  <button id="buy-credits-button" class="wall-link" type="button">Buy</button>
+                  <p class="credits-figure" role="status" aria-live="polite">
+                    <span id="credits-balance" class="credits-balance" data-state="unknown">…</span>
+                    <span class="credits-unit">credits</span>
+                  </p>
+                  <button id="buy-credits-button" class="mp-btn wall-buy-more" type="button">Buy more</button>
                 </div>
               </div>
               <div class="wall-action">

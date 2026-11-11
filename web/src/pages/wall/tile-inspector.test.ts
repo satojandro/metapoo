@@ -176,6 +176,37 @@ describe("Tile card", () => {
     expect(host.textContent).not.toMatch(/Copy link/);
   });
 
+  it("shortens a 64-character painter id, keeping the whole one in reach (F6)", () => {
+    const id = "fcd66acf3b1e4d5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c3076f59e";
+    document.body.innerHTML = `<section class="wall-inspect"><p class="summary"></p><div id="host" hidden></div></section>`;
+    const scope = createWallScope();
+    const inspector = createTileInspector({
+      scope,
+      card: document.querySelector<HTMLElement>(".wall-inspect")!,
+      host: document.querySelector<HTMLElement>("#host")!,
+      selected: () => ({ x: 3, y: 4 }),
+      cachedPixel: () => painted(30, id),
+      viewer: () => null,
+      tunables: () => tunables,
+      free: () => ({ kind: "unknown" }),
+      knownCost: () => undefined,
+      network: "testnet",
+      prime: () => undefined,
+      paintOver: () => undefined,
+      pageUrl: () => "https://meta.poo/",
+      now: () => Number(NOW / 1_000_000n),
+      tickMs: 60_000,
+    });
+    inspector.render();
+    const link = document.querySelector<HTMLAnchorElement>("#host .tile-painter a")!;
+    // Three lines of hex became one chip-sized handle.
+    expect(link.textContent).toBe("fcd66acf…3076f59e");
+    expect(link.title).toBe(id);
+    expect(link.getAttribute("aria-label")).toContain(id);
+    scope.markDisposed();
+    scope.runCleanups();
+  });
+
   it("describes the hovered tile without a tap, then falls back to the selection", () => {
     let hover: { x: number; y: number } | null = { x: 9, y: 9 };
     const { inspector, paintOver } = setup(null, () => hover);

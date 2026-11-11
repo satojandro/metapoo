@@ -316,8 +316,11 @@ describe("wall behaviour: free board", () => {
     expect(text(root, "#result")).toContain("Transaction id: tx-64-64");
     expect(root.querySelector<HTMLAnchorElement>("#result a")?.href).toContain("tx-64-64");
     expect(text(document.body, "#flow-state")).toBe(
-      "Painted. Your square is on the wall.",
+      "Painted. Your tile is on the wall.",
     );
+    // The dock's headline is the confirmation (F3); on a free board it has no
+    // credits to count, and the stroke summary it replaced is gone (F1).
+    expect(text(root, "#stroke-total")).toBe("On the wall.");
     const op = services.operations.list().find((o) => o.kind === "paint");
     expect(op).toMatchObject({ phase: "confirmed", transactionId: "tx-64-64" });
     // Stamped from the receipt at its executed block; the marker clears with the stamp.
@@ -450,7 +453,7 @@ describe("wall behaviour: paid board", () => {
     controllableWallet(services, ALICE);
     const { root, api, dispose } = mount(services);
     await booted(root);
-    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("Credits: 10"));
+    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("10"));
     expect(root.querySelector<HTMLElement>("#credits-dock")!.hidden).toBe(false);
     // Legend comes from get_tunables alone.
     await vi.waitFor(() =>
@@ -485,14 +488,25 @@ describe("wall behaviour: paid board", () => {
     controllableWallet(services, ALICE);
     const { root, api, dispose } = mount(services);
     await booted(root);
-    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("Credits: 10"));
+    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("10"));
+
+    // Choosing a tile prices it for the Tile card, never as a stroke (F1): the
+    // dock's headline stays empty until something is about to be placed.
+    const focus = root.querySelector<HTMLElement>("#board-focus")!;
+    focus.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    await vi.waitFor(() => expect(text(root, "#cell-price")).toContain("credits"));
+    expect(text(root, "#stroke-total")).toBe("");
 
     api.enqueueUnsent(req(5, 6, 3));
     await api.kickDrain();
 
     expect(vi.mocked(submitDraw)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(submitDraw).mock.calls[0]![0]).toMatchObject({ x: 5, y: 6, colorIndex: 3 });
-    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("Credits: 9"));
+    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("9"));
+    // The confirmation replaces the stroke summary in the dock's headline, and
+    // says what it cost and what is left (F1, F3). The exact remainder depends on
+    // which balance read lands first, so only its shape is pinned.
+    expect(text(root, "#stroke-total")).toMatch(/^On the wall\. −2 credits, \d+ left\.$/);
     expect(text(root, "#result")).toContain("Paint confirmed");
     expect(root.querySelector<HTMLButtonElement>("#draw-button")!.disabled).toBe(false);
     // The pre-submit quote put the cell price on screen.
@@ -508,7 +522,7 @@ describe("wall behaviour: paid board", () => {
     controllableWallet(services, ALICE);
     const { root, api, dispose } = mount(services);
     await booted(root);
-    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("Credits: 1"));
+    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("1"));
 
     api.enqueueUnsent(req(7, 7, 0));
     await api.kickDrain();
@@ -534,7 +548,7 @@ describe("wall behaviour: paid board", () => {
     controllableWallet(services, { accountId: null, networkId: null });
     const { root, dispose } = mount(services);
     await booted(root);
-    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("Credits: connect wallet"));
+    await vi.waitFor(() => expect(text(root, "#credits-balance")).toBe("—"));
     expect(root.querySelector<HTMLButtonElement>("#buy-credits-button")!.disabled).toBe(true);
     expect(text(document.body, "#flow-state")).toBe(
       "Look around freely. Connect a wallet to paint.",

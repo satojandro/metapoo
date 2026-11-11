@@ -15,6 +15,7 @@ import { paletteColor } from "@shared/palette.ts";
 import { BOARD_HEIGHT, BOARD_WIDTH, type PixelView } from "@shared/types.ts";
 import { accountExplorerUrl } from "../../app/revenue-panel";
 import type { Cell } from "../../selection";
+import { shortAccount } from "../../shared/short-account";
 import type { WallScope } from "./wall-scope";
 import {
   blankIsFree,
@@ -249,15 +250,23 @@ export function createTileInspector(deps: TileInspectorDeps): TileInspector {
     list.append(row("Colour", colour));
 
     if (model.painter) {
+      // A 64-character implicit id printed whole ran across three lines in the
+      // card (owner, 11 Nov). Show the shared short form; keep the whole id in
+      // `title` and in the label, so it is still there to read or copy.
       const who = el("span", "tile-painter");
+      const short = shortAccount(model.painter.account);
+      const full = model.painter.account;
       if (model.painter.href) {
-        const link = el("a", undefined, model.painter.account);
+        const link = el("a", undefined, short);
         link.href = model.painter.href;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
+        link.title = full;
+        link.setAttribute("aria-label", `Painted by ${full}. Opens the account in a block explorer.`);
         who.append(link);
       } else {
-        who.textContent = model.painter.account;
+        who.textContent = short;
+        who.title = full;
       }
       if (model.painter.you) who.append(el("span", "tile-you", "you"));
       list.append(row("Painted by", who));
