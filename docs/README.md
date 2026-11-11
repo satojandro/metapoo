@@ -15,6 +15,7 @@ Everything not listed here lives in [`archive/`](archive/README.md) and is histo
 | what is decided vs still open? | [`00-shared-decisions.md`](00-shared-decisions.md), [`roadmap.md`](roadmap.md) |
 | what blocks mainnet, in what order? | [`2026-10-29-code-audit.md`](2026-10-29-code-audit.md); work orders in [`implementation/2026-11-01-work-queue.md`](implementation/2026-11-01-work-queue.md) |
 | how should the site look and feel? | [`2026-10-29-whole-site-design-review.md`](2026-10-29-whole-site-design-review.md) |
+| what UI work is left before launch? | [`2026-11-11-ui-launch-review.md`](2026-11-11-ui-launch-review.md) |
 | how should a judgement call be made? | [`2026-10-14-product-judgment.md`](2026-10-14-product-judgment.md) |
 
 ## Payments (the money path)
