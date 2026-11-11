@@ -12,13 +12,19 @@ Decision taken by the owner, 11 Nov: **G ships with SEND-HARDEN in one PR, separ
 The first table was not approved. Six faults, all confirmed against the code or the contracts
 before rewriting — each one was a false statement a player would have read:
 
-1. Registration on the board is **`register_credit_account`**, not `storage_deposit`, and it is not
-   its own approval: it is the **first action of the first purchase** (`web/src/wallet.ts`). The
-   board has no unregister and no refund, so "refundable if you close your account" was false.
+1. Registration on the board is **`register_credit_account`**, not `storage_deposit` — and my claim
+   that it is never its own approval was **only half right** (`web/src/wallet.ts:788-814` vs
+   `:840-874`). A NEAR purchase batches it with `buy_credits_near` in **one** transaction and one
+   approval; an **mPOO purchase signs it as its own transaction first**, so that path shows **two
+   approvals**. The board has no unregister and no refund either way, so "refundable if you close
+   your account" was false.
 2. The first-purchase **button understated its total**: the transaction sends credits **plus** the
    one-time setup, so the button must carry the sum.
-3. A plain `draw` reaches the approval window only when the **account's main key** signs, so its
-   network fee comes from the player's **NEAR**, not from the painting key.
+3. My paint row was wrong twice over. With a painting key active, a `draw`/`draw_many` **never
+   reaches an approval window at all** — it signs locally (`submit-draw.ts:127-136`,
+   `local-draw.ts:287,511`). The NEAR it spends was prepaid as a **0.25 NEAR allowance when the key
+   was added** (itself one approval, `wallet.ts:473-491`). The window only appears in the fallback
+   where the account's main key signs (`submit-draw.ts:213`).
 4. `claim_toilet` and `claim_rewards` take **no amount argument**; the figure accrues until
    execution, so a number in the title would be one the game passed in, not one the wallet can check.
 5. "About 0.0004 NEAR" was **not computed anywhere**. The existing honest note stays: you pay only
@@ -36,8 +42,9 @@ Every row is derived **inside the sign page from the transaction itself** — de
 |---|---|---|---|
 | `buy_credits_near` on the board | Buy 10 credits | Pay · 0.025 NEAR — To · the Meta Poo wall | Pay 0.025 NEAR |
 | `register_credit_account` + `buy_credits_near` | Buy 10 credits | Credits · 0.025 NEAR — One-time account setup · 0.01 NEAR — Total · 0.035 NEAR | Pay 0.035 NEAR |
-| `register_credit_account` + `ft_transfer_call` (mPOO → board) | Buy 10 credits with mPOO | Pay · 48.25 mPOO — One-time account setup · 0.01 NEAR — Total · 0.01 NEAR + 48.25 mPOO | Pay 48.25 mPOO |
-| `draw` / `draw_many` on the board | Paint 3 tiles | Cost · at most 3 credits — Network fee · a little NEAR | Paint 3 tiles |
+| `register_credit_account` (mPOO path) — **first of two approvals** | Set up your account | One-time account setup · 0.01 NEAR — Needed once before mPOO credits | Pay 0.01 NEAR |
+| `ft_transfer_call` (mPOO → board) — **second approval** | Buy 10 credits with mPOO | Pay · 48.25 mPOO — To · the Meta Poo wall | Pay 48.25 mPOO |
+| `draw` / `draw_many` on the board — **only when the main key signs** (no painting key active) | Paint 3 tiles | Cost · at most 3 credits — Network fee · a little NEAR | Paint 3 tiles |
 | `claim_toilet` on the board | Claim your TOILET | Everything your tiles have earned — To · your wallet | Claim TOILET |
 | `ft_transfer_call` (TOILET → staking, `msg: "stake"`) | Stake 607.68 TOILET | To · the staking pool | Stake 607.68 TOILET |
 | the same, preceded by `storage_deposit` on staking | Stake 607.68 TOILET | To · the staking pool — One-time setup · 0.01 NEAR, returned if you leave with nothing staked | Stake 607.68 TOILET |
@@ -51,7 +58,14 @@ pool" only for the configured staking contract. Anything else is unmapped and **
 
 Owner console gets an explicit allowlist — board plus `distribute_near`, `distribute_mpoo`,
 `set_paused`, `set_tunables` — so that "untouched" cannot leave the generic "Calls X on Y" path open
-as a catch-all. **After this PR there is no catch-all.**
+as a catch-all. **After this PR there is no catch-all.** The fact-check added four shapes that need
+rows or refusals: `distribute_near` / `distribute_mpoo` take no args, no deposit and **anyone may
+call them** (`wallet.ts:908-928`); the owner setters (`set_tunables`, `set_paused`, `set_near_price`,
+`set_mpoo_price`, `set_team_account`, `set_buyback_account`, `set_staking_contract`) are owner-only
+1-yocto calls (`wallet.ts:1018-1061`); the staking contract also accepts **mPOO with `msg: "fund"`**
+(`contracts/toilet-staking/src/lib.rs:232-237`), which is a different caption from `"stake"`; and the
+RHEA swap sends `near_deposit` + `ft_transfer_call` to an exchange
+(`integrations/rhea/plan.ts:118-127`), so an unlisted exchange receiver must be refused, not captioned.
 
 Rates and setup amounts come from the contracts (the same reads the Stake page makes): the unstake
 burn rate, the staking registration amount, the mPOO registration amount. **No constants in the sign
@@ -104,5 +118,12 @@ existing sentence still in place.
 1. Sign off on §2's rows and the two buttons that carry a **total** (first NEAR purchase, first mPOO
    purchase) — those are the two places the wording changed most from my first draft.
 2. Sign off on §3.1 and §3.2.
-3. Say whether the mPOO token's registration amount should be read from the token (preferred, and
-   what the table assumes) or whether that path should stay hidden until the amount is verified live.
+3. The mPOO token is external (`mpoo.nearlytrade.near`, `web/README.md:48`) with **no source in
+   `contracts/`**, so its refundability is **not established in the repo**. The code already reads the
+   amount at runtime (`storage_balance_bounds` → `mpooStorageMin`, `staking.ts:163-172`), which is why
+   the table shows `<amount read from the token>`; the row makes **no refund claim**. Settling
+   refundability needs the token's source or a `storage_unregister` probe — say which you want before
+   that row ships.
+4. `claim_toilet` currently sends a `toilet` argument that the contract signature does not have
+   (`wallet.ts:1011`); it is silently ignored. The approval copy will not mention it, but the dead
+   argument should be removed in a follow-up rather than captioned.
