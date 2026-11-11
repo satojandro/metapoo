@@ -9,6 +9,8 @@ vi.mock("../contract", async (importOriginal) => {
   return { ...actual, isContractConfigured: () => false };
 });
 import { createAppServices } from "./services";
+import type { AppServices } from "./services";
+import { createOperationsStore } from "./operations";
 import { mountShell } from "./shell";
 import { matchRoute } from "./routes";
 
@@ -120,6 +122,62 @@ describe("app shell", () => {
 
     shell.placeFooter(matchRoute("/admin"));
     expect(shell.outlet.querySelector(".site-foot")).toBeNull();
+    shell.dispose();
+  });
+
+  it("orders the wallet panel: balances, buy, claim, move funds, links, technical details, disconnect", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    // A connected session puts Disconnect inside the panel, which is the order under test.
+    const services: AppServices = {
+      wallet: {
+        getSession: () => ({ accountId: "alice.near", networkId: "mainnet" }),
+        connect: async () => {},
+        disconnect: async () => {},
+        subscribe: () => () => {},
+        whenReady: Promise.resolve({ accountId: "alice.near", networkId: "mainnet" }),
+      },
+      operations: createOperationsStore(),
+    };
+    const shell = mountShell(host, services);
+    const details = host.querySelector<HTMLDetailsElement>("details.wallet-details")!;
+
+    const order = [
+      ".wallet-account-head",
+      "#paint-wallet-panel",
+      "#toilet-wallet-panel",
+      "#wallet-move-funds",
+      ".wallet-links",
+      ".wallet-technical",
+      "#connect-button",
+    ].map((selector) => details.querySelector(selector));
+    for (const element of order) expect(element).not.toBeNull();
+    // compareDocumentPosition: FOLLOWING means the element after it comes later in the panel.
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    // Disconnect is not the same weight as Claim and Add funds.
+    expect(order.at(-1)!.className).not.toContain("mp-btn-primary");
+    shell.dispose();
+  });
+
+  it("keeps the header to one row and the chain detail closed and short", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shell = mountShell(host, createAppServices());
+    const details = host.querySelector<HTMLDetailsElement>("details.wallet-details")!;
+
+    // Address, copy and Close share the header row; the copy is an icon button with a label.
+    const head = details.querySelector(".wallet-account-head")!;
+    expect(head.querySelector("[data-account-id]")).not.toBeNull();
+    expect(head.querySelector(".wallet-account-copy")?.getAttribute("aria-label")).toBe("Copy address");
+    expect(head.querySelector(".wallet-details-close")).not.toBeNull();
+    // The 64-character id is not repeated as a second box.
+    expect(details.querySelectorAll("[data-account-id]")).toHaveLength(1);
+    expect(details.querySelector("h2")?.textContent).not.toBe("Connection details");
+    const technical = details.querySelector<HTMLDetailsElement>("details.wallet-technical")!;
+    expect(technical.open).toBe(false);
+    expect(technical.querySelector("summary")!.textContent).toBe("Technical details");
     shell.dispose();
   });
 });

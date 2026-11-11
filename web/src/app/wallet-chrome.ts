@@ -81,17 +81,13 @@ export function mountWalletChrome(
 
   function showWallet(): void {
     const session = services.wallet.getSession();
-    if (session.accountId) {
-      walletSummary.textContent = `Connected account: ${session.accountId}. Contract: ${
-        CONTRACT_ID || "not configured"
-      }.`;
-      connectButton.textContent = "Disconnect wallet";
-    } else {
-      walletSummary.textContent = `Not connected. You can still browse. Contract: ${
-        CONTRACT_ID || "not configured"
-      }.`;
-      connectButton.textContent = "Connect wallet";
-    }
+    // Technical details holds identifiers for support, short like everywhere else; the
+    // full account id lives in the copy button's clipboard payload and its title.
+    const contract = shortAccount(CONTRACT_ID) || "not configured";
+    walletSummary.textContent = session.accountId
+      ? `Account ${shortAccount(session.accountId)} · contract ${contract}`
+      : `Not connected · contract ${contract}`;
+    connectButton.textContent = session.accountId ? "Disconnect" : "Connect wallet";
     placeWalletControls(session.accountId);
     showAccount(session.accountId);
     const notice = describeNetwork(
@@ -107,12 +103,14 @@ export function mountWalletChrome(
     }
   }
 
-  /** The full account id, readable and copyable: a 64-character implicit id does not fit the header. */
+  /** Short id, full id in the title: a 64-character implicit id does not fit the header. */
   function showAccount(account: string | null): void {
     if (!accountSection || !accountId) return;
     accountSection.hidden = account === null;
-    if (accountId.textContent !== (account ?? "")) {
-      accountId.textContent = account ?? "";
+    const shown = account === null ? "" : shortAccount(account);
+    if (accountId.textContent !== shown) {
+      accountId.textContent = shown;
+      accountId.title = account ?? "";
       if (accountNote) accountNote.textContent = "";
     }
   }
@@ -123,16 +121,10 @@ export function mountWalletChrome(
     const copied = () => {
       accountNote.textContent = `Address copied. Send only NEAR on NEAR ${networkId} to it.`;
     };
+    // No on-screen copy of the full id to fall back to selecting: point at the wallet instead
+    // of telling the player to copy a shortened address.
     const fallback = () => {
-      // Select the id so a long-press or Ctrl+C copies it when the clipboard API is refused.
-      if (accountId) {
-        const range = document.createRange();
-        range.selectNodeContents(accountId);
-        const selection = window.getSelection();
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
-      accountNote.textContent = "Copy was blocked. The address is selected: copy it from there.";
+      accountNote.textContent = "Copy was blocked. Copy the address from your wallet app.";
     };
     try {
       void navigator.clipboard.writeText(account).then(copied, fallback);
@@ -158,16 +150,13 @@ export function mountWalletChrome(
     recoverableOps = recoverable.length;
     placeWalletControls(services.wallet.getSession().accountId);
     opsRecovery.replaceChildren();
+    // Nothing in flight is the normal state: say nothing rather than print a "nothing here"
+    // block above Technical details.
+    opsRecovery.hidden = recoverable.length === 0;
+    if (recoverable.length === 0) return;
     const heading = document.createElement("h2");
     heading.textContent = "Operations";
     opsRecovery.append(heading);
-    if (recoverable.length === 0) {
-      const empty = document.createElement("p");
-      empty.textContent =
-        "No in-flight wallet operations. Leaving a page does not drop a broadcast transaction.";
-      opsRecovery.append(empty);
-      return;
-    }
     const list = document.createElement("ul");
     list.className = "ops-list";
     for (const op of recoverable) {

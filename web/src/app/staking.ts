@@ -272,7 +272,7 @@ export function lockState(input: ActionInput & { amount: bigint | null; account:
   if (input.amount > a.wallet) return { enabled: false, label: "Not enough TOILET", hint: "That’s more than your wallet holds." };
   const label = `Lock ${fmt(input.amount)} TOILET`;
   return a.registered
-    ? { enabled: true, label, hint: "Your wallet signs one transaction with 1 yoctoNEAR attached." }
+    ? { enabled: true, label, hint: "One approval in your wallet, plus a small network fee." }
     : { enabled: true, label, hint: "First time: your wallet signs two transactions. The first registers you with the staking contract and pays its storage, once." };
 }
 
@@ -288,7 +288,7 @@ export function unlockState(input: ActionInput & { amount: bigint | null; accoun
   return {
     enabled: true,
     label: tax > 0n ? `Unlock and burn ${fmt(tax)} TOILET` : `Unlock ${fmt(input.amount)} TOILET`,
-    hint: "Your wallet signs one transaction with 1 yoctoNEAR attached. Your mPOO stays claimable.",
+    hint: "One approval in your wallet, plus a small network fee. Your mPOO stays claimable.",
   };
 }
 
@@ -305,7 +305,7 @@ export function claimRewardsState(input: ActionInput & { account: StakingAccount
     return { enabled: false, label, hint: "Couldn’t read what the mPOO token charges to register you. Try again in a moment." };
   }
   return a.mpooRegistered
-    ? { enabled: true, label, hint: "Your wallet signs one transaction with 1 yoctoNEAR attached." }
+    ? { enabled: true, label, hint: "One approval in your wallet, plus a small network fee." }
     : { enabled: true, label, hint: "First claim: your wallet signs two transactions. The first registers you with the mPOO token so it can pay you." };
 }
 

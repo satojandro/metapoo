@@ -24,6 +24,22 @@ describe("wireWalletDetailsClose", () => {
     details.remove();
   });
 
+  it("puts Close in the account header row when the panel has one", () => {
+    const details = document.createElement("details");
+    details.className = "wallet-details";
+    details.innerHTML = `<summary>Wallet</summary>
+      <div class="wallet-account-head"><code>alice.near</code></div><p>balances</p>`;
+    document.body.append(details);
+    const handles = wireWalletDetailsClose(details);
+    const head = details.querySelector(".wallet-account-head")!;
+    expect(head.querySelector(".wallet-details-close")).not.toBeNull();
+    // No row of its own above the content.
+    expect(details.querySelector(".wallet-details-toolbar")).toBeNull();
+    handles.dispose();
+    expect(details.querySelector(".wallet-details-close")).toBeNull();
+    details.remove();
+  });
+
   it("closes when the pointer lands outside the panel", () => {
     const details = openPanel();
     const outside = document.createElement("div");

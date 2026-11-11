@@ -207,7 +207,7 @@ export function claimButtonState(input: ClaimInput): ClaimState {
       hint: `${formatAmount(input.pending, TOILET_DECIMALS, { maxFraction: 2 })} of 1.00 TOILET earned. Claim opens at 1.00 — your tiles keep earning either way.`,
     };
   }
-  return { enabled: true, label, hint: "Your wallet signs. You attach 1 yoctoNEAR and pay gas; the TOILET lands in your wallet." };
+  return { enabled: true, label, hint: "One approval in your wallet, plus a small network fee." };
 }
 
 /** True when the receipts carry the board's `claim_failed` event: the mint was refused. */

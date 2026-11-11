@@ -23,8 +23,13 @@ export function wireWalletDetailsClose(
   closeButton.textContent = "Close";
   toolbar.append(closeButton);
 
+  // Inside the account header row when the shell provides one (short address, copy, Close),
+  // so Close is never on a row of its own; the toolbar is the fallback for other markup.
+  const head = details.querySelector(".wallet-account-head");
   const summary = details.querySelector("summary");
-  if (summary?.nextSibling) {
+  if (head) {
+    head.append(closeButton);
+  } else if (summary?.nextSibling) {
     details.insertBefore(toolbar, summary.nextSibling);
   } else {
     details.append(toolbar);
@@ -68,6 +73,7 @@ export function wireWalletDetailsClose(
       closeButton.removeEventListener("click", onCloseClick);
       document.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("keydown", onKeyDown);
+      closeButton.remove();
       toolbar.remove();
     },
   };
