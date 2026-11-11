@@ -3,14 +3,14 @@
  */
 import { describe, expect, it } from "vitest";
 import { createSiteFooter } from "./site-footer";
-import { MPOO_CHART_URL } from "../social-links";
+import { GITHUB_ISSUES_URL, MPOO_CHART_URL } from "../social-links";
 
 describe("site footer", () => {
   it("renders the brand and one link per destination, in order", () => {
     const footer = createSiteFooter({ env: {} });
     expect(footer.tagName).toBe("FOOTER");
     expect(footer.querySelector(".site-foot-brand")?.textContent).toBe("meta poo.");
-    const links = [...footer.querySelectorAll<HTMLAnchorElement>("a")];
+    const links = [...footer.querySelectorAll<HTMLAnchorElement>("a[data-social-link]")];
     expect(links.map((a) => a.dataset.socialLink)).toEqual([
       "x",
       "telegram",
@@ -31,7 +31,7 @@ describe("site footer", () => {
     for (const a of footer.querySelectorAll<HTMLAnchorElement>("a")) {
       expect(a.target).toBe("_blank");
       expect(a.rel).toBe("noopener noreferrer");
-      expect(a.getAttribute("aria-label")).toMatch(/opens in a new tab/);
+      expect(a.getAttribute("aria-label")).toMatch(/opens .*in a new tab/i);
       // The arrow is decoration; the label is what a screen reader reads.
       expect(a.querySelector(".site-foot-mark")?.getAttribute("aria-hidden")).toBe("true");
     }
@@ -56,5 +56,21 @@ describe("site footer", () => {
     });
     const toilet = footer.querySelector<HTMLAnchorElement>('[data-social-link="toilet-chart"]');
     expect(toilet?.href).toBe("https://dexscreener.com/near/toilet-pair");
+  });
+
+  it("offers a report link, always, to the public issue tracker (UI review B9)", () => {
+    const footer = createSiteFooter({ env: {} });
+    const report = footer.querySelector<HTMLAnchorElement>('[data-footer-link="report"]');
+    expect(report?.href).toBe(GITHUB_ISSUES_URL);
+    expect(report?.querySelector(".site-foot-label")?.textContent).toBe("Report a problem");
+    expect(report?.getAttribute("aria-label")).toMatch(/report a problem/);
+  });
+
+  it("renders the guide only when an operator configured one, never a dead link", () => {
+    expect(createSiteFooter({ env: {} }).querySelector('[data-footer-link="guide"]')).toBeNull();
+    expect(createSiteFooter({ env: {}, guideUrl: "   " }).querySelector('[data-footer-link="guide"]')).toBeNull();
+    const guide = createSiteFooter({ env: {}, guideUrl: "https://metapoo.example/guide" })
+      .querySelector<HTMLAnchorElement>('[data-footer-link="guide"]');
+    expect(guide?.href).toBe("https://metapoo.example/guide");
   });
 });

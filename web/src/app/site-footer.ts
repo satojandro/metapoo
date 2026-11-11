@@ -12,11 +12,13 @@
  */
 
 import "./site-footer.css";
-import { socialLinks, type SocialLink, type SocialLinkEnv } from "../social-links";
+import { GITHUB_ISSUES_URL, socialLinks, type SocialLink, type SocialLinkEnv } from "../social-links";
 
 export interface SiteFooterOptions {
   links?: SocialLink[];
   env?: SocialLinkEnv;
+  /** `VITE_BETA_GUIDE_URL`, or "" when unset. Empty means the entry is not rendered. */
+  guideUrl?: string;
 }
 
 function linkElement(link: SocialLink): HTMLAnchorElement {
@@ -42,11 +44,39 @@ function linkElement(link: SocialLink): HTMLAnchorElement {
 }
 
 /**
+ * A non-community entry: the report link, and the guide only when one is configured.
+ * Same shape as a social link so the row reads as one list; `data-footer-link` keeps
+ * the two kinds distinguishable in tests and analytics-free markup.
+ */
+function extraLink(id: string, label: string, href: string, ariaLabel: string): HTMLAnchorElement {
+  const a = document.createElement("a");
+  a.className = "site-foot-link site-foot-extra";
+  a.href = href;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.dataset.footerLink = id;
+  a.setAttribute("aria-label", ariaLabel);
+
+  const text = document.createElement("span");
+  text.className = "site-foot-label";
+  text.textContent = label;
+
+  const mark = document.createElement("span");
+  mark.className = "site-foot-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = "↗";
+
+  a.append(text, mark);
+  return a;
+}
+
+/**
  * The footer element. Always returns one: the public routes all carry it, and a
  * build with no community links left is a bug worth seeing on the page.
  */
 export function createSiteFooter(options: SiteFooterOptions = {}): HTMLElement {
   const links = options.links ?? socialLinks(options.env ?? {});
+  const guide = (options.guideUrl ?? "").trim();
 
   const footer = document.createElement("footer");
   footer.className = "site-foot";
@@ -59,6 +89,19 @@ export function createSiteFooter(options: SiteFooterOptions = {}): HTMLElement {
   nav.className = "site-foot-links";
   nav.setAttribute("aria-label", "Meta Poo on other platforms");
   nav.append(...links.map(linkElement));
+  if (guide) {
+    nav.append(extraLink("guide", "Guide", guide, "Opens the beta guide in a new tab"));
+  }
+  // Always present: the repository and its issue tracker are public constants, so this
+  // is never a dead link, and "report a problem" is the one footer entry a beta needs.
+  nav.append(
+    extraLink(
+      "report",
+      "Report a problem",
+      GITHUB_ISSUES_URL,
+      "Opens the public issue tracker in a new tab, where you can report a problem",
+    ),
+  );
 
   footer.append(brand, nav);
   return footer;

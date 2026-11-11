@@ -142,7 +142,7 @@ export function mountWall(
   directPaintToggle.setAttribute("aria-describedby", tapToPaintAnnouncement.id);
 
   // One-approval unlock. This is the visible entry point to the drawing
-  // session; the authorise/revoke panel stays in About / details for people
+  // session; the authorise/revoke panel stays under Contract details for people
   // who want the details, but nobody should have to find it to start painting.
   const paintUnlock = el("#paint-unlock");
   const paintUnlocked = el("#paint-unlocked");
@@ -489,7 +489,7 @@ export function mountWall(
     },
   });
 
-  // The drawing-key opt-in ("Also allow painting without a popup each time") is
+  // The drawing-key opt-in ("Paint without approving every stroke") is
   // shell-owned. On the wall it sits in the dock, next to Connect, not in the header.
   const optIn = document.querySelector<HTMLLabelElement>("label.drawing-session-opt-in");
   const optInSlot = pageRoot.querySelector<HTMLElement>("#wall-optin-slot");

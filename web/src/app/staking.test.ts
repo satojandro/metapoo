@@ -113,15 +113,22 @@ describe("buttons", () => {
     expect(lockState({ ...base, amount: E18, account: acct({ registered: false }), storageMin: 1n }).hint).toMatch(/two transactions/);
     expect(lockState({ ...base, amount: E18, account: acct({ wallet: 0n }), storageMin: 1n }).hint).toMatch(/no TOILET yet/);
     expect(lockState({ ...base, accountId: null, amount: E18, account: null, storageMin: 1n }).hint).toMatch(/Connect/);
+    // Signed out is not a dead end: the same button becomes Connect (UI review C1).
+    const signedOut = lockState({ ...base, accountId: null, amount: E18, account: null, storageMin: 1n });
+    expect(signedOut.enabled).toBe(true);
+    expect(signedOut.connect).toBe(true);
+    expect(signedOut.label).toBe("Connect wallet");
+    expect(unlockState({ ...base, accountId: null, amount: E18, account: null, exitTaxBps: 1000 }).connect).toBe(true);
+    expect(claimRewardsState({ ...base, accountId: null, account: null }).connect).toBe(true);
     expect(lockState({ ...base, live: false, amount: E18, account: acct(), storageMin: 1n }).enabled).toBe(false);
   });
   it("unlock: names the burn on the button before signing", () => {
     const s = unlockState({ ...base, amount: 4n * E18, account: acct(), exitTaxBps: 1000 });
     expect(s.enabled).toBe(true);
-    expect(s.label).toBe("Unlock and burn 0.4 TOILET");
+    expect(s.label).toBe("Unstake and burn 0.4 TOILET");
     expect(s.hint).toBe("One approval in your wallet, plus a small network fee. Your mPOO stays claimable.");
     expect(unlockState({ ...base, amount: 6n * E18, account: acct(), exitTaxBps: 1000 }).enabled).toBe(false);
-    expect(unlockState({ ...base, amount: E18, account: acct({ staked: 0n }), exitTaxBps: 1000 }).hint).toMatch(/nothing locked/);
+    expect(unlockState({ ...base, amount: E18, account: acct({ staked: 0n }), exitTaxBps: 1000 }).hint).toMatch(/nothing staked/);
   });
   it("claim mPOO: needs something released, and registers with mPOO first if needed", () => {
     expect(claimRewardsState({ ...base, account: acct() }).enabled).toBe(true);

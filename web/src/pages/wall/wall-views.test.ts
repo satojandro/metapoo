@@ -4,7 +4,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PixelView } from "@shared/types.ts";
 import {
-  ageColor,
   assignTurfColors,
   blankIsFree,
   createWallViews,
@@ -72,12 +71,6 @@ describe("age buckets", () => {
     expect(wetnessOf(null, NOW, null)).toBeNull();
   });
 
-  it("fades from wet to a day old", () => {
-    expect(ageColor(0n, tunables, palette)).toBe(palette.wet);
-    expect(ageColor(10n * MIN, tunables, palette)).toBe(palette.drying);
-    expect(ageColor(60n * MIN, tunables, palette)).toBe(palette.old);
-    expect(ageColor(3n * 24n * 60n * MIN, tunables, palette)).toBe(ageColor(24n * 60n * MIN, tunables, palette));
-  });
 });
 
 describe("free tint", () => {
@@ -95,8 +88,8 @@ describe("free tint", () => {
     expect(parseFreeFirst({ remaining: "5" })).toEqual({ kind: "unknown" });
   });
 
-  it("tints blank tiles free in Price view only when the viewer has free paints", () => {
-    const base = { mode: "price" as const, now: NOW, tunables, viewer: "me.testnet", palette };
+  it("tints blank tiles free in Fresh view only when the viewer has free paints", () => {
+    const base = { mode: "fresh" as const, now: NOW, tunables, viewer: "me.testnet", palette };
     const free = tilePainterFor({ ...base, free: { kind: "yes", remaining: 5 } })!;
     const unknown = tilePainterFor({ ...base, free: { kind: "unknown" } })!;
     expect(free.empty(0, 0)).not.toBe(unknown.empty(0, 0));
@@ -104,11 +97,27 @@ describe("free tint", () => {
   });
 
   it("shows price unavailable instead of guessing when tunables can't be read", () => {
-    const painter = tilePainterFor({ mode: "price", now: NOW, tunables: null, free: { kind: "unknown" }, viewer: null, palette })!;
+    const painter = tilePainterFor({ mode: "fresh", now: NOW, tunables: null, free: { kind: "unknown" }, viewer: null, palette })!;
     expect(painter.empty(0, 0)).toBeNull();
-    const legend = legendFor({ mode: "price", now: NOW, tunables: null, free: { kind: "unknown" }, viewer: null, palette, pixels: [] });
-    expect(legend.note).toMatch(/Price unavailable/);
-    expect(legend.items).toHaveLength(0);
+    const legend = legendFor({ mode: "fresh", now: NOW, tunables: null, free: { kind: "unknown" }, viewer: null, palette, pixels: [] });
+    // B1: the bands and their windows are still true without tunables; only the
+    // credit figures are unknown, and the note says so instead of printing a number.
+    expect(legend.title).toBe("Fresh");
+    expect(legend.note).toMatch(/Prices are unavailable/);
+    expect(legend.items.map((i) => i.label)).toEqual([
+      "Wet · under 10 min", "Drying · under an hour", "Dry", "Blank",
+    ]);
+  });
+
+  it("one Fresh legend carries both the band's price and its window (UI review B1)", () => {
+    const legend = legendFor({ mode: "fresh", now: NOW, tunables, free: { kind: "unknown" }, viewer: null, palette, pixels: [] });
+    expect(legend.items.map((i) => i.label)).toEqual([
+      "Wet · 4 credits · under 10 min",
+      "Drying · 2 credits · under an hour",
+      "Dry · 1 credit",
+      "Blank · 1 credit",
+    ]);
+    expect(legend.note).toBe("Fresh paint costs more to cover, so new work gets a moment on the wall.");
   });
 });
 
@@ -171,7 +180,7 @@ describe("turf", () => {
 describe("view controller", () => {
   function setup() {
     const scope = createWallScope();
-    document.body.innerHTML = `<div>${["art", "price", "age", "turf"]
+    document.body.innerHTML = `<div>${["art", "fresh", "turf"]
       .map((v) => `<button data-wall-view="${v}" disabled>${v}</button>`)
       .join("")}</div><section id="legend" hidden></section>`;
     const chips = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-wall-view]"));
@@ -207,7 +216,7 @@ describe("view controller", () => {
     expect(legend.hidden).toBe(true);
   });
 
-  it("switching to Price reads tunables and free paints once, and the legend says free for you", async () => {
+  it("switching to Fresh reads tunables and free paints once, and the legend says free for you", async () => {
     const { views, chips, legend, readTunables, readFreeFirst, render } = setup();
     chips[1].click();
     await vi.waitFor(() => expect(views.free()).toEqual({ kind: "yes", remaining: 4 }));
@@ -218,14 +227,15 @@ describe("view controller", () => {
     expect(readTunables).toHaveBeenCalledTimes(1);
     expect(readFreeFirst).toHaveBeenCalledWith("me");
     expect(render).toHaveBeenCalled();
-    chips[2].click();
+    chips[1].click();
+    chips[0].click();
     chips[1].click();
     expect(readTunables).toHaveBeenCalledTimes(1);
   });
 
   it("re-renders on the timer so paint visibly dries", () => {
     const { views, render, tick } = setup();
-    views.setMode("age");
+    views.setMode("fresh");
     render.mockClear();
     tick();
     expect(render).toHaveBeenCalledTimes(1);

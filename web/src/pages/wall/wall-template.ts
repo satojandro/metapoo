@@ -1,9 +1,10 @@
 /**
- * Wall page markup: the framed wall with its controls floating over the corners, one
- * side panel (a bottom sheet on phone) and the collapsed About / details. The panel is
- * a scrolling body plus a pinned footer, so the primary action and its result are
- * always on screen. Signed out the page is Look; signed in it is Paint (no toggle).
- * Wallet chrome lives on the app shell so it survives navigation.
+ * Wall page markup: the framed wall with its pointer controls over the corners, the view
+ * tabs and the freshness line under it, one side panel (a bottom sheet on phone) and the
+ * collapsed Contract details. The panel is a scrolling body plus a pinned footer, so the
+ * primary action and its result are always on screen. Signed out the page is Look;
+ * signed in it is Paint (no toggle). Wallet chrome lives on the app shell so it survives
+ * navigation.
  */
 
 import { DRAWING_SESSION_GAS_ALLOWANCE_YOCTO, formatAllowanceNear } from "../../drawing-session";
@@ -57,12 +58,6 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                 <p class="wall-chip wall-gesture-hint" data-for-mode="paint">Tap or drag to paint</p>
                 <p class="wall-chip wall-gesture-hint" data-for-mode="moving">Drag to move · tap a tile to see it · nothing paints</p>
               </div>
-              <div class="mp-seg mp-seg-small wall-views" role="group" aria-label="Wall view">
-                <button type="button" data-wall-view="art" aria-pressed="true" title="The picture as painted">Art</button>
-                <button type="button" data-wall-view="price" aria-pressed="false" title="What each tile costs to cover">Price</button>
-                <button type="button" data-wall-view="age" aria-pressed="false" title="How recently each tile was painted">Age</button>
-                <button type="button" data-wall-view="turf" aria-pressed="false" title="Who holds the most tiles">Turf</button>
-              </div>
               <!-- Full screen: the wall takes the window; the panel floats and can hide. -->
               <button id="wall-fullscreen" class="wall-icon-btn wall-fullscreen-btn" type="button"
                 aria-pressed="false" aria-label="Full screen" title="Full screen">
@@ -72,15 +67,25 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
               <button id="wall-panel-toggle" class="wall-chip-btn wall-panel-toggle" type="button"
                 aria-controls="wall-panel" aria-expanded="true" hidden>Hide panel</button>
             </div>
+          </div>
 
-            <div class="wall-foot">
-              <p id="board-freshness" class="board-freshness" role="status" aria-live="polite">Reading the wall…</p>
-              <button id="refresh-board" class="wall-refresh" type="button" aria-label="Refresh the wall now">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"></path><path d="M21 4v5h-5"></path></svg>
-              </button>
-              <p id="hover-summary" class="hover-summary" aria-live="polite"></p>
-              <p class="wall-runtime-status" aria-label="Network"><span>${NETWORK_BADGE[network]}</span></p>
-            </div>
+          <!-- What you are looking at, and how fresh it is, sit under the art rather than
+               on it: with the pin hint, the view tabs and the freshness chip all floating
+               over the corners, the top fifth of the wall was under controls, and on a
+               360 px phone the tabs covered the top-right of the picture (UI review B7). -->
+          <div class="mp-seg mp-seg-small wall-views" role="group" aria-label="Wall view">
+            <button type="button" data-wall-view="art" aria-pressed="true" title="The picture as painted">Art</button>
+            <button type="button" data-wall-view="fresh" aria-pressed="false" title="How fresh each tile is, and what covering it costs">Fresh</button>
+            <button type="button" data-wall-view="turf" aria-pressed="false" title="Who holds the most tiles">Turf</button>
+          </div>
+
+          <div class="wall-foot">
+            <p id="board-freshness" class="board-freshness" role="status" aria-live="polite">Reading the wall…</p>
+            <button id="refresh-board" class="wall-refresh" type="button" aria-label="Refresh the wall now">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"></path><path d="M21 4v5h-5"></path></svg>
+            </button>
+            <p id="hover-summary" class="hover-summary" aria-live="polite"></p>
+            <p class="wall-runtime-status" aria-label="Network"><span>${NETWORK_BADGE[network]}</span></p>
           </div>
 
           <!-- The pulse: how full the wall is, how much is wet, when happy hour is. -->
@@ -128,7 +133,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
                   popup for every square. The key can only paint on this wall, and
                   on a paid wall painting will spend your paint credits.
                   It cannot send NEAR or tokens from your wallet. You can revoke it
-                  any time under About / details.
+                  any time under Contract details, at the foot of this page.
                 </p>
                 <button id="unlock-paint-button" class="mp-btn action unlock" type="button">
                   Unlock painting — one approval
@@ -183,7 +188,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
             <div class="paint-dock wall-dock-foot" data-wall-card="paint">
               <div class="wall-tally">
                 <div class="wall-cost">
-                  <!-- The Price view's key explains wet paint; this copy stays for screen readers. -->
+                  <!-- The Fresh view's key explains wet paint; this copy stays for screen readers. -->
                   <p id="repaint-legend" class="repaint-legend visually-hidden" hidden></p>
                   <p id="cell-price" class="cell-price visually-hidden" role="status" aria-live="polite"></p>
                   <p id="stroke-total" class="stroke-total" role="status" aria-live="polite"></p>
@@ -239,7 +244,7 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
       </section>
 
         <details class="wall-advanced about wall-about">
-          <summary>About / details <span aria-hidden="true">＋</span></summary>
+          <summary>Contract details <span aria-hidden="true">＋</span></summary>
           <aside class="side wall-details-content">
             <section data-wall-detail="instructions">
               <h2>How to paint</h2>

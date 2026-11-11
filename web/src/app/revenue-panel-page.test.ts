@@ -85,11 +85,14 @@ it("shows live numbers formatted exactly, the split preview and a countdown", as
 it("enables Distribute now only when due and a wallet is connected", async () => {
   const t = setup({ load: async () => live() });
   await flush();
-  expect(t.button("near").disabled).toBe(true); // due, but no wallet
+  // C1: due and no wallet is a Connect control, not a dead button.
+  expect(t.button("near").disabled).toBe(false);
+  expect(t.button("near").textContent).toBe("Connect wallet");
   expect(t.text("near-hint")).toMatch(/Connect a wallet/);
   expect(t.button("mpoo").disabled).toBe(true); // not due
   t.connect({ accountId: "alice.testnet", networkId: "testnet" });
   expect(t.button("near").disabled).toBe(false);
+  expect(t.button("near").textContent).toBe("Distribute now");
   expect(t.button("mpoo").disabled).toBe(true);
   expect(t.text("mpoo-hint")).toMatch(/Not yet/);
 });

@@ -76,9 +76,9 @@ it("locks: previews the share, then sends ft_transfer_call to the staking contra
   t.type("stk-lock-amt", "10000");
   expect(t.s("lockAfter")).toBe("20,000 TOILET");
   expect(t.s("lockShare")).toBe("40%");
-  expect(t.btn("lock").textContent).toBe("Lock 10,000 TOILET");
+  expect(t.btn("lock").textContent).toBe("Stake 10,000 TOILET");
   t.btn("lock").click();
-  await vi.waitFor(() => expect(t.s("lockResult")).toMatch(/Locked 10,000 TOILET/));
+  await vi.waitFor(() => expect(t.s("lockResult")).toMatch(/Staked 10,000 TOILET/));
   expect(t.deps.stake).toHaveBeenCalledWith(expect.objectContaining({
     toilet: "toilet3.testnet", staking: "staking.metapoo-player1.testnet", amount: (10_000n * E18).toString(), registerDeposit: null,
   }));
@@ -107,7 +107,7 @@ it("unlocks: shows the 10% burn before signing", async () => {
   t.type("stk-unlock-amt", "4000");
   expect(t.s("unlockNet")).toBe("3,600 TOILET");
   expect(t.s("unlockTax")).toBe("400 TOILET");
-  expect(t.btn("unlock").textContent).toBe("Unlock and burn 400 TOILET");
+  expect(t.btn("unlock").textContent).toBe("Unstake and burn 400 TOILET");
   t.btn("unlock").click();
   await vi.waitFor(() => expect(t.s("unlockResult")).toMatch(/3,600 TOILET is back in your wallet and 400 TOILET was burned/));
   expect(t.deps.unstake).toHaveBeenCalledWith({ staking: "staking.metapoo-player1.testnet", amount: (4_000n * E18).toString(), gas: "100000000000000" });
@@ -131,9 +131,14 @@ it("reports a refused mPOO payout as restored", async () => {
 it("signed out: pool shows, position asks to connect, nothing can be sent", async () => {
   const t = await setup({ load: vi.fn(async () => live(null)) }, { accountId: null, networkId: null });
   expect(t.s("pool")).toBe("10,000");
-  expect(t.s("wallet")).toBe("Connect a wallet");
-  expect(t.btn("lock").disabled).toBe(true);
-  expect(t.btn("claim").disabled).toBe(true);
+  // C2: an unknown value is an em dash, never the words "Connect a wallet" in a <dd>.
+  expect(t.s("wallet")).toBe("—");
+  expect(t.s("share")).toBe("—");
+  // One real Connect control in the card; C1's Connect-labelled action sits beside it.
+  expect(t.btn("connect").hidden).toBe(false);
+  expect(t.btn("claim").hidden).toBe(true);
+  expect(t.btn("lock").disabled).toBe(false);
+  expect(t.btn("lock").textContent).toBe("Connect wallet");
 });
 
 it("renders step 3 of the money flow as one row, so no line starts with a comma", async () => {

@@ -97,10 +97,15 @@ describe("distributeButtonState", () => {
     expect(s.enabled).toBe(false);
     expect(s.hint).toMatch(/Not yet/);
   });
-  it("is disabled without a wallet, and says anyone can send it", () => {
+  it("offers Connect instead of a dead button when the only blocker is a wallet", () => {
     const s = distributeButtonState({ ...base, accountId: null, walletNetwork: null });
-    expect(s.enabled).toBe(false);
+    // A disabled control that says what you cannot do is the thing C1 removes.
+    expect(s.enabled).toBe(true);
+    expect(s.connect).toBe(true);
+    expect(s.label).toBe("Connect wallet");
     expect(s.hint).toMatch(/Connect a wallet.*Any account/);
+    // Nothing waiting is still a real "no": no Connect on an empty split.
+    expect(distributeButtonState({ ...base, accountId: null, walletNetwork: null, waiting: 0n }).enabled).toBe(false);
   });
   it("is disabled on a wrong network, with nothing waiting, while busy, and for example data", () => {
     expect(distributeButtonState({ ...base, walletNetwork: "mainnet" }).enabled).toBe(false);

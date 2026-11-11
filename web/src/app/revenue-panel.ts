@@ -210,6 +210,8 @@ export interface ButtonState {
   label: string;
   /** Why it is disabled, or what pressing it does. */
   hint: string;
+  /** Signed out with something to send: the button says "Connect wallet" (UI review C1). */
+  connect?: true;
 }
 
 /** Whether "Distribute now" can be pressed, and the sentence that says why not. */
@@ -219,7 +221,9 @@ export function distributeButtonState(input: ButtonInput): ButtonState {
   if (input.busy) return { enabled: false, label: "Waiting for wallet…", hint: "Confirm or cancel in your wallet." };
   if (!input.due) return { enabled: false, label, hint: "Not yet: the board allows one split per interval." };
   if (input.waiting === 0n) return { enabled: false, label, hint: "Nothing is waiting, so there is nothing to send." };
-  if (!input.accountId) return { enabled: false, label, hint: "Connect a wallet to send it. Any account can." };
+  if (!input.accountId) {
+    return { enabled: true, label: "Connect wallet", hint: "Connect a wallet to send it. Any account can.", connect: true };
+  }
   if (input.walletNetwork !== input.pageNetwork) {
     return { enabled: false, label, hint: `Switch your wallet to ${input.pageNetwork} to send it.` };
   }

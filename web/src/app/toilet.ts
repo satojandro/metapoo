@@ -183,6 +183,11 @@ export interface ClaimState {
   enabled: boolean;
   label: string;
   hint: string;
+  /**
+   * Signed out: the action is not blocked by anything the player can fix in the
+   * panel, so the button says "Connect wallet" and stays pressable (UI review C1).
+   */
+  connect?: true;
 }
 
 /** Whether "Claim TOILET" can be pressed, and the sentence that says why not. */
@@ -191,7 +196,9 @@ export function claimButtonState(input: ClaimInput): ClaimState {
   if (input.example) return { enabled: false, label, hint: "Example only: this preview is not connected to a board." };
   if (!input.toilet) return { enabled: false, label, hint: "This page doesn’t know the TOILET token address yet, so it can’t claim." };
   if (input.busy) return { enabled: false, label: "Waiting for wallet…", hint: "Confirm or cancel in your wallet." };
-  if (!input.accountId) return { enabled: false, label, hint: "Connect a wallet to see and claim what your tiles earned." };
+  if (!input.accountId) {
+    return { enabled: true, label: "Connect wallet", hint: "Connect a wallet to see and claim what your tiles earned.", connect: true };
+  }
   if (input.walletNetwork !== input.pageNetwork) {
     return { enabled: false, label, hint: `Switch your wallet to ${input.pageNetwork} to claim.` };
   }
