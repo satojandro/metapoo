@@ -145,6 +145,7 @@ function setup() {
       selectedColor: () => 2,
       setFlow: vi.fn((_: UiPhase) => undefined),
       showSelection: vi.fn(),
+      pulseSelection: vi.fn(),
     },
     render: vi.fn(),
   });

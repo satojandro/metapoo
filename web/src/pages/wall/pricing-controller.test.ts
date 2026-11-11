@@ -135,7 +135,7 @@ describe("pricing controller", () => {
     const { pricing, deps, dispose } = setup();
     pricing.onSchemaChanged();
     expect(deps.creditsDock.hidden).toBe(false);
-    await vi.waitFor(() => expect(deps.creditsBalance.textContent).toBe("Credits: 10"));
+    await vi.waitFor(() => expect(deps.creditsBalance.textContent).toBe("10"));
     await vi.waitFor(() =>
       expect(deps.repaintChrome.legend.textContent).toBe(
         "Fresh tiles cost more to repaint. Wait an hour and it is 1 credit again.",
@@ -148,7 +148,7 @@ describe("pricing controller", () => {
   it("no wallet: the dock asks to connect and Buy is disabled", async () => {
     const { pricing, deps, dispose } = setup({ wallet: null });
     await pricing.refreshCreditsDock();
-    expect(deps.creditsBalance.textContent).toBe("Credits: connect wallet");
+    expect(deps.creditsBalance.textContent).toBe("—");
     expect(deps.buyCreditsButton.disabled).toBe(true);
     dispose();
   });
@@ -365,6 +365,10 @@ describe("free first paints", () => {
     setFree({ kind: "yes", remaining: 3 });
     pricing.requestCellPrice({ x: 8, y: 8 });
     await vi.waitFor(() => expect(deps.repaintChrome.badge.textContent).toContain("free for you"));
+    // A preview prices the tile under the cursor; the dock's headline describes
+    // only the stroke about to be placed, so it stays empty (F1).
+    expect(deps.repaintChrome.strokeTotal.textContent).toBe("");
+    expect(await pricing.ensurePaidQuote([{ x: 8, y: 8 }], "alice.testnet")).toMatchObject({ maxCredits: 0 });
     expect(deps.repaintChrome.strokeTotal.textContent).toBe("This tile is free for you");
     dispose();
   });

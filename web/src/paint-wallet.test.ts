@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { availableNear, formatUnits, loadPaintWallet, type Rpc } from "./paint-wallet";
+import { availableNear, formatUnits, loadPaintWallet, walletAmount, type Rpc } from "./paint-wallet";
 const encoded = (value: unknown) => ({result: Array.from(new TextEncoder().encode(JSON.stringify(value)))});
 function fixture(overrides: Record<string, unknown> = {}): Rpc {
  return async (method, params) => {
@@ -21,8 +21,19 @@ it("subtracts storage without double subtracting locked funds", () => {
 it("reads NEAR prices and credits while mPOO payments stay gated",async () => {
  const data=await loadPaintWallet(fixture(),"board.near","mainnet","alice.near");
  // Launch is NEAR-only: do not append the mPOO unit price until TOKEN_PAYMENTS_ENABLED.
- expect(data.price).toBe("0.0025 NEAR / pixel"); expect(data.credits).toBe("12 pixels"); expect(data.near).toBe("0.999 NEAR");
+ expect(data.price).toBe("0.0025 NEAR"); expect(data.credits).toBe("12 credits"); expect(data.near).toBe("0.999 NEAR");
  expect(data.mpoo).toBe("mPOO payments not enabled yet");
+ // The panel shows balances; buying is a button, so no self-describing sentence.
+ expect(data.note).toBe("");
+});
+it("shows a wallet balance in at most four decimals, cut rather than rounded", () => {
+ expect(walletAmount("1.065470563726758755741822")).toBe("1.0654");
+ // 0.00009 must not round up to 0.0001: that would claim NEAR the wallet does not hold.
+ expect(walletAmount("0.00009")).toBe("0");
+ expect(walletAmount("0.999")).toBe("0.999");
+ expect(walletAmount("12")).toBe("12");
+ const data="1000000000000000000000000";
+ expect(walletAmount(availableNear(data,"0",100,"10000000000000000000"))).toBe("0.999");
 });
 it("distinguishes unregistered from failed reads",async () => {
  expect((await loadPaintWallet(fixture({get_credits:null}),"board.near","mainnet","a.near")).credits).toContain("Not registered");

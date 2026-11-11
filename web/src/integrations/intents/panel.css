@@ -195,6 +195,13 @@ select.mp-intents-input {
   .mp-intents-qr { width: 168px; justify-self: center; }
 }
 
+/* ---- Done: the payment is over and the money is in the wallet ---- */
+/* One card, one number, one button. The amount is the headline of the whole flow, so it
+   takes the site's figure size rather than the row size. */
+.mp-intents-success .mp-intents-card-title { color: var(--mp-good, #65d5ae); }
+.mp-intents-success .mp-intents-rows .is-strong dd { font-size: var(--mp-text-h3, 17px); }
+.mp-intents-success .mp-intents-btn-primary { margin-top: var(--mp-space-1, 4px); }
+
 /* ---- Recovery ---- */
 .mp-intents-recover { border-top: 1px solid var(--mp-line, #343537); padding-top: var(--mp-space-3, 12px); }
 .mp-intents-recover > summary {

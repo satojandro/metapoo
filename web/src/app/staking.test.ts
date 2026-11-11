@@ -108,6 +108,7 @@ describe("buttons", () => {
   });
   it("lock: amount within the wallet, and a two-step note for a first lock", () => {
     expect(lockState({ ...base, amount: 2n * E18, account: acct(), storageMin: 1n }).enabled).toBe(true);
+    expect(lockState({ ...base, amount: 2n * E18, account: acct(), storageMin: 1n }).hint).toBe("One approval in your wallet, plus a small network fee.");
     expect(lockState({ ...base, amount: 11n * E18, account: acct(), storageMin: 1n }).label).toBe("Not enough TOILET");
     expect(lockState({ ...base, amount: E18, account: acct({ registered: false }), storageMin: 1n }).hint).toMatch(/two transactions/);
     expect(lockState({ ...base, amount: E18, account: acct({ wallet: 0n }), storageMin: 1n }).hint).toMatch(/no TOILET yet/);
@@ -118,6 +119,7 @@ describe("buttons", () => {
     const s = unlockState({ ...base, amount: 4n * E18, account: acct(), exitTaxBps: 1000 });
     expect(s.enabled).toBe(true);
     expect(s.label).toBe("Unlock and burn 0.4 TOILET");
+    expect(s.hint).toBe("One approval in your wallet, plus a small network fee. Your mPOO stays claimable.");
     expect(unlockState({ ...base, amount: 6n * E18, account: acct(), exitTaxBps: 1000 }).enabled).toBe(false);
     expect(unlockState({ ...base, amount: E18, account: acct({ staked: 0n }), exitTaxBps: 1000 }).hint).toMatch(/nothing locked/);
   });

@@ -258,8 +258,12 @@
   display: flex;
   flex-direction: column;
   gap: var(--mp-space-3);
-  /* As tall as the wall and its pulse strip, so the two columns end together. */
-  height: calc(var(--wall-size) + var(--wall-pulse-h));
+  /* As tall as its content, up to the wall's height (owner, 11 Nov). It used to be
+     stretched to the wall and its body left a third of the panel empty between the
+     Tile card and the dock, which read as missing content. The footer still sits
+     directly under the cards; a panel taller than the wall scrolls inside itself. */
+  height: auto;
+  max-height: calc(var(--wall-size) + var(--wall-pulse-h));
   min-width: 0;
 }
 .wall-page .wall-panel-body {
@@ -840,6 +844,13 @@
   to { opacity: 0; visibility: hidden; max-height: 0; padding-block: 0; margin-top: calc(-1 * var(--mp-space-4)); }
 }
 
+/* The Colour card's own grid: an empty slot — the opt-in before connecting, the
+   hint host once dismissed — must not leave a gap-sized strip where a control
+   used to be (owner, 11 Nov: "an empty strip in the Colour card"). */
+.wall-page .wall-dock { align-content: start; }
+.wall-page .wall-dock > .wall-optin:not(:has(*)),
+.wall-page .wall-dock > .wall-hint-host:not(:has(*)) { display: none; }
+
 /* The footer tally: this stroke on the left, your credits on the right. */
 .wall-page .wall-tally {
   display: flex;
@@ -854,15 +865,35 @@
   font: 600 var(--mp-text-body)/1.3 var(--mp-font);
 }
 .wall-page .wall-panel .stroke-total::first-letter { text-transform: uppercase; }
+
+/* The credits figure and the way to get more (owner, 11 Nov). "Credits: 12 Buy"
+   made the number look like a label and the purchase look like a footnote. */
 .wall-page .wall-panel .credits-dock {
   flex: none;
   flex-wrap: nowrap;
+  align-items: center;
   justify-content: flex-end;
-  gap: var(--mp-space-2);
+  gap: var(--mp-space-3);
+  min-width: 0;
 }
-.wall-page .wall-panel .credits-balance { color: var(--mp-muted); font: 500 var(--mp-text-md) var(--mp-font); }
-.wall-page .wall-panel #buy-credits-button { min-height: 0; font-size: var(--mp-text-md); }
-/* When Buy credits is already the big button, the small link would say it twice. */
+.wall-page .wall-panel .credits-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin: 0;
+  min-width: 0;
+  white-space: nowrap;
+}
+.wall-page .wall-panel .credits-balance {
+  color: var(--mp-fg);
+  font: 800 var(--mp-text-body) var(--mp-mono);
+  font-variant-numeric: tabular-nums;
+}
+.wall-page .wall-panel .credits-unit { color: var(--mp-muted); font-size: var(--mp-text-md); }
+/* No number, no unit: "—" alone says the balance is not known yet. */
+.wall-page .wall-panel .credits-dock:has(#credits-balance:not([data-state="known"])) .credits-unit { display: none; }
+.wall-page .wall-panel .wall-buy-more { min-height: 32px; padding: 3px 12px; font-size: var(--mp-text-md); }
+/* When buying is already the big button, the small one would say it twice. */
 .wall-page:has(.wall-action[data-primary="buy"]) #buy-credits-button { display: none; }
 
 /* One status line, not a box. Colour carries the phase. */
@@ -921,6 +952,37 @@
   color: var(--mp-near);
   font-size: var(--mp-text-sm);
 }
+
+/* ——— The confirmation is the dock's headline (owner, 11 Nov) ———
+   "This is the moment the product exists for." For a few seconds the line that
+   usually prices the next stroke says what just landed ("On the wall. −1 credit,
+   11 left."), the tile beats once on the wall, and the quiet status under the
+   button steps aside so the panel says it once. */
+.wall-page .wall-panel .stroke-total[data-state="confirmed"] {
+  color: var(--mp-good);
+  font: 800 var(--mp-text-h3)/1.2 var(--mp-font);
+}
+.wall-page .wall-dock-foot:has(.stroke-total[data-state="confirmed"]) .draw-state { display: none; }
+
+/* One beat where it happened: the ring is already on that tile, so it needs no
+   second positioning path. */
+.wall-page[data-painted-pulse="true"] #selection-ring { animation: wall-tile-pulse .9s ease-out 1; }
+@keyframes wall-tile-pulse {
+  0% { transform: scale(1); }
+  40% {
+    transform: scale(1.22);
+    box-shadow:
+      0 0 0 2px var(--mp-good),
+      0 0 0 6px color-mix(in srgb, var(--mp-good) 40%, transparent);
+  }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wall-page[data-painted-pulse="true"] #selection-ring { animation: none; }
+}
+
+/* The stroke has landed, so the over-the-art hint has taught what it can. */
+.wall-page[data-painted="true"] .wall-gesture-hint[data-for-mode="paint"] { display: none; }
 
 /* Placement pills: centred one row above the status and zoom chips. */
 .wall-page .placement-outcomes {
@@ -1243,6 +1305,9 @@ html.wall-fullscreen-open body { overflow: hidden; overscroll-behavior: none; }
 .wall-page[data-fullscreen="true"] .wall-foot { left: 16px; bottom: 16px; }
 .wall-page[data-fullscreen="true"] .wall-panel {
   height: auto;
+  /* Full screen stretches the panel beside the wall; the page's own cap would
+     leave it short of the window's edge. */
+  max-height: none;
   min-height: 0;
   box-sizing: border-box;
   padding: var(--mp-space-4);

@@ -17,18 +17,25 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
   network: string = PAGE_NETWORK,
 ): () => void {
   const showTokenPath = TOKEN_PAYMENTS_ENABLED;
+  // One vocabulary: you paint tiles with credits. Every label below is either a credit
+  // count, a token a player recognises, or a price in one of those.
   host.innerHTML = `<h2>Paint &amp; balances</h2>
     <dl class="paint-wallet-values">
-      <div><dt>Price per pixel</dt><dd data-value="price"></dd></div>
-      <div><dt>Paint pixels available</dt><dd data-value="credits"></dd></div>
-      <div><dt>NEAR available · before gas</dt><dd data-value="near"></dd></div>
-      <div data-row="mpoo"${showTokenPath ? "" : " hidden"}><dt>mPOO in wallet</dt><dd data-value="mpoo"></dd></div>
+      <div data-row="credits"><dt>Paint credits</dt><dd data-value="credits"></dd></div>
+      <div data-row="near"><dt>NEAR in your wallet</dt><dd data-value="near"></dd></div>
+      <div data-row="mpoo"${showTokenPath ? "" : " hidden"}><dt>mPOO in wallet</dt><dd data-value="mpoo">…</dd></div>
     </dl>
-    <p data-value="note"></p><p class="paint-wallet-status" role="status"></p>
-    <button type="button" class="action secondary paint-wallet-refresh">Refresh balances</button>
-    <a class="action paint-wallet-buy" data-buy-cta target="_blank" rel="noopener noreferrer"></a>
+    <p class="paint-wallet-status-row"><span class="paint-wallet-status" role="status"></span>
+      <button type="button" class="paint-wallet-refresh">Refresh</button></p>
+    <p class="paint-wallet-note" data-value="note"></p>
+    <div class="paint-wallet-actions">
+      <a class="action paint-wallet-buy-credits" href="/wall" data-buy-credits>Buy credits</a>
+      <a class="paint-wallet-buy-near" data-buy-cta target="_blank" rel="noopener noreferrer"></a>
+    </div>
+    <p class="paint-wallet-price"><span>Price per credit</span> <span data-value="price"></span></p>
     <p class="paint-wallet-market-note"></p>`;
   const buy = host.querySelector<HTMLAnchorElement>("[data-buy-cta]")!;
+  const buyCredits = host.querySelector<HTMLAnchorElement>("[data-buy-credits]")!;
   const marketNote = host.querySelector<HTMLElement>(".paint-wallet-market-note")!;
   if (showTokenPath) {
     buy.href = NEARLY_MPOO_URL;
@@ -37,13 +44,14 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
       ? "Opens the mPOO market in a new tab. Return here to refresh your balance."
       : "External mainnet market. Real mPOO bought there cannot fund testnet paint credits.";
   } else {
+    // A text link, not a second button: Add funds already buys NEAR in-app, and two
+    // button-shaped ways to get NEAR read as rival offers.
     buy.href = BUY_NEAR_URL;
     buy.textContent = "Buy NEAR ↗";
-    marketNote.textContent =
-      "Credits are bought with NEAR on this board. Opens near.com to get NEAR from other chains.";
   }
   const status = host.querySelector<HTMLElement>(".paint-wallet-status")!;
   const button = host.querySelector<HTMLButtonElement>(".paint-wallet-refresh")!;
+  const mpooRow = host.querySelector<HTMLElement>('[data-row="mpoo"]')!;
   let generation = 0;
   let controller: AbortController | undefined;
   let disposed = false;
@@ -51,19 +59,26 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
     const el = host.querySelector<HTMLElement>(`[data-value="${key}"]`);
     if (el) el.textContent = text;
   }
+  /** The mPOO row exists only while this board sells for mPOO; elsewhere it is not a zero, it is absent. */
+  function showMpoo(value: string): void {
+    const selling = showTokenPath && !/not enabled|no mPOO token/i.test(value);
+    mpooRow.hidden = !selling;
+    display("mpoo", value.trim() === "" ? "…" : value);
+  }
   async function refresh(): Promise<void> {
     if (disposed) return;
     const current = ++generation;
     controller?.abort();
     controller = new AbortController();
     const session = services.wallet.getSession();
-    const keys = (showTokenPath
-      ? ["price", "credits", "near", "mpoo"]
-      : ["price", "credits", "near"]) as Array<keyof PaintWalletSnapshot>;
+    // mPOO is rendered by showMpoo, which also decides whether the row exists at all.
+    const keys: Array<keyof PaintWalletSnapshot> = ["price", "credits", "near"];
     for (const key of keys) display(key, "Loading…");
+    if (showTokenPath) showMpoo("");
     display("note", "Refreshing balances…");
     if (session.accountId && session.networkId !== network) {
       for (const key of keys) display(key, "Switch wallet network to view");
+      if (showTokenPath) showMpoo("Switch wallet network to view");
       status.textContent = `This app is using ${network}.`;
       return;
     }
@@ -75,21 +90,35 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
       const snapshot = await load(session.accountId, request.signal);
       if (disposed || generation !== current) return;
       for (const key of Object.keys(snapshot) as (keyof PaintWalletSnapshot)[]) {
-        if (!showTokenPath && key === "mpoo") continue;
+        if (key === "mpoo") { if (showTokenPath) showMpoo(snapshot.mpoo); continue; }
         display(key, snapshot[key]);
       }
       status.textContent = Object.values(snapshot).some(value => /unavailable|retry/i.test(value))
         ? "Some information is unavailable. Retry to refresh."
-        : `Updated ${new Date().toLocaleTimeString()}`;
+        : "Updated just now";
     } catch {
       if (disposed || generation !== current) return;
       for (const key of keys) display(key, "Unavailable — retry");
+      if (showTokenPath) showMpoo("Unavailable — retry");
       status.textContent = "Could not refresh balances. Please retry.";
     } finally { window.clearTimeout(timeout); }
   }
   const refreshNow = (): void => { void refresh(); };
   const focus = (): void => { if (document.visibilityState !== "hidden") refreshNow(); };
   button.addEventListener("click", refreshNow);
+  /**
+   * The buy sheet belongs to the wall page. Where the wall is mounted, press its own
+   * trigger so there is one sheet and one owner of the purchase; anywhere else the
+   * link's /wall href is the honest answer.
+   */
+  const onBuyCredits = (event: MouseEvent): void => {
+    const trigger = document.querySelector<HTMLButtonElement>("#buy-credits-button");
+    if (!trigger || trigger.disabled) return;
+    event.preventDefault();
+    trigger.click();
+    host.closest("details")?.removeAttribute("open");
+  };
+  buyCredits.addEventListener("click", onBuyCredits);
   window.addEventListener("focus", focus);
   document.addEventListener("visibilitychange", focus);
   const unsubscribe = services.wallet.subscribe(refreshNow);
@@ -109,8 +138,8 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
     // wallet session has normally restored by then.
     const open = document.createElement("button");
     open.type = "button";
-    open.className = "action paint-wallet-add-funds";
-    open.textContent = hasRecovery && !INTENTS_FUNDING_ENABLED ? "Track a funding payment" : "Add funds from another chain";
+    open.className = "action secondary paint-wallet-add-funds";
+    open.textContent = hasRecovery && !INTENTS_FUNDING_ENABLED ? "Track a funding payment" : "Add funds";
     buy.before(open);
     const dialog = document.createElement("dialog");
     dialog.className = "mp-funding-dialog";
@@ -141,7 +170,11 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
     dialog.addEventListener("click", onBackdrop);
     disposeDialog = () => { open.removeEventListener("click", onOpen); dialog.removeEventListener("click", onBackdrop); close(); dialog.remove(); open.remove(); };
   }
-  const disposeWithdrawals = mountWithdrawalControls(host, services, refreshNow);
+  // Send and Self-custody read as one block of ways to get funds out, so they mount into the
+  // shell's "Move funds out" slot when the shell provides one. Standalone mounts fall back
+  // to the panel itself rather than silently dropping the controls.
+  const withdrawalHost = host.parentElement?.querySelector<HTMLElement>("#wallet-move-funds") ?? host;
+  const disposeWithdrawals = mountWithdrawalControls(withdrawalHost, services, refreshNow);
   refreshNow();
   return () => {
     disposeWithdrawals();
@@ -149,6 +182,7 @@ export function mountPaintWalletPanel(host: HTMLElement, services: AppServices,
     disposeDialog?.();
     disposed = true; generation++; controller?.abort(); unsubscribe(); unsubscribeOps();
     window.clearInterval(timer); button.removeEventListener("click", refreshNow);
+    buyCredits.removeEventListener("click", onBuyCredits);
     window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus);
   };
 }

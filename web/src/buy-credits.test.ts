@@ -66,7 +66,7 @@ describe("quoteBuyCredits", () => {
       network: "testnet",
     });
     expect(unregistered.registrationDeposit).toBe(REGISTRATION_YOCTO);
-    expect(unregistered.lineItems.some((item) => /First-time setup/i.test(item.label))).toBe(
+    expect(unregistered.lineItems.some((item) => /One-time account setup/i.test(item.label))).toBe(
       true,
     );
     expect(unregistered.totalNearAttached).toBe(
@@ -81,7 +81,7 @@ describe("quoteBuyCredits", () => {
       network: "testnet",
     });
     expect(registered.registrationDeposit).toBeNull();
-    expect(registered.lineItems.some((item) => /First-time setup/i.test(item.label))).toBe(
+    expect(registered.lineItems.some((item) => /One-time account setup/i.test(item.label))).toBe(
       false,
     );
   });

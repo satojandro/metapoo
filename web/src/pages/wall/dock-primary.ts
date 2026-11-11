@@ -15,13 +15,18 @@ export type DockPrimaryKind = "connect" | "buy" | "pick-colour" | "armed" | "pla
 
 export interface DockPrimaryInput {
   connected: boolean;
-  /** Credits from the dock's balance line; null when not known. */
+  /** Credits from the dock's figure; null when not known. */
   credits: number | null;
   colourChosen: boolean;
   /** Paint this tile is hidden because a tap on the wall paints directly. */
   armed: boolean;
   /** The draw-state phase (`UiPhase`), if any. */
   phase: string | null;
+  /**
+   * The last stroke cost more than the balance. Buying is the action that
+   * unblocks it, so it takes the one primary slot (owner, 11 Nov).
+   */
+  shortfall?: boolean;
 }
 
 export interface DockPrimaryState {
@@ -41,6 +46,9 @@ export function dockPrimaryState(input: DockPrimaryInput): DockPrimaryState {
   if (input.credits === 0) {
     return { kind: "buy", label: "Buy credits", disabled: false };
   }
+  if (input.shortfall) {
+    return { kind: "buy", label: "Buy more credits", disabled: false };
+  }
   if (!input.colourChosen) {
     return { kind: "pick-colour", label: "Pick a colour", disabled: true };
   }
@@ -58,9 +66,9 @@ export function dockPrimaryState(input: DockPrimaryInput): DockPrimaryState {
   };
 }
 
-/** "Credits: 12", "Credits: not registered · 0" → number; anything else → null. */
+/** The credits figure: "12", "0" → number; "—", "…", anything else → null. */
 export function parseCreditsLine(text: string | null | undefined): number | null {
-  const match = /^Credits:\s*(?:not registered\s*·\s*)?(\d+)\s*$/.exec((text ?? "").trim());
+  const match = /^(\d+)$/.exec((text ?? "").trim());
   return match ? Number(match[1]) : null;
 }
 
@@ -97,6 +105,7 @@ export function mountDockPrimary(deps: DockPrimaryDeps): DockPrimary {
       colourChosen: deps.colourChosen(),
       armed: drawButton.hidden,
       phase: deps.drawState.dataset.phase ?? null,
+      shortfall: deps.creditsDock.dataset.shortfall === "true",
     });
   }
 
@@ -136,7 +145,7 @@ export function mountDockPrimary(deps: DockPrimaryDeps): DockPrimary {
     childList: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ["hidden", "disabled", "data-phase", "aria-pressed"],
+    attributeFilter: ["hidden", "disabled", "data-phase", "data-shortfall", "aria-pressed"],
   });
   sync();
 

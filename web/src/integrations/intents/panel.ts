@@ -1,8 +1,9 @@
 import QRCode from "qrcode";
 import type { OperationContext } from "../types";
+import { shortAccount } from "../../shared/short-account";
 import type { IntentsFundingController } from "./funding";
 import { expiresAt, formatTokenAmount, providerFeeBps } from "./quote";
-import type { FundingPhase, FundingSnapshot } from "./types";
+import type { FundingOperation, FundingPhase, FundingSnapshot } from "./types";
 import "./panel.css";
 
 export interface IntentsPanelOptions {
@@ -58,6 +59,19 @@ const REFUND_PLACEHOLDER: Record<string, string> = {
   ton: "UQ…",
   tron: "T…",
 };
+
+/**
+ * Payments where nothing is in flight and the record is over: the money either arrived or
+ * went back, or the quote died before anyone sent to it. These are the phases the funding
+ * controller's own `reset()` allows, so reopening the dialog (or pressing Done) can start a
+ * fresh form. Everything else — waiting for a deposit, converting, an unrecognised status —
+ * must stay on screen: an uncertain payment is never replaced by a clean form.
+ */
+const FINISHED_PHASES: readonly FundingPhase[] = [
+  "funded",
+  "refunded",
+  "expired_unfunded",
+];
 
 /** What the player sees for each tracked phase: a short label and a tone. */
 const PHASE_LABEL: Partial<
@@ -193,6 +207,24 @@ export function mountIntentsFundingPanel(
   const tracking = el("div", "mp-intents-actions");
   tracking.append(check, startNew);
 
+  // ---- Step 4: done ---------------------------------------------------------------------
+  // A funded payment is over (#105). One card: what arrived and one way out, instead of a
+  // finished quote with a buried reset and a permanent "Track an earlier payment".
+  const success = el("div", "mp-intents-card mp-intents-success");
+  const successRows = el("dl", "mp-intents-rows");
+  const doneButton = button("Done", "mp-intents-btn mp-intents-primary");
+  success.append(
+    el("h4", "mp-intents-card-title", "NEAR arrived"),
+    successRows,
+    el(
+      "p",
+      "mp-intents-fine",
+      "It is in your wallet now. Buy credits from the wall when you want to paint.",
+    ),
+    doneButton,
+  );
+  success.hidden = true;
+
   // ---- Recovery, tucked away ------------------------------------------------------------
   const recoverBox = el("details", "mp-intents-recover");
   recoverBox.append(el("summary", undefined, "Track an earlier payment"));
@@ -212,7 +244,7 @@ export function mountIntentsFundingPanel(
     "You pay the source network's fee. Funding adds NEAR only — it does not buy paint credits or mPOO automatically.",
   );
 
-  section.append(lede, status, form, retry, review, instructions, tracking, recoverBox, warning);
+  section.append(lede, status, success, form, retry, review, instructions, tracking, recoverBox, warning);
   if (options.testMode) {
     // Stated before any control, and before the amount is chosen: this route is not proven.
     const test = el(
@@ -295,6 +327,21 @@ export function mountIntentsFundingPanel(
     }
   }
 
+  /**
+   * The amount that actually arrived, from the reconciled native Transfer — never the
+   * quote's estimate. Without proof of an amount the card says only that NEAR arrived.
+   */
+  function renderFunded(op: FundingOperation): void {
+    successRows.replaceChildren();
+    const received = op.evidence?.amountYocto;
+    row(
+      successRows,
+      "Received",
+      received ? `${formatTokenAmount(received, 24)} NEAR` : "NEAR",
+      true,
+    );
+  }
+
   function details(snapshot: FundingSnapshot) {
     renderedInstructionsKey = `${snapshot.operation?.id ?? ""}:${snapshot.canSend}:${snapshot.message}`;
     const epoch = ++qrRevision;
@@ -355,6 +402,30 @@ export function mountIntentsFundingPanel(
       );
     if (disabled && !hasPayment) recoverBox.open = true;
 
+    // A funded payment is finished. Show only what arrived and one way out: the form, the
+    // quote, the payment instructions and the recovery box all belong to a payment in
+    // progress and would otherwise leave the player on a finished one (#105).
+    if (snapshot.operation?.phase === "funded") {
+      lede.hidden = true;
+      status.hidden = true;
+      form.hidden = true;
+      retry.hidden = true;
+      review.hidden = true;
+      instructions.hidden = true;
+      tracking.hidden = true;
+      recoverBox.hidden = true;
+      warning.hidden = true;
+      success.hidden = false;
+      renderFunded(snapshot.operation);
+      return;
+    }
+    success.hidden = true;
+    lede.hidden = false;
+    status.hidden = false;
+    tracking.hidden = false;
+    recoverBox.hidden = false;
+    warning.hidden = false;
+
     reviewRows.replaceChildren();
     if (snapshot.preview) {
       const quote = snapshot.preview;
@@ -384,9 +455,12 @@ export function mountIntentsFundingPanel(
         fee === undefined ? "Included in the quote" : `${(fee / 100).toFixed(2)}%, included`,
       );
       row(reviewRows, "Time", `About ${Math.ceil(quote.quote.timeEstimate / 60)} min`);
-      row(reviewRows, "Refunds to", quote.quoteRequest.refundTo);
-      reviewNote.textContent =
-        "Your source network fee is separate. Native NEAR delivery is checked before the payment address is shown.";
+      // Short form: the refund address is where money goes if the conversion fails, and it
+      // is the player's own address — 64 characters of it do not need reading.
+      row(reviewRows, "Refunds to", shortAccount(quote.quoteRequest.refundTo));
+      // The capability check that gates the payment address is our business; the player only
+      // needs to know the source chain charges its own fee (review D).
+      reviewNote.textContent = "Your source network fee is separate.";
     }
 
     instructions.replaceChildren();
@@ -567,6 +641,46 @@ export function mountIntentsFundingPanel(
     }
   };
   startNew.addEventListener("click", onNew);
+
+  /**
+   * End this payment and put the form back. Used by Done and by closing a finished dialog,
+   * so reopening Add funds never shows a payment that is over (#105). `reset()` refuses
+   * while anything may still be in flight; on that refusal the screen stays exactly as it
+   * was, because an uncertain payment must never be replaced by a clean form.
+   */
+  function startFresh(): void {
+    try {
+      const context = options.newContext?.();
+      if (!context) return;
+      controller.reset(context);
+      reviewContext = null;
+      ownership.checked = false;
+      void controller.loadAssets();
+    } catch {
+      /* In flight: leave the state on screen. */
+    }
+  }
+  /** The panel sits inside the wallet's Add funds dialog; Done closes it when there is one. */
+  function closeDialog(): void {
+    const dialog = section.closest("dialog");
+    if (!dialog) return;
+    if (typeof dialog.close === "function") dialog.close();
+    else dialog.removeAttribute("open");
+  }
+  const onDone = () => {
+    startFresh();
+    closeDialog();
+  };
+  doneButton.addEventListener("click", onDone);
+  // Reopening must start on a fresh form, so a finished payment resets when its dialog
+  // closes. Phases that may hold money are deliberately not in FINISHED_PHASES: they stay
+  // on screen, open and visible, until the provider settles them.
+  const hostDialog = section.closest("dialog");
+  const onDialogClose = () => {
+    const op = controller.getState().operation;
+    if (op && FINISHED_PHASES.includes(op.phase)) startFresh();
+  };
+  hostDialog?.addEventListener("close", onDialogClose);
   const onResume = (event: Event) => {
     event.preventDefault();
     const context = getContext(),
@@ -611,6 +725,8 @@ export function mountIntentsFundingPanel(
     check.removeEventListener("click", onCheck);
     recovery.removeEventListener("submit", onResume);
     startNew.removeEventListener("click", onNew);
+    doneButton.removeEventListener("click", onDone);
+    hostDialog?.removeEventListener("close", onDialogClose);
     controller.dispose();
     section.remove();
   };
