@@ -2,6 +2,11 @@
  * Dock-matched buy-credits panel for schema-4 boards (Phase 0).
  * Cream panel language matches `.paint-dock` — not a separate IAP aesthetic.
  *
+ * A confirmed purchase closes the sheet and reports the new balance in a page toast: the
+ * purchase is the point of the panel, so leaving the player on a form that quietly
+ * reloaded read as if nothing had happened (issue #98). Only a confirmed result does this;
+ * an unclear or failed outcome keeps the sheet open with its explanation.
+ *
  * The token ("Pay with mPOO") path is feature-detected per board: it opens only
  * when `get_mpoo_sales_today()` exists and reports a non-zero cap with credits
  * remaining today, and the token's `ft_metadata` verifies. Otherwise the sheet
@@ -73,14 +78,30 @@ const TOKEN_REFUND_CODES: ReadonlySet<BuyFailureCode> = new Set([
   "price_changed",
 ]);
 
+/** How long a purchase confirmation stays on screen before it clears itself. */
+const TOAST_MS = 6000;
+
+/** The quantity a fresh form starts on, and the sheet's own default. */
+const DEFAULT_QUANTITY = 10;
+
+/** "12 credits" / "1 credit" — the one place a credit count is pluralised. */
+function creditCount(balance: bigint | number): string {
+  return `${balance} credit${String(balance) === "1" ? "" : "s"}`;
+}
+
+/**
+ * The player's balance in their own words. "Not registered · 0" is the contract's
+ * vocabulary for an account that has never bought: to the player that is simply zero
+ * credits, and naming the registration step here only raised a question.
+ */
 function creditLabel(balance: bigint | null | undefined): string {
   if (balance === undefined) {
-    return "Credits: …";
+    return "Reading your credits…";
   }
-  if (balance === null) {
-    return "Credits: not registered · 0";
+  if (balance === null || balance === 0n) {
+    return "You have 0 credits";
   }
-  return `Credits: ${balance}`;
+  return `You have ${creditCount(balance)}`;
 }
 
 /** Reset moment in the viewer's own time zone, e.g. "Tue 1:00 AM". */
@@ -147,7 +168,7 @@ export function mountBuyCreditsSheet(
           <p data-buy="split-text"></p>
           <button type="button" class="action secondary" data-buy="split-near"></button>
         </div>
-        <ul class="buy-credits-lines" data-buy="lines"></ul>
+        <dl class="buy-credits-lines" data-buy="lines"></dl>
         <p class="buy-credits-total" data-buy="total"></p>
         <p class="buy-credits-note" data-buy="note">Credits are prepaid paint. They cannot be withdrawn.</p>
         <div class="buy-credits-funding" data-buy="funding" hidden>
@@ -156,7 +177,9 @@ export function mountBuyCreditsSheet(
         </div>
         <p class="buy-credits-status" data-buy="status" role="status"></p>
         <div class="buy-credits-actions">
-          <button type="button" class="action place" data-buy="pay">Pay</button>
+          <!-- The site's primary button (design/tokens.css .mp-btn-primary), so the one
+               action that spends money is the same yellow as every other primary. -->
+          <button type="button" class="mp-btn mp-btn-primary" data-buy="pay">Pay</button>
           <button type="button" class="action secondary" data-buy="retry-price" hidden>Retry price</button>
           <a class="action secondary buy-credits-buy-near" data-buy="buy-near" target="_blank" rel="noopener noreferrer">Buy NEAR ↗</a>
           <a class="action secondary buy-credits-nearly" data-buy="nearly" target="_blank" rel="noopener noreferrer" hidden>Buy on NEARLY ↗</a>
@@ -227,6 +250,41 @@ export function mountBuyCreditsSheet(
     statusEl.textContent = text;
   }
 
+  /**
+   * A confirmation that outlives the panel. A confirmed purchase closes the sheet, so a
+   * status line inside it would be gone before anyone read it; the news goes to the page
+   * instead. One at a time: a second purchase replaces the first rather than stacking.
+   */
+  let toast: HTMLElement | null = null;
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  function dismissToast(): void {
+    clearTimeout(toastTimer);
+    toast?.remove();
+    toast = null;
+  }
+  function showToast(text: string): void {
+    dismissToast();
+    toast = document.createElement("p");
+    toast.className = "mp-toast";
+    // Announced, not just painted: the panel that used to hold focus is now closed.
+    toast.setAttribute("role", "status");
+    toast.textContent = text;
+    document.body.append(toast);
+    toastTimer = setTimeout(dismissToast, TOAST_MS);
+  }
+
+  /**
+   * Every open starts from the same place. A sheet that kept the last purchase's quantity,
+   * asset or status read as if something were still in progress.
+   */
+  function resetForm(quantity: number): void {
+    qtyInput.value = String(quantity);
+    nearRemainder = 0;
+    splitBox.hidden = true;
+    selectNear();
+    setStatus("");
+  }
+
   /** Token path: never let the quantity exceed today's remaining credits. */
   function clampToRemaining(): void {
     const offer = tokenOffer();
@@ -282,20 +340,26 @@ export function mountBuyCreditsSheet(
     }
     lines.replaceChildren();
     for (const item of quote.lineItems) {
-      const li = document.createElement("li");
-      li.textContent = `${item.label} · ${item.amountLabel}`;
-      lines.append(li);
+      // One cost per row: the label reads left, the money reads right. The old
+      // bulleted list made a receipt look like a paragraph.
+      const line = document.createElement("div");
+      const label = document.createElement("dt");
+      label.textContent = item.label;
+      const amount = document.createElement("dd");
+      amount.textContent = item.amountLabel;
+      line.append(label, amount);
+      lines.append(line);
     }
     if (quote.asset === "near" || !load.token) {
-      totalEl.textContent = `Total attached · ${formatUnits(quote.totalNearAttached, 24)} NEAR (plus network gas)`;
+      totalEl.textContent = `Total · ${formatUnits(quote.totalNearAttached, 24)} NEAR, plus a small network fee`;
       payButton.textContent = `Pay ${formatUnits(quote.purchaseAmount, 24)} NEAR`;
       nearly.hidden = true;
       buyNear.hidden = false;
     } else {
       const decimals = load.token.decimals;
       totalEl.textContent = quote.registrationDeposit
-        ? `Token amount · ${formatUnits(quote.purchaseAmount, decimals)} ${quote.tokenLabel} + ${formatUnits(quote.registrationDeposit, 24)} NEAR setup (plus gas)`
-        : `Token amount · ${formatUnits(quote.purchaseAmount, decimals)} ${quote.tokenLabel} (plus gas)`;
+        ? `Token amount · ${formatUnits(quote.purchaseAmount, decimals)} ${quote.tokenLabel} + ${formatUnits(quote.registrationDeposit, 24)} NEAR setup, plus a small network fee`
+        : `Token amount · ${formatUnits(quote.purchaseAmount, decimals)} ${quote.tokenLabel}, plus a small network fee`;
       payButton.textContent = `Pay ${formatUnits(quote.purchaseAmount, decimals)} ${quote.tokenLabel}`;
       buyNear.hidden = true;
       nearly.hidden = PAGE_NETWORK !== "mainnet";
@@ -351,7 +415,7 @@ export function mountBuyCreditsSheet(
       load = { status: "ready", config, credits, token };
       balanceEl.textContent = session.accountId
         ? creditLabel(credits)
-        : "Credits: connect wallet to buy";
+        : "Connect a wallet to buy credits";
       priceEl.textContent = `${formatUnits(config.nearPerCredit, 24)} NEAR / credit`;
       if (token) {
         tokenLabel.textContent = token.symbol;
@@ -484,8 +548,13 @@ export function mountBuyCreditsSheet(
         detail: result.message,
       });
       balanceEl.textContent = creditLabel(result.creditsAfter);
+      // The dock and the next tap's balance come from chain, never from this number.
       options.onCreditsChanged?.(result.creditsAfter);
-      await refreshConfig(result.message);
+      // A confirmed purchase is over (#98): close the form and say what the player now
+      // owns, instead of reloading prices in place and looking like nothing happened.
+      // Only this branch does this — an unclear or failed outcome keeps the sheet open.
+      close();
+      showToast(`You have ${creditCount(result.creditsAfter)} — go paint`);
       return;
     }
 
@@ -540,9 +609,12 @@ export function mountBuyCreditsSheet(
     if (!paidBoardVisible) {
       return;
     }
-    if (opts?.quantity && Number.isInteger(opts.quantity) && opts.quantity > 0) {
-      qtyInput.value = String(opts.quantity);
-    }
+    const wanted = opts?.quantity;
+    resetForm(
+      wanted && Number.isInteger(wanted) && wanted > 0 ? wanted : DEFAULT_QUANTITY,
+    );
+    // Reopening means the last confirmation is old news; never leave it over the form.
+    dismissToast();
     sheet.hidden = false;
     if (!CONTRACT_ID) {
       priceEl.textContent = "Paid painting not available yet";
@@ -637,6 +709,7 @@ export function mountBuyCreditsSheet(
     dispose() {
       disposed = true;
       generation += 1;
+      dismissToast();
       unsubWallet();
       window.removeEventListener("keydown", onKey);
       host.replaceChildren();

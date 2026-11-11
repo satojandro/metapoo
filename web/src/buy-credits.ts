@@ -137,8 +137,10 @@ export function quoteBuyCredits(input: {
       },
     ];
     if (registrationDeposit) {
+      // "One-time account setup", not the contract's "First-time setup (storage)": the
+      // player is opening an account on the board, not buying storage (review D).
       lineItems.push({
-        label: "First-time setup (storage)",
+        label: "One-time account setup",
         amountLabel: `${formatUnits(registrationDeposit, 24)} NEAR`,
       });
     }
@@ -170,7 +172,7 @@ export function quoteBuyCredits(input: {
   ];
   if (registrationDeposit) {
     lineItems.push({
-      label: "First-time setup (storage)",
+      label: "One-time account setup",
       amountLabel: `${formatUnits(registrationDeposit, 24)} NEAR`,
     });
   }

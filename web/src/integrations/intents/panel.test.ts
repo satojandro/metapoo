@@ -48,6 +48,10 @@ function app(
     initialOperationId?: string;
     context?: OperationContext;
     status?: FundingStatus["status"];
+    /** Reconcile the delivery as a proven native transfer of `fundedYocto`. */
+    fundedYocto?: string;
+    /** Mount inside the Add funds dialog the wallet panel creates. */
+    inDialog?: boolean;
   },
 ) {
   let now = FIXTURE_TIME;
@@ -89,10 +93,24 @@ function app(
     }),
     currentContext: () => context,
     readReadiness: async () => ({ state: "ready", expectedKeyMatches: true }),
-    reconcileDestination: async () => ({ state: "pending" }),
+    reconcileDestination: async () =>
+      seed?.fundedYocto
+        ? {
+            state: "verified_native",
+            transactionHash: "tx-funded",
+            amountYocto: seed.fundedYocto,
+            spendableBeforeGasYocto: "5000",
+          }
+        : { state: "pending" },
   });
+  const dialog = document.createElement("dialog");
   const host = document.createElement("div");
-  document.body.append(host);
+  if (seed?.inDialog) {
+    dialog.append(host);
+    document.body.append(dialog);
+  } else {
+    document.body.append(host);
+  }
   const newContext = vi.fn(() => {
     context = { ...context, operationId: "next-payment" };
     return context;
@@ -107,6 +125,7 @@ function app(
   );
   return {
     host,
+    dialog,
     controller,
     newContext,
     data,
@@ -294,5 +313,152 @@ describe("Intents inline panel", () => {
     expect((host.querySelector("input") as HTMLInputElement).disabled).toBe(
       false,
     );
+  });
+});
+
+// ---- A3 (#105): a funded payment is over, and one button ends it ---------------------
+
+const FUNDED_YOCTO = "1234560000000000000000000"; // 1.23456 NEAR
+
+async function commitAndFund(seed: Parameters<typeof app>[3]) {
+  const mounted = app(true, false, [FIXTURE_TOKEN], seed);
+  await mounted.controller.loadAssets();
+  const preview = await mounted.controller.preview(
+    {
+      assetId: FIXTURE_TOKEN.assetId,
+      amount: "1",
+      refundAddress: FIXTURE_REFUND,
+      refundAddressConfirmed: true,
+    },
+    FIXTURE_CONTEXT,
+  );
+  await mounted.controller.commit(preview.preview!.correlationId, FIXTURE_CONTEXT);
+  return mounted;
+}
+
+/** Hidden from the player: a hidden node, or one inside a hidden block. */
+function unreachable(host: HTMLElement, selector: string): boolean {
+  const node = host.querySelector(selector);
+  return !node || node.hasAttribute("hidden") || !!node.closest("[hidden]");
+}
+
+/** Buttons the player can actually reach: not hidden themselves, nor inside a hidden block. */
+function visibleButtons(host: HTMLElement): string[] {
+  return Array.from(host.querySelectorAll("button"))
+    .filter((b) => !b.hidden && !b.closest("[hidden]"))
+    .map((b) => b.textContent ?? "");
+}
+
+describe("Intents panel — a funded payment", () => {
+  it("shows the amount received and one yellow Done button, and nothing to track", async () => {
+    const { host, controller, setStatus } = await commitAndFund({
+      data: new Map<string, string>(),
+      fundedYocto: FUNDED_YOCTO,
+    });
+    setStatus("SUCCESS");
+    await controller.refresh(FIXTURE_CONTEXT.operationId);
+
+    await vi.waitFor(() => expect(unreachable(host, ".mp-intents-success")).toBe(false));
+    expect(controller.getState().operation?.phase).toBe("funded");
+    // The amount is the reconciled Transfer, not the quote's estimate.
+    expect(host.querySelector(".mp-intents-success")!.textContent).toContain("Received");
+    expect(host.querySelector(".mp-intents-success")!.textContent).toContain("1.23456 NEAR");
+    // One action, and it is the panel's primary (yellow) button.
+    expect(visibleButtons(host)).toEqual(["Done"]);
+    const done = host.querySelector<HTMLButtonElement>(".mp-intents-success button")!;
+    expect(done.classList.contains("mp-intents-primary")).toBe(true);
+    // Nothing that belongs to a payment in progress is left on screen.
+    expect(unreachable(host, ".mp-intents-recover")).toBe(true);
+    expect(unreachable(host, ".mp-intents-form")).toBe(true);
+    expect(unreachable(host, ".mp-intents-pay")).toBe(true);
+  });
+
+  it("Done ends the payment and puts the form back", async () => {
+    const { host, controller, newContext, setStatus } = await commitAndFund({
+      data: new Map<string, string>(),
+      fundedYocto: FUNDED_YOCTO,
+    });
+    setStatus("SUCCESS");
+    await controller.refresh(FIXTURE_CONTEXT.operationId);
+    await vi.waitFor(() => expect(unreachable(host, ".mp-intents-success")).toBe(false));
+
+    host.querySelector<HTMLButtonElement>(".mp-intents-success button")!.click();
+
+    expect(newContext).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(controller.getState().operation).toBeUndefined());
+    expect(controller.getState().phase).toBe("editing");
+    expect(host.querySelector<HTMLElement>(".mp-intents-success")!.hidden).toBe(true);
+    expect(host.querySelector<HTMLFormElement>(".mp-intents-form")!.hidden).toBe(false);
+  });
+
+  it("reopening the dialog starts a fresh form after a funded payment", async () => {
+    const { host, dialog, controller, setStatus } = await commitAndFund({
+      data: new Map<string, string>(),
+      fundedYocto: FUNDED_YOCTO,
+      inDialog: true,
+    });
+    setStatus("SUCCESS");
+    await controller.refresh(FIXTURE_CONTEXT.operationId);
+    await vi.waitFor(() => expect(unreachable(host, ".mp-intents-success")).toBe(false));
+
+    dialog.dispatchEvent(new Event("close"));
+    await vi.waitFor(() => expect(controller.getState().operation).toBeUndefined());
+    expect(host.querySelector(".mp-intents-success")!.hasAttribute("hidden")).toBe(true);
+    expect(host.querySelector<HTMLInputElement>(".mp-intents-amount-input")!.disabled).toBe(
+      false,
+    );
+  });
+
+  it("never resets a payment that may still be in flight", async () => {
+    const { host, dialog, controller, setStatus } = await commitAndFund({
+      data: new Map<string, string>(),
+      inDialog: true,
+    });
+    // PROCESSING: the provider has the money and has not settled. Uncertain, so it stays.
+    setStatus("PROCESSING");
+    await controller.refresh(FIXTURE_CONTEXT.operationId);
+    await vi.waitFor(() => expect(controller.getState().operation?.phase).toBe("processing"));
+
+    dialog.dispatchEvent(new Event("close"));
+
+    expect(controller.getState().operation).toBeDefined();
+    expect(controller.getState().phase).toBe("processing");
+    expect(unreachable(host, ".mp-intents-success")).toBe(true);
+    expect(unreachable(host, ".mp-intents-recover")).toBe(false);
+    expect(host.querySelector("[role=status]")?.textContent).toContain(
+      "Conversion is processing",
+    );
+  });
+});
+
+describe("Intents panel — the quote in player words (D)", () => {
+  it("shortens the refund address and leaves our delivery check out of the note", async () => {
+    // A NEAR-chain deposit, where the refund address is a 64-character implicit account.
+    const implicit = `fcd66acf${"0".repeat(48)}3076f59e`;
+    const nearToken = {
+      ...FIXTURE_TOKEN,
+      assetId: "nep141:usdc.near",
+      blockchain: "near",
+      symbol: "USDC",
+    };
+    const { host, controller } = app(true, false, [nearToken]);
+    await controller.loadAssets();
+    await controller.preview(
+      {
+        assetId: nearToken.assetId,
+        amount: "1",
+        refundAddress: implicit,
+        refundAddressConfirmed: true,
+      },
+      FIXTURE_CONTEXT,
+    );
+    await vi.waitFor(() => expect(host.textContent).toContain("Your quote"));
+
+    const rows = Array.from(host.querySelectorAll(".mp-intents-review .mp-intents-rows > div"));
+    const refund = rows.find((row) => row.querySelector("dt")?.textContent === "Refunds to");
+    expect(refund?.querySelector("dd")?.textContent).toBe("fcd66acf…3076f59e");
+    const note = host.querySelector(".mp-intents-review .mp-intents-fine")!.textContent;
+    expect(note).toBe("Your source network fee is separate.");
+    expect(host.textContent).not.toContain("Native NEAR delivery is checked");
   });
 });

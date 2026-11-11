@@ -146,24 +146,40 @@ summary { cursor: pointer; }
 .wall-hint-dismiss { position: static; flex: 0 0 auto; width: 36px; height: 36px; border: 0; border-radius: var(--mp-radius-md); background: transparent; cursor: pointer; }
 .wall-hint-dismiss:hover, .wall-hint-dismiss:focus-visible { background: var(--mp-line); }
 
-/* Buy credits, inside the dock. */
+/* Buy credits, inside the dock.
+   Type is the site's own scale (14px body), never the 12px the sheet used to run at:
+   this is the one screen where money changes hands, and it read smaller than the prose
+   around it. */
 .buy-credits-sheet[hidden] { display: none; }
-.buy-credits-panel { display: grid; gap: 10px; margin-top: 4px; padding: var(--mp-space-3); border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); color: var(--mp-soft); }
+.buy-credits-panel { display: grid; gap: 10px; margin-top: 4px; padding: var(--mp-space-3); border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); color: var(--mp-soft); font-size: var(--mp-text-body); }
 .buy-credits-header { display: flex; align-items: center; justify-content: space-between; gap: var(--mp-space-3); }
 .buy-credits-header h2 { margin: 0; font-size: var(--mp-text-body); font-weight: 700; color: var(--mp-fg); }
-.buy-credits-price, .buy-credits-token-info, .buy-credits-split p, .buy-credits-balance, .buy-credits-note, .buy-credits-status, .buy-credits-total { margin: 0; font-size: var(--mp-text-sm); line-height: 1.4; color: var(--mp-soft); overflow-wrap: anywhere; }
-.buy-credits-qty-label { font-size: var(--mp-text-sm); color: var(--mp-soft); }
+.buy-credits-price, .buy-credits-token-info, .buy-credits-split p, .buy-credits-balance, .buy-credits-note, .buy-credits-status { margin: 0; font-size: var(--mp-text-body); line-height: 1.45; color: var(--mp-soft); overflow-wrap: anywhere; }
+.buy-credits-total { margin: 0; font-size: var(--mp-text-base); font-weight: 700; line-height: 1.45; color: var(--mp-fg); overflow-wrap: anywhere; }
+.buy-credits-qty-label { font-size: var(--mp-text-body); color: var(--mp-soft); }
 .buy-credits-qty-row { display: flex; align-items: center; gap: var(--mp-space-2); }
 .buy-credits-qty { width: min(100%, 120px); min-height: var(--mp-hit); padding: 8px 10px; border: 1px solid var(--mp-line); border-radius: 4px; background: var(--mp-bg); color: var(--mp-fg); font-size: var(--mp-text-body); }
-.buy-credits-asset { margin: 0; padding: 0; border: 0; font-size: var(--mp-text-sm); color: var(--mp-soft); display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
-.buy-credits-asset legend { padding: 0; margin: 0 12px 0 0; font-size: var(--mp-text-sm); }
-.buy-credits-lines { margin: 0; padding-left: 18px; font-size: var(--mp-text-sm); color: var(--mp-soft); }
+.buy-credits-asset { margin: 0; padding: 0; border: 0; font-size: var(--mp-text-body); color: var(--mp-soft); display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.buy-credits-asset legend { padding: 0; margin: 0 12px 0 0; font-size: var(--mp-text-body); }
+/* The cost breakdown reads as rows — label left, money right — like .mp-intents-rows.
+   It arrived as a default bulleted list, which reads as prose, not as a bill. */
+.buy-credits-lines { display: grid; gap: 0; margin: 0; font-size: var(--mp-text-body); color: var(--mp-soft); }
+.buy-credits-lines > div { display: flex; justify-content: space-between; align-items: baseline; gap: var(--mp-space-3); padding: 8px 0; border-bottom: 1px solid var(--mp-line); }
+.buy-credits-lines > div:last-child { border-bottom: 0; }
+.buy-credits-lines dt { color: var(--mp-muted); }
+.buy-credits-lines dd { margin: 0; min-width: 0; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .buy-credits-actions { display: flex; flex-wrap: wrap; gap: var(--mp-space-2); align-items: center; }
 .buy-credits-actions .action { min-height: var(--mp-hit); }
+.buy-credits-actions .mp-btn { min-width: 160px; }
 .buy-credits-nearly { text-decoration: none; display: inline-flex; align-items: center; }
 .buy-credits-token-info[hidden], .buy-credits-split[hidden], .buy-credits-actions [hidden] { display: none; }
 .buy-credits-split { display: grid; gap: 6px; padding: var(--mp-space-2); border: 1px dashed var(--mp-line); border-radius: 4px; background: var(--mp-card); }
 .buy-credits-split .action { min-height: var(--mp-hit); justify-self: start; }
+
+/* A confirmation for an action that closes its own panel. The buy-credits sheet unmounts
+   on success, so its news cannot live inside it: one line at the top of the screen, out of
+   the way of the dock and the wall controls, never in the way of a tap, gone on its own. */
+.mp-toast { position: fixed; top: max(var(--mp-space-4), env(safe-area-inset-top, 0px)); left: 50%; z-index: 70; transform: translateX(-50%); width: max-content; max-width: min(420px, calc(100vw - 32px)); margin: 0; padding: var(--mp-space-3) var(--mp-space-4); border: 1px solid var(--mp-line); border-left: 3px solid var(--mp-tag); border-radius: var(--mp-radius-md); background: var(--mp-card); color: var(--mp-fg); font-size: var(--mp-text-body); font-weight: 700; line-height: 1.4; box-shadow: 0 12px 40px var(--mp-shadow); pointer-events: none; }
 
 /* ——— About / details, under the wall ——— */
 .wall-advanced { border-top: 1px solid var(--mp-line); padding: 18px 0; font-size: var(--mp-text-sm); color: var(--mp-muted); }
@@ -222,8 +238,8 @@ summary { cursor: pointer; }
    payment fails for lack of NEAR. */
 .buy-credits-funding { display: grid; gap: var(--mp-space-2); padding: var(--mp-space-3); border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); }
 .buy-credits-funding[hidden] { display: none; }
-.buy-credits-funding p { margin: 0; font-size: var(--mp-text-sm); line-height: 1.4; color: var(--mp-soft); }
+.buy-credits-funding p { margin: 0; font-size: var(--mp-text-body); line-height: 1.45; color: var(--mp-soft); }
 .buy-credits-funding .action { justify-self: start; min-height: var(--mp-hit); }
 .buy-credits-funding[data-emphasis="true"] { border-color: var(--mp-tag); }
-.buy-credits-how { margin: 0; font-size: var(--mp-text-sm); }
+.buy-credits-how { margin: 0; font-size: var(--mp-text-body); }
 .buy-credits-how a { color: var(--mp-soft); }

@@ -340,7 +340,7 @@ describe("mountBuyCreditsSheet — token checkout (FE-4)", () => {
     expect(args.deposit).toBe("1");
     expect(BigInt(args.gas)).toBeGreaterThanOrEqual(100_000_000_000_000n);
     await vi.waitFor(() => {
-      expect(host.querySelector("[data-buy=balance]")?.textContent).toBe("Credits: 15");
+      expect(host.querySelector("[data-buy=balance]")?.textContent).toBe("You have 15 credits");
     });
     expect(settled).toHaveBeenCalledTimes(1);
     sheet.dispose();
@@ -392,13 +392,152 @@ describe("mountBuyCreditsSheet — token checkout (FE-4)", () => {
     const status = host.querySelector("[data-buy=status]")?.textContent ?? "";
     expect(status).toMatch(/sold out/);
     expect(status).toMatch(/sent back.*pay with NEAR/);
-    expect(host.querySelector("[data-buy=balance]")?.textContent).toBe("Credits: 12");
+    expect(host.querySelector("[data-buy=balance]")?.textContent).toBe("You have 12 credits");
     expect(changed.mock.calls.length).toBeGreaterThan(0);
     expect(changed.mock.calls.every(([balance]) => balance === 12n)).toBe(true);
     expect(settled).toHaveBeenCalledTimes(1);
     expect(host.querySelector<HTMLInputElement>('input[value="near"]')!.checked).toBe(true);
     expect(host.querySelector("[data-buy=pay]")?.textContent).toMatch(/NEAR$/);
     expect(host.querySelector("[data-buy=buy-near]")?.hasAttribute("hidden")).toBe(false);
+    sheet.dispose();
+  });
+});
+
+// ---- A3 + D: what a confirmed purchase leaves behind, and the sheet's words -----------
+
+describe("mountBuyCreditsSheet — after a confirmed purchase (A3)", () => {
+  afterEach(() => {
+    sendNear.mockReset();
+    document.body.replaceChildren();
+  });
+
+  it("closes the sheet and shows one toast with the new credits", async () => {
+    let credits: string | null = null;
+    chain({ sales: () => "missing", credits: () => credits });
+    // A clean success receipt: the wallet's answer proves the purchase landed.
+    sendNear.mockImplementation(async () => {
+      credits = "15";
+      return {
+        transaction: { hash: "tx-confirmed" },
+        status: { SuccessValue: "" },
+        receipts_outcome: [],
+      };
+    });
+    const changed = vi.fn();
+    const settled = vi.fn();
+    const { host, sheet } = await mountOpen(connectedServices(), {
+      onCreditsChanged: changed,
+      onPurchaseSettled: settled,
+    });
+    expect(host.querySelector("[data-buy=balance]")?.textContent).toBe("You have 0 credits");
+
+    host.querySelector<HTMLButtonElement>("[data-buy=pay]")!.click();
+
+    await vi.waitFor(() => expect(document.querySelectorAll(".mp-toast")).toHaveLength(1));
+    // Closed, not reloaded in place: a finished purchase must not look like a no-op.
+    expect(host.querySelector<HTMLElement>(".buy-credits-sheet")!.hidden).toBe(true);
+    expect(document.querySelector(".mp-toast")!.textContent).toBe(
+      "You have 15 credits — go paint",
+    );
+    // The dock, and the next tap's balance, come from the chain-reported figure.
+    expect(changed.mock.calls.at(-1)).toEqual([15n]);
+    expect(settled).toHaveBeenCalledTimes(1);
+    sheet.dispose();
+    expect(document.querySelectorAll(".mp-toast")).toHaveLength(0);
+  });
+
+  it("keeps an unclear outcome open, with its warning, and says nothing in a toast", async () => {
+    chain({ sales: () => "missing", credits: () => "12" });
+    // A hash and no receipt status: the wallet answered, but not with proof of success.
+    sendNear.mockImplementation(async () => ({ transaction: { hash: "tx-unclear" } }));
+    const settled = vi.fn();
+    const { host, sheet } = await mountOpen(connectedServices(), {
+      onPurchaseSettled: settled,
+    });
+
+    host.querySelector<HTMLButtonElement>("[data-buy=pay]")!.click();
+
+    await vi.waitFor(() =>
+      expect(host.querySelector("[data-buy=status]")?.textContent).toMatch(
+        /do not buy again/i,
+      ),
+    );
+    expect(host.querySelector<HTMLElement>(".buy-credits-sheet")!.hidden).toBe(false);
+    expect(document.querySelectorAll(".mp-toast")).toHaveLength(0);
+    // Uncertain is not success: the balance never moved on a guess.
+    expect(host.querySelector("[data-buy=balance]")?.textContent).toBe("You have 12 credits");
+    sheet.dispose();
+  });
+
+  it("reopens on a fresh form: default quantity, NEAR selected, no leftover status", async () => {
+    chain({ sales: () => sales("5"), credits: () => "12" });
+    const { host, sheet } = await mountOpen(connectedServices(), {});
+    pickToken(host);
+    host.querySelector<HTMLInputElement>("#buy-credits-qty")!.value = "7";
+    sheet.close();
+
+    sheet.open();
+
+    expect(host.querySelector<HTMLInputElement>("#buy-credits-qty")!.value).toBe("10");
+    expect(host.querySelector<HTMLInputElement>('input[value="near"]')!.checked).toBe(true);
+    // The re-read clears the loading notice and prices the fresh form; no stale quote,
+    // no leftover confirmation from the purchase before it.
+    await vi.waitFor(() =>
+      expect(host.querySelector("[data-buy=status]")?.textContent).toBe(""),
+    );
+    expect(host.querySelector("[data-buy=total]")?.textContent).toMatch(/^Total · /);
+    sheet.dispose();
+  });
+});
+
+describe("mountBuyCreditsSheet — the sheet's words and layout (D)", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it("says the balance in the player's words, not the contract's", async () => {
+    chain({ sales: () => "missing", credits: () => null });
+    const unregistered = await mountOpen(connectedServices());
+    expect(unregistered.host.querySelector("[data-buy=balance]")?.textContent).toBe(
+      "You have 0 credits",
+    );
+    unregistered.sheet.dispose();
+    document.body.replaceChildren();
+
+    chain({ sales: () => "missing", credits: () => "1" });
+    const one = await mountOpen(connectedServices());
+    expect(one.host.querySelector("[data-buy=balance]")?.textContent).toBe("You have 1 credit");
+    one.sheet.dispose();
+  });
+
+  it("lays the cost breakdown out as labelled rows and names the setup line in plain words", async () => {
+    chain({ sales: () => "missing", credits: () => null });
+    const { host, sheet } = await mountOpen(connectedServices());
+    const lines = host.querySelector("[data-buy=lines]")!;
+    expect(lines.tagName).toBe("DL");
+    expect(lines.querySelectorAll("li")).toHaveLength(0);
+    const rows = Array.from(lines.querySelectorAll("div"));
+    expect(rows.map((row) => row.querySelector("dt")?.textContent)).toEqual([
+      "3 credits",
+      "One-time account setup",
+    ]);
+    expect(rows.map((row) => row.querySelector("dd")?.textContent)).toEqual([
+      "0.0075 NEAR",
+      "0.01 NEAR",
+    ]);
+    expect(host.querySelector("[data-buy=total]")?.textContent).toBe(
+      "Total · 0.0175 NEAR, plus a small network fee",
+    );
+    sheet.dispose();
+  });
+
+  it("pays with the site's primary button, not a one-off pale one", async () => {
+    chain({ sales: () => "missing", credits: () => "12" });
+    const { host, sheet } = await mountOpen(connectedServices());
+    const pay = host.querySelector<HTMLButtonElement>("[data-buy=pay]")!;
+    expect(pay.classList.contains("mp-btn")).toBe(true);
+    expect(pay.classList.contains("mp-btn-primary")).toBe(true);
+    expect(pay.textContent).toBe("Pay 0.0075 NEAR");
     sheet.dispose();
   });
 });
