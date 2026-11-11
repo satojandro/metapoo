@@ -275,3 +275,13 @@ it("shortens the contract id and stamps the read relatively (C7)", async () => {
   // A 64-character id is shortened; a short one is left alone (shortAccount's rule).
   if (source.length > 90) expect(source).toContain("…");
 });
+
+
+it("leads with the totals, then the pending splits (C8)", async () => {
+  const t = setup({ load: async () => live() });
+  await flush();
+  const stats = t.root.querySelector(".rev-stats")!;
+  const flows = t.root.querySelector(".rev-flows")!;
+  const follows = (stats.compareDocumentPosition(flows) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  expect(follows).toBe(true);
+});
