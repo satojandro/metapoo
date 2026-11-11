@@ -125,10 +125,10 @@ describe("buttons", () => {
   it("unlock: names the burn on the button before signing", () => {
     const s = unlockState({ ...base, amount: 4n * E18, account: acct(), exitTaxBps: 1000 });
     expect(s.enabled).toBe(true);
-    expect(s.label).toBe("Unlock and burn 0.4 TOILET");
+    expect(s.label).toBe("Unstake and burn 0.4 TOILET");
     expect(s.hint).toBe("One approval in your wallet, plus a small network fee. Your mPOO stays claimable.");
     expect(unlockState({ ...base, amount: 6n * E18, account: acct(), exitTaxBps: 1000 }).enabled).toBe(false);
-    expect(unlockState({ ...base, amount: E18, account: acct({ staked: 0n }), exitTaxBps: 1000 }).hint).toMatch(/nothing locked/);
+    expect(unlockState({ ...base, amount: E18, account: acct({ staked: 0n }), exitTaxBps: 1000 }).hint).toMatch(/nothing staked/);
   });
   it("claim mPOO: needs something released, and registers with mPOO first if needed", () => {
     expect(claimRewardsState({ ...base, account: acct() }).enabled).toBe(true);

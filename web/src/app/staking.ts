@@ -42,7 +42,7 @@ export interface StakingPool {
 }
 
 export interface StakingAccount {
-  /** TOILET in the wallet, ready to lock. */
+  /** TOILET in the wallet, ready to stake. */
   wallet: bigint;
   registered: boolean;
   staked: bigint;
@@ -265,31 +265,31 @@ export const fmtToken = (units: bigint, maxFraction = 4) => formatAmount(units, 
 const fmt = (units: bigint) => fmtToken(units);
 
 export function lockState(input: ActionInput & { amount: bigint | null; account: StakingAccount | null; storageMin: bigint }): ActionState {
-  const blocked = gate(input, "Lock TOILET");
+  const blocked = gate(input, "Stake TOILET");
   if (blocked) return blocked;
   const a = input.account;
-  if (!a) return { enabled: false, label: "Lock TOILET", hint: "Couldn’t read your balance. Try again in a moment." };
-  if (a.wallet === 0n) return { enabled: false, label: "Lock TOILET", hint: "You have no TOILET yet. Tiles you paint with credits earn it." };
-  if (input.amount === null) return { enabled: false, label: "Enter an amount", hint: "How much TOILET to lock." };
+  if (!a) return { enabled: false, label: "Stake TOILET", hint: "Couldn’t read your balance. Try again in a moment." };
+  if (a.wallet === 0n) return { enabled: false, label: "Stake TOILET", hint: "You have no TOILET yet. Tiles you paint with credits earn it." };
+  if (input.amount === null) return { enabled: false, label: "Enter an amount", hint: "How much TOILET to stake." };
   if (input.amount > a.wallet) return { enabled: false, label: "Not enough TOILET", hint: "That’s more than your wallet holds." };
-  const label = `Lock ${fmt(input.amount)} TOILET`;
+  const label = `Stake ${fmt(input.amount)} TOILET`;
   return a.registered
     ? { enabled: true, label, hint: "One approval in your wallet, plus a small network fee." }
     : { enabled: true, label, hint: "First time: your wallet signs two transactions. The first registers you with the staking contract and pays its storage, once." };
 }
 
 export function unlockState(input: ActionInput & { amount: bigint | null; account: StakingAccount | null; exitTaxBps: number }): ActionState {
-  const blocked = gate(input, "Unlock TOILET");
+  const blocked = gate(input, "Unstake TOILET");
   if (blocked) return blocked;
   const a = input.account;
-  if (!a) return { enabled: false, label: "Unlock TOILET", hint: "Couldn’t read your stake. Try again in a moment." };
-  if (a.staked === 0n) return { enabled: false, label: "Unlock TOILET", hint: "You have nothing locked." };
-  if (input.amount === null) return { enabled: false, label: "Enter an amount", hint: "How much TOILET to unlock." };
-  if (input.amount > a.staked) return { enabled: false, label: "More than you locked", hint: "That’s more than you have locked." };
+  if (!a) return { enabled: false, label: "Unstake TOILET", hint: "Couldn’t read your stake. Try again in a moment." };
+  if (a.staked === 0n) return { enabled: false, label: "Unstake TOILET", hint: "You have nothing staked." };
+  if (input.amount === null) return { enabled: false, label: "Enter an amount", hint: "How much TOILET to unstake." };
+  if (input.amount > a.staked) return { enabled: false, label: "More than you staked", hint: "That’s more than you have staked." };
   const { tax } = exitTax(input.amount, input.exitTaxBps);
   return {
     enabled: true,
-    label: tax > 0n ? `Unlock and burn ${fmt(tax)} TOILET` : `Unlock ${fmt(input.amount)} TOILET`,
+    label: tax > 0n ? `Unstake and burn ${fmt(tax)} TOILET` : `Unstake ${fmt(input.amount)} TOILET`,
     hint: "One approval in your wallet, plus a small network fee. Your mPOO stays claimable.",
   };
 }
@@ -301,7 +301,7 @@ export function claimRewardsState(input: ActionInput & { account: StakingAccount
   const a = input.account;
   if (!a) return { enabled: false, label, hint: "Couldn’t read your rewards. Try again in a moment." };
   if (a.pendingRewards === 0n) {
-    return { enabled: false, label, hint: a.staked > 0n ? "Nothing released to you yet. The pool pays out a little every moment." : "Lock TOILET to start receiving mPOO." };
+    return { enabled: false, label, hint: a.staked > 0n ? "Nothing released to you yet. The pool pays out a little every moment." : "Stake TOILET to start receiving mPOO." };
   }
   if (!a.mpooRegistered && a.mpooStorageMin === null) {
     return { enabled: false, label, hint: "Couldn’t read what the mPOO token charges to register you. Try again in a moment." };
@@ -315,7 +315,7 @@ export function claimRewardsState(input: ActionInput & { account: StakingAccount
 export function explainFailure(text: string | null | undefined): string | null {
   if (!text) return null;
   if (/NotRegistered|AccountNotRegistered/.test(text)) return "You’re not registered with the staking contract yet.";
-  if (/InsufficientStake/.test(text)) return "That’s more than you have locked.";
+  if (/InsufficientStake/.test(text)) return "That’s more than you have staked.";
   if (/NothingToClaim/.test(text)) return "Nothing was waiting to claim.";
   if (/InsufficientGas/.test(text)) return "The wallet attached too little gas.";
   return null;

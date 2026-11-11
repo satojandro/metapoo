@@ -1,7 +1,7 @@
 /**
- * /stake — lock TOILET, collect mPOO. The live front end for contracts/toilet-staking.
+ * /stake — stake TOILET, collect mPOO. The live front end for contracts/toilet-staking.
  *
- * Layout follows the Toilet Staking mock (lock/unlock tabs, tax preview, money stats,
+ * Layout follows the Toilet Staking mock (stake/unstake tabs, tax preview, money stats,
  * your position). Rules come from the staking contract's own `get_config`, never from
  * constants here, and every figure names where it was read. A failed read is unknown,
  * never zero. Nothing on this page states or implies a promised return.
@@ -68,8 +68,8 @@ const TEMPLATE = `
 <article class="stk" aria-labelledby="stk-title">
   <header class="stk-head">
     <p class="mp-eyebrow">TOILET staking</p>
-    <h2 id="stk-title" data-route-heading="true">Lock TOILET. Get paid in mPOO.</h2>
-    <p class="stk-lede">${MPOO_SPLIT.stakers}% of every mPOO the wall earns goes to the stakers’ pool. The pool pays out a share of itself every day, split by how much TOILET each staker has locked. Paint tiles to earn TOILET, lock it here, claim mPOO whenever you like.</p>
+    <h2 id="stk-title" data-route-heading="true">Stake TOILET. Get paid in mPOO.</h2>
+    <p class="stk-lede">${MPOO_SPLIT.stakers}% of every mPOO the wall earns goes to the stakers’ pool. The pool pays out a share of itself every day, split by how much TOILET each staker has staked. Paint tiles to earn TOILET, stake it here, claim mPOO whenever you like.</p>
     <p class="stk-source" data-s="source" role="status"></p>
   </header>
 
@@ -77,13 +77,13 @@ const TEMPLATE = `
 
   <div class="stk-live" data-s="live" hidden>
     <dl class="stk-stats" aria-label="The staking pool">
-      <div data-c="stake"><dt>TOILET locked</dt><dd data-s="totalStaked">…</dd><small>by everyone</small></div>
+      <div data-c="stake"><dt>TOILET staked</dt><dd data-s="totalStaked">…</dd><small>by everyone</small></div>
       <div data-c="tag"><dt>mPOO in the pool</dt><dd data-s="pool">…</dd><small data-s="dripNote">…</small></div>
       <div data-c="near"><dt>Today’s payout, at most</dt><dd data-s="today">…</dd><small>mPOO, split across all stakers</small></div>
       <div><dt>mPOO paid to stakers</dt><dd data-s="released">…</dd><small>all time, as of the last payout on chain</small></div>
-      <div data-c="burn"><dt>TOILET burned by unlocking</dt><dd data-s="burned">…</dd><small data-s="taxNote">…</small></div>
+      <div data-c="burn"><dt>TOILET burned by unstaking</dt><dd data-s="burned">…</dd><small data-s="taxNote">…</small></div>
       <div><dt>mPOO on its way</dt><dd data-s="reserve">…</dd><small>held on the board, joins the pool at the next split</small></div>
-      <div data-c="stake"><dt>Your share</dt><dd data-s="share">…</dd><small data-s="shareNote">of all locked TOILET</small></div>
+      <div data-c="stake"><dt>Your share</dt><dd data-s="share">…</dd><small data-s="shareNote">of all staked TOILET</small></div>
       <div data-c="tag"><dt>Your cut of today’s payout</dt><dd data-s="cut">…</dd><small>at today’s pool; it moves as the pool and stakes change</small></div>
     </dl>
 
@@ -92,40 +92,43 @@ const TEMPLATE = `
         <h3 id="stk-pos-h">Your position</h3>
         <dl class="stk-rows">
           <div><dt>TOILET in your wallet</dt><dd data-s="wallet">…</dd></div>
-          <div><dt>Locked</dt><dd data-s="staked" class="stk-good">…</dd></div>
+          <div><dt>Staked</dt><dd data-s="staked" class="stk-good">…</dd></div>
           <div><dt>mPOO ready to claim</dt><dd data-s="pending" class="stk-tag">…</dd></div>
         </dl>
+        <!-- Signed out there is exactly one way forward in this card (C2): one real
+             Connect control, instead of "Connect a wallet" written into five values. -->
+        <button type="button" class="mp-btn" data-act="connect" hidden>Connect wallet</button>
         <button type="button" class="mp-btn mp-btn-primary" data-act="claim">Claim mPOO</button>
         <p class="stk-hint" data-s="claimHint"></p>
         <p class="stk-result" data-s="claimResult" role="status"></p>
-        <p class="stk-fine">Claiming doesn’t touch your locked TOILET, and your mPOO is never taxed. <a href="/toilet">Earn more TOILET from your tiles →</a></p>
+        <p class="stk-fine">Claiming doesn’t touch your staked TOILET, and your mPOO is never taxed. <a href="/toilet">Earn more TOILET from your tiles →</a></p>
       </section>
 
-      <section class="mp-card stk-panel" aria-label="Lock or unlock">
-        <div class="stk-tabs" role="tablist" aria-label="Lock or unlock">
-          <button type="button" role="tab" id="stk-t-lock" aria-selected="true" aria-controls="stk-p-lock">Lock</button>
-          <button type="button" role="tab" id="stk-t-unlock" aria-selected="false" aria-controls="stk-p-unlock" tabindex="-1">Unlock</button>
+      <section class="mp-card stk-panel" aria-label="Stake or unstake">
+        <div class="stk-tabs" role="tablist" aria-label="Stake or unstake">
+          <button type="button" role="tab" id="stk-t-lock" aria-selected="true" aria-controls="stk-p-lock">Stake</button>
+          <button type="button" role="tab" id="stk-t-unlock" aria-selected="false" aria-controls="stk-p-unlock" tabindex="-1">Unstake</button>
         </div>
 
         <div id="stk-p-lock" role="tabpanel" aria-labelledby="stk-t-lock" class="stk-pane">
           <div class="stk-field">
-            <label for="stk-lock-amt">Amount to lock</label>
+            <label for="stk-lock-amt">Amount to stake</label>
             <div class="stk-input"><input id="stk-lock-amt" inputmode="decimal" autocomplete="off" placeholder="0"><span>TOILET</span><button type="button" data-max="lock">MAX</button></div>
           </div>
           <dl class="stk-rows stk-preview" aria-live="polite">
-            <div><dt>Locked after this</dt><dd data-s="lockAfter">—</dd></div>
+            <div><dt>Staked after this</dt><dd data-s="lockAfter">—</dd></div>
             <div><dt>Your share after this</dt><dd data-s="lockShare" class="stk-good">—</dd></div>
             <div><dt>Your cut of today’s payout after</dt><dd data-s="lockCut" class="stk-tag">—</dd></div>
           </dl>
           <p class="stk-fine" data-s="registerNote" hidden></p>
-          <button type="button" class="mp-btn mp-btn-primary" data-act="lock">Lock TOILET</button>
+          <button type="button" class="mp-btn mp-btn-primary" data-act="lock">Stake TOILET</button>
           <p class="stk-hint" data-s="lockHint"></p>
           <p class="stk-result" data-s="lockResult" role="status"></p>
         </div>
 
         <div id="stk-p-unlock" role="tabpanel" aria-labelledby="stk-t-unlock" class="stk-pane" hidden>
           <div class="stk-field">
-            <label for="stk-unlock-amt">Amount to unlock</label>
+            <label for="stk-unlock-amt">Amount to unstake</label>
             <div class="stk-input"><input id="stk-unlock-amt" inputmode="decimal" autocomplete="off" placeholder="0"><span>TOILET</span><button type="button" data-max="unlock">MAX</button></div>
           </div>
           <div class="stk-bar" aria-hidden="true"><i data-s="barKeep"></i><i data-s="barBurn"></i></div>
@@ -136,14 +139,14 @@ const TEMPLATE = `
             <div><dt>Your mPOO</dt><dd>stays claimable</dd></div>
           </dl>
           <div class="stk-tax">
-            <b>Paper hands pay: <span data-s="taxPct">10%</span> of the TOILET you unlock is burned.</b>
+            <b>Paper hands pay: <span data-s="taxPct">10%</span> of the TOILET you unstake is burned.</b>
             <ul>
-              <li>Every time, on the amount you take out only. Locked TOILET you leave in isn’t touched.</li>
+              <li>Every time, on the amount you take out only. TOILET you leave staked isn’t touched.</li>
               <li>It’s burned: sent to an address with no key. Nobody receives it, the team included.</li>
               <li>Your mPOO is never taxed.</li>
             </ul>
           </div>
-          <button type="button" class="mp-btn stk-danger" data-act="unlock">Unlock TOILET</button>
+          <button type="button" class="mp-btn stk-danger" data-act="unlock">Unstake TOILET</button>
           <p class="stk-hint" data-s="unlockHint"></p>
           <p class="stk-result" data-s="unlockResult" role="status"></p>
         </div>
@@ -155,7 +158,7 @@ const TEMPLATE = `
       <ol class="stk-flow">
         <li><b>Painters buy credits</b> in NEAR or mPOO. The NEAR is swapped for mPOO.</li>
         <li><b>Each split</b> sends ${MPOO_SPLIT.stakers}% of the mPOO to the stakers’ pool, burns ${MPOO_SPLIT.burn}% and pays ${MPOO_SPLIT.team}% to the team.</li>
-        <li><span><b>The pool pays out <span data-s="dripPct">10%</span> of itself a day, a little every moment</b>, split by locked TOILET.</span></li>
+        <li><span><b>The pool pays out <span data-s="dripPct">10%</span> of itself a day, a little every moment</b>, split by staked TOILET.</span></li>
         <li><b>You claim</b> your mPOO whenever you like.</li>
       </ol>
       <p class="stk-fine">The daily payout smooths what arrives; it doesn’t grow it. A busy week fills the pool, and the pool spreads it over the following days. <a href="/money">See every split on Where the money goes →</a></p>
@@ -178,6 +181,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
   const page = root.querySelector<HTMLElement>(".stk")!;
   const $ = (key: string) => page.querySelector<HTMLElement>(`[data-s="${key}"]`)!;
   const btn = (act: string) => page.querySelector<HTMLButtonElement>(`[data-act="${act}"]`)!;
+  const connectBtn = btn("connect");
   const lockInput = page.querySelector<HTMLInputElement>("#stk-lock-amt")!;
   const unlockInput = page.querySelector<HTMLInputElement>("#stk-unlock-amt")!;
   const cleanups: Array<() => void> = [];
@@ -261,7 +265,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     $("today").textContent = fmtToken((pool.pool * BigInt(config.dripBps)) / 10_000n, 2);
     $("released").textContent = fmtToken(pool.releasedTotal, 2);
     $("burned").textContent = fmtToken(pool.burnedTotal, 2);
-    $("taxNote").textContent = `${config.exitTaxBps / 100}% of every unlock`;
+    $("taxNote").textContent = `${config.exitTaxBps / 100}% of every unstake`;
     $("reserve").textContent = l.boardReserve === null ? "Unavailable" : formatAmount(l.boardReserve, MPOO_DECIMALS, { maxFraction: 2 });
     $("taxPct").textContent = `${config.exitTaxBps / 100}%`;
     $("dripPct").textContent = `${config.dripBps / 100}%`;
@@ -270,10 +274,11 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     if (a) {
       const ppm = sharePpm(a.staked, pool.totalStaked);
       $("share").textContent = shareText(ppm);
-      $("shareNote").textContent = `${fmtToken(a.staked, 2)} of ${fmtToken(pool.totalStaked, 2)} locked`;
+      $("shareNote").textContent = `${fmtToken(a.staked, 2)} of ${fmtToken(pool.totalStaked, 2)} staked`;
       $("cut").textContent = `≈ ${fmtToken(todaysCut(pool.pool, config.dripBps, a.staked, pool.totalStaked), 4)}`;
     } else {
-      const text = !signedIn ? "Connect a wallet" : l.accountFailed ? "Unavailable" : "…";
+      // C2: signed out is an unknown value, not a sentence in a value slot.
+      const text = !signedIn ? "—" : l.accountFailed ? "Unavailable" : "…";
       $("share").textContent = text;
       $("cut").textContent = text;
     }
@@ -284,8 +289,10 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     if (!l) return;
     const a = l.account;
     const session = services.wallet.getSession();
+    connectBtn.hidden = !!session.accountId;
+    btn("claim").hidden = !session.accountId;
     for (const key of ["wallet", "staked", "pending"]) {
-      if (!session.accountId) $(key).textContent = "Connect a wallet";
+      if (!session.accountId) $(key).textContent = "—";
       else if (session.networkId !== deps.network) $(key).textContent = `Switch to ${deps.network}`;
       else if (!a) $(key).textContent = l.accountFailed ? "Unavailable" : "…";
     }
@@ -314,7 +321,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     $("lockHint").textContent = state.hint;
     const note = $("registerNote");
     note.hidden = !(l && a && !a.registered);
-    if (l && a && !a.registered) note.textContent = `Your first lock also pays ${near(l.config.storageMin)} to register you with the staking contract, once. It comes back if you ever close your staking account.`;
+    if (l && a && !a.registered) note.textContent = `Your first stake also pays ${near(l.config.storageMin)} to register you with the staking contract, once. It comes back if you ever close your staking account.`;
     if (!l || !a || amount === null) {
       for (const k of ["lockAfter", "lockShare", "lockCut"]) $(k).textContent = "—";
       return;
@@ -355,7 +362,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     if (!l) { list.replaceChildren(); return; }
     const session = services.wallet.getSession();
     const rows: Array<[string, string, string]> = [
-      ["Staking contract", l.staking, "Holds locked TOILET and the stakers’ mPOO."],
+      ["Staking contract", l.staking, "Holds staked TOILET and the stakers’ mPOO."],
       ["TOILET token", l.config.toilet, "What you lock."],
       ["mPOO token", l.config.mpoo, "What you’re paid in."],
     ];
@@ -464,7 +471,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
       toilet: l.config.toilet, staking: l.staking, amount: amount.toString(),
       registerDeposit: a.registered ? null : l.config.storageMin.toString(), storageGas: STORAGE_GAS, gas: STAKE_GAS,
     });
-    report("lockResult", raw, `Locked ${tok(amount, "TOILET")}. Your share of each payout starts now.`, [
+    report("lockResult", raw, `Staked ${tok(amount, "TOILET")}. Your share of each payout starts now.`, [
       [stakeRefused(raw), "The staking contract refused the lock and sent your TOILET back. Nothing was lost."],
     ]);
     lockInput.value = "";
@@ -473,7 +480,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     const l = live()!, amount = parseAmount(unlockInput.value)!;
     const { tax, net } = exitTax(amount, l.config.exitTaxBps);
     const raw = await deps.unstake({ staking: l.staking, amount: amount.toString(), gas: UNSTAKE_GAS });
-    report("unlockResult", raw, `Unlocked. ${tok(net, "TOILET")} is back in your wallet and ${tok(tax, "TOILET")} was burned.`, [
+    report("unlockResult", raw, `Unstaked. ${tok(net, "TOILET")} is back in your wallet and ${tok(tax, "TOILET")} was burned.`, [
       [hasEvent(raw, ["unstake_failed"]), "The transfer back failed, so your stake was restored in full. Nothing was burned."],
     ]);
     unlockInput.value = "";
@@ -490,6 +497,7 @@ export function mountStakePage(root: HTMLElement, ctx: PageContext, overrides: P
     ]);
   });
 
+  listen(connectBtn, "click", () => connectWallet(() => void services.wallet.connect()));
   listen(btn("lock"), "click", onLock);
   listen(btn("unlock"), "click", onUnlock);
   listen(btn("claim"), "click", onClaim);
