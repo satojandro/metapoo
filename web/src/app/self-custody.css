@@ -1,5 +1,106 @@
-.mp-custody { padding:20px; display:grid; gap:12px; max-width:440px; }
-.mp-custody li { overflow-wrap:anywhere; margin-block:12px; }
-.mp-custody label { display:grid; gap:6px; }
-.mp-custody input { width:100%; box-sizing:border-box; padding:12px; font:inherit; }
-.mp-custody button { padding:10px; font:inherit; }
+/*
+ * Self-custody panel (UI review A4). Structure is a list of keys as facts — name, what the
+ * key may do, and the key itself — then numbered steps. Colour, spacing and type come from
+ * design/tokens.css; there is no literal colour here.
+ */
+.mp-custody {
+  padding: var(--mp-space-5);
+  display: grid;
+  gap: var(--mp-space-3);
+  max-width: 440px;
+  color: var(--mp-fg);
+  font: var(--mp-text-body)/var(--mp-leading) var(--mp-font);
+}
+.mp-custody h2,
+.mp-custody h3 { margin: 0; }
+.mp-custody h2 { font-size: var(--mp-text-h3); }
+.mp-custody h3 { font-size: var(--mp-text-base); }
+
+.mp-custody-status,
+.mp-custody-risk,
+.mp-custody-note { margin: 0; }
+.mp-custody-risk,
+.mp-custody-note { color: var(--mp-soft-2); font-size: var(--mp-text-md); }
+.mp-custody-status:empty { display: none; }
+
+.mp-custody-keys {
+  margin: 0;
+  display: grid;
+  gap: var(--mp-space-2);
+}
+.mp-custody-key {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--mp-space-1) var(--mp-space-3);
+  align-items: baseline;
+  padding: var(--mp-space-3);
+  background: var(--mp-card);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-md);
+}
+.mp-custody-key dt,
+.mp-custody-key dd { margin: 0; min-width: 0; }
+/* A key is a full-width fact under its name, never squeezed into the name's column. */
+.mp-custody-key-fact,
+.mp-custody-key-action { grid-column: 1 / -1; }
+.mp-custody-key-name { font-weight: 700; overflow-wrap: anywhere; }
+.mp-custody-key-access { color: var(--mp-muted); font-size: var(--mp-text-md); text-align: right; }
+.mp-custody-key-value {
+  font: var(--mp-text-md)/1.4 var(--mp-mono);
+  color: var(--mp-soft);
+  overflow-wrap: anywhere;
+}
+.mp-custody-key-action { justify-self: start; }
+.mp-custody-key-action:empty { display: none; }
+
+.mp-custody-confirm {
+  display: grid;
+  gap: var(--mp-space-2);
+  padding-top: var(--mp-space-2);
+  border-top: 1px solid var(--mp-line);
+}
+.mp-custody-confirm p { margin: 0; color: var(--mp-soft); font-size: var(--mp-text-md); }
+.mp-custody-confirm button { justify-self: start; }
+/* Destructive reuses the token that already means loss, rather than a new colour. */
+.mp-custody button { border: 1px solid var(--mp-line); border-radius: var(--mp-radius-md); background: var(--mp-card-2); color: var(--mp-fg); min-height: var(--mp-hit); }
+.mp-custody button:disabled { opacity: .5; cursor: default; }
+.mp-custody input:focus-visible, .mp-custody button:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
+/* Destructive, and now unopposed: the Send sheet no longer styles this panel's buttons. */
+.mp-custody .mp-custody-danger { background: var(--mp-bad); border-color: var(--mp-bad); color: var(--mp-on-tag); }
+.mp-custody .mp-custody-danger:hover { border-color: var(--mp-bad); filter: brightness(1.05); }
+
+.mp-custody-steps {
+  margin: 0;
+  padding-inline-start: var(--mp-space-5);
+  display: grid;
+  gap: var(--mp-space-2);
+  color: var(--mp-soft);
+  font-size: var(--mp-text-md);
+}
+.mp-custody-steps li { overflow-wrap: anywhere; }
+.mp-custody-steps li::marker { color: var(--mp-muted); }
+
+.mp-custody label {
+  display: grid;
+  gap: var(--mp-space-2);
+  color: var(--mp-soft-2);
+  font-size: var(--mp-text-md);
+}
+.mp-custody input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--mp-space-3);
+  min-height: var(--mp-hit);
+  font: var(--mp-text-md)/1.4 var(--mp-mono);
+  color: var(--mp-fg);
+  background: var(--mp-card);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-md);
+}
+.mp-custody input::placeholder { color: var(--mp-muted); }
+.mp-custody input:focus-visible {
+  outline: 2px solid var(--mp-focus);
+  outline-offset: 2px;
+}
+.mp-custody [data-add] { justify-self: start; }
+.mp-custody button { cursor: pointer; }

@@ -32,14 +32,19 @@ export function mountWithdrawalControls(host: HTMLElement, services: AppServices
   const open = async (kind: "send" | "custody") => {
     closeDialog?.();
     const dialog = document.createElement("dialog"); dialog.className = "mp-withdrawal-dialog"; dialog.setAttribute("aria-label", kind === "send" ? "Send" : "Self-custody");
-    const close = document.createElement("button"); close.type = "button"; close.textContent = "Close";
-    const body = document.createElement("div"); dialog.append(close, body); document.body.append(dialog);
+    const body = document.createElement("div");
+    // Send draws its own header row (title + Close) inside the panel, like the buy-credits
+    // sheet. The custody panel keeps the shared outer chip until its own review lands.
+    const outerClose = kind === "custody" ? document.createElement("button") : null;
+    if (outerClose) { outerClose.type = "button"; outerClose.textContent = "Close"; dialog.append(outerClose); }
+    dialog.append(body); document.body.append(dialog);
     let unmount: (() => void) | undefined, closed = false;
     closeDialog = () => { closed = true; unmount?.(); dialog.remove(); };
-    close.onclick = closeDialog; dialog.oncancel = closeDialog;
+    if (outerClose) outerClose.onclick = closeDialog;
+    dialog.oncancel = closeDialog;
     if (dialog.showModal) dialog.showModal(); else dialog.open = true;
     try {
-      if (kind === "send") { const module = await import("./send-sheet"); if (!disposed && !closed) unmount = module.mountSendSheet(body, refresh); }
+      if (kind === "send") { const module = await import("./send-sheet"); if (!disposed && !closed) unmount = module.mountSendSheet(body, refresh, closeDialog); }
       else { const module = await import("./self-custody-panel"); if (!disposed && !closed) unmount = module.mountSelfCustodyPanel(body); }
     } catch { body.textContent = "These controls couldn't load. Close and retry."; }
   };
