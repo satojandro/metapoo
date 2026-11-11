@@ -95,7 +95,7 @@ describe("camera controller", () => {
     expect(camera.camera().cellSize).toBe(7.75);
     expect(camera.readZoomState().fitted).toBe(false);
     expect(document.querySelector(".position-readout")?.textContent).toBe(
-      "Zoom 200% · Cell: none selected",
+      "Zoom 200% · Tile: none selected",
     );
     camera.fitWallToView();
     expect(camera.readZoomState().fitted).toBe(true);

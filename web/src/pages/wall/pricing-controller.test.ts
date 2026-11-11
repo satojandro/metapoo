@@ -138,7 +138,7 @@ describe("pricing controller", () => {
     await vi.waitFor(() => expect(deps.creditsBalance.textContent).toBe("Credits: 10"));
     await vi.waitFor(() =>
       expect(deps.repaintChrome.legend.textContent).toBe(
-        "Fresh cells cost more to repaint. Wait an hour and it is 1 credit again.",
+        "Fresh tiles cost more to repaint. Wait an hour and it is 1 credit again.",
       ),
     );
     expect(pricing.priceUnavailable()).toBe(false);
@@ -171,7 +171,7 @@ describe("pricing controller", () => {
     chain.credits = ["5"];
     const { pricing, deps, dispose } = setup();
     expect(await pricing.ensurePaidQuote([{ x: 2, y: 3 }], "alice.testnet")).toMatchObject({ maxCredits: 2 });
-    expect(deps.repaintChrome.strokeTotal.textContent).toBe("this stroke: 1 cell · 2 credits");
+    expect(deps.repaintChrome.strokeTotal.textContent).toBe("this stroke: 1 tile · 2 credits");
     // The balance (5) and cost (2) are now known; a tap is admitted.
     expect(pricing.admitTap({ x: 2, y: 3 })).toBeTruthy();
     dispose();
@@ -365,7 +365,7 @@ describe("free first paints", () => {
     setFree({ kind: "yes", remaining: 3 });
     pricing.requestCellPrice({ x: 8, y: 8 });
     await vi.waitFor(() => expect(deps.repaintChrome.badge.textContent).toContain("free for you"));
-    expect(deps.repaintChrome.strokeTotal.textContent).toBe("This cell is free for you");
+    expect(deps.repaintChrome.strokeTotal.textContent).toBe("This tile is free for you");
     dispose();
   });
 });
