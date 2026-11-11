@@ -24,13 +24,15 @@ export interface ShellHandles {
 }
 
 /** Primary nav routes. The labels are also the page names used in the tab title. */
-export const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: PageId }> = [
+export const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: PageId; short?: string }> = [
   { href: "/wall", label: "Wall", match: "wall" },
   { href: "/how-it-works", label: "How it works", match: "how" },
   { href: "/agents", label: "Agents", match: "agents" },
   { href: "/toilet", label: "TOILET", match: "toilet" },
   { href: "/stake", label: "Stake", match: "stake" },
-  { href: "/money", label: "Where the money goes", match: "money" },
+  // Six items have to fit one phone row (UI review C10). The short label is the
+  // visible one below 600px; the full label stays the page name and the tab title.
+  { href: "/money", label: "Where the money goes", match: "money", short: "Money" },
 ];
 
 const NAV_LABELS = new Map<PageId, string>(NAV_ITEMS.map((item) => [item.match, item.label]));
@@ -92,7 +94,19 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     const a = document.createElement("a");
     a.href = item.href;
     a.dataset.navMatch = item.match;
-    a.textContent = item.label;
+    const long = document.createElement("span");
+    long.className = "app-nav-long";
+    long.textContent = item.label;
+    a.append(long);
+    if (item.short) {
+      const short = document.createElement("span");
+      short.className = "app-nav-short";
+      short.textContent = item.short;
+      a.append(short);
+      // The two spans are one link; name it with the full label so a screen reader
+      // never hears the abbreviation the phone layout needed.
+      a.setAttribute("aria-label", item.label);
+    }
     li.append(a);
     navList.append(li);
   }
@@ -139,9 +153,16 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
       <a href="/toilet">What TOILET is for →</a>
       <a href="/stake">Stake TOILET →</a>
     </nav>
+    <!-- Two lines: what it does, then what it costs and what it cannot do. The old
+         label named the mechanism ("allow painting without a popup") without saying
+         what was being granted (UI review B3). Both lines sit inside the label, so
+         the checkbox's accessible name carries them. -->
     <label class="drawing-session-opt-in" for="authorize-drawing-session">
       <input id="authorize-drawing-session" type="checkbox" disabled />
-      Also allow painting without a popup each time
+      <span class="drawing-session-opt-in-body">
+        <span class="drawing-session-opt-in-title">Paint without approving every stroke</span>
+        <span class="drawing-session-opt-in-note">Adds a painting key that can only paint here. It can’t move your funds. Turn it off any time.</span>
+      </span>
     </label>
     <section id="ops-recovery" class="ops-recovery" aria-label="Operation recovery" hidden></section>
     <details class="wallet-technical"><summary>Technical details</summary>

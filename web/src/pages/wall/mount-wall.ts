@@ -489,7 +489,7 @@ export function mountWall(
     },
   });
 
-  // The drawing-key opt-in ("Also allow painting without a popup each time") is
+  // The drawing-key opt-in ("Paint without approving every stroke") is
   // shell-owned. On the wall it sits in the dock, next to Connect, not in the header.
   const optIn = document.querySelector<HTMLLabelElement>("label.drawing-session-opt-in");
   const optInSlot = pageRoot.querySelector<HTMLElement>("#wall-optin-slot");

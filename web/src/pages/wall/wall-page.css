@@ -764,7 +764,7 @@
 .wall-page:not(:has(.wall-action[data-primary="connect"])) .wall-optin { display: none; }
 .wall-page .wall-optin .drawing-session-opt-in {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--mp-space-2);
   margin: 0;
   color: var(--mp-soft);

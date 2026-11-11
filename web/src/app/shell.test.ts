@@ -32,6 +32,22 @@ describe("app shell", () => {
     shell.dispose();
   });
 
+  it("gives the money route a phone-sized nav label without renaming the page", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shell = mountShell(host, createAppServices());
+
+    const money = host.querySelector<HTMLAnchorElement>('a[href="/money"]')!;
+    expect(money.querySelector(".app-nav-long")?.textContent).toBe("Where the money goes");
+    expect(money.querySelector(".app-nav-short")?.textContent).toBe("Money");
+    // One link, one accessible name: the abbreviation is layout only.
+    expect(money.getAttribute("aria-label")).toBe("Where the money goes");
+    // The tab title and PAGE_NAMES keep the full label (batch 1's rule).
+    const { pageTitle } = await import("./shell");
+    expect(pageTitle("money")).toBe("Where the money goes · Meta Poo");
+    shell.dispose();
+  });
+
   it("shows one wallet control: Connect while disconnected, the panel hidden", () => {
     const host = document.createElement("div");
     document.body.append(host);
@@ -70,6 +86,12 @@ describe("app shell", () => {
     const optIn = host.querySelector<HTMLLabelElement>("label.drawing-session-opt-in")!;
     expect(page.querySelector("#wall-optin-slot")!.contains(optIn)).toBe(true);
     expect(optIn.querySelector("#authorize-drawing-session")).not.toBeNull();
+    // The label says what the key does and what it cannot do (UI review B3): the old
+    // text named the mechanism ("without a popup") and left the player to guess.
+    expect(optIn.textContent).toContain("Paint without approving every stroke");
+    expect(optIn.textContent).toContain("only paint here");
+    expect(optIn.textContent).toContain("can’t move your funds");
+    expect(optIn.querySelector(".drawing-session-opt-in-note")).not.toBeNull();
     dispose();
     expect(host.querySelector("details.wallet-details")!.contains(optIn)).toBe(true);
     shell.dispose();
