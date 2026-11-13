@@ -167,3 +167,13 @@ it("never promises a return", async () => {
   expect(text).toMatch(/Nothing here is a promised return/);
   expect(text).not.toMatch(/\bAPR\b|\bAPY\b|guaranteed|30 days/i);
 });
+
+it("stamps the reading relatively, and keeps the exact time on hover (C7)", async () => {
+  const t = await setup();
+  await vi.waitFor(() => expect(t.s("source")).toMatch(/Read live from|Reading/));
+  const line = t.s("source");
+  // A wall-clock time was the finding; a relative age is the fix.
+  expect(line).not.toMatch(/\d{1,2}:\d{2}:\d{2}/);
+  if (/updated/.test(line)) expect(line).toMatch(/updated (just now|\d+ min ago|\d+ h ago)/);
+  expect(t.root.querySelector<HTMLElement>('[data-s="source"]')!.title).toMatch(/read at \d/);
+});
