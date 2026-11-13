@@ -21,7 +21,7 @@
 //!
 //! When it succeeds it writes the **genesis marker** (`draw_history:genesis`: the deploy block
 //! and the side there): the log now starts at the first paint, and `GET /api/history/head`
-//! says `complete: true`. When it rewrote the stream it also bumps `draw_history:epoch`, which
+//! says `complete: true`. When it rewrote the stream it also replaces `draw_history:epoch`, which
 //! is part of every cacheable history page URL.
 //!
 //! Re-running it is safe: the second run replays the same entries, finds the log already equal
@@ -106,7 +106,8 @@ for _, row in ipairs(rows) do
   redis.call('XADD', KEYS[2], row[1], unpack(row[2]))
 end
 redis.call('RENAME', KEYS[2], KEYS[1])
-redis.call('INCR', KEYS[3])
+local epoch = tonumber(redis.call('GET', KEYS[3]) or '0')
+redis.call('SET', KEYS[3], math.max(epoch + 1, tonumber(ARGV[3])))
 redis.call('HSET', KEYS[4], 'start_block', ARGV[1], 'initial_side', ARGV[2])
 return #rows
 ";
@@ -217,6 +218,7 @@ pub async fn backfill(
             .key(keys::DRAW_HISTORY_GENESIS)
             .arg(start_block)
             .arg(initial_side)
+            .arg(now_ms)
             .invoke_async(con)
             .await?;
         tracing::info!(target: "indexer", "backfilled {} entries and {} expansions, kept {copied} newer live ones", entries.len(), replayed_expansions.len());

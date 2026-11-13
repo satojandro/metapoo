@@ -81,11 +81,9 @@ pub fn encode_page(rows: &[LogRow], next: Option<(u64, u32)>, more: bool) -> Vec
                     }
                     // Three bytes a tile: anything that does not fit is not a tile of this
                     // wall (128 a side, 16 colours) and is left out rather than truncated.
-                    if let (Ok(x), Ok(y), Ok(color)) = (
-                        u8::try_from(e.x),
-                        u8::try_from(e.y),
-                        u8::try_from(e.color),
-                    ) {
+                    if let (Ok(x), Ok(y), Ok(color)) =
+                        (u8::try_from(e.x), u8::try_from(e.y), u8::try_from(e.color))
+                    {
                         tiles.extend_from_slice(&[x, y, color]);
                     }
                     j += 1;
@@ -108,6 +106,104 @@ pub fn encode_page(rows: &[LogRow], next: Option<(u64, u32)>, more: bool) -> Vec
     out.splice(header_rows..header_rows, header);
     out.extend_from_slice(&body);
     out
+}
+
+/// One decoded record: what a reader of the page sees.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Record {
+    Paints {
+        block: u64,
+        at_ms: u64,
+        /// `(x, y, colour)` in applied order.
+        tiles: Vec<(u8, u8, u8)>,
+    },
+    Expand {
+        block: u64,
+        at_ms: u64,
+        from: u32,
+        to: u32,
+    },
+}
+
+/// A decoded page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Decoded {
+    pub more: bool,
+    pub rows: u64,
+    /// `None` on an empty page.
+    pub next: Option<(u64, u32)>,
+    pub records: Vec<Record>,
+}
+
+/// The reference decoder (the page's own is TypeScript). `None` for a body that is not a
+/// well-formed `MPH1` page.
+pub fn decode_page(bytes: &[u8]) -> Option<Decoded> {
+    fn varint(bytes: &[u8], at: &mut usize) -> Option<u64> {
+        let (mut value, mut shift) = (0u64, 0u32);
+        loop {
+            let byte = *bytes.get(*at)?;
+            *at += 1;
+            value |= u64::from(byte & 0x7f).checked_shl(shift)?;
+            if byte & 0x80 == 0 {
+                return Some(value);
+            }
+            shift += 7;
+        }
+    }
+    fn zigzag(bytes: &[u8], at: &mut usize) -> Option<i64> {
+        let v = varint(bytes, at)?;
+        Some((v >> 1) as i64 ^ -((v & 1) as i64))
+    }
+    if bytes.get(..4)? != MAGIC {
+        return None;
+    }
+    let more = bytes.get(4)? & FLAG_MORE != 0;
+    let mut at = 5;
+    let rows = varint(bytes, &mut at)?;
+    let position = varint(bytes, &mut at)?;
+    let index = u32::try_from(varint(bytes, &mut at)?).ok()?;
+    let (mut block, mut at_ms) = (0u64, 0i64);
+    let mut records = Vec::new();
+    while at < bytes.len() {
+        let tag = bytes[at];
+        at += 1;
+        if tag != TAG_PAINTS && tag != TAG_EXPAND {
+            return None;
+        }
+        block = block.checked_add(varint(bytes, &mut at)?)?;
+        at_ms = at_ms.checked_add(zigzag(bytes, &mut at)?)?;
+        let at_ms = u64::try_from(at_ms).ok()?;
+        if tag == TAG_EXPAND {
+            let from = u32::try_from(varint(bytes, &mut at)?).ok()?;
+            let to = u32::try_from(varint(bytes, &mut at)?).ok()?;
+            records.push(Record::Expand {
+                block,
+                at_ms,
+                from,
+                to,
+            });
+        } else {
+            let n = usize::try_from(varint(bytes, &mut at)?).ok()?;
+            let end = at.checked_add(n.checked_mul(3)?)?;
+            let tiles = bytes
+                .get(at..end)?
+                .chunks_exact(3)
+                .map(|t| (t[0], t[1], t[2]))
+                .collect();
+            at = end;
+            records.push(Record::Paints {
+                block,
+                at_ms,
+                tiles,
+            });
+        }
+    }
+    Some(Decoded {
+        more,
+        rows,
+        next: (rows > 0 || position > 0).then_some((position, index)),
+        records,
+    })
 }
 
 /// Lowercase hex, for the fixture.
@@ -207,6 +303,57 @@ mod tests {
         // (and the row count, now 128, takes a second byte)
         assert_eq!(both.len(), one.len() + 1 + (1 + 1 + 3 + 1) + 64 * 3);
         assert_eq!(&both[..4], MAGIC);
+    }
+
+    #[test]
+    fn the_fixture_decodes_back_to_its_rows_in_order() {
+        let fixture: serde_json::Value = serde_json::from_str(FIXTURE).unwrap();
+        let rows = rows_of(&fixture);
+        let page =
+            decode_page(&encode_page(&rows, Some(rows.last().unwrap().key()), true)).unwrap();
+        assert!(page.more);
+        assert_eq!(page.rows, 8);
+        assert_eq!(page.next, Some((223_200_010_000_000, 0)));
+        assert_eq!(
+            page.records,
+            vec![
+                // Two events in one block at one time share a header.
+                Record::Paints {
+                    block: 223_113_576,
+                    at_ms: 1_762_000_000_123,
+                    tiles: vec![(1, 2, 3), (63, 63, 15), (1, 2, 0)]
+                },
+                Record::Paints {
+                    block: 223_113_700,
+                    at_ms: 1_762_000_075_000,
+                    tiles: vec![(10, 11, 7)]
+                },
+                Record::Expand {
+                    block: 223_200_000,
+                    at_ms: 1_762_051_800_000,
+                    from: 64,
+                    to: 96
+                },
+                Record::Paints {
+                    block: 223_200_009,
+                    at_ms: 1_762_051_805_400,
+                    tiles: vec![(95, 80, 12), (64, 0, 4)]
+                },
+                // One millisecond *earlier* than the record before it.
+                Record::Paints {
+                    block: 223_200_010,
+                    at_ms: 1_762_051_805_399,
+                    tiles: vec![(0, 95, 9)]
+                },
+            ]
+        );
+        assert_eq!(decode_page(b"MPH2\x00\x00\x00\x00"), None);
+        assert_eq!(
+            decode_page(b"MPH1\x00\x01\x00\x00\x01\x05\x00\x09\x01"),
+            None,
+            "truncated"
+        );
+        assert_eq!(decode_page(b"MPH1\x00\x00\x00\x00").unwrap().next, None);
     }
 
     #[test]

@@ -57,9 +57,10 @@ pub const DRAW_HISTORY: &str = "draw_history";
 /// Where the backfill builds the replayed log before merging it in and renaming it over
 /// [`DRAW_HISTORY`].
 pub const DRAW_HISTORY_BACKFILL: &str = "draw_history:backfill";
-/// TIMELAPSE (spec §4.3): a counter the backfill bumps whenever it rewrites [`DRAW_HISTORY`].
-/// It is part of every cacheable `GET /api/history` URL, so a page cached before a backfill is
-/// never served as part of the log after it. Absent = 0.
+/// TIMELAPSE (spec §4.3): a number naming this copy of [`DRAW_HISTORY`]: the wall-clock ms at
+/// which it was first read, replaced by the backfill whenever it rewrites the stream. It is
+/// part of every cacheable `GET /api/history` URL, so a page cached before a backfill (or
+/// before a wipe and rebuild) is never served as part of the log after it.
 pub const DRAW_HISTORY_EPOCH: &str = "draw_history:epoch";
 /// Hash `{start_block, initial_side}`, written by the backfill once the log is certified to
 /// start at the deploy block. Absent, the log starts where the consumer began writing it.

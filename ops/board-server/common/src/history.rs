@@ -739,13 +739,37 @@ pub fn parse_stream_id(id: &str) -> Option<(u64, u32)> {
     Some((position.parse().ok()?, index.parse().ok()?))
 }
 
+/// The log's epoch: a number that names this copy of the log and is part of every cacheable
+/// page URL. It is the wall-clock ms at which the copy was first read or last rewritten, not a
+/// counter, so a mirror that is wiped and rebuilt gets a new one and can never be confused
+/// with pages cached from the copy before it. Set on first use (`SET … NX`).
+pub async fn read_epoch(con: &mut ConnectionManager, now_ms: u64) -> redis::RedisResult<u64> {
+    let (epoch,): (u64,) = redis::pipe()
+        .atomic()
+        .cmd("SET")
+        .arg(keys::DRAW_HISTORY_EPOCH)
+        .arg(now_ms)
+        .arg("NX")
+        .ignore()
+        .get(keys::DRAW_HISTORY_EPOCH)
+        .query_async(con)
+        .await?;
+    Ok(epoch)
+}
+
 pub async fn read_page(
     con: &mut ConnectionManager,
     start: PageStart,
     limit: usize,
+    now_ms: u64,
 ) -> redis::RedisResult<RawPage> {
-    let (epoch, rows): (Option<u64>, StreamRows) = redis::pipe()
+    let (epoch, rows): (u64, StreamRows) = redis::pipe()
         .atomic()
+        .cmd("SET")
+        .arg(keys::DRAW_HISTORY_EPOCH)
+        .arg(now_ms)
+        .arg("NX")
+        .ignore()
         .get(keys::DRAW_HISTORY_EPOCH)
         .cmd("XRANGE")
         .arg(keys::DRAW_HISTORY)
@@ -758,7 +782,7 @@ pub async fn read_page(
     let next = rows.last().and_then(|(id, _)| parse_stream_id(id));
     let more = rows.len() >= limit;
     Ok(RawPage {
-        epoch: epoch.unwrap_or(0),
+        epoch,
         rows: parse_rows(rows),
         next,
         more,
@@ -768,7 +792,8 @@ pub async fn read_page(
 /// `GET /api/history/head`: what the log holds, without reading it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Head {
-    /// Changes whenever the backfill rewrites the log; part of every cacheable page URL.
+    /// Names this copy of the log ([`read_epoch`]); changes whenever the backfill rewrites it.
+    /// Part of every cacheable page URL.
     pub epoch: u64,
     /// True once the backfill has certified that the log starts at the deploy block.
     pub complete: bool,
@@ -793,17 +818,16 @@ fn moment(rows: StreamRows) -> Option<Moment> {
     })
 }
 
-/// Five O(1) reads in one `MULTI`.
-pub async fn read_head(con: &mut ConnectionManager) -> redis::RedisResult<Head> {
-    type Snapshot = (
-        Option<u64>,
-        HashMap<String, String>,
-        u64,
-        StreamRows,
-        StreamRows,
-    );
+/// Five O(1) reads (and the epoch's first-use `SET … NX`) in one `MULTI`.
+pub async fn read_head(con: &mut ConnectionManager, now_ms: u64) -> redis::RedisResult<Head> {
+    type Snapshot = (u64, HashMap<String, String>, u64, StreamRows, StreamRows);
     let (epoch, genesis, entries, first, last): Snapshot = redis::pipe()
         .atomic()
+        .cmd("SET")
+        .arg(keys::DRAW_HISTORY_EPOCH)
+        .arg(now_ms)
+        .arg("NX")
+        .ignore()
         .get(keys::DRAW_HISTORY_EPOCH)
         .hgetall(keys::DRAW_HISTORY_GENESIS)
         .cmd("XLEN")
@@ -824,7 +848,7 @@ pub async fn read_head(con: &mut ConnectionManager) -> redis::RedisResult<Head> 
         .await?;
     let genesis = Genesis::from_hash(&genesis);
     Ok(Head {
-        epoch: epoch.unwrap_or(0),
+        epoch,
         complete: genesis.is_some(),
         start_block: genesis.map(|g| g.start_block),
         initial_side: genesis.map(|g| g.initial_side),
@@ -1199,7 +1223,10 @@ mod tests {
     }
 
     fn fields_of<const N: usize>(fields: [(&'static str, String); N]) -> HashMap<String, String> {
-        fields.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
+        fields
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect()
     }
 
     #[test]
@@ -1245,7 +1272,10 @@ mod tests {
         let Some(LogRow::Draw(e)) = LogRow::from_stream("100000000-4", &fields) else {
             panic!("an old draw entry must still parse")
         };
-        assert_eq!((e.position, e.index, e.x, e.y, e.color), (100_000_000, 4, 1, 2, 3));
+        assert_eq!(
+            (e.position, e.index, e.x, e.y, e.color),
+            (100_000_000, 4, 1, 2, 3)
+        );
     }
 
     fn paint_at(block: u64, x: u32, y: u32) -> LogRow {
@@ -1303,14 +1333,24 @@ mod tests {
         assert_eq!(compare_side(&unchained, Some(128), genesis, 10).len(), 1);
         // A log with no expansions and no genesis claims nothing about the side.
         assert!(compare_side(&missing, Some(96), None, 10).is_empty());
-        assert_eq!(compare_side(&missing, Some(96), genesis, 1).len(), 1, "capped");
+        assert_eq!(
+            compare_side(&missing, Some(96), genesis, 1).len(),
+            1,
+            "capped"
+        );
     }
 
     #[test]
     fn page_starts_and_cursors() {
         assert_eq!(PageStart::Beginning.xrange_arg(), "-");
-        assert_eq!(PageStart::After(100_000_000, 7).xrange_arg(), "(100000000-7");
-        assert_eq!(PageStart::FromPosition(100_000_000).xrange_arg(), "100000000-0");
+        assert_eq!(
+            PageStart::After(100_000_000, 7).xrange_arg(),
+            "(100000000-7"
+        );
+        assert_eq!(
+            PageStart::FromPosition(100_000_000).xrange_arg(),
+            "100000000-0"
+        );
         assert_eq!(parse_stream_id("100000000-7"), Some((100_000_000, 7)));
         assert_eq!(parse_stream_id("100000000"), None);
         assert_eq!(parse_stream_id("a-b"), None);
