@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use common::keys;
+use common::{history, keys};
 use common::{
     BoardEvent, BoardState, QueuedEvent, FREE_BITMAP_SIZE, MAX_OWNER_ID, REGION_BLOB_SIZE,
     WRITTEN_AT_SIZE,
@@ -109,6 +109,20 @@ pub async fn apply(
                     }
                 }
             }
+
+            // HISTORY and AWAY-A: the durable log and the victims' cover sets, in this same
+            // transaction, so they can never disagree with the board.
+            let (log, covers) =
+                history::record(event, &out.pixels, |id| names.get(&id).map(String::as_str));
+            for entry in &log {
+                entry.xadd(&mut pipe, keys::DRAW_HISTORY);
+            }
+            history::add_covers(
+                &mut pipe,
+                &covers,
+                event.block_timestamp_ms,
+                crate::consumer::now_ms(),
+            );
 
             for (id, delta) in &out.pixel_delta {
                 pipe.hincr(keys::ACCOUNT_PIXEL_COUNT, *id, *delta).ignore();
