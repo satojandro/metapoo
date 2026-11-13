@@ -53,6 +53,9 @@ board's transactions since the watermark, however long the gap.
     and the `LREM` all commit together.
   - An event at or below `last_applied_position` is dropped, so a re-delivered block cannot
     double-count.
+  - The same transaction appends each applied tile to the **draw log** (`draw_history`) and
+    records **cover events** for the account whose tile was painted over. See "History and
+    covers" below.
   - On start, an event stranded in `processing_queue` goes back to the head of the queue.
   - A failed apply is **retried** with backoff, on a reconnecting connection, rather than
     ending the consumer: skipping would leave a permanent gap, and exiting would freeze the
@@ -88,9 +91,51 @@ board's transactions since the watermark, however long the gap.
 | `GET /api/region/0/0/timestamps` | `[[x, y, ms], …]` for tiles written in the last hour |
 | `GET /api/account/{owner_id}` | the account name (immutable, cached for a year) |
 | `GET /api/stats/accounts` | `[{account_id, pixel_count, earning_count}]`, largest first |
+| `GET /api/account-covers?account=<id>&since_ms=<ms>` | AWAY-A (return-and-growth spec §1.2). `{"count": n, "by": [{"account": id, "tiles": n}], "first": {"x": x, "y": y}}`: how many of `account`'s tiles other accounts painted over since `since_ms`. `count` and each `tiles` count **distinct** tiles (a tile covered, won back and covered again counts once; one tile covered by two accounts counts once in `count` and once for each of them). `by` is most tiles first, ties by account id. `first` is the earliest covered tile in the window, and **`null` when `count` is 0** (also for an account never covered). The window never starts earlier than 30 days ago (the sets keep no more). `account` is trimmed and lowercased; a missing or invalid account id, or a `since_ms` that is missing or not a whole number, is **400**. 503 if Valkey does not answer in 2 s. `Cache-Control: no-cache, must-revalidate` |
 | `GET /api/health` | `status` (`ok` / `degraded` while retrying / `stalled` when the consumer has not ticked for a minute), `last_processed_block`, `last_applied_block` (with nothing queued or in processing, everything through `last_processed_block` is applied, so it reports that; otherwise the last applied event's block), `queue_length`, `side`, `painted_tiles`, `consumer_last_tick_ms`, `consumer_failures` |
 | `POST /api/hint` | 202: poll the index now, a tab just painted. 429 within 2 s of the last accepted hint. Carries no data |
 | `GET /ws` | pushes `{"type":"draw",…}` and `{"type":"board_expanded",…}`. Send `{"type":"catch_up","since_timestamp_ms":n}` after a reconnect |
+
+## History and covers
+
+`draw_events` is the WebSocket catch-up buffer: a sorted set trimmed to `CATCHUP_RETENTION_MS`
+(2 h by default) on every write. It is not a history. Two keys are (`common/src/history.rs`):
+
+| key | what | kept |
+|---|---|---|
+| `draw_history` | Stream. One entry per applied tile, fields `block, at_ms, x, y, color, by, free` (spec §4.2). Id `<position>-<index>`: the event's `block × 10⁶ + place in block`, then the tile's place in the event, so ids are fixed by the chain and a timelapse can page by block with `XRANGE draw_history <block × 10⁶> +`. Tiles the contract rejected are not in it. `board_expanded` is not in it either. | **forever**: no `MAXLEN`, nothing trims it |
+| `covers:<account>` | Sorted set per account whose tile someone else painted over, scored by `at_ms`. Member `<position>:<index>:{"x","y","by","at_ms"}`, so writing the same cover twice is one member. Painting over your own tile is not a cover. | 30 days: trimmed on each write, the key expires 30 days after its last write, covers already older than that are never written |
+
+Both are written in the consumer's `MULTI`/`EXEC` with the board, so they cannot disagree
+with it. They are as durable as the board itself: `valkey.conf` snapshots (RDB) every 60 s, so
+a Valkey crash can lose up to a minute of board, log and `last_processed_block` **together**,
+and the indexer re-queues that minute. Turning on AOF would narrow that window for all three;
+it is not done here.
+
+**Backfill, once.** The log starts when this version is deployed. To fill it from the deploy
+block (spec §4.2), with the server and indexer running:
+
+```bash
+docker compose run --rm indexer board-history backfill   # uses .env: CONTRACT_ID, START_BLOCK_HEIGHT, INITIAL_SIDE
+```
+
+It reads the board's events from `START_BLOCK_HEIGHT` through the mirror's
+`last_applied_position` from the transaction index (~20 requests for the testing board's
+history), replays them on an empty board with the consumer's rules, and **writes nothing**
+unless the replay equals what the consumer has already logged up to that point. It then
+builds the log in `draw_history:backfill`, and one Lua script copies across the live entries
+newer than the replay and renames it over `draw_history` (the consumer cannot append in
+between). It re-adds the last 30 days of covers and ends with the tip check. Running it twice
+changes nothing.
+
+The replay numbers events the way the `txindex` indexer does. A mirror built by the `stream`
+indexer numbers events within a block differently, and the backfill will refuse rather than
+merge mismatched ids.
+
+**Tip check.** `board-history check` rebuilds each tile's latest colour, holder and free bit
+from the log and compares it with the stored blob (the same comparison `replay-check.py` makes
+against the chain). Exit 0 when they agree, 1 with the differences when not. Before the
+backfill it fails, because the log does not yet hold the tiles painted before it started.
 
 ## Run
 
@@ -122,6 +167,9 @@ cargo test -- --test-threads=1          # Valkey tests are skipped unless TEST_V
                                         # the outage test needs valkey-server/redis-server or Docker
 cargo clippy --all-targets -- -D warnings
 ```
+
+The log and covers are tested in `server/tests/history.rs` (consumer and endpoint) and
+`indexer/tests/backfill.rs` (backfill with a scripted index, the real consumer and Valkey).
 
 Spec §7.1, a replay that matches the chain tile for tile:
 
