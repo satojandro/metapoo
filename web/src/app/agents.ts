@@ -3,7 +3,7 @@
  *
  * Spec: docs/implementation/2026-11-09-agents-page-spec.md.
  * The mechanics live in `/skill.md`; this page never repeats them. It carries
- * one copyable prompt, the live prices, and the safety story.
+ * three copyable prompts, the live prices, and the safety story.
  *
  * Every number is read from the board. Until a read confirms one it shows "…";
  * if the read fails, the line that needs it is hidden, never guessed.
@@ -32,19 +32,50 @@ export const EMPTY_COSTS: AgentsCosts = {
 /** Tiles in the example drawing the price table quotes. */
 export const EXAMPLE_TILES = 40;
 
+export interface AgentPrompt {
+  id: "invader" | "name" | "look";
+  /** Short label above the prompt. */
+  label: string;
+  /** One line under the label: what it costs and why you would pick it. */
+  note: string;
+  text: string;
+}
+
+/** The budget cap written into the two painting prompts. */
+export const PROMPT_BUDGET_NEAR = "0.1";
+
 /**
- * The text of the "Give this to your agent" block. It is a prompt, not a URL:
- * a bare link pasted into a chat gets summarised instead of acted on.
+ * The three "Give this to your agent" prompts (return/growth spec §5.1).
  *
- * It also has to leave the decision with the human. The agent's job is what the
- * human asked for; the skill is only the mechanics.
+ * Each is a prompt, not a URL: a bare link pasted into a chat gets summarised
+ * instead of acted on. Each painting prompt carries a budget and asks for the
+ * plan and cost first, so the decision stays with the human. The look-only
+ * prompt costs nothing and is the easiest first step.
  */
-export function agentPrompt(origin: string): string {
+export function agentPrompts(origin: string): AgentPrompt[] {
   const base = origin.replace(/\/$/, "");
+  const read = `Read ${base}/skill.md.`;
+  const guard = `Spend at most ${PROMPT_BUDGET_NEAR} NEAR. Show me the plan and the cost before you spend.`;
   return [
-    `Read ${base}/skill.md, then paint what I ask for on the Meta Poo wall.`,
-    `Tell me the plan, the spot and the cost before you spend.`,
-  ].join(" ");
+    {
+      id: "invader",
+      label: "Draw something small",
+      note: `Up to ${PROMPT_BUDGET_NEAR} NEAR, and it asks first.`,
+      text: `${read} Find an empty spot on the Meta Poo wall and draw a small space invader. ${guard}`,
+    },
+    {
+      id: "name",
+      label: "Write your name",
+      note: "Replace YOUR NAME before you paste it.",
+      text: `${read} Write my name, YOUR NAME, in 5-tile-high letters in an empty spot on the Meta Poo wall. ${guard}`,
+    },
+    {
+      id: "look",
+      label: "Just look — free",
+      note: "Costs nothing. A good first step.",
+      text: `${read} Look at the Meta Poo wall and tell me what is there. Do not paint.`,
+    },
+  ];
 }
 
 function yocto(value: unknown): bigint | null {

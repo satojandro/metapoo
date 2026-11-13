@@ -4,7 +4,7 @@ import { createOperationsStore } from "./operations";
 import type { PageContext } from "./page-registry";
 import { matchRoute } from "./routes";
 import { mountAgentsPage, type AgentsPageDeps } from "./agents-page";
-import { agentPrompt, priceLines, type AgentsCosts } from "./agents";
+import { agentPrompts, PROMPT_BUDGET_NEAR, priceLines, type AgentsCosts } from "./agents";
 
 const LIVE: AgentsCosts = {
   nearPerCredit: 2_500_000_000_000_000_000_000n,
@@ -57,14 +57,30 @@ async function mount(deps: Partial<AgentsPageDeps> = {}) {
   return { root, q, dispose };
 }
 
-describe("agentPrompt", () => {
-  it("tells the agent to do what the human asked, after reading the skill", () => {
-    const text = agentPrompt("https://wall.example/");
-    expect(text).toContain("https://wall.example/skill.md");
-    expect(text).toContain("paint what I ask for");
-    // The old wording asked the agent to invent its own subject and ignored the user.
-    expect(text).not.toMatch(/paint something that answers/i);
-    expect(text).toMatch(/before you spend/i);
+describe("agentPrompts", () => {
+  const prompts = agentPrompts("https://wall.example/");
+
+  it("offers three prompts, each pointing at the skill", () => {
+    expect(prompts.map((p) => p.id)).toEqual(["invader", "name", "look"]);
+    for (const p of prompts) expect(p.text).toContain("https://wall.example/skill.md");
+  });
+
+  it("puts a budget and an ask-first line in every prompt that paints", () => {
+    for (const p of prompts.filter((x) => x.id !== "look")) {
+      expect(p.text).toContain(`at most ${PROMPT_BUDGET_NEAR} NEAR`);
+      expect(p.text).toMatch(/plan and the cost before you spend/i);
+    }
+  });
+
+  it("has one prompt that only looks and spends nothing", () => {
+    const look = prompts.find((p) => p.id === "look")!;
+    expect(look.text).toMatch(/do not paint/i);
+    expect(look.text).not.toMatch(/NEAR\./);
+    expect(look.label).toMatch(/free/i);
+  });
+
+  it("leaves an obvious placeholder in the name prompt", () => {
+    expect(prompts.find((p) => p.id === "name")!.text).toContain("YOUR NAME");
   });
 });
 
@@ -83,15 +99,23 @@ describe("priceLines", () => {
 });
 
 describe("mountAgentsPage", () => {
-  it("copies exactly the text it shows", async () => {
+  it("renders three prompts, each with its own Copy button", async () => {
+    const { root } = await mount();
+    expect(root.querySelectorAll(".agents-prompt-item")).toHaveLength(3);
+    expect(root.querySelectorAll("[data-agents-copy]")).toHaveLength(3);
+  });
+
+  it("copies exactly the text of the prompt whose button was pressed", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const { q } = await mount();
-    const shown = q("#agents-prompt").textContent!;
-    q<HTMLButtonElement>("[data-agents-copy]").click();
+    const shown = q("#agents-prompt-look").textContent!;
+    q<HTMLButtonElement>('[data-agents-copy="look"]').click();
     await new Promise((r) => setTimeout(r, 0));
+    expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText).toHaveBeenCalledWith(shown);
-    expect(q("[data-agents-copy]").textContent).toBe("Copied");
+    expect(q('[data-agents-copy="look"]').textContent).toBe("Copied");
+    expect(q('[data-agents-copy="invader"]').textContent).toBe("Copy");
   });
 
   it("shows live prices and the free allowance", async () => {
