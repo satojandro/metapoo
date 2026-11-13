@@ -59,3 +59,20 @@ pub const DRAW_HISTORY_BACKFILL: &str = "draw_history:backfill";
 /// AWAY-A (spec §1.2): prefix of one sorted set per account whose tiles were covered,
 /// `covers:<account>`, scored by `at_ms`, trimmed to 30 days. See `history.rs`.
 pub const COVERS_PREFIX: &str = "covers:";
+
+/// AWAY-B (spec §1.3), Telegram alerts. Everything the feature stores is under `telegram:`.
+/// See `telegram.rs` for what each holds. `telegram:links` (account → chat id) is the only
+/// personal data; no HTTP route returns it.
+pub const TELEGRAM_LINKS: &str = "telegram:links";
+/// Prefix of one set per chat: the accounts that alert into it (`/stop` unlinks them all).
+pub const TELEGRAM_CHAT_PREFIX: &str = "telegram:chat:";
+/// Prefix of one hash per link/unlink code, expiring with the code.
+pub const TELEGRAM_CHALLENGE_PREFIX: &str = "telegram:challenge:";
+/// account → JSON `AlertState`: the send cursor and when the last alert went out.
+pub const TELEGRAM_ALERT_STATE: &str = "telegram:alert_state";
+/// Prefix of one set per account: SHA-256 of the status tokens issued to its browsers.
+pub const TELEGRAM_TOKENS_PREFIX: &str = "telegram:tokens:";
+/// Notices the server leaves for the bot to send ("you are linked").
+pub const TELEGRAM_OUTBOX: &str = "telegram:outbox";
+/// Next `getUpdates` offset.
+pub const TELEGRAM_UPDATE_OFFSET: &str = "telegram:update_offset";

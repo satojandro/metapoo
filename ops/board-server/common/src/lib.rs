@@ -8,8 +8,10 @@ pub mod demand;
 pub mod event;
 pub mod history;
 pub mod keys;
+pub mod nep413;
 pub mod palette;
 pub mod region;
+pub mod telegram;
 pub mod valkey;
 
 pub use apply::*;
