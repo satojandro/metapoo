@@ -1,7 +1,8 @@
 //! Free paints (spec §F1, §F2) and the one pricing routine every paint path uses.
 //!
-//! - **F1, free first paints.** Until `first_fill_complete` latches, a registered
-//!   account's first `free_first_paints_per_account` paints of *empty* cells cost 0.
+//! - **F1, free first paints.** Until `first_fill_complete` latches, an account's
+//!   first `free_first_paints_per_account` paints of *empty* cells cost 0, whether or
+//!   not it ever registered: a brand-new wallet can paint before it buys anything.
 //! - **F2, happy hour.** Once a week, after the latch, base-tier cells cost 0 up to
 //!   `happy_hour_cap_per_account` per window, for accounts that have bought credits
 //!   (when `happy_hour_requires_purchase` is on).
@@ -62,7 +63,7 @@ pub struct StrokeCostView {
 #[near(serializers = [json])]
 pub struct FreeFirstPaintsView {
     pub used: u32,
-    /// Free first paints this account can still use now (0 when inactive or unregistered).
+    /// Free first paints this account can still use now (0 while the programme is inactive).
     pub remaining: u32,
     /// True while the programme runs: before the first fill and allowance above 0.
     pub active: bool,
@@ -209,12 +210,14 @@ impl Board {
     /// An entry repeating an earlier key was just repainted by that entry, so it is
     /// priced at the young tier and is never an empty cell. Free first paints go to
     /// empty cells in order; happy hour covers base-tier cells in order. The two never
-    /// overlap: one needs the latch unset, the other set. Free paints need a registered
-    /// account. `account = None` prices without any free paints.
+    /// overlap: one needs the latch unset, the other set. Free first paints need no
+    /// registration, so a new wallet can paint before it buys a credit; happy hour
+    /// still needs a registered (and, per the flag, buying) account.
+    /// `account = None` prices without any free paints.
     pub(crate) fn plan_stroke(&self, account: Option<&AccountId>, keys: &[u32], now: u64) -> StrokePlan {
         let mut extra = account.map(|a| self.account_extra(a)).unwrap_or_default();
         let mut first_left: u32 = match account {
-            Some(a) if !self.first_fill_complete && self.is_registered(a) => self
+            Some(_) if !self.first_fill_complete => self
                 .tunables
                 .free_first_paints_per_account
                 .saturating_sub(u32::from(extra.free_first_used)),
@@ -307,7 +310,7 @@ impl Board {
         let registered = self.is_registered(&account_id);
         FreeFirstPaintsView {
             used,
-            remaining: if active && registered {
+            remaining: if active {
                 allowance.saturating_sub(used)
             } else {
                 0
@@ -491,12 +494,24 @@ mod tests {
     }
 
     #[test]
-    fn f1_an_unregistered_account_gets_no_free_paint() {
+    fn f1_an_unregistered_account_paints_its_first_25_free_then_needs_credits() {
         let mut board = setup();
         context(5, SUN_1_NOV_2026);
-        rejected("PriceRoseAboveMax", || board.draw(0, 0, 1, 0));
-        rejected("AccountNotRegistered", || board.draw(0, 0, 1, 1));
+        // No balance record, no registration fee paid: empty cells are still free.
+        assert!(!board.payments.balances.contains_key(&accounts(5)));
+        let view = board.get_free_first_paints(accounts(5));
+        assert_eq!((view.remaining, view.active, view.registered), (25, true, false));
+        let quote = board.get_stroke_cost(Some(accounts(5)), (0..25).map(|x| cell(x, 0)).collect());
+        assert_eq!((quote.total, quote.free.iter().filter(|f| **f).count()), (0, 25));
+        board.draw_many(row(0, 25, 1), 0);
+        assert_eq!(board.get_pixel(24, 0).color, Some(1));
         assert_eq!(board.get_free_first_paints(accounts(5)).remaining, 0);
+        // Past the allowance the stroke costs credits, and an unregistered painter
+        // has none to spend: the quote rejects before anything is written or charged.
+        rejected("PriceRoseAboveMax", || board.draw(25, 0, 1, 0));
+        rejected("AccountNotRegistered", || board.draw(25, 0, 1, 1));
+        assert_eq!(board.get_pixel(25, 0).color, None);
+        assert!(!board.free_cells.contains(&crate::pixel_key(25, 0)));
     }
 
     #[test]

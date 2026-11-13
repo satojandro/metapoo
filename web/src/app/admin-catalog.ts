@@ -33,7 +33,7 @@ export const ADMIN_GROUPS: AdminGroup[] = [
     { name: "Reserve floor", what: "NEAR the board always keeps on top of storage, never distributed.", launch: "5 NEAR", range: "At least 5 NEAR", how: "now", rule: "Owner, any time.", field: "reserve_floor" },
   ]},
   { id: "free", title: "Free painting", blurb: "Seeds the wall at launch, then a weekly happy hour once it's full.", items: [
-    { name: "Free first paints per person", what: "Empty cells each registered account can paint for free, until every cell has been painted once.", launch: "25", range: "0–100", how: "now", rule: "Owner, any time. 0 turns it off.", field: "free_first_paints_per_account" },
+    { name: "Free first paints per person", what: "Empty cells each account can paint for free, until every cell has been painted once. No registration or credit needed.", launch: "25", range: "0–100", how: "now", rule: "Owner, any time. 0 turns it off.", field: "free_first_paints_per_account" },
     { name: "First board full", what: "Flips on when all 16,384 cells have been painted. Ends free first paints, allows happy hour. Never flips back.", launch: "Not yet", range: "—", how: "read", rule: "Set by the board.", field: "first_fill_complete" },
     { name: "Happy hour", what: "Weekly window where base-price cells are free. Only after the first board is full.", launch: "Off at deploy, on once the board is full", range: "On or off", how: "wait", rule: "Turning off: immediate. Turning on: 24 h after the last happy-hour change.", field: "happy_hour_enabled" },
     { name: "Happy hour day", what: "Day of the week.", launch: "Sunday", range: "Monday–Sunday", how: "wait", rule: "Moving it while on: 24 h cooldown.", field: "happy_hour_weekday" },
