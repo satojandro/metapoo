@@ -32,7 +32,11 @@ const TEMPLATE = `
   <p class="hall-soon">Watch the wall fill, tile by tile — a timelapse is coming soon.</p>
 </article>`;
 
-function card(entry: HallEntry): HTMLLIElement {
+/**
+ * One still as a card. Shared with the agent gallery on /agents, which sits one
+ * heading level lower and appends the prompt to the caption.
+ */
+export function hallCard(entry: HallEntry, heading: "h3" | "h4" = "h3"): HTMLLIElement {
   const li = document.createElement("li");
   li.className = "hall-card";
   li.dataset.hallId = entry.id;
@@ -46,7 +50,7 @@ function card(entry: HallEntry): HTMLLIElement {
   figure.append(img);
 
   const caption = document.createElement("figcaption");
-  const title = document.createElement("h3");
+  const title = document.createElement(heading);
   title.textContent = entry.title;
   const meta = document.createElement("p");
   meta.className = "hall-meta";
@@ -76,7 +80,7 @@ export function mountHallPage(root: HTMLElement, _ctx: PageContext, overrides: P
   const grid = page.querySelector<HTMLOListElement>("[data-hall-grid]")!;
   const empty = page.querySelector<HTMLElement>("[data-hall-empty]")!;
 
-  grid.append(...deps.entries.map(card));
+  grid.append(...deps.entries.map((e) => hallCard(e)));
   grid.hidden = deps.entries.length === 0;
   empty.hidden = deps.entries.length > 0;
 

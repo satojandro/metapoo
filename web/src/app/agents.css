@@ -111,6 +111,30 @@
 .agents-fund h3 { font-size: var(--mp-text-h3); font-weight: 800; }
 .agents-fund p { color: var(--mp-soft); font-size: var(--mp-text-body); }
 
+/* Gallery (return/growth spec §5.2). Cards are the Hall's (.hall-card, hall.css). */
+.agents-gallery { display: grid; gap: var(--mp-space-3); }
+.agents-gallery h3 { font-size: var(--mp-text-h3); font-weight: 800; }
+.agents-gallery-lede { color: var(--mp-soft); font-size: var(--mp-text-body); max-width: 62ch; }
+.agents-gallery-empty {
+  border: 1px dashed var(--mp-line);
+  border-radius: var(--mp-radius-md);
+  padding: var(--mp-space-4);
+  color: var(--mp-soft);
+  font-size: var(--mp-text-body);
+}
+.agents-gallery-empty strong { color: var(--mp-fg); }
+.agents-piece-prompt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--mp-space-2);
+  align-items: center;
+  margin-top: var(--mp-space-2);
+}
+.agents-piece-label { font: 800 var(--mp-text-sm) var(--mp-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--mp-muted); }
+/* A long prompt scrolls inside its box; the card keeps its shape. */
+.agents-piece-prompt .agents-prompt { grid-column: 1 / -1; max-height: 13.5em; overflow-y: auto; font-size: var(--mp-text-sm); }
+.agents-piece-prompt .agents-copy { padding: 6px 16px; font-size: var(--mp-text-sm); }
+
 /* Builders */
 .agents-foot { border-top: 1px solid var(--mp-line); padding-top: var(--mp-space-3); display: flex; flex-wrap: wrap; gap: var(--mp-space-4); font: var(--mp-text-sm) var(--mp-mono); color: var(--mp-muted); }
 .agents-foot code { color: var(--mp-soft); overflow-wrap: anywhere; }
