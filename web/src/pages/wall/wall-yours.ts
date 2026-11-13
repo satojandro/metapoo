@@ -25,6 +25,7 @@
 import type { PixelView } from "@shared/types.ts";
 import type { AccountCovers, ReadAccountCovers } from "../../board-server/account-covers";
 import { shortAccount } from "../../shared/short-account";
+import { syncNameNote } from "../../shared/get-a-name";
 import type { WallScope } from "./wall-scope";
 
 export interface Cell {
@@ -226,6 +227,8 @@ export interface WallYoursDeps {
   flyTo(cell: Cell): void;
   /** Open the paint flow on a tile, as the Tile card's "Paint over this" does. */
   paintBack(cell: Cell): void;
+  /** NAMES: offer "Get a name" to a viewer on a hex id. Defaults to the build flag. */
+  namesGuide?: boolean;
 }
 
 export interface WallYours {
@@ -385,6 +388,7 @@ export function createWallYours(deps: WallYoursDeps): WallYours {
     if (scope.isDisposed()) return;
     const viewer = deps.viewer();
     section.hidden = viewer === null;
+    syncNameNote(q(".wall-yours-note"), viewer, deps.namesGuide);
     if (!viewer) {
       comparedFor = null;
       result = null;

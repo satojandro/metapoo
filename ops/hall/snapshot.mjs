@@ -9,6 +9,10 @@
  * entry skeleton with the block the still was read at. Title and painters are for a
  * human to fill in: adding an entry is a commit.
  *
+ * With --gallery the still is for the agent gallery on /agents (spec §5.2): it goes to
+ * `web/public/agents-gallery/<id>.png` and the entry is an `agents-gallery.json` one,
+ * with `prompt` to fill in as well.
+ *
  * Reads only. With --server it uses the region blob (`GET /api/region/0/0`, block from
  * `x-last-block`); with --rpc it pages `get_pixels` pinned to one final block.
  */
@@ -23,6 +27,7 @@ import {
   gridFromRegionBlob,
   parseCrop,
   rasterize,
+  stillDir,
 } from "./lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -38,13 +43,14 @@ const { values } = parseArgs({
     crop: { type: "string" },
     scale: { type: "string", default: "8" },
     out: { type: "string" },
+    gallery: { type: "boolean", default: false },
     help: { type: "boolean", short: "h" },
   },
 });
 
 if (values.help || !values.id || (!values.server && !(values.rpc && values.board))) {
   console.error(
-    "usage: snapshot.mjs --id <slug> (--server <url> | --rpc <url> --board <contract>) [--crop x,y,w,h] [--scale n] [--out file.png]",
+    "usage: snapshot.mjs --id <slug> (--server <url> | --rpc <url> --board <contract>) [--crop x,y,w,h] [--scale n] [--gallery] [--out file.png]",
   );
   process.exit(values.help ? 0 : 2);
 }
@@ -112,7 +118,7 @@ const source = values.server ? await fromServer(values.server) : await fromChain
 const crop = parseCrop(values.crop, source.side);
 const scale = Number(values.scale);
 const image = rasterize(source.grid, crop, scale);
-const out = resolve(values.out ?? resolve(repo, "web/public/hall", `${values.id}.png`));
+const out = resolve(values.out ?? resolve(repo, stillDir(values.gallery), `${values.id}.png`));
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(
   out,
@@ -129,7 +135,7 @@ const served = out.startsWith(publicDir) ? `/${relative(publicDir, out).split("\
 console.error(`wrote ${out} (${image.width} × ${image.height}, block ${source.block})`);
 console.log(
   JSON.stringify(
-    entrySkeleton({ id: values.id, block: source.block, crop, image: served, date: new Date().toISOString().slice(0, 10) }),
+    entrySkeleton({ id: values.id, block: source.block, crop, image: served, date: new Date().toISOString().slice(0, 10), gallery: values.gallery }),
     null,
     2,
   ),

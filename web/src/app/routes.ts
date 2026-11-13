@@ -91,6 +91,7 @@ export function matchRoute(pathname: string, search = ""): ParsedRoute {
   if (path === "/hall") {
     return { path, pageId: "hall", params: {}, query };
   }
+  if (path === "/timelapse") return { path, pageId: "timelapse", params: {}, query };
   if (path === "/money") {
     return { path, pageId: "money", params: {}, query };
   }

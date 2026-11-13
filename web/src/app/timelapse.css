@@ -1,0 +1,170 @@
+/* /timelapse. Spec: docs/implementation/2026-11-11-return-and-growth-spec.md §4.3
+   Tokens only (web/src/design/tokens.css): no literal colours. The wall is the picture;
+   the one thing with a voice of its own is the scrubber's day ruler. */
+
+.tl {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 0 64px;
+  display: grid;
+  gap: var(--mp-space-6);
+  color: var(--mp-fg);
+  font: var(--mp-text-base) / var(--mp-leading) var(--mp-font);
+  min-width: 0;
+}
+.tl p, .tl dl, .tl dd { margin: 0; }
+.tl h2 { margin: 0; text-wrap: balance; }
+.tl [hidden] { display: none !important; }
+
+.tl-head { display: grid; gap: var(--mp-space-2); max-width: 62ch; }
+.tl-head h2 { font-size: clamp(34px, 6.2vw, 60px); line-height: 1; font-weight: 900; letter-spacing: -1.8px; color: var(--mp-tag); }
+.tl-head h2:focus { outline: none; }
+.tl-lede { color: var(--mp-soft); font-size: var(--mp-text-lead); }
+
+.tl-state {
+  border: 1px dashed var(--mp-line);
+  border-radius: var(--mp-radius-md);
+  padding: var(--mp-space-5);
+  display: grid;
+  gap: var(--mp-space-3);
+  justify-items: start;
+  color: var(--mp-soft);
+  max-width: 62ch;
+}
+.tl-state strong { color: var(--mp-fg); }
+.tl-state a.mp-btn { text-decoration: none; display: inline-flex; align-items: center; }
+
+.tl-player {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  grid-template-areas: "stage side" "transport transport";
+  gap: var(--mp-space-5) var(--mp-space-6);
+  align-items: start;
+}
+
+/* The stage is the full-grown wall's footprint. Tiles the wall did not have yet are
+   transparent on the canvas, so the hatch shows through: ground not built on. */
+.tl-stage {
+  grid-area: stage;
+  aspect-ratio: 1;
+  width: 100%;
+  max-width: min(100%, 76vh);
+  justify-self: start;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-sm);
+  background:
+    repeating-linear-gradient(45deg, transparent 0 7px, var(--mp-line) 7px 8px),
+    var(--mp-bg);
+  overflow: hidden;
+}
+/* `.tl-stage .tl-canvas` outranks the site-wide `canvas` rule (style.css), which gives every
+   canvas the live wall's frame, background and size. */
+.tl-stage .tl-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  image-rendering: pixelated;
+  cursor: default;
+  touch-action: auto;
+}
+
+.tl-side { grid-area: side; display: grid; gap: var(--mp-space-5); align-content: start; min-width: 0; }
+.tl-now { display: grid; gap: var(--mp-space-3); }
+.tl-now dt { color: var(--mp-muted); font-size: var(--mp-text-sm); }
+.tl-now dd { font: 700 var(--mp-text-lead) var(--mp-mono); font-variant-numeric: tabular-nums; color: var(--mp-fg); }
+.tl-when dd { font: 900 clamp(22px, 2.6vw, 28px) / 1.15 var(--mp-font); letter-spacing: -0.4px; text-wrap: balance; }
+.tl-start { color: var(--mp-muted); font-size: var(--mp-text-md); border-top: 1px solid var(--mp-line); padding-top: var(--mp-space-3); }
+.tl-start.is-partial { color: var(--mp-soft); border: 1px solid var(--mp-warn); border-radius: var(--mp-radius-md); padding: var(--mp-space-3); }
+.tl-share { display: grid; gap: var(--mp-space-2); justify-items: start; }
+.tl-share-status { color: var(--mp-muted); font-size: var(--mp-text-md); min-height: 1.5em; }
+.tl-share-url {
+  width: 100%;
+  min-height: var(--mp-hit);
+  font: var(--mp-text-sm) var(--mp-mono);
+  color: var(--mp-fg);
+  background: var(--mp-card);
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-md);
+  padding: 0 var(--mp-space-3);
+}
+.tl-share-url:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
+
+.tl-transport {
+  grid-area: transport;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--mp-space-4);
+  align-items: start;
+}
+.tl-play { min-width: 84px; }
+.tl-speeds { display: flex; gap: var(--mp-space-1); }
+.tl-speeds .mp-chip { min-height: var(--mp-hit); padding-inline: var(--mp-space-3); font-variant-numeric: tabular-nums; }
+
+/* The scrubber: a ruler of days under a native range input. A wide day was a busy day. */
+.tl-scrub { position: relative; display: grid; min-width: 0; }
+.tl-days {
+  position: absolute;
+  inset: 12px 0 auto 0;
+  height: 20px;
+  display: flex;
+  gap: 2px;
+  border-radius: var(--mp-radius-sm);
+  overflow: hidden;
+  pointer-events: none;
+}
+.tl-day { flex: 1 1 0; min-width: 0; background: var(--mp-card-2); }
+.tl-day:nth-child(even) { background: var(--mp-line); }
+.tl-grew { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: var(--mp-near); }
+.tl-range {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  width: 100%;
+  height: var(--mp-hit);
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+.tl-range::-webkit-slider-runnable-track { height: 20px; background: transparent; }
+.tl-range::-moz-range-track { height: 20px; background: transparent; }
+.tl-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 36px;
+  margin-top: -8px;
+  border-radius: 2px;
+  background: var(--mp-tag);
+  border: 2px solid var(--mp-bg);
+  box-sizing: content-box;
+}
+.tl-range::-moz-range-thumb {
+  width: 10px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--mp-tag);
+  border: 2px solid var(--mp-bg);
+}
+.tl-range:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; border-radius: var(--mp-radius-sm); }
+.tl-day-labels { position: relative; height: 18px; color: var(--mp-muted); font: var(--mp-text-xs) var(--mp-mono); }
+.tl-day-label { position: absolute; top: 0; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .tl { padding-top: var(--mp-space-4); gap: var(--mp-space-4); }
+  .tl-player { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stage" "transport" "side"; gap: var(--mp-space-4); }
+  .tl-stage { max-width: 100%; }
+  .tl-transport { grid-template-columns: auto minmax(0, 1fr); }
+  .tl-scrub { grid-column: 1 / -1; grid-row: 1; }
+  .tl-speeds { justify-self: end; }
+  .tl-now { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tl-when, .tl-now > div:nth-child(3) { grid-column: 1 / -1; }
+  .tl-now > div:nth-child(3) { order: 1; }
+  .tl-now dd { font-size: var(--mp-text-body); }
+  .tl-when dd { font-size: 22px; }
+}

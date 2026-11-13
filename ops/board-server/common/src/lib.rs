@@ -7,6 +7,7 @@ pub mod catchup;
 pub mod demand;
 pub mod event;
 pub mod history;
+pub mod history_wire;
 pub mod keys;
 pub mod nep413;
 pub mod palette;

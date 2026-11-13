@@ -49,6 +49,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/hint", post(hint))
         .route("/ws", get(ws_upgrade))
+        // TIMELAPSE: /api/history/head and /api/history (history_api.rs).
+        .merge(crate::history_api::routes())
         .with_state(state)
 }
 

@@ -50,7 +50,7 @@
   image-rendering: pixelated;
 }
 .hall-card figcaption { padding: var(--mp-space-4); display: grid; gap: 6px; align-content: start; }
-.hall-card h3 { font-size: var(--mp-text-h3); font-weight: 800; }
+.hall-card h3, .hall-card h4 { margin: 0; font-size: var(--mp-text-h3); font-weight: 800; }
 .hall-meta { color: var(--mp-muted); font: var(--mp-text-sm) var(--mp-mono); }
 .hall-painters { color: var(--mp-soft); font-size: var(--mp-text-md); overflow-wrap: anywhere; }
 .hall-link { color: var(--mp-near); font-size: var(--mp-text-md); margin-top: var(--mp-space-2); }
@@ -65,3 +65,4 @@
   color: var(--mp-soft);
 }
 .hall-soon { color: var(--mp-muted); font: var(--mp-text-sm) var(--mp-mono); border-top: 1px solid var(--mp-line); padding-top: var(--mp-space-3); }
+.hall-soon a { color: var(--mp-near); }

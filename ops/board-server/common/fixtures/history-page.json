@@ -1,0 +1,84 @@
+{
+  "about": "One GET /api/history page. `rows` is what the log held; `hex` is what the server sends for it (common/src/history_wire.rs) and what the web decoder must read back (web/src/timelapse/history-wire.test.ts). Encoded with next = the last row's id and more = true.",
+  "hex": "4d504831010880adbdeafcdf320001e8e2b16af6d192f6c766030102033f3f0f010200017cfa9109010a0b07029ca205908baa3140600109b054025f500c40000401010101005f09",
+  "rows": [
+    {
+      "at_ms": 1762000000123,
+      "block": 223113576,
+      "by": "bob.near",
+      "color": 3,
+      "free": false,
+      "id": "223113576000002-0",
+      "x": 1,
+      "y": 2
+    },
+    {
+      "at_ms": 1762000000123,
+      "block": 223113576,
+      "by": "bob.near",
+      "color": 15,
+      "free": true,
+      "id": "223113576000002-1",
+      "x": 63,
+      "y": 63
+    },
+    {
+      "at_ms": 1762000000123,
+      "block": 223113576,
+      "by": "alice.near",
+      "color": 0,
+      "free": false,
+      "id": "223113576000005-0",
+      "x": 1,
+      "y": 2
+    },
+    {
+      "at_ms": 1762000075000,
+      "block": 223113700,
+      "by": "alice.near",
+      "color": 7,
+      "free": false,
+      "id": "223113700000000-0",
+      "x": 10,
+      "y": 11
+    },
+    {
+      "at_ms": 1762051800000,
+      "block": 223200000,
+      "from": 64,
+      "id": "223200000000001-0",
+      "kind": "expand",
+      "to": 96
+    },
+    {
+      "at_ms": 1762051805400,
+      "block": 223200009,
+      "by": "carol.near",
+      "color": 12,
+      "free": false,
+      "id": "223200009000000-0",
+      "x": 95,
+      "y": 80
+    },
+    {
+      "at_ms": 1762051805400,
+      "block": 223200009,
+      "by": "carol.near",
+      "color": 4,
+      "free": false,
+      "id": "223200009000000-1",
+      "x": 64,
+      "y": 0
+    },
+    {
+      "at_ms": 1762051805399,
+      "block": 223200010,
+      "by": "carol.near",
+      "color": 9,
+      "free": false,
+      "id": "223200010000000-0",
+      "x": 0,
+      "y": 95
+    }
+  ]
+}

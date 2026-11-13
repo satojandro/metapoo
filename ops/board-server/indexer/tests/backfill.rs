@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use common::history::{self, HistoryEntry};
+use common::history::{self, HistoryEntry, LogRow};
 use common::{keys, BoardState, QueuedEvent};
 use indexer::backfill::{backfill, fetch_events};
 use indexer::txindex::{AccountPage, AccountRow, TxIndex};
@@ -233,7 +233,9 @@ async fn backfill_fills_the_log_from_the_deploy_block_and_keeps_newer_live_entri
     let to_tip = fetch_events(&chain(now), BOARD, 1_000, tip, 1, Duration::ZERO)
         .await
         .unwrap();
-    let report = backfill(&mut con, &to_tip, tip, 64, now).await.unwrap();
+    let report = backfill(&mut con, &to_tip, tip, 1_000, 64, now)
+        .await
+        .unwrap();
     assert_eq!(report.events, 3);
     assert_eq!(report.replayed_entries, 7);
     assert_eq!(report.overlap_entries, 3, "t3's three entries, checked");
@@ -271,7 +273,9 @@ async fn backfill_fills_the_log_from_the_deploy_block_and_keeps_newer_live_entri
     assert!(history::tip_check(&mut con, 10).await.unwrap().matches());
 
     // A second run changes nothing.
-    let again = backfill(&mut con, &to_tip, tip, 64, now).await.unwrap();
+    let again = backfill(&mut con, &to_tip, tip, 1_000, 64, now)
+        .await
+        .unwrap();
     assert!(again.tip.matches());
     assert_eq!(log(&mut con).await.len(), 9);
 }
@@ -290,7 +294,9 @@ async fn backfill_into_an_empty_log_and_refuses_a_replay_that_disagrees() {
     // No log at all (a mirror that predates HISTORY).
     let _: () = con.del(keys::DRAW_HISTORY).await.unwrap();
     let tip = events[3].position();
-    let report = backfill(&mut con, &events, tip, 64, now).await.unwrap();
+    let report = backfill(&mut con, &events, tip, 1_000, 64, now)
+        .await
+        .unwrap();
     assert_eq!(report.overlap_entries, 0);
     assert!(report.tip.matches(), "{:?}", report.tip.differences);
     assert_eq!(log(&mut con).await, complete);
@@ -301,9 +307,102 @@ async fn backfill_into_an_empty_log_and_refuses_a_replay_that_disagrees() {
         .filter(|e| e.block_height != 1_003)
         .cloned()
         .collect();
-    let err = backfill(&mut con, &missing_t3, tip, 64, now)
+    let err = backfill(&mut con, &missing_t3, tip, 1_000, 64, now)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("disagrees"), "{err}");
     assert_eq!(log(&mut con).await, complete, "untouched");
+}
+
+/// TIMELAPSE: the wall grew at block 1,003. A server from before expansions were logged wrote
+/// the draws but not the growth; the backfill puts it back in order, certifies the start, and
+/// moves the epoch once.
+#[tokio::test]
+async fn backfill_restores_a_board_expansion_an_older_server_did_not_log() {
+    let Some(mut con) = connect().await else {
+        return;
+    };
+    let now = now_ms();
+    let mut events = fetch_all(&chain(now)).await;
+    // t3 becomes the expansion; a paint in the new area follows at 1,006.
+    let grow = QueuedEvent {
+        block_height: 1_003,
+        block_timestamp_ms: now - 2 * DAY_MS,
+        seq: 0,
+        receipt_id: "grow".into(),
+        predecessor_id: "owner.near".into(),
+        event: common::BoardEvent::BoardExpanded { from: 64, to: 96 },
+    };
+    let mut beyond = events[3].clone();
+    beyond.block_height = 1_006;
+    if let common::BoardEvent::Draw { entries, .. } = &mut beyond.event {
+        entries[0].x = 90;
+        entries[0].y = 70;
+    }
+    events[2] = grow;
+    events.push(beyond);
+
+    let state = Arc::new(RwLock::new(BoardState::empty(64)));
+    apply_live(&mut con, &state, &events).await;
+    let (complete, _) = history::read_rows(&mut con, keys::DRAW_HISTORY)
+        .await
+        .unwrap();
+    let grown: Vec<_> = history::expansions(&complete);
+    assert_eq!(grown.len(), 1, "the consumer logs the expansion");
+    assert_eq!(
+        (grown[0].stream_id().as_str(), grown[0].from, grown[0].to),
+        ("1003000000-0", 64, 96)
+    );
+    // In order with the draws: after t1/t2 (4 tiles), before the later paints.
+    assert_eq!(complete[4], LogRow::Expand(grown[0].clone()));
+    assert!(history::tip_check(&mut con, 10).await.unwrap().matches());
+    let head = history::read_head(&mut con, now).await.unwrap();
+    assert!(!head.complete, "nothing has certified where the log starts");
+    assert_eq!(head.entries, complete.len() as u64);
+    let before = head.epoch;
+
+    // What the older server left: the same draws, no expansion.
+    let _: () = redis::cmd("XDEL")
+        .arg(keys::DRAW_HISTORY)
+        .arg(grown[0].stream_id())
+        .query_async(&mut con)
+        .await
+        .unwrap();
+    let tip = events.last().unwrap().position();
+    let report = backfill(&mut con, &events, tip, 1_000, 64, now)
+        .await
+        .unwrap();
+    assert!(report.rewritten);
+    assert_eq!(report.replayed_expansions, 1);
+    assert!(report.tip.matches(), "{:?}", report.tip.differences);
+    assert_eq!(report.tip.expansions, 1);
+    let (after, _) = history::read_rows(&mut con, keys::DRAW_HISTORY)
+        .await
+        .unwrap();
+    assert_eq!(after, complete);
+    let head = history::read_head(&mut con, now).await.unwrap();
+    assert_eq!(
+        (head.complete, head.start_block, head.initial_side),
+        (true, Some(1_000), Some(64))
+    );
+    assert!(head.epoch > before, "a rewritten log is a new epoch");
+    let rewritten_epoch = head.epoch;
+    assert_eq!(head.first.unwrap().block, 1_001);
+    assert_eq!(head.last.unwrap().block, 1_006);
+
+    // A second run finds the log equal and leaves the stream and its epoch alone.
+    let again = backfill(&mut con, &events, tip, 1_000, 64, now)
+        .await
+        .unwrap();
+    assert!(!again.rewritten);
+    assert_eq!(
+        history::read_head(&mut con, now).await.unwrap().epoch,
+        rewritten_epoch
+    );
+
+    // A certified log whose board then grows without the log hearing fails the check.
+    let _: () = con.set(keys::BOARD_SIDE, 128).await.unwrap();
+    let stale = history::tip_check(&mut con, 10).await.unwrap();
+    assert_eq!(stale.differences.len(), 1, "{:?}", stale.differences);
+    assert!(stale.differences[0].contains("side is 128"));
 }
