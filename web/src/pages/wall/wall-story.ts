@@ -29,6 +29,7 @@ import type { WallScope } from "./wall-scope";
 import type { WallStats } from "./wall-invite";
 import { formatAgo } from "./tile-inspector";
 import { shortAccount } from "../../shared/short-account";
+import { nameLink, syncNameNote } from "../../shared/get-a-name";
 import { topPainters, type PainterRow, type ViewTunables } from "./wall-views";
 
 const count = (n: number) => n.toLocaleString("en-US");
@@ -264,6 +265,8 @@ export interface WallStoryDeps {
   /** Move the wall to a tile (the `#tile-x-y` path: select, zoom, show). */
   flyTo(cell: { x: number; y: number }): void;
   now?: () => number;
+  /** NAMES: offer "Get a name" beside the viewer's own hex id. Defaults to the build flag. */
+  namesGuide?: boolean;
 }
 
 export interface WallStory {
@@ -420,6 +423,8 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
           const tilesText = `${count(row.tiles)} tile${row.tiles === 1 ? "" : "s"}`;
           tiles.textContent = tilesText;
           li.append(rank, sw, name, tiles);
+          const getName = nameLink(row.account, deps.viewer(), deps.namesGuide);
+          if (getName) { li.dataset.nameLink = "true"; li.append(getName); }
           if (row.perDay !== null) {
             const day = document.createElement("span");
             day.className = "wall-holder-day";
@@ -483,6 +488,10 @@ export function createWallStory(deps: WallStoryDeps): WallStory {
       );
     }
     deps.recent.hidden = stats === null || model.recent.length === 0;
+    // "Right now" says "You", not the id, so the offer is one line under the list, and only
+    // while one of the viewer's own strokes is in it.
+    const viewerNow = deps.viewer();
+    syncNameNote(recentList, model.recent.some((s) => s.artist === viewerNow) ? viewerNow : null, deps.namesGuide);
 
     rules.replaceChildren(
       ...model.rules.map((card) => {

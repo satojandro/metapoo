@@ -1,0 +1,18 @@
+/* NAMES: the "Get a name →" link beside the viewer's own hex id, and its one-line note. */
+.name-link {
+  color: var(--mp-near);
+  font: 600 var(--mp-text-sm) var(--mp-font);
+  white-space: nowrap;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--mp-near) 45%, transparent);
+  text-underline-offset: 3px;
+  /* Small text, full-size target. */
+  padding: 6px 0;
+}
+.name-link:hover { text-decoration-color: currentColor; }
+.name-link:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; border-radius: var(--mp-radius-sm); }
+.name-note { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-md); line-height: 1.45; }
+.name-note-id { font-family: var(--mp-mono); color: var(--mp-soft); }
+/* "Who holds the wall": the link drops under the viewer's own row instead of squeezing the id. */
+.wall-page .wall-turf-list li[data-name-link="true"] { flex-wrap: wrap; row-gap: 0; }
+.wall-page .wall-turf-list li[data-name-link="true"] .name-link { order: 9; flex: 0 0 100%; padding-left: calc(1.6ch + 14px + 2 * var(--mp-space-2)); font-weight: 600; }

@@ -173,3 +173,10 @@ export const BETA_BANNER_ENABLED = envString("VITE_BETA_BANNER") !== "false";
 export const BETA_GUIDE_URL = envString("VITE_BETA_GUIDE_URL");
 /** Public issue-report form (Notion). Empty hides the link. */
 export const BETA_REPORT_URL = envString("VITE_BETA_REPORT_URL");
+
+/**
+ * NAMES: the "Get a name" section on /how-it-works and the "Get a name →" link beside the
+ * signed-in player's own hex id. Off unless `VITE_NAMES_GUIDE=true`: the Meteor Wallet steps
+ * in `app/meteor-name-steps.ts` are a draft until the owner has checked them on a device.
+ */
+export const NAMES_GUIDE_ENABLED = envString("VITE_NAMES_GUIDE") === "true";
