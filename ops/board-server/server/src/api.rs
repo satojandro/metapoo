@@ -31,6 +31,32 @@ pub struct AppState {
     pub viewers: Arc<AtomicUsize>,
     /// When the last hint was accepted (ms), for the rate limit.
     pub last_hint_ms: Arc<AtomicU64>,
+    /// When an HTTP read last refreshed the viewers flag (ms), so reads count as viewers
+    /// without writing to Valkey on every request.
+    pub last_reader_ms: Arc<AtomicU64>,
+}
+
+/// Count an HTTP read as somebody watching: keep the viewers flag up, and on the first read
+/// after a quiet spell tell the indexer to catch up at once. Non-fatal by design — a read must
+/// never fail because the flag could not be written.
+async fn note_reader(state: &AppState) {
+    let now = consumer::now_ms();
+    let last = state.last_reader_ms.load(Ordering::Relaxed);
+    let Some(arrived) = common::demand::reader_touch(now, last) else {
+        return;
+    };
+    state.last_reader_ms.store(now, Ordering::Relaxed);
+    let mut con = state.valkey.clone();
+    let mut pipe = redis::pipe();
+    pipe.set(
+        keys::VIEWERS_UNTIL_MS,
+        now + common::demand::VIEWER_TTL_MS,
+    )
+    .ignore();
+    if arrived {
+        pipe.set(keys::VIEWER_ARRIVED_MS, now).ignore();
+    }
+    let _: Result<(), _> = pipe.query_async(&mut con).await;
 }
 
 pub fn router(state: AppState) -> Router {
@@ -95,6 +121,7 @@ async fn binary(state: &AppState, body: Vec<u8>, side: u32) -> Response {
 }
 
 async fn get_region(State(state): State<AppState>, Path((rx, ry)): Path<(i32, i32)>) -> Response {
+    note_reader(&state).await;
     if !is_wall(rx, ry) {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -140,6 +167,7 @@ async fn get_regions_batch(
     State(state): State<AppState>,
     Query(query): Query<BatchQuery>,
 ) -> Response {
+    note_reader(&state).await;
     let coords: Vec<i32> = query
         .coords
         .split(',')
@@ -186,6 +214,7 @@ async fn get_region_timestamps(
 }
 
 async fn get_account_stats(State(state): State<AppState>) -> Response {
+    note_reader(&state).await;
     let mut con = state.valkey.clone();
     let tiles: std::collections::HashMap<u32, i64> = con
         .hgetall(keys::ACCOUNT_PIXEL_COUNT)
@@ -213,6 +242,7 @@ async fn get_account_stats(State(state): State<AppState>) -> Response {
 }
 
 async fn get_account_by_id(State(state): State<AppState>, Path(owner_id): Path<u32>) -> Response {
+    note_reader(&state).await;
     let account: Option<String> = state
         .valkey
         .clone()
@@ -256,6 +286,7 @@ async fn get_account_covers(
     State(state): State<AppState>,
     Query(query): Query<CoversQuery>,
 ) -> Response {
+    note_reader(&state).await;
     let Some(account) = query.account.as_deref().and_then(normalize_account) else {
         return bad_request("account must be a NEAR account id");
     };
