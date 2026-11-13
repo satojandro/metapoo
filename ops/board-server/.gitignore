@@ -1,3 +1,7 @@
 target/
 valkey-data/
 .env
+ops.env
+backups/
+valkey-data.*/
+.alert-state/

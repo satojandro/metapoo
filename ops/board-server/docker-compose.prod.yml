@@ -1,0 +1,33 @@
+# Production overlay for the Hetzner box (DEPLOY-HETZNER.md). It adds what a public host
+# needs and changes nothing for local or Mini use of docker-compose.yml:
+#   - caddy: HTTPS on 80/443 with automatic certificates, proxying everything (the HTTP API
+#     and the WebSocket at /ws) to the server over the compose network.
+#   - valkey: valkey.prod.conf (AOF on, maxmemory, noeviction) instead of valkey.conf.
+#
+# Use it by putting this line in .env on the box, so every `docker compose` command in the
+# README and the runbook picks it up without -f flags:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+services:
+  caddy:
+    image: caddy:2
+    environment:
+      # Only the hostname: Caddy does not get the rest of .env (the bot token will live there).
+      BOARD_HOSTNAME: ${BOARD_HOSTNAME:?set BOARD_HOSTNAME in .env}
+    ports:
+      - "80:80" # ACME HTTP-01 challenge and the redirect to HTTPS
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # certificates and the ACME account: keep it across restarts
+      - caddy-config:/config
+    depends_on: [server]
+    restart: unless-stopped
+
+  valkey:
+    volumes:
+      - ./valkey.prod.conf:/usr/local/etc/valkey/valkey.prod.conf:ro
+    command: valkey-server /usr/local/etc/valkey/valkey.prod.conf
+
+volumes:
+  caddy-data:
+  caddy-config:
