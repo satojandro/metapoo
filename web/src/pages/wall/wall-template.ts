@@ -223,19 +223,27 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
         </aside>
       </main>
 
-      <!-- Signed in, below the wall: your tiles, your TOILET, what happened since you last looked. -->
+      <!-- Signed in, below the wall: what happened while you were away, your tiles, your TOILET. -->
       <section class="wall-yours" aria-labelledby="wall-yours-heading" hidden>
+        <div class="wall-away" data-away role="group" aria-labelledby="wall-away-heading" hidden>
+          <div class="wall-away-head">
+            <p id="wall-away-heading" class="wall-away-title">While you were away</p>
+            <button type="button" class="wall-away-dismiss" data-away-dismiss aria-label="Dismiss until your next visit">×</button>
+          </div>
+          <p class="wall-away-line" data-away-text></p>
+          <p class="wall-away-note" data-away-note hidden></p>
+          <div class="wall-away-actions">
+            <button type="button" class="mp-btn" data-away-show hidden>Show me</button>
+            <button type="button" class="mp-btn mp-btn-primary" data-away-paint hidden>Paint it back</button>
+          </div>
+        </div>
         <div class="wall-yours-main">
           <p id="wall-yours-heading" class="mp-eyebrow">Your tiles</p>
-          <p class="wall-yours-covered" data-yours-covered hidden>
-            <span data-yours-covered-text></span>
-            <button type="button" class="wall-link" data-yours-show-covered hidden>Show me</button>
-          </p>
           <div class="wall-yours-count">
             <span class="wall-yours-figure" data-yours-tiles>…</span>
             <span class="wall-yours-unit">tiles you hold on the wall</span>
           </div>
-          <p class="wall-yours-note">Only tiles you painted with credits earn TOILET. “Since you last looked” is what this browser remembers, not a history the wall keeps.</p>
+          <p class="wall-yours-note">Only tiles you painted with credits earn TOILET.</p>
           <button type="button" class="mp-btn wall-yours-mine" data-yours-show-mine hidden>Show my tiles</button>
         </div>
         <div class="wall-yours-claim" data-yours-claim></div>

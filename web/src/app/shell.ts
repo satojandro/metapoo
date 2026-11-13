@@ -8,6 +8,7 @@ import type { PageId } from "./page-registry";
 import { BETA_GUIDE_URL } from "../config";
 import { createSiteFooter } from "./site-footer";
 import { mountToiletClaim, toiletConfigured } from "./toilet-claim";
+import { hallInMenu } from "./hall";
 import type { ParsedRoute } from "./routes";
 import { mountWalletChrome, type WalletChromeDispose } from "./wallet-chrome";
 import { wireWalletDetailsClose } from "./wallet-details-close";
@@ -24,17 +25,31 @@ export interface ShellHandles {
   dispose: () => void;
 }
 
-/** Primary nav routes. The labels are also the page names used in the tab title. */
-export const NAV_ITEMS: ReadonlyArray<{ href: string; label: string; match: PageId; short?: string }> = [
-  { href: "/wall", label: "Wall", match: "wall" },
-  { href: "/how-it-works", label: "How it works", match: "how" },
-  { href: "/agents", label: "Agents", match: "agents" },
-  { href: "/toilet", label: "TOILET", match: "toilet" },
-  { href: "/stake", label: "Stake", match: "stake" },
-  // Six items have to fit one phone row (UI review C10). The short label is the
-  // visible one below 600px; the full label stays the page name and the tab title.
-  { href: "/money", label: "Where the money goes", match: "money", short: "Money" },
-];
+export interface NavItem { href: string; label: string; match: PageId; short?: string }
+
+/** The Hall of Fame's nav entry. Its label is the page name whether or not it is in the nav. */
+const HALL_NAV: NavItem = { href: "/hall", label: "Hall of Fame", match: "hall", short: "Hall" };
+
+/**
+ * Primary nav routes. The labels are also the page names used in the tab title.
+ * The Hall of Fame joins only once it has three entries (owner, 11 Nov: one real
+ * menu item, no SOON placeholders).
+ */
+export function navItems(withHall: boolean): ReadonlyArray<NavItem> {
+  return [
+    { href: "/wall", label: "Wall", match: "wall" },
+    { href: "/how-it-works", label: "How it works", match: "how" },
+    { href: "/agents", label: "Agents", match: "agents" },
+    ...(withHall ? [HALL_NAV] : []),
+    { href: "/toilet", label: "TOILET", match: "toilet" },
+    { href: "/stake", label: "Stake", match: "stake" },
+    // Items have to fit one phone row (UI review C10). The short label is the
+    // visible one below 600px; the full label stays the page name and the tab title.
+    { href: "/money", label: "Where the money goes", match: "money", short: "Money" },
+  ];
+}
+
+export const NAV_ITEMS: ReadonlyArray<NavItem> = navItems(hallInMenu());
 
 const NAV_LABELS = new Map<PageId, string>(NAV_ITEMS.map((item) => [item.match, item.label]));
 
@@ -48,6 +63,7 @@ export const PAGE_NAMES: Readonly<Record<PageId, string>> = {
   wall: NAV_LABELS.get("wall")!,
   how: NAV_LABELS.get("how")!,
   agents: NAV_LABELS.get("agents")!,
+  hall: HALL_NAV.label,
   toilet: NAV_LABELS.get("toilet")!,
   stake: NAV_LABELS.get("stake")!,
   money: NAV_LABELS.get("money")!,
@@ -104,6 +120,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
       short.className = "app-nav-short";
       short.textContent = item.short;
       a.append(short);
+      a.classList.add("has-short");
       // The two spans are one link; name it with the full label so a screen reader
       // never hears the abbreviation the phone layout needed.
       a.setAttribute("aria-label", item.label);
@@ -112,6 +129,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     navList.append(li);
   }
   nav.append(navList);
+  nav.classList.toggle("is-crowded", NAV_ITEMS.length > 6);
 
   const statusStrip = document.createElement("div");
   // The dock shows the same status next to Place paint. Keep this copy for
@@ -152,7 +170,8 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     <nav class="wallet-links" aria-label="More about the board">
       <a href="/money">Where the money goes →</a>
       <a href="/toilet">What TOILET is for →</a>
-      <a href="/stake">Stake TOILET →</a>
+      <a href="/stake">Stake TOILET →</a>${hallInMenu() ? `
+      <a href="/hall">Hall of Fame →</a>` : ""}
     </nav>
     <!-- Two lines: what it does, then what it costs and what it cannot do. The old
          label named the mechanism ("allow painting without a popup") without saying

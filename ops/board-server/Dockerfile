@@ -10,4 +10,5 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/ops/board-server/target/release/indexer /usr/local/bin/indexer
 COPY --from=build /src/ops/board-server/target/release/server /usr/local/bin/server
+COPY --from=build /src/ops/board-server/target/release/board-history /usr/local/bin/board-history
 CMD ["server"]

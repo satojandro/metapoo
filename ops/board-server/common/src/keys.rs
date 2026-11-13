@@ -45,3 +45,17 @@ pub const HINT_AT_MS: &str = "hint_at_ms";
 /// instead of at its next interval, so the first visitor after a quiet spell sees a current
 /// mirror within seconds.
 pub const VIEWER_ARRIVED_MS: &str = "viewer_arrived_ms";
+
+/// HISTORY (return-and-growth spec §4.2): every applied draw, one stream entry per tile, in
+/// applied order. **Never trimmed** (no `MAXLEN`): `draw_events` above is a catch-up buffer
+/// trimmed to `CATCHUP_RETENTION_MS` (2 h by default); this is the record a timelapse replays.
+/// Entry id `<position>-<index>` (the event's `QueuedEvent::position()`, then the tile's place
+/// in the event); fields `block`, `at_ms`, `x`, `y`, `color`, `by`, `free`. See `history.rs`.
+pub const DRAW_HISTORY: &str = "draw_history";
+/// Where the backfill builds the replayed log before merging it in and renaming it over
+/// [`DRAW_HISTORY`].
+pub const DRAW_HISTORY_BACKFILL: &str = "draw_history:backfill";
+
+/// AWAY-A (spec §1.2): prefix of one sorted set per account whose tiles were covered,
+/// `covers:<account>`, scored by `at_ms`, trimmed to 30 days. See `history.rs`.
+pub const COVERS_PREFIX: &str = "covers:";

@@ -3,7 +3,8 @@
 //!
 //! 1. At start, an event left in `processing_queue` by a crash goes back to the head of the
 //!    queue (Berry Fast leaves it there, so it is never applied).
-//! 2. The board write, the catch-up entry, `last_applied_position` and the `LREM` are one
+//! 2. The board write, the catch-up entry, the history log and cover sets
+//!    (`common/src/history.rs`), `last_applied_position` and the `LREM` are one
 //!    `MULTI`/`EXEC`, and an event at or below `last_applied_position` is dropped unapplied, so a
 //!    re-delivered event cannot double-count holders.
 //! 3. A failure retries the **same** event with backoff instead of ending the task. Skipping it

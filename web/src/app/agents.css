@@ -46,6 +46,19 @@
   overflow-wrap: anywhere;
   user-select: all;
 }
+.agents-prompt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--mp-space-3); }
+.agents-prompt-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "head copy" "text text";
+  gap: var(--mp-space-2) var(--mp-space-3);
+  align-items: end;
+}
+.agents-prompt-head { grid-area: head; display: grid; gap: 2px; }
+.agents-prompt-head h4 { margin: 0; font-size: var(--mp-text-body); font-weight: 800; color: var(--mp-fg); }
+.agents-prompt-note { color: var(--mp-muted); font-size: var(--mp-text-sm); }
+.agents-prompt-item .agents-prompt { grid-area: text; }
+.agents-prompt-item .agents-copy { grid-area: copy; }
 .agents-handoff-row { display: flex; flex-wrap: wrap; gap: var(--mp-space-3); align-items: center; }
 .agents-copy {
   border: 0;

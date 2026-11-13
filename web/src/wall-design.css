@@ -21,6 +21,12 @@ summary { cursor: pointer; }
 /* One item has a phone-sized label (shell.NAV_ITEMS.short); the full one is the default. */
 .app-nav-short { display: none; }
 .app-nav-list a.is-active { color: var(--mp-tag); border-color: var(--mp-tag); }
+/* Seven items (the Hall of Fame joins at three entries) do not fit one row between the
+   brand and the wallet below 1280px: use the short labels there, as phones do. */
+@media (max-width: 1280px) {
+  .app-nav.is-crowded .has-short .app-nav-long { display: none; }
+  .app-nav.is-crowded .app-nav-short { display: inline; }
+}
 .shell-chrome { grid-column: 3; grid-row: 1; display: block; margin: 0; padding: 0; background: none; border: 0; }
 .wallet-chrome { display: flex; align-items: center; gap: var(--mp-space-4); }
 .shell-connect { min-height: 40px; padding: var(--mp-space-2) var(--mp-space-4); }
@@ -239,9 +245,10 @@ summary { cursor: pointer; }
   .brand .lede { font-size: 8px; letter-spacing: 1px; }
   /* Phones get the nav as one compact row under the brand and wallet button. */
   .app-nav { display: block; grid-column: 1 / -1; grid-row: 2; min-width: 0; }
-  .app-nav-list { justify-content: flex-start; gap: 16px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+  .app-nav-list { justify-content: flex-start; flex-wrap: nowrap; gap: 16px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
   .app-nav-list::-webkit-scrollbar { display: none; }
-  .app-nav-long { display: none; }
+  /* Only a link that has a short label swaps; the others keep their only label. */
+  .app-nav-list .has-short .app-nav-long { display: none; }
   .app-nav-short { display: inline; }
   .app-nav-list a { padding: 4px 0; }
   .shell-chrome { grid-column: 2; grid-row: 1; }

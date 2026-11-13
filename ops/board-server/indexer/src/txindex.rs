@@ -299,6 +299,16 @@ impl Cursor {
     }
 }
 
+/// The index's base URL for a chain id (`mainnet` or `testnet`), unless `TX_INDEX_URL` says
+/// otherwise.
+pub fn default_base_url(chain_id: &str) -> Option<&'static str> {
+    match chain_id {
+        "mainnet" => Some("https://tx.main.fastnear.com"),
+        "testnet" => Some("https://tx.test.fastnear.com"),
+        _ => None,
+    }
+}
+
 /// The real index, over HTTP.
 pub struct HttpTxIndex {
     base: String,

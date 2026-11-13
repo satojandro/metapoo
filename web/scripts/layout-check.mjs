@@ -45,7 +45,7 @@ try {
 
 const base = (process.argv[2] ?? "http://localhost:5174").replace(/\/$/, "");
 /** Routes a player can reach, including one that does not exist. */
-const routes = ["/", "/toilet", "/how-it-works", "/money", "/wall", "/stake", "/nope"];
+const routes = ["/", "/toilet", "/how-it-works", "/money", "/wall", "/stake", "/hall", "/nope"];
 /** Only these render a board; the board assertions are skipped elsewhere. */
 const boardRoutes = new Set(["/", "/wall"]);
 const sizes = [

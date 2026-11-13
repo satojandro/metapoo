@@ -10,6 +10,8 @@ use axum::http::{header, HeaderName, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
+use common::account::normalize_account;
+use common::history::{self, COVER_RETENTION_MS};
 use common::{keys, BoardState};
 use redis::AsyncCommands;
 use serde::Deserialize;
@@ -43,6 +45,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/regions", get(get_regions_batch))
         .route("/api/stats/accounts", get(get_account_stats))
         .route("/api/account/{owner_id}", get(get_account_by_id))
+        .route("/api/account-covers", get(get_account_covers))
         .route("/api/health", get(health))
         .route("/api/hint", post(hint))
         .route("/ws", get(ws_upgrade))
@@ -226,6 +229,60 @@ async fn get_account_by_id(State(state): State<AppState>, Path(owner_id): Path<u
     }
 }
 
+#[derive(Deserialize)]
+pub struct CoversQuery {
+    account: Option<String>,
+    since_ms: Option<String>,
+}
+
+/// How long `/api/account-covers` waits for Valkey before answering 503.
+const COVERS_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// The window start actually used: `since_ms`, but never earlier than the 30 days the cover
+/// sets keep. Older covers may still be in a set until its next trim; clamping here means the
+/// answer does not depend on when that trim last ran.
+pub fn covers_since(since_ms: u64, now_ms: u64) -> u64 {
+    since_ms.max(now_ms.saturating_sub(COVER_RETENTION_MS))
+}
+
+fn bad_request(why: &'static str) -> Response {
+    (StatusCode::BAD_REQUEST, why).into_response()
+}
+
+/// `GET /api/account-covers?account=<id>&since_ms=<ms>` (AWAY-A, spec §1.2): how many of
+/// `account`'s tiles other accounts covered since `since_ms`, by whom, and where the first was.
+/// Always `{count, by: [{account, tiles}], first: {x, y} | null}`; see `history::summarize`.
+async fn get_account_covers(
+    State(state): State<AppState>,
+    Query(query): Query<CoversQuery>,
+) -> Response {
+    let Some(account) = query.account.as_deref().and_then(normalize_account) else {
+        return bad_request("account must be a NEAR account id");
+    };
+    let Some(since_ms) = query
+        .since_ms
+        .as_deref()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+    else {
+        return bad_request("since_ms must be a whole number of milliseconds since the epoch");
+    };
+    let since = covers_since(since_ms, consumer::now_ms());
+    let mut con = state.valkey.clone();
+    match tokio::time::timeout(
+        COVERS_READ_TIMEOUT,
+        history::read_covers(&mut con, &account, since),
+    )
+    .await
+    {
+        Ok(Ok(records)) => (
+            [(header::CACHE_CONTROL, "no-cache, must-revalidate")],
+            axum::Json(history::summarize(records)),
+        )
+            .into_response(),
+        _ => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    }
+}
+
 /// The `/api/health` body. Pure, so the status rules are testable without a server.
 ///
 /// `status` is derived, never asserted: `ok` needs a consumer that is still ticking and not
@@ -403,6 +460,15 @@ mod tests {
         // A fresh mirror with no paint yet.
         assert_eq!(checked_through(Some(9_000), None, 0, 0), Some(9_000));
         assert_eq!(checked_through(None, None, 0, 0), None);
+    }
+
+    #[test]
+    fn the_covers_window_is_never_older_than_thirty_days() {
+        let now = 100 * COVER_RETENTION_MS;
+        assert_eq!(covers_since(0, now), now - COVER_RETENTION_MS);
+        assert_eq!(covers_since(now - 5, now), now - 5);
+        // A clock near the epoch does not underflow.
+        assert_eq!(covers_since(7, 1_000), 7);
     }
 
     #[test]

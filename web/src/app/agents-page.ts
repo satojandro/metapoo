@@ -2,7 +2,7 @@
  * /agents — "Give this to your agent" and the story around it.
  *
  * Spec: docs/implementation/2026-11-09-agents-page-spec.md. The mechanics are in
- * `/skill.md`; this page carries the prompt, the live prices and the safety story.
+ * `/skill.md`; this page carries three prompts, the live prices and the safety story.
  *
  * Live numbers come from the board. Until a read confirms one it shows "…"; if the
  * read fails, the line that needs it is hidden, never guessed.
@@ -11,7 +11,7 @@
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
 import type { PageContext, PageDispose } from "./page-registry";
 import { createRpcView } from "./revenue-panel";
-import { agentPrompt, EMPTY_COSTS, EXAMPLE_TILES, loadAgentsCosts, priceLines, type AgentsCosts, type View } from "./agents";
+import { agentPrompts, EMPTY_COSTS, EXAMPLE_TILES, loadAgentsCosts, priceLines, type AgentsCosts, type View } from "./agents";
 import "./agents.css";
 
 export interface AgentsPageDeps {
@@ -48,10 +48,9 @@ const TEMPLATE = `
 
   <section class="agents-handoff" aria-labelledby="agents-handoff-h">
     <h3 id="agents-handoff-h">Give this to your agent</h3>
-    <p class="agents-paste">Paste it into the chat. It tells the agent to read the rules, then do what you asked — and to show you the cost first.</p>
-    <pre class="agents-prompt" id="agents-prompt" tabindex="0"></pre>
+    <p class="agents-paste">Pick one and paste it into the chat. Each tells the agent to read the rules first; the two that paint carry a budget and show you the cost before spending.</p>
+    <ul class="agents-prompt-list" data-agents-prompts></ul>
     <div class="agents-handoff-row">
-      <button class="agents-copy" type="button" data-agents-copy>Copy</button>
       <a class="agents-raw" href="/skill.md">Read what your agent reads: skill.md ↗</a>
     </div>
     <p class="agents-status" role="status" aria-live="polite" data-agents-status></p>
@@ -85,7 +84,7 @@ const TEMPLATE = `
     <ul class="agents-safe-list">
       <li><b>Lend it a marker, not your wallet.</b><span>A drawing key can only paint on this board and spend its own small gas allowance. It cannot move your funds.</span></li>
       <li><b>Or give it its own account.</b><span>Fund a separate account with what you are happy to spend — around a tenth of a NEAR is plenty for one drawing.</span></li>
-      <li><b>It should ask first.</b><span>The prompt tells it to show you the plan and the cost before it spends anything.</span></li>
+      <li><b>It should ask first.</b><span>The painting prompts tell it to show you the plan and the cost before it spends anything, and cap what it may spend.</span></li>
       <li><b>Take it back any time.</b><span>Removing the key on chain stops it painting. Nothing else on your account changes.</span></li>
     </ul>
   </section>
@@ -109,14 +108,39 @@ export function mountAgentsPage(root: HTMLElement, _ctx: PageContext, overrides:
   const page = root.querySelector<HTMLElement>(".agents")!;
   const q = <T extends HTMLElement = HTMLElement>(sel: string) => page.querySelector<T>(sel)!;
 
-  const promptEl = q<HTMLPreElement>("#agents-prompt");
-  const copyBtn = q<HTMLButtonElement>("[data-agents-copy]");
+  const list = q<HTMLUListElement>("[data-agents-prompts]");
   const status = q("[data-agents-status]");
   const source = q("[data-agents-source]");
   const boardEl = q("[data-agents-board]");
-  const prompt = agentPrompt(deps.origin);
+  const prompts = agentPrompts(deps.origin);
 
-  promptEl.textContent = prompt;
+  for (const p of prompts) {
+    const item = document.createElement("li");
+    item.className = "agents-prompt-item";
+    item.dataset.prompt = p.id;
+    const head = document.createElement("div");
+    head.className = "agents-prompt-head";
+    const label = document.createElement("h4");
+    label.id = `agents-prompt-${p.id}-h`;
+    label.textContent = p.label;
+    const note = document.createElement("p");
+    note.className = "agents-prompt-note";
+    note.textContent = p.note;
+    head.append(label, note);
+    const pre = document.createElement("pre");
+    pre.className = "agents-prompt";
+    pre.id = `agents-prompt-${p.id}`;
+    pre.tabIndex = 0;
+    pre.textContent = p.text;
+    const btn = document.createElement("button");
+    btn.className = "agents-copy";
+    btn.type = "button";
+    btn.dataset.agentsCopy = p.id;
+    btn.textContent = "Copy";
+    btn.setAttribute("aria-describedby", label.id);
+    item.append(head, pre, btn);
+    list.append(item);
+  }
   boardEl.textContent = deps.configured ? deps.board : "not configured";
 
   const issues = q<HTMLAnchorElement>("[data-agents-issues]");
@@ -129,8 +153,10 @@ export function mountAgentsPage(root: HTMLElement, _ctx: PageContext, overrides:
     cleanups.push(() => el.removeEventListener(type, fn));
   };
 
-  const setCopied = (label: string, note: string) => {
-    copyBtn.textContent = label;
+  const buttons = [...list.querySelectorAll<HTMLButtonElement>("[data-agents-copy]")];
+  const setCopied = (copyBtn: HTMLButtonElement, note: string) => {
+    for (const b of buttons) b.textContent = "Copy";
+    copyBtn.textContent = "Copied";
     status.textContent = note;
     window.clearTimeout(resetTimer);
     resetTimer = window.setTimeout(() => {
@@ -139,8 +165,11 @@ export function mountAgentsPage(root: HTMLElement, _ctx: PageContext, overrides:
     }, 2000);
   };
 
-  listen(copyBtn, "click", (() => {
-    const done = () => setCopied("Copied", "Prompt copied. Paste it in your chat.");
+  for (const copyBtn of buttons) listen(copyBtn, "click", (() => {
+    const p = prompts.find((x) => x.id === copyBtn.dataset.agentsCopy)!;
+    const promptEl = list.querySelector<HTMLPreElement>(`#agents-prompt-${p.id}`)!;
+    const prompt = p.text;
+    const done = () => setCopied(copyBtn, `"${p.label}" copied. Paste it in your chat.`);
     const failed = () => {
       // Clipboard denied (insecure context, permission): leave the text selected
       // so a human can copy it by hand, and say so.
@@ -149,7 +178,7 @@ export function mountAgentsPage(root: HTMLElement, _ctx: PageContext, overrides:
       const sel = window.getSelection();
       sel?.removeAllRanges();
       sel?.addRange(range);
-      status.textContent = "Press ⌘C / Ctrl-C to copy the text above.";
+      status.textContent = `Press ⌘C / Ctrl-C to copy the "${p.label}" prompt.`;
     };
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(prompt).then(done, failed);

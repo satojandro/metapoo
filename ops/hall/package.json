@@ -1,0 +1,14 @@
+{
+  "name": "metapoo-hall",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hall of Fame snapshot tool: a pixel-crisp PNG of the wall plus its hall.json entry",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "snapshot": "node snapshot.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}

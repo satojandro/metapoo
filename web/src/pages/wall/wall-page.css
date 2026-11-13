@@ -1255,29 +1255,49 @@
 .wall-page > .wall-yours + .wall-story { margin-top: var(--mp-space-7); }
 .wall-page .wall-yours-main { display: grid; gap: var(--mp-space-3); align-content: start; min-width: 0; }
 .wall-page .wall-yours-main .mp-eyebrow { margin: 0; }
-.wall-page .wall-yours-covered {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px var(--mp-space-3);
-  margin: 0;
-  padding: var(--mp-space-3);
-  border-left: 3px solid var(--mp-stake);
+/* "While you were away" (AWAY-A): one card across the top of Your tiles, only when
+   something was covered. */
+.wall-page .wall-away {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--mp-space-2);
+  min-width: 0;
+  padding: var(--mp-space-3) var(--mp-space-4);
+  border-left: 3px solid var(--mp-turf-2);
   border-radius: var(--mp-radius-md);
   background: var(--mp-card-2);
   color: var(--mp-fg);
-  font-size: var(--mp-text-body);
-  line-height: 1.45;
 }
-.wall-page .wall-yours-covered[hidden] { display: none; }
-.wall-page .wall-yours-covered[data-tone="covered"] { border-left-color: var(--mp-turf-2); }
+.wall-page .wall-away[hidden] { display: none; }
+.wall-page .wall-away-head { display: flex; align-items: center; justify-content: space-between; gap: var(--mp-space-3); }
+.wall-page .wall-away-title { margin: 0; font-weight: 800; font-size: var(--mp-text-body); }
+.wall-page .wall-away-dismiss {
+  flex: none;
+  min-width: var(--mp-hit);
+  min-height: var(--mp-hit);
+  margin: calc(var(--mp-space-2) * -1) calc(var(--mp-space-3) * -1) calc(var(--mp-space-2) * -1) 0;
+  border: 0;
+  border-radius: var(--mp-radius-md);
+  background: none;
+  color: var(--mp-muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.wall-page .wall-away-dismiss:hover { color: var(--mp-fg); }
+.wall-page .wall-away-dismiss:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
+.wall-page .wall-away-line { margin: 0; font-size: var(--mp-text-body); line-height: 1.45; overflow-wrap: anywhere; }
+.wall-page .wall-away-note { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-md); line-height: 1.45; }
+.wall-page .wall-away-note[hidden] { display: none; }
+.wall-page .wall-away-actions { display: flex; flex-wrap: wrap; gap: var(--mp-space-2); }
+.wall-page .wall-away-actions .mp-btn { min-height: var(--mp-hit); }
+.wall-page .wall-away-actions .mp-btn[hidden] { display: none; }
 .wall-page .wall-yours-count { display: flex; align-items: baseline; gap: var(--mp-space-2); flex-wrap: wrap; }
 .wall-page .wall-yours-figure { color: var(--mp-tag); font: 800 var(--mp-text-figure)/1 var(--mp-mono); font-variant-numeric: tabular-nums; }
 .wall-page .wall-yours-unit { color: var(--mp-soft); font-size: var(--mp-text-body); }
 .wall-page .wall-yours-note { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-md); line-height: 1.45; max-width: 52ch; }
 .wall-page .wall-yours-mine { justify-self: start; min-height: var(--mp-hit); }
-.wall-page .wall-yours-mine[hidden],
-.wall-page .wall-yours [data-yours-show-covered][hidden] { display: none; }
+.wall-page .wall-yours-mine[hidden] { display: none; }
 .wall-page .wall-yours-claim { min-width: 0; }
 .wall-page .wall-yours-claim:empty { display: none; }
 @media (max-width: 760px) {
