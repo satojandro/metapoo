@@ -147,6 +147,21 @@ docker compose up -d --build
 The public host — a Tailscale Funnel in front of the launch stack, why it replaced the Cloudflare
 quick tunnel, and how to restore it — is [`docs/ops/board-server-public-host.md`](../../docs/ops/board-server-public-host.md).
 
+**Two stacks, two image tags.** `docker-compose.yml` (testing board) runs
+`metapoo-board-server:latest`; `docker-compose.launch.yml` (the launch board, host port 3002) runs
+`metapoo-board-server:launch`. Rebuilding one cannot move the other onto new code at its next
+restart. The image is built from the **repository root** — the Dockerfile's context is the repo,
+not this directory:
+
+```bash
+git -C <repo> status --short          # build from a checkout of main, never a detached tree
+docker build -f ops/board-server/Dockerfile -t metapoo-board-server:launch .
+```
+
+After an upgrade that adds endpoints the wall already calls, run the one-off backfill (below)
+before anyone connects a wallet: `GET /api/account-covers` answers `{"count":0,…}` on an empty
+draw log, which reads as "nothing was covered" rather than "unknown".
+
 The first run needs `START_BLOCK_HEIGHT`. For the mainnet testing board that is
 `223113576`, the block that included the deploy tx. With it, the server rebuilds the wall from
 history, with no snapshot. The first poll happens when the first viewer connects.
