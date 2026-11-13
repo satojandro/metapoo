@@ -1376,3 +1376,38 @@ export async function signAndSendSelfCustodyKey(context: OperationContext, publi
 export async function isConnectedPrivyWallet(): Promise<boolean> {
   try { return (await ensureConnector().wallet()).manifest.id === PRIVY_WALLET_ID; } catch { return false; }
 }
+
+/**
+ * AWAY-B: can the connected wallet sign an off-chain message (NEP-413)? Its manifest says.
+ * The Privy sign-in ("Google or email") declares `signMessage: false`, so those players
+ * cannot link Telegram alerts until that changes; nothing here changes it.
+ */
+export async function connectedWalletCanSignMessages(): Promise<boolean> {
+  try {
+    return (await ensureConnector().wallet()).manifest?.features?.signMessage === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ask the wallet to sign a NEP-413 message as `accountId`. A signature only: no transaction,
+ * no fee, and no key is added or changed. The server that receives it decides what it proves.
+ */
+export async function signOwnershipMessage(params: {
+  accountId: string;
+  message: string;
+  recipient: string;
+  nonce: Uint8Array;
+}): Promise<{ accountId: string; publicKey: string; signature: unknown }> {
+  const wallet = await ensureConnector().wallet();
+  const actual = await accountIdFromWallet(wallet);
+  if (actual !== params.accountId) throw new Error("WalletAccountChanged");
+  return wallet.signMessage({
+    message: params.message,
+    recipient: params.recipient,
+    nonce: params.nonce,
+    network: WALLET_NETWORK,
+    signerId: params.accountId,
+  });
+}

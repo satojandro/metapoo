@@ -120,6 +120,13 @@ export function fastnearHeaders(url: string, withBody = true): Record<string, st
 export const BOARD_SERVER_URL = envString("VITE_BOARD_SERVER_URL").replace(/\/+$/, "");
 
 /**
+ * AWAY-B: the Telegram alerts bot's username, without `@` (`ops/board-server`, "Telegram
+ * alerts"). Empty (the default) hides "Get alerts on Telegram" entirely; so does an empty
+ * `BOARD_SERVER_URL`, since the board server is what verifies the link.
+ */
+export const TELEGRAM_BOT = envString("VITE_TELEGRAM_BOT");
+
+/**
  * Gas sponsorship stays off until custody, limits, and a kill switch exist.
  * When this flag is false, the UI must not claim a sponsored path exists.
  * When true but sponsorship is unavailable, the ordinary wallet path is used.
