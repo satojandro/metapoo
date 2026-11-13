@@ -17,3 +17,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
 dotenvy = "0.15"
 signal-hook = "0.3"
+
+[dev-dependencies]
+server = { path = "../server" }

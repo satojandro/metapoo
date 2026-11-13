@@ -6,6 +6,7 @@ use common::{parse_log, ParseOutcome, QueuedEvent};
 use fastnear_primitives::block_with_tx_hash::BlockWithTxHashes;
 use fastnear_primitives::near_primitives::views::ExecutionStatusView;
 
+pub mod backfill;
 pub mod txindex;
 
 /// Board events in `block`, in chain order: shard order, then outcome order, then log order.

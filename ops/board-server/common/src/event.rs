@@ -59,7 +59,7 @@ pub struct QueuedEvent {
 }
 
 /// Room for a million board events per block, which no block can hold.
-const SEQ_PER_BLOCK: u64 = 1_000_000;
+pub const SEQ_PER_BLOCK: u64 = 1_000_000;
 
 impl QueuedEvent {
     /// A strictly increasing position across the whole chain. The server stores the last one it
