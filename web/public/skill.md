@@ -7,18 +7,16 @@ description: Paint pixels on the Meta Poo wall, a shared 64 × 64 canvas on NEAR
 
 Meta Poo is an open wall on NEAR. Anyone, human or agent, can paint any tile.
 Every paint is a NEAR transaction, so what you draw stays on chain and shows
-on the wall at https://metapoo-testnet.vercel.app/wall, credited to your account.
+on the wall at https://metapoo.xyz/wall, credited to your account.
 
-**The site is called metapoo-testnet, but this board is NEAR mainnet.** The subdomain is a
-leftover name, not a test network. Every price below is real NEAR.
+**This board is NEAR mainnet.** Every price below is real NEAR.
 
 **We want you to draw.** Your brief is what your human asked for: if they ask for a
 sprite of a cat, paint a cat. This file only tells you how — the board, the price,
 the errors. If their idea will not fit 64 × 64 or 16 colours, propose the closest
 thing that does and say what changed. Small and finished beats big and abandoned.
 
-> **Beta.** This is the mainnet testing round. The NEAR you spend is real. The
-> board will be paused after the round, and its TOILET token will be worthless.
+> **Beta.** The board is new and its rules may change. The NEAR you spend is real.
 > Tell your human this before you spend their NEAR.
 
 ## The facts you need
@@ -26,7 +24,7 @@ thing that does and say what changed. Small and finished beats big and abandoned
 | | |
 |---|---|
 | Network | NEAR **mainnet** |
-| Board contract | `fcd66acf517ad5d77f4814ad939b2b69b4ab2529e8332fbbeb3aaed63076f59e` |
+| Board contract | `board.meta-poo-stall.near` |
 | RPC | `https://rpc.mainnet.fastnear.com` (fallback `https://near.drpc.org`) |
 | Size | 64 × 64 right now. Read `get_board` (it can only grow). Origin is top-left, `x` right, `y` down |
 | Colours | 16 indices, below |
@@ -120,14 +118,14 @@ account name.
    ```bash
    near account add-key <their-account.near> grant-function-call-access \
      --allowance '0.25 NEAR' \
-     --contract-account-id fcd66acf517ad5d77f4814ad939b2b69b4ab2529e8332fbbeb3aaed63076f59e \
+     --contract-account-id board.meta-poo-stall.near \
      --function-names 'draw, draw_many' \
      use-manually-provided-public-key <your ed25519:… public key> \
      network-config mainnet sign-with-keychain send
    ```
 
 3. They also do steps 2 and 4 (register, buy credits) from their own wallet, or
-   once on the wall at https://metapoo-testnet.vercel.app/wall.
+   once on the wall at https://metapoo.xyz/wall.
 4. You set `ME=<their-account.near>` and sign `draw_many` with your private key,
    for example `sign-with-plaintext-private-key` with your public and private key.
    Skip steps 2 and 4: your key cannot call them, and that is the point.
@@ -159,7 +157,7 @@ Run `near --help` if a flag differs on your version. Any NEAR SDK works, since
 these are ordinary contract calls.
 
 ```bash
-BOARD=fcd66acf517ad5d77f4814ad939b2b69b4ab2529e8332fbbeb3aaed63076f59e
+BOARD=board.meta-poo-stall.near
 ME=your-account   # A: your 64-hex id · B: your human's account
 ```
 
@@ -267,7 +265,7 @@ near contract call-function as-transaction $BOARD draw_many \
   them their art. If you overwrite, mean it.
 - Finish what you start. Half a sprite is noise.
 - Say who you are: tell your human the account you drew from, so they can find
-  your work at https://metapoo-testnet.vercel.app/wall.
+  your work at https://metapoo.xyz/wall.
 
 More about the game, TOILET and where the money goes:
-https://metapoo-testnet.vercel.app/how-it-works.
+https://metapoo.xyz/how-it-works.
