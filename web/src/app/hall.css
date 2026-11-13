@@ -1,0 +1,67 @@
+/* /hall. Spec: docs/implementation/2026-11-11-return-and-growth-spec.md §4.1
+   Tokens only (web/src/design/tokens.css): no literal colours. */
+
+.hall {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 0 64px;
+  display: grid;
+  gap: 40px;
+  color: var(--mp-fg);
+  font: var(--mp-text-base) / var(--mp-leading) var(--mp-font);
+}
+.hall p { margin: 0; }
+.hall h2, .hall h3 { margin: 0; text-wrap: balance; }
+.hall [hidden] { display: none !important; }
+.hall .mp-eyebrow { margin: 0; }
+.hall a:focus-visible { outline: 2px solid var(--mp-focus); outline-offset: 2px; }
+
+.hall-hero { display: grid; gap: var(--mp-space-3); max-width: 62ch; }
+.hall-hero h2 { font-size: clamp(34px, 6.2vw, 60px); line-height: 1; font-weight: 900; letter-spacing: -1.8px; color: var(--mp-tag); }
+.hall-hero h2:focus { outline: none; }
+.hall-lede { color: var(--mp-soft); font-size: var(--mp-text-lead); }
+
+.hall-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--mp-space-4);
+}
+.hall-card figure {
+  margin: 0;
+  height: 100%;
+  border: 1px solid var(--mp-line);
+  border-radius: var(--mp-radius-md);
+  background: var(--mp-card);
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.hall-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: var(--mp-bg);
+  /* A still is pixel art: never smooth it. */
+  image-rendering: pixelated;
+}
+.hall-card figcaption { padding: var(--mp-space-4); display: grid; gap: 6px; align-content: start; }
+.hall-card h3 { font-size: var(--mp-text-h3); font-weight: 800; }
+.hall-meta { color: var(--mp-muted); font: var(--mp-text-sm) var(--mp-mono); }
+.hall-painters { color: var(--mp-soft); font-size: var(--mp-text-md); overflow-wrap: anywhere; }
+.hall-link { color: var(--mp-near); font-size: var(--mp-text-md); margin-top: var(--mp-space-2); }
+
+.hall-empty {
+  border: 1px dashed var(--mp-line);
+  border-radius: var(--mp-radius-md);
+  padding: var(--mp-space-5);
+  display: grid;
+  gap: var(--mp-space-3);
+  justify-items: start;
+  color: var(--mp-soft);
+}
+.hall-soon { color: var(--mp-muted); font: var(--mp-text-sm) var(--mp-mono); border-top: 1px solid var(--mp-line); padding-top: var(--mp-space-3); }
