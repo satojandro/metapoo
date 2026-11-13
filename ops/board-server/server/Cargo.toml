@@ -17,6 +17,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures = "0.3"
 anyhow = "1"
 dotenvy = "0.15"
+# AWAY-B: view_access_key over JSON-RPC (server/src/telegram_api.rs).
+reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+ed25519-dalek = "2"
+sha2 = "0.10"
+bs58 = "0.5"
+base64 = "0.22"

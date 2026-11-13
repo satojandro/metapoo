@@ -258,9 +258,7 @@ fn write_allowed(state: &TelegramState, headers: &HeaderMap) -> bool {
         WRITES_PER_CLIENT,
         MINUTE_MS,
         now,
-    ) && state
-        .limiter
-        .allow("w:*", WRITES_GLOBAL, MINUTE_MS, now)
+    ) && state.limiter.allow("w:*", WRITES_GLOBAL, MINUTE_MS, now)
 }
 
 const VALKEY_TIMEOUT: Duration = Duration::from_secs(2);
@@ -287,10 +285,7 @@ async fn challenge(
         return refuse(StatusCode::TOO_MANY_REQUESTS, "too many requests");
     }
     let Some(account) = normalize_account(&body.account) else {
-        return refuse(
-            StatusCode::BAD_REQUEST,
-            "account must be a NEAR account id",
-        );
+        return refuse(StatusCode::BAD_REQUEST, "account must be a NEAR account id");
     };
     let Some(action) = Action::parse(&body.action) else {
         return refuse(StatusCode::BAD_REQUEST, "action must be link or unlink");
@@ -341,12 +336,8 @@ async fn verified(
     if !write_allowed(state, headers) {
         return Err(refuse(StatusCode::TOO_MANY_REQUESTS, "too many requests"));
     }
-    let account = normalize_account(&body.account).ok_or_else(|| {
-        refuse(
-            StatusCode::BAD_REQUEST,
-            "account must be a NEAR account id",
-        )
-    })?;
+    let account = normalize_account(&body.account)
+        .ok_or_else(|| refuse(StatusCode::BAD_REQUEST, "account must be a NEAR account id"))?;
     let gone = || refuse(StatusCode::GONE, "this code has expired; start again");
     let code = telegram::normalize_code(&body.code).ok_or_else(gone)?;
     let mut con = state.valkey.clone();
@@ -375,7 +366,10 @@ async fn verified(
         )
     })?;
     // Only now, with a valid signature in hand, is the chain asked.
-    if !state.limiter.allow("rpc:*", RPC_GLOBAL, MINUTE_MS, now_ms()) {
+    if !state
+        .limiter
+        .allow("rpc:*", RPC_GLOBAL, MINUTE_MS, now_ms())
+    {
         return Err(refuse(StatusCode::TOO_MANY_REQUESTS, "too many requests"));
     }
     match state.keys.permission(&account, &body.public_key).await {
@@ -414,9 +408,7 @@ async fn link(
     let status = match attached {
         Attached::Linked { .. } => "linked",
         Attached::Waiting { .. } => "waiting_for_telegram",
-        Attached::Used => {
-            return refuse(StatusCode::CONFLICT, "this code was already signed for")
-        }
+        Attached::Used => return refuse(StatusCode::CONFLICT, "this code was already signed for"),
         Attached::Missing | Attached::Taken => {
             return refuse(StatusCode::GONE, "this code has expired; start again")
         }
@@ -520,7 +512,10 @@ mod tests {
         let unknown_key = json!({"jsonrpc":"2.0","id":"x","error":{
             "name":"HANDLER_ERROR","cause":{"name":"UNKNOWN_ACCESS_KEY","info":{}},
             "code":-32000,"message":"Server error"}});
-        assert_eq!(permission_from_rpc(&unknown_key), Ok(KeyPermission::Missing));
+        assert_eq!(
+            permission_from_rpc(&unknown_key),
+            Ok(KeyPermission::Missing)
+        );
         let legacy = json!({"jsonrpc":"2.0","id":"x","result":{"block_height":1,
             "error":"access key ed25519:abc does not exist while viewing","logs":[]}});
         assert_eq!(permission_from_rpc(&legacy), Ok(KeyPermission::Missing));

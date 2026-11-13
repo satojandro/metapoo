@@ -81,6 +81,8 @@ async fn main() -> anyhow::Result<()> {
     let viewers = Arc::new(AtomicUsize::new(0));
     tokio::spawn(publish_viewers(con.clone(), viewers.clone()));
 
+    // AWAY-B: the Telegram link routes, only on a box configured for the bot.
+    let telegram = server::telegram_api::from_env(con.clone())?;
     let app = api::router(api::AppState {
         board: state,
         valkey: con,
@@ -88,7 +90,11 @@ async fn main() -> anyhow::Result<()> {
         consumer: consumer_health,
         viewers,
         last_hint_ms: Arc::new(AtomicU64::new(0)),
-    })
+    });
+    let app = match telegram {
+        Some(routes) => app.merge(routes),
+        None => app,
+    }
     .layer(CorsLayer::permissive());
     let listener = tokio::net::TcpListener::bind(&listen_addr).await?;
     tracing::info!("listening on {listen_addr}");
