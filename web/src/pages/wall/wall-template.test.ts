@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { wallPageHtml } from "./wall-template";
 
 describe("wallPageHtml", () => {
-  it("keeps the wall primary and implementation detail behind one Contract details link", () => {
+  it("keeps the wall primary and implementation detail behind one Contract details link", async () => {
     const root = document.createElement("div");
     root.innerHTML = wallPageHtml();
 
@@ -87,6 +87,13 @@ describe("wallPageHtml", () => {
     for (const view of ["art", "fresh", "turf"]) {
       expect(root.querySelector(`[data-wall-view="${view}"]`), view).not.toBeNull();
     }
+    // B6: a newcomer learns a wallet is needed before choosing a tile, not after.
+    const note = root.querySelector(".wall-primary-note");
+    expect(note?.textContent).toBe("You’ll connect a wallet when you place your first tile.");
+    expect(note?.previousElementSibling?.id).toBe("start-painting");
+    // B5: the phone paint layout gives the sheet room, so the palette is on screen at once.
+    const css = (await import("node:fs")).readFileSync("src/pages/wall/wall-page.css", "utf8");
+    expect(css).toContain('.wall-page[data-mode="paint"] { --wall-size: min(100%, 34dvh); }');
     expect(about?.contains(root.querySelector("#palette"))).toBe(false);
     expect(about?.contains(root.querySelector("#draw-button"))).toBe(false);
     expect(root.querySelector("#buy-credits-button")?.closest(".paint-dock")).not.toBeNull();

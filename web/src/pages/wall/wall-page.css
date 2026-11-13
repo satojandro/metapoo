@@ -303,6 +303,7 @@
   border-radius: 10px;
   background: var(--mp-card);
 }
+.wall-page .wall-primary-note { margin: var(--mp-space-2) 0 0; color: var(--mp-muted); font: var(--mp-text-xs)/1.4 var(--mp-font); text-align: center; }
 .wall-page .wall-foot-look,
 .wall-page .wall-dock-foot { display: grid; gap: var(--mp-space-2); min-width: 0; }
 /* Just looking only means something before you sign in. */
@@ -574,6 +575,31 @@
 /* ——— Phone: the wall on top at full width, the panel as a bottom sheet ——— */
 @media (max-width: 760px) {
   .wall-page { --wall-size: 100%; padding-block: var(--mp-space-2) 0; }
+
+  /*
+   * B5: entering paint mode used to push the whole palette below the fold on any phone
+   * shorter than ~840 px — measured at 360×640, 390×700 and 320×568, the colour block began
+   * at 722/752/685 px in a 640/700/568 px window, so a new player saw a "Connect wallet to
+   * paint" bar and no colours at all. Paint mode now gives the sheet its room back: the wall
+   * is capped to a share of the viewport (still square, still the thing you paint on), so the
+   * colour row and the first swatch row are on screen the moment the mode opens.
+   */
+  .wall-page[data-mode="paint"] { --wall-size: min(100%, 34dvh); }
+  /* The phone media sets the stage to `width: 100%`, so the cap has to be repeated here or
+     `--wall-size` would be a variable nothing reads. */
+  .wall-page[data-mode="paint"] .wall-stage {
+    position: static;
+    width: min(100%, 34dvh);
+    margin-inline: auto;
+  }
+
+  /* The wall's own chip already says "Tap or drag to paint"; repeating it in the sheet cost
+     67 px of the space the palette needs. */
+  .wall-page[data-mode="paint"] .wall-hint-host { display: none; }
+  /* B5: the footer is pinned to the bottom of the sheet, and on a short screen it sat on top
+     of the palette. In paint mode it takes its place in the flow instead, so the colours can
+     never be behind it; the page scrolls if the sheet needs more room. */
+  .wall-page[data-mode="paint"] .wall-panel-foot { position: static; }
   .wall-page > .wall-main { grid-template-columns: minmax(0, 1fr); gap: 0; }
 
   /* The wall stays in view; the sheet scrolls up to it, never over it. */
@@ -1440,4 +1466,14 @@ html.wall-fullscreen-open body { overflow: hidden; overscroll-behavior: none; }
   .wall-page[data-fullscreen="true"] .wall-panel-body { overflow-y: auto; }
   .wall-page .wall-bar .wall-minimap { width: 108px; bottom: 50px; }
   .wall-page .wall-fullscreen-btn { bottom: 50px; }
+}
+
+/* A 568 px-tall phone still cut the last swatch row at 40dvh. Top-level on purpose: a nested
+   @media inside the phone block is not valid CSS and was silently dropped (review B5). */
+@media (max-width: 760px) and (max-height: 700px) {
+  .wall-page[data-mode="paint"] .wall-stage { width: min(100%, 30dvh); }
+}
+
+@media (max-width: 760px) and (max-height: 620px) {
+  .wall-page[data-mode="paint"] .wall-stage { width: min(100%, 26dvh); }
 }

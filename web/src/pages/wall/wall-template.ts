@@ -184,6 +184,10 @@ export function wallPageHtml(network: NetworkId = PAGE_NETWORK): string {
           <div class="wall-panel-foot">
             <div class="wall-foot-look" data-wall-card="look">
               <button id="start-painting" class="mp-btn mp-btn-primary wall-primary" type="button">Start painting</button>
+              <!-- B6: say it before the first tap, not after the tile is chosen. Trying the
+                   wall without a wallet is deliberate; learning then that a wallet is needed
+                   is not. -->
+              <p class="wall-primary-note">You’ll connect a wallet when you place your first tile.</p>
             </div>
             <div class="paint-dock wall-dock-foot" data-wall-card="paint">
               <div class="wall-tally">
