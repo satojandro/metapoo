@@ -120,6 +120,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
       short.className = "app-nav-short";
       short.textContent = item.short;
       a.append(short);
+      a.classList.add("has-short");
       // The two spans are one link; name it with the full label so a screen reader
       // never hears the abbreviation the phone layout needed.
       a.setAttribute("aria-label", item.label);
@@ -128,6 +129,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     navList.append(li);
   }
   nav.append(navList);
+  nav.classList.toggle("is-crowded", NAV_ITEMS.length > 6);
 
   const statusStrip = document.createElement("div");
   // The dock shows the same status next to Place paint. Keep this copy for

@@ -48,6 +48,20 @@ describe("app shell", () => {
     shell.dispose();
   });
 
+  it("marks only links that have a short label, so the phone rule never blanks the others", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shell = mountShell(host, createAppServices());
+    // Live 13 Nov at 375px: the phone rule hid every .app-nav-long, so five of six
+    // links rendered 0px wide and only "Money" showed. It now keys on .has-short.
+    const marked = [...host.querySelectorAll<HTMLAnchorElement>(".app-nav a.has-short")].map((a) => a.getAttribute("href"));
+    expect(marked).toEqual(["/money"]);
+    for (const a of host.querySelectorAll<HTMLAnchorElement>(".app-nav a:not(.has-short)")) {
+      expect(a.querySelector(".app-nav-short")).toBeNull();
+    }
+    shell.dispose();
+  });
+
   it("shows one wallet control: Connect while disconnected, the panel hidden", () => {
     const host = document.createElement("div");
     document.body.append(host);
