@@ -88,7 +88,7 @@ const TEMPLATE = `
     <h4>Before you start: nothing moves</h4>
     <p>A name isn’t a label on the account you have. It’s a new account, and a new account starts empty. Tiles you hold stay signed by the old id until someone covers them. Credits you bought stay with the old account, and so does the TOILET it earned. There’s no way to send any of it across.</p>
     <p>So get your name early, before you’ve built much. Use up your credits and claim your TOILET on the old account first.</p>
-    <p data-name-privy><b>Signed in with email?</b> That account can’t be given a name. The way to a name is a Meteor wallet with a named account, connected here in place of your email sign-in. It starts empty too.</p>
+    <p data-name-privy><b>Signed in with Google or email?</b> That account can’t be given a name. The way to a name is a Meteor wallet with a named account, connected here in place of that sign-in. It starts empty too.</p>
   </div>
 
   <div class="hiw-name-steps">
