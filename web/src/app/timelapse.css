@@ -53,15 +53,25 @@
   border: 1px solid var(--mp-line);
   border-radius: var(--mp-radius-sm);
   background:
-    repeating-linear-gradient(45deg, transparent 0 7px, var(--mp-card) 7px 8px),
+    repeating-linear-gradient(45deg, transparent 0 7px, var(--mp-line) 7px 8px),
     var(--mp-bg);
   overflow: hidden;
 }
-.tl-canvas {
+/* `.tl-stage .tl-canvas` outranks the site-wide `canvas` rule (style.css), which gives every
+   canvas the live wall's frame, background and size. */
+.tl-stage .tl-canvas {
   display: block;
   width: 100%;
   height: 100%;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
   image-rendering: pixelated;
+  cursor: default;
+  touch-action: auto;
 }
 
 .tl-side { grid-area: side; display: grid; gap: var(--mp-space-5); align-content: start; min-width: 0; }
@@ -152,8 +162,9 @@
   .tl-transport { grid-template-columns: auto minmax(0, 1fr); }
   .tl-scrub { grid-column: 1 / -1; grid-row: 1; }
   .tl-speeds { justify-self: end; }
-  .tl-now { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .tl-when { grid-column: 1 / -1; }
+  .tl-now { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tl-when, .tl-now > div:nth-child(3) { grid-column: 1 / -1; }
+  .tl-now > div:nth-child(3) { order: 1; }
   .tl-now dd { font-size: var(--mp-text-body); }
   .tl-when dd { font-size: 22px; }
 }

@@ -218,7 +218,7 @@ export function mountTimelapsePage(root: HTMLElement, ctx: PageContext, override
       ruler.append(segment);
       const at = (day.start / timeline.length) * 100;
       // Label a day only where there is room for it.
-      if (at - lastLabelAt >= 16 && at <= 86) {
+      if (at - lastLabelAt >= 22 && at <= 84) {
         const label = document.createElement("span");
         label.className = "tl-day-label";
         label.style.left = `${at}%`;
