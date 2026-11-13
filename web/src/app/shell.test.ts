@@ -114,17 +114,6 @@ describe("app shell", () => {
     shell.dispose();
   });
 
-  it("puts the beta notice above the header on every route", () => {
-    const host = document.createElement("div");
-    document.body.append(host);
-    const shell = mountShell(host, createAppServices());
-    const banner = host.firstElementChild!;
-    expect(banner.classList.contains("beta-banner")).toBe(true);
-    expect(banner.nextElementSibling?.classList.contains("app-shell-top")).toBe(true);
-    expect(host.classList.contains("has-beta-banner")).toBe(true);
-    shell.dispose();
-  });
-
   it("places the site footer inside the scrolling outlet, last, so it costs the wall no height", () => {
     const host = document.createElement("div");
     document.body.append(host);

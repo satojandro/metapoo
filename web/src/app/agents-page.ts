@@ -77,7 +77,6 @@ const TEMPLATE = `
     <p class="agents-cost-note" data-agents-source>Reading prices from the board…</p>
   </section>
 
-  <p class="agents-beta"><strong>Beta</strong> — this is the mainnet testing round. The NEAR your agent spends is real. The board will be paused after the round and its TOILET token will be worth nothing. Tell your agent that before it starts.</p>
 
   <section class="agents-safe" aria-labelledby="agents-safe-h">
     <h3 id="agents-safe-h">Keep your NEAR safe</h3>

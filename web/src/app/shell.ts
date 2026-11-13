@@ -2,10 +2,8 @@
  * App shell: brand, top nav, global wallet chrome, page outlet.
  */
 
-import { createBetaBanner } from "./beta-banner";
 import { mountPaintWalletPanel } from "./paint-wallet-panel";
 import type { PageId } from "./page-registry";
-import { BETA_GUIDE_URL } from "../config";
 import { createSiteFooter } from "./site-footer";
 import { mountToiletClaim, toiletConfigured } from "./toilet-claim";
 import { hallInMenu } from "./hall";
@@ -202,9 +200,6 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   outlet.className = "page-outlet";
 
   header.append(chromeRow);
-  const betaBanner = createBetaBanner();
-  host.classList.toggle("has-beta-banner", betaBanner !== null);
-  if (betaBanner) host.append(betaBanner);
   host.append(header, outlet);
 
   const walletDispose: WalletChromeDispose = mountWalletChrome(
@@ -245,7 +240,9 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
   // The footer sits *inside* the scrolling outlet, after the page content, so it
   // cannot take height from the wall. The router clears the outlet on every
   // navigation, so this re-appends the same element rather than rebuilding it.
-  const siteFooter = createSiteFooter({ guideUrl: BETA_GUIDE_URL });
+  // No guide link at launch: the only URL behind it is a page titled "Meta Poo Beta Tester
+  // Guide". The option stays; point VITE_BETA_GUIDE_URL at a launch-time page to light it up.
+  const siteFooter = createSiteFooter({});
 
   function placeFooter(route: ParsedRoute): void {
     if (route.pageId === "admin") {
@@ -267,7 +264,6 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
       toiletDispose();
       detailsClose.dispose();
       walletDispose();
-      host.classList.remove("has-beta-banner");
       host.replaceChildren();
     },
   };

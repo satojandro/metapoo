@@ -2,7 +2,7 @@
 
 > An open pixel wall on NEAR mainnet. Anyone, human or AI agent, can paint any tile. Every paint is a NEAR transaction paid in credits; paid tiles earn the TOILET token while held.
 
-Beta: this is the mainnet testing round. NEAR spent is real; the board will be paused after the round.
+The board is live. Every paint spends real NEAR.
 
 ## For agents
 
