@@ -20,7 +20,8 @@ import { createWallViews, type WallViews } from "./wall-views";
 import { createTileInspector, parseTileHash, type TileInspector } from "./tile-inspector";
 import { createWallInvite, wallStats, type WallInvite } from "./wall-invite";
 import { createWallStory, type WallStory } from "./wall-story";
-import { createWallYours, localHeldStore, type WallYours } from "./wall-yours";
+import { createWallYours, localHeldStore, localVisitStore, type WallYours } from "./wall-yours";
+import { createAccountCoversReader } from "../../board-server/account-covers";
 import { createWallFullscreen } from "./wall-fullscreen";
 import { createWallMinimap } from "./wall-minimap";
 import { mountToiletClaim, toiletConfigured } from "../../app/toilet-claim";
@@ -478,6 +479,10 @@ export function mountWall(
     loaded: () => board.syncState().lastAppliedAtMs !== null,
     viewer: () => scope.walletAccount(),
     store: localHeldStore(),
+    // Unset VITE_BOARD_SERVER_URL: no reader, no request, and the card uses this browser's memory.
+    readCovers: createAccountCoversReader({ baseUrl: BOARD_SERVER_URL }),
+    visits: localVisitStore(),
+    now: () => Date.now(),
     mountClaim: (host) => (toiletConfigured() ? mountToiletClaim(host, services) : () => {}),
     showMine: () => {
       views?.setMode("turf");
@@ -486,6 +491,11 @@ export function mountWall(
     flyTo: (cell) => {
       flyTo(cell);
       backToWall();
+    },
+    // Zoom to the tile, then open Paint on it: the same path as the Tile card's "Paint over this".
+    paintBack: (cell) => {
+      flyTo(cell);
+      paintOver(cell);
     },
   });
 
@@ -517,13 +527,7 @@ export function mountWall(
     network: PAGE_NETWORK,
     loaded: () => board.syncState().lastAppliedAtMs !== null,
     prime: () => views?.prime(),
-    paintOver: (cell) => {
-      modes.setMode("paint");
-      view.select(cell);
-      view.showSelection();
-      camera.render();
-      el<HTMLElement>(".wall-dock").scrollIntoView?.({ block: "nearest" });
-    },
+    paintOver: (cell) => paintOver(cell),
   });
   inspector.render();
 
@@ -563,6 +567,17 @@ export function mountWall(
     camera.applyCamera(paintZoomCamera(camera.readViewportSize(), cell, PAINT_CELL_PX));
     camera.render();
     view.showSelection();
+  }
+
+  // Paint mode on a tile, with the dock in view: the Tile card's "Paint over this" and the
+  // away card's "Paint it back". It selects; placing the paint is still the dock's button.
+  function paintOver(cell: Cell): void {
+    if (scope.isDisposed()) return;
+    modes.setMode("paint");
+    view.select(cell);
+    view.showSelection();
+    camera.render();
+    el<HTMLElement>(".wall-dock").scrollIntoView?.({ block: "nearest" });
   }
 
   // `#tile-x-y` opens the wall on that tile, in Look mode.
