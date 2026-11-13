@@ -57,8 +57,8 @@ function setup(
     operations: createOperationsStore(),
   };
   const client = {
-    challenge: vi.fn(async () => challenge()),
-    link: vi.fn(async () => ({ linked: true, token: "tok" })),
+    challenge: vi.fn(async (): Promise<TelegramChallenge> => challenge()),
+    link: vi.fn(async (): Promise<{ linked: boolean; token: string }> => ({ linked: true, token: "tok" })),
     unlink: vi.fn(async () => {}),
     status: vi.fn(async (): Promise<boolean | null> => true),
   } satisfies TelegramAlertsClient;
@@ -85,7 +85,7 @@ function setup(
   const click = (action: string) => host.querySelector<HTMLElement>(`[data-tg="${action}"]`)!.click();
   const has = (action: string) => host.querySelector(`[data-tg="${action}"]`) !== null;
   const status = () => host.querySelector(".telegram-alerts-status")?.textContent ?? "";
-  return { host, client: deps.client!, sign, storage: deps.storage as ReturnType<typeof memoryStorage>, click, has, status, setSession: (s: WalletSession) => listener(s) };
+  return { host, client, sign, storage: deps.storage as ReturnType<typeof memoryStorage>, click, has, status, setSession: (s: WalletSession) => listener(s) };
 }
 
 it("stays hidden with no board server, no bot username, or no wallet", async () => {
