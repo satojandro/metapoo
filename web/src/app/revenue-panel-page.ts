@@ -10,6 +10,7 @@ import { explorerUrl } from "@shared/board-rules.ts";
 import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
 import { isContractConfigured } from "../contract";
 import { connectWallet } from "../shared/connect-wallet";
+import { sinceLabel } from "../shared/relative-time";
 import { shortAccount } from "../shared/short-account";
 import { isUserRejection, parseTxOutcome } from "../tx-outcome";
 import { signAndSendDistribution } from "../wallet";
@@ -135,6 +136,23 @@ const TEMPLATE = `
   </figure>
 
   <div class="rev-live" data-rev="live">
+    <!-- C8: the totals lead; the two pending-split cards follow them. A page whose first
+         two numbers are both 0 and whose first two buttons are dead is the wrong first
+         impression of where the money goes. -->
+    <div class="rev-stats">
+      <section class="rev-stat" aria-labelledby="rev-reserve-h">
+        <h3 id="rev-reserve-h">Stakers’ reserve</h3>
+        <p class="rev-figure"><span data-rev="reserve">…</span> <span class="rev-unit">mPOO</span></p>
+        <p class="rev-explain" data-rev="reserve-explain"></p>
+      </section>
+      <section class="rev-stat" aria-labelledby="rev-burned-h">
+        <h3 id="rev-burned-h">Burned so far</h3>
+        <p class="rev-figure"><span data-rev="burned">…</span> <span class="rev-unit">mPOO</span></p>
+        <p class="rev-explain">Everything the burn address holds. It has no key, so nothing sent there moves again. This counts burns from anyone, not only this board.</p>
+      </section>
+    </div>
+
+
     <div class="rev-flows">
       <section class="rev-card rev-card-near" aria-labelledby="rev-near-h">
         <h3 id="rev-near-h">NEAR from credit sales</h3>
@@ -165,19 +183,6 @@ const TEMPLATE = `
         <button type="button" class="action rev-send" data-distribute="mpoo">Distribute now</button>
         <p class="rev-hint" data-rev="mpoo-hint"></p>
         <p class="rev-result" data-rev="mpoo-result" role="status"></p>
-      </section>
-    </div>
-
-    <div class="rev-stats">
-      <section class="rev-stat" aria-labelledby="rev-reserve-h">
-        <h3 id="rev-reserve-h">Stakers’ reserve</h3>
-        <p class="rev-figure"><span data-rev="reserve">…</span> <span class="rev-unit">mPOO</span></p>
-        <p class="rev-explain" data-rev="reserve-explain"></p>
-      </section>
-      <section class="rev-stat" aria-labelledby="rev-burned-h">
-        <h3 id="rev-burned-h">Burned so far</h3>
-        <p class="rev-figure"><span data-rev="burned">…</span> <span class="rev-unit">mPOO</span></p>
-        <p class="rev-explain">Everything the burn address holds. It has no key, so nothing sent there moves again. This counts burns from anyone, not only this board.</p>
       </section>
     </div>
 
@@ -268,8 +273,11 @@ export function mountRevenuePage(
       source.textContent = `Reading ${deps.contractId} on ${deps.network}…`;
       return;
     }
-    const when = updatedAt === null ? "" : ` · updated ${new Date(updatedAt).toLocaleTimeString()}`;
-    source.textContent = `Read live from ${deps.contractId} on ${deps.network}${when}.`;
+    // C7: "updated 1:16:25 AM" was a wall-clock time beside a 64-character id — precise,
+    // unreadable and twice as wide as the fact it carries.
+    const when = updatedAt === null ? "" : ` · updated ${sinceLabel(updatedAt)}`;
+    source.textContent = `Read live from ${shortAccount(deps.contractId)} on ${deps.network}${when}.`;
+    source.title = `${deps.contractId}${updatedAt === null ? "" : ` — read at ${new Date(updatedAt).toLocaleTimeString()}`}`;
   }
 
   function renderNotice(): void {

@@ -107,3 +107,12 @@ it("works as a labelled preview with no board", () => {
   expect(t.root.querySelector("[data-tlt-source]")!.textContent).toMatch(/isn’t connected to a board/);
   expect(t.root.querySelector("[data-tlt-claim]")!.textContent).toMatch(/nothing to claim here/);
 });
+
+
+it("renders the hard cap at stat size, not paragraph size (C5)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync("src/app/toilet.css", "utf8");
+  // The generic card rule must not be able to win over the cap's own size.
+  expect(css).toContain(".tlt-supply .mp-card .tlt-cap");
+  expect(css).toMatch(/\.tlt-supply \.mp-card \.tlt-cap \{[^}]*font-size: clamp\(34px/);
+});
