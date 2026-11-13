@@ -5,6 +5,9 @@ import { buildTimeline, createReplay } from "./timeline";
 
 const BASE = "https://board.example";
 
+/** A response body from bytes (a fresh ArrayBuffer, which every `Response` accepts). */
+const body = (bytes: Uint8Array) => bytes.slice().buffer as ArrayBuffer;
+
 function headJson(head: HistoryHead): Record<string, unknown> {
   return {
     epoch: head.epoch,
@@ -29,7 +32,7 @@ function server(head: HistoryHead, pages: Uint8Array[]) {
     if (url.searchParams.get("epoch") !== String(head.epoch)) return new Response("stale", { status: 409 });
     const after = url.searchParams.get("after");
     const index = after ? Number(after.split("-")[0]) / 1_000_000 : 0;
-    return new Response(pages[index] ?? new Uint8Array(), { status: pages[index] ? 200 : 404 });
+    return new Response(body(pages[index] ?? new Uint8Array()), { status: pages[index] ? 200 : 404 });
   });
   return { urls, fetcher: fetcher as unknown as typeof fetch };
 }
@@ -120,7 +123,7 @@ describe("createHistoryReader", () => {
         if (head.epoch === 5) head = { ...head, epoch: 6 };
         return body;
       }
-      return url.searchParams.get("epoch") === "6" ? new Response(pages[0]) : new Response("stale", { status: 409 });
+      return url.searchParams.get("epoch") === "6" ? new Response(body(pages[0]!)) : new Response("stale", { status: 409 });
     }) as typeof fetch;
     const log = await createHistoryReader({ baseUrl: BASE, fetcher })!.loadLog();
     expect(log?.head.epoch).toBe(6);
@@ -138,12 +141,12 @@ describe("createHistoryReader", () => {
       ["second page is HTML", (async (input: RequestInfo | URL) => {
         const url = new URL(String(input));
         if (url.pathname.endsWith("/head")) return Response.json(headJson(head));
-        return url.searchParams.get("after") ? new Response("<html>bad gateway</html>") : new Response(pages[0]);
+        return url.searchParams.get("after") ? new Response("<html>bad gateway</html>") : new Response(body(pages[0]!));
       }) as typeof fetch],
       ["a page cut off in transit", (async (input: RequestInfo | URL) => {
         const url = new URL(String(input));
         if (url.pathname.endsWith("/head")) return Response.json(headJson(head));
-        return new Response(pages[0]!.subarray(0, 700));
+        return new Response(body(pages[0]!.subarray(0, 700)));
       }) as typeof fetch],
       ["stale twice", (async (input: RequestInfo | URL) => {
         const url = new URL(String(input));
