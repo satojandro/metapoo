@@ -34,7 +34,7 @@ internet ── 80/443 ──► caddy ──► server:3000 ──► valkey �
 
 | file | what |
 |---|---|
-| `docker-compose.yml` | Valkey, indexer, server. Unchanged; local and Mini use it alone |
+| `docker-compose.yml` | Valkey, indexer, server. Its services are unchanged; local and Mini use it alone |
 | `docker-compose.prod.yml` | overlay for this box: adds Caddy, switches Valkey to `valkey.prod.conf` |
 | `Caddyfile` | HTTPS for `BOARD_HOSTNAME`, everything proxied to the server, blobs compressed |
 | `valkey.prod.conf` | `appendonly yes`, `maxmemory 1gb`, `noeviction` (includes `valkey.conf`) |
@@ -371,8 +371,8 @@ and random. To use Telegram instead (or as well), set `ALERT_TELEGRAM_BOT_TOKEN`
 id. Anything else goes through `ALERT_CMD`.
 
 ```bash
-scripts/health-alert.sh; echo "exit $?"        # "ok", exit 0 (it will name the missing backup until the first one exists)
-scripts/backup-valkey.sh                       # the first backup
+scripts/backup-valkey.sh                       # the first backup (it says "kept on this box only" until section 15)
+scripts/health-alert.sh; echo "exit $?"        # "ok", exit 0
 sudo cp deploy/systemd/board-*.service deploy/systemd/board-*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now board-alert.timer board-backup.timer
@@ -658,6 +658,8 @@ binaries built from this branch (TIMELAPSE merged):
 
 - `docker compose config` with the overlay (four services, Valkey on `valkey.prod.conf`) and
   without it (three services, unchanged); it refuses to start without `BOARD_HOSTNAME`.
+- The base stack alone, after the overlay had run: three services, `appendonly no`, no
+  `maxmemory`, as before this change.
 - The overlay stack running: the server published on `127.0.0.1:3000` only, Valkey not
   published; `appendonly yes`, `maxmemory 1073741824`, `noeviction` in effect.
 - Caddy (with `BOARD_HOSTNAME=localhost` and its internal CA): `/api/health` over HTTPS, the
