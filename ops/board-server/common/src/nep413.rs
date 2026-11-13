@@ -114,7 +114,10 @@ mod tests {
     #[test]
     fn the_tag_is_two_to_the_31_plus_413() {
         assert_eq!(TAG, 2_147_484_061);
-        assert_eq!(&payload_bytes("", &[0; 32], "", None)[..4], &[0x9d, 0x01, 0x00, 0x80]);
+        assert_eq!(
+            &payload_bytes("", &[0; 32], "", None)[..4],
+            &[0x9d, 0x01, 0x00, 0x80]
+        );
     }
 
     #[test]
@@ -137,11 +140,25 @@ mod tests {
     #[test]
     fn a_near_api_js_signature_verifies() {
         assert_eq!(
-            verify("hi", &nonce(), "myapp.com", Some(CALLBACK), PUBLIC_KEY, WITH_CALLBACK),
+            verify(
+                "hi",
+                &nonce(),
+                "myapp.com",
+                Some(CALLBACK),
+                PUBLIC_KEY,
+                WITH_CALLBACK
+            ),
             Ok(())
         );
         assert_eq!(
-            verify("hi", &nonce(), "myapp.com", None, PUBLIC_KEY, WITHOUT_CALLBACK),
+            verify(
+                "hi",
+                &nonce(),
+                "myapp.com",
+                None,
+                PUBLIC_KEY,
+                WITHOUT_CALLBACK
+            ),
             Ok(())
         );
         // Wallets differ on base64 padding.
@@ -164,17 +181,29 @@ mod tests {
             verify(m, n, r, c, PUBLIC_KEY, WITHOUT_CALLBACK)
         };
         assert_eq!(ok("hi", &nonce(), "myapp.com", None), Ok(()));
-        assert_eq!(ok("hi!", &nonce(), "myapp.com", None), Err(VerifyError::Mismatch));
+        assert_eq!(
+            ok("hi!", &nonce(), "myapp.com", None),
+            Err(VerifyError::Mismatch)
+        );
         let mut other = nonce();
         other[31] ^= 1;
-        assert_eq!(ok("hi", &other, "myapp.com", None), Err(VerifyError::Mismatch));
-        assert_eq!(ok("hi", &nonce(), "evil.com", None), Err(VerifyError::Mismatch));
+        assert_eq!(
+            ok("hi", &other, "myapp.com", None),
+            Err(VerifyError::Mismatch)
+        );
+        assert_eq!(
+            ok("hi", &nonce(), "evil.com", None),
+            Err(VerifyError::Mismatch)
+        );
         assert_eq!(
             ok("hi", &nonce(), "myapp.com", Some(CALLBACK)),
             Err(VerifyError::Mismatch)
         );
         // Bytes moved between message and recipient: the length prefixes keep them apart.
-        assert_eq!(ok("himyapp", &nonce(), ".com", None), Err(VerifyError::Mismatch));
+        assert_eq!(
+            ok("himyapp", &nonce(), ".com", None),
+            Err(VerifyError::Mismatch)
+        );
     }
 
     #[test]
@@ -202,10 +231,18 @@ mod tests {
             "ed25519:abc",
             "ed25519:0OIl",
         ] {
-            assert_eq!(v(key, WITHOUT_CALLBACK), Err(VerifyError::BadPublicKey), "{key:?}");
+            assert_eq!(
+                v(key, WITHOUT_CALLBACK),
+                Err(VerifyError::BadPublicKey),
+                "{key:?}"
+            );
         }
         for sig in ["", "not base64!", "aGk=", &WITHOUT_CALLBACK[..40]] {
-            assert_eq!(v(PUBLIC_KEY, sig), Err(VerifyError::BadSignature), "{sig:?}");
+            assert_eq!(
+                v(PUBLIC_KEY, sig),
+                Err(VerifyError::BadSignature),
+                "{sig:?}"
+            );
         }
     }
 }
