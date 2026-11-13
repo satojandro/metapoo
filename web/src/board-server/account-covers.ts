@@ -60,17 +60,16 @@ export function parseAccountCovers(body: unknown): AccountCovers | null {
   if (total === null || !Array.isArray(raw.by)) return null;
 
   const by: AccountCoverer[] = [];
-  let credited = 0;
   for (const entry of raw.by as unknown[]) {
     if (!entry || typeof entry !== "object") return null;
     const row = entry as Record<string, unknown>;
     const tiles = count(row.tiles);
     if (typeof row.account !== "string" || row.account.trim() === "" || tiles === null || tiles === 0) return null;
-    credited += tiles;
+    // A tile covered by two accounts counts once in `count` and once for each of them, so the
+    // coverers may add up to more than the count; no single coverer can exceed it.
+    if (tiles > total) return null;
     by.push({ account: row.account, tiles });
   }
-  // Each covered tile has one coverer, so the coverers cannot add up to more than the count.
-  if (credited > total) return null;
   if (total === 0 && by.length > 0) return null;
   // The contract says "sorted by tiles desc"; sort anyway so the card never names the wrong one.
   by.sort((a, b) => b.tiles - a.tiles || (a.account < b.account ? -1 : a.account > b.account ? 1 : 0));

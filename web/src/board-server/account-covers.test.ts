@@ -24,6 +24,18 @@ describe("account covers: the response shape", () => {
     expect(parseAccountCovers({ count: 0, by: [], first: null })).toEqual({ count: 0, by: [], first: null });
   });
 
+  it("accepts coverers adding up to more than the count (one tile covered by two accounts)", () => {
+    const body = {
+      count: 2,
+      by: [
+        { account: "a.near", tiles: 2 },
+        { account: "b.near", tiles: 1 },
+      ],
+      first: { x: 1, y: 1 },
+    };
+    expect(parseAccountCovers(body)?.by).toEqual(body.by);
+  });
+
   it("sorts coverers by tiles even if the server did not", () => {
     expect(
       parseAccountCovers({ count: 4, by: [{ account: "b.near", tiles: 1 }, { account: "a.near", tiles: 3 }], first: { x: 0, y: 0 } })?.by,
@@ -42,7 +54,7 @@ describe("account covers: the response shape", () => {
     ["a coverer with no name", { count: 1, by: [{ account: "", tiles: 1 }], first: { x: 1, y: 1 } }],
     ["a coverer with zero tiles", { count: 1, by: [{ account: "a.near", tiles: 0 }], first: { x: 1, y: 1 } }],
     ["a coverer that is not an object", { count: 1, by: ["a.near"], first: { x: 1, y: 1 } }],
-    ["coverers adding up to more than the count", { count: 2, by: [{ account: "a.near", tiles: 3 }], first: { x: 1, y: 1 } }],
+    ["one coverer with more tiles than the count", { count: 2, by: [{ account: "a.near", tiles: 3 }], first: { x: 1, y: 1 } }],
     ["a count with no first tile", { count: 3, by: [{ account: "a.near", tiles: 3 }], first: null }],
     ["a first tile with nothing covered", { count: 0, by: [], first: { x: 1, y: 1 } }],
     ["coverers with nothing covered", { count: 0, by: [{ account: "a.near", tiles: 1 }], first: null }],
