@@ -106,7 +106,7 @@ export function buildTimeline(records: readonly HistoryRecord[], head: Pick<Hist
     const need = Math.max(xs[i]!, ys[i]!) + 1;
     if (need > side && need > widest) widest = need;
   }
-  if (widest > 0) startSide = clampSide(Math.max(startSide, widest > startSide ? head.side : startSide, widest));
+  if (widest > 0) startSide = clampSide(Math.max(startSide, head.side, widest));
   let maxSide = startSide;
   for (const x of expansions) maxSide = Math.max(maxSide, x.to);
 
@@ -131,13 +131,11 @@ export function buildTimeline(records: readonly HistoryRecord[], head: Pick<Hist
   };
 }
 
-/** The wall's side after `position` paints. */
+/** The wall's side after `position` paints (an expansion at `position` has happened). */
 export function sideAt(timeline: Timeline, position: number): number {
   let side = timeline.startSide;
   for (const x of timeline.expansions) {
     if (x.at > position) break;
-    // An expansion sitting exactly at `position` has happened once the paint before it has.
-    if (x.at === position && position === 0) break;
     side = Math.max(side, x.to);
   }
   return side;
@@ -197,7 +195,7 @@ export function createReplay(timeline: Timeline): Replay {
       return sideAt(timeline, position);
     },
     seek(target) {
-      const to = Math.min(timeline.length, Math.max(0, Math.floor(Number.isFinite(target) ? target : 0)));
+      const to = Math.min(timeline.length, Math.max(0, Number.isNaN(target) ? 0 : Math.floor(target)));
       const checkpoint = Math.floor(to / CHECKPOINT_EVERY);
       let from = position;
       // Backwards, or forwards past a nearer checkpoint: start from the checkpoint.
