@@ -16,6 +16,7 @@ import { BOARD_HEIGHT, BOARD_WIDTH, type PixelView } from "@shared/types.ts";
 import { accountExplorerUrl } from "../../app/revenue-panel";
 import type { Cell } from "../../selection";
 import { shortAccount } from "../../shared/short-account";
+import { nameLink } from "../../shared/get-a-name";
 import type { WallScope } from "./wall-scope";
 import {
   blankIsFree,
@@ -168,6 +169,8 @@ export interface TileInspectorDeps {
   pageUrl?: () => string;
   now?: () => number;
   tickMs?: number;
+  /** NAMES: offer "Get a name" beside the viewer's own hex id. Defaults to the build flag. */
+  namesGuide?: boolean;
 }
 
 export interface TileInspector {
@@ -269,6 +272,8 @@ export function createTileInspector(deps: TileInspectorDeps): TileInspector {
         who.title = full;
       }
       if (model.painter.you) who.append(el("span", "tile-you", "you"));
+      const getName = nameLink(full, deps.viewer(), deps.namesGuide);
+      if (getName) who.append(getName);
       list.append(row("Painted by", who));
     }
 

@@ -103,7 +103,9 @@ board's transactions since the watermark, however long the gap.
 
 | key | what | kept |
 |---|---|---|
-| `draw_history` | Stream. One entry per applied tile, fields `block, at_ms, x, y, color, by, free` (spec §4.2). Id `<position>-<index>`: the event's `block × 10⁶ + place in block`, then the tile's place in the event, so ids are fixed by the chain and a timelapse can page by block with `XRANGE draw_history <block × 10⁶> +`. Tiles the contract rejected are not in it. `board_expanded` is not in it either. | **forever**: no `MAXLEN`, nothing trims it |
+| `draw_history` | Stream. One entry per applied tile, fields `block, at_ms, x, y, color, by, free` (spec §4.2). Id `<position>-<index>`: the event's `block × 10⁶ + place in block`, then the tile's place in the event, so ids are fixed by the chain and a timelapse can page by block with `XRANGE draw_history <block × 10⁶> +`. Tiles the contract rejected are not in it. **`board_expanded` is in it** as a second kind of entry, in order with the draws: id `<position>-0`, fields `kind = expand, block, at_ms, from, to`. Draw entries have no `kind` field and did not change, so a stream written before expansions were logged reads as before. | **forever**: no `MAXLEN`, nothing trims it |
+| `draw_history:genesis` | Hash `{start_block, initial_side}`, written by the backfill once it has certified that the log starts at the deploy block. Absent, the log starts where the consumer began writing it. | until the mirror is wiped |
+| `draw_history:epoch` | A number naming this copy of the log: the ms at which it was first read, replaced whenever the backfill rewrites the stream. Part of every cacheable history URL. | — |
 | `covers:<account>` | Sorted set per account whose tile someone else painted over, scored by `at_ms`. Member `<position>:<index>:{"x","y","by","at_ms"}`, so writing the same cover twice is one member. Painting over your own tile is not a cover. | 30 days: trimmed on each write, the key expires 30 days after its last write, covers already older than that are never written |
 
 Both are written in the consumer's `MULTI`/`EXEC` with the board, so they cannot disagree
@@ -126,7 +128,14 @@ unless the replay equals what the consumer has already logged up to that point. 
 builds the log in `draw_history:backfill`, and one Lua script copies across the live entries
 newer than the replay and renames it over `draw_history` (the consumer cannot append in
 between). It re-adds the last 30 days of covers and ends with the tip check. Running it twice
-changes nothing.
+changes nothing: the second run finds the log equal to the replay and does not rewrite it.
+
+It replays `board_expanded` too. A log written by a server from before expansions were logged
+holds the draws but not the growth; the backfill adds the missing expansions (so **a deploy
+that already ran the backfill with the older version should run it once more** if its board
+has ever grown; on a board that never grew a second run only writes the marker). When it
+succeeds it writes `draw_history:genesis`, which is what lets `/api/history/head` say
+`complete: true`, and a rewrite replaces `draw_history:epoch`.
 
 The replay numbers events the way the `txindex` indexer does. A mirror built by the `stream`
 indexer numbers events within a block differently, and the backfill will refuse rather than
@@ -134,8 +143,35 @@ merge mismatched ids.
 
 **Tip check.** `board-history check` rebuilds each tile's latest colour, holder and free bit
 from the log and compares it with the stored blob (the same comparison `replay-check.py` makes
-against the chain). Exit 0 when they agree, 1 with the differences when not. Before the
-backfill it fails, because the log does not yet hold the tiles painted before it started.
+against the chain). It also follows the log's `board_expanded` entries: each must start from
+the side the one before left, the last must end at the stored `board_side`, with a genesis
+marker the chain must start at its `initial_side`, and no draw may lie outside the side in
+force when it was applied. Exit 0 when all of that holds, 1 with the differences when not. It
+prints whether the start is certified. Before the backfill it fails, because the log does not
+yet hold the tiles painted before it started.
+
+**Reading it: `GET /api/history/head` and `GET /api/history`** (`server/src/history_api.rs`,
+TIMELAPSE, spec §4.3).
+
+- `/api/history/head` → `{epoch, complete, start_block, initial_side, entries, first, last,
+  side, page_limit}`, `no-cache`. `complete` is true only with the genesis marker; until then
+  the log starts at `first` (`{block, at_ms}`), and the `/timelapse` page says so instead of
+  presenting a partial log as the whole story. Six O(1) Valkey commands.
+- `/api/history?epoch=<n>&after=<cursor>` → one page of up to 20,000 stream rows, oldest
+  first, as a compact binary (`common/src/history_wire.rs`, magic `MPH1`): paints that share a
+  block and a time share a header, and each tile is 3 bytes (x, y, colour index). Painters and
+  the free bit are not sent. `after` is the cursor the previous page returned; `from_block=`
+  starts at a block instead; `limit=` (1–20,000) asks for less.
+- **A full page is immutable** (`Cache-Control: public, max-age=31536000, immutable`): the log
+  only grows above its last id, so `(epoch, after)` names the same bytes forever. The last,
+  partial page is `no-cache`. A request for another epoch answers **409**: the backfill
+  rewrote the log, read the head again. 400 for a parameter that does not parse, 503 if
+  Valkey does not answer in 5 s.
+- Cost: one request per 20,000 tiles painted plus the head, about 3.3 bytes a tile. 2,000
+  tiles is 2 requests and ~7 KB; 100,000 is 7 requests and ~330 KB; 1,000,000 is 52 requests
+  and ~3.3 MB, all but the last cacheable for good. Per request Valkey does one
+  `XRANGE … COUNT 20000` at most, and a full page is packed once per server process and then
+  served from memory. There is no compression middleware here; a proxy in front may add gzip.
 
 ## Run
 
@@ -168,7 +204,8 @@ cargo test -- --test-threads=1          # Valkey tests are skipped unless TEST_V
 cargo clippy --all-targets -- -D warnings
 ```
 
-The log and covers are tested in `server/tests/history.rs` (consumer and endpoint) and
+The log and covers are tested in `server/tests/history.rs` (consumer and endpoint),
+`server/tests/timelapse.rs` (`board_expanded` in the log, the head and the pages) and
 `indexer/tests/backfill.rs` (backfill with a scripted index, the real consumer and Valkey).
 
 Spec §7.1, a replay that matches the chain tile for tile:

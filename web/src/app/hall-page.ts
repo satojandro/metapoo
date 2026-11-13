@@ -5,16 +5,31 @@
  * a link back to the spot on the live wall. The data is `hall.json`, curated by hand.
  *
  * With no entries the page says so plainly; it is not linked from the menu until it
- * has three (owner, 11 Nov). The timelapse is teased at the foot, not given a page.
+ * has three (owner, 11 Nov).
+ *
+ * The timelapse is teased at the foot and is not in the menu (owner, spec §4.4). The foot
+ * line becomes a real link to `/timelapse` only once the board server says its draw log
+ * has something to play (one small `GET /api/history/head`); with no server, a server that
+ * does not answer, or an empty log it stays "coming soon", so the link never leads to an
+ * empty page.
  */
 
 import type { PageContext, PageDispose } from "./page-registry";
 import { HALL_ENTRIES, hallDate, hallWallHref, type HallEntry } from "./hall";
 import { shortAccount } from "../shared/short-account";
+import { BOARD_SERVER_URL } from "../config";
+import { createHistoryReader } from "../timelapse/history-client";
 import "./hall.css";
 
 export interface HallPageDeps {
   entries: readonly HallEntry[];
+  /** True when `/timelapse` has a recording to play. Any doubt is false. */
+  timelapseHasData: () => Promise<boolean>;
+}
+
+async function timelapseHasData(): Promise<boolean> {
+  const head = await createHistoryReader({ baseUrl: BOARD_SERVER_URL })?.readHead();
+  return !!head && head.entries > 0;
 }
 
 const TEMPLATE = `
@@ -29,10 +44,14 @@ const TEMPLATE = `
     <p><strong>Nothing hung yet.</strong> The first stills go up once the wall has something worth remembering.</p>
     <a class="mp-btn mp-btn-primary" href="/wall">Go paint something</a>
   </section>
-  <p class="hall-soon">Watch the wall fill, tile by tile — a timelapse is coming soon.</p>
+  <p class="hall-soon" data-hall-timelapse>Watch the wall fill, tile by tile — a timelapse is coming soon.</p>
 </article>`;
 
-function card(entry: HallEntry): HTMLLIElement {
+/**
+ * One still as a card. Shared with the agent gallery on /agents, which sits one
+ * heading level lower and appends the prompt to the caption.
+ */
+export function hallCard(entry: HallEntry, heading: "h3" | "h4" = "h3"): HTMLLIElement {
   const li = document.createElement("li");
   li.className = "hall-card";
   li.dataset.hallId = entry.id;
@@ -46,7 +65,7 @@ function card(entry: HallEntry): HTMLLIElement {
   figure.append(img);
 
   const caption = document.createElement("figcaption");
-  const title = document.createElement("h3");
+  const title = document.createElement(heading);
   title.textContent = entry.title;
   const meta = document.createElement("p");
   meta.className = "hall-meta";
@@ -70,17 +89,30 @@ function card(entry: HallEntry): HTMLLIElement {
 }
 
 export function mountHallPage(root: HTMLElement, _ctx: PageContext, overrides: Partial<HallPageDeps> = {}): PageDispose {
-  const deps: HallPageDeps = { entries: HALL_ENTRIES, ...overrides };
+  const deps: HallPageDeps = { entries: HALL_ENTRIES, timelapseHasData, ...overrides };
   root.insertAdjacentHTML("beforeend", TEMPLATE);
   const page = root.querySelector<HTMLElement>(".hall")!;
   const grid = page.querySelector<HTMLOListElement>("[data-hall-grid]")!;
   const empty = page.querySelector<HTMLElement>("[data-hall-empty]")!;
 
-  grid.append(...deps.entries.map(card));
+  grid.append(...deps.entries.map((e) => hallCard(e)));
   grid.hidden = deps.entries.length === 0;
   empty.hidden = deps.entries.length > 0;
 
+  let disposed = false;
+  void deps.timelapseHasData().then(
+    (has) => {
+      if (disposed || !has) return;
+      const link = document.createElement("a");
+      link.href = "/timelapse";
+      link.textContent = "Watch the wall fill, tile by tile";
+      page.querySelector<HTMLElement>("[data-hall-timelapse]")!.replaceChildren(link, document.createTextNode(" — the timelapse."));
+    },
+    () => undefined,
+  );
+
   return () => {
+    disposed = true;
     page.remove();
   };
 }

@@ -31,6 +31,7 @@ export type PageId =
   | "how"
   | "agents"
   | "hall"
+  | "timelapse"
   | "money"
   | "toilet"
   | "stake"
