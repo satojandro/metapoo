@@ -1,8 +1,9 @@
 //! `board-history`: the HISTORY log's one-off tools (return-and-growth spec §4.2).
 //!
 //! - `board-history check`: the tip check. Rebuilds the tile state from `draw_history` and
-//!   compares it with the stored board. Exit 0 when they agree, 1 when they do not. Valkey
-//!   only, no network.
+//!   compares it with the stored board, and checks that the log's `board_expanded` entries
+//!   end at the stored side. Exit 0 when they agree, 1 when they do not. Valkey only, no
+//!   network.
 //! - `board-history backfill`: replays the board's events from `START_BLOCK_HEIGHT` (the deploy
 //!   block) through the mirror's tip from FastNEAR's transaction index, merges them into
 //!   `draw_history`, re-adds the last 30 days of cover events, then runs the check. Safe to
@@ -20,9 +21,18 @@ use redis::AsyncCommands;
 
 fn print_tip(tip: &TipReport) {
     println!(
-        "log: {} entries, blocks {:?}..{:?}; mirror tip position {:?}",
-        tip.entries, tip.first_block, tip.last_block, tip.last_applied_position
+        "log: {} entries and {} board expansions, blocks {:?}..{:?}; mirror tip position {:?}",
+        tip.entries, tip.expansions, tip.first_block, tip.last_block, tip.last_applied_position
     );
+    match tip.genesis {
+        Some(g) => println!(
+            "start: certified from the deploy block {} (side {}) by the backfill",
+            g.start_block, g.initial_side
+        ),
+        None => println!(
+            "start: NOT certified: the log begins where the consumer started writing it; run `board-history backfill`"
+        ),
+    }
     if tip.matches() {
         println!("tip check: the log's tile state equals the stored board");
     } else {
@@ -94,11 +104,18 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
             let report =
-                indexer::backfill::backfill(&mut con, &events, through, side, now_ms()).await?;
+                indexer::backfill::backfill(&mut con, &events, through, start, side, now_ms())
+                    .await?;
             println!(
-                "replayed {} events into {} entries; {} already logged and matching; {} newer kept; {} recent covers",
+                "replayed {} events into {} entries and {} board expansions; {}; {} already logged and matching; {} newer kept; {} recent covers",
                 report.events,
                 report.replayed_entries,
+                report.replayed_expansions,
+                if report.rewritten {
+                    "log rewritten"
+                } else {
+                    "log already equal, not rewritten"
+                },
                 report.overlap_entries,
                 report.newer_entries,
                 report.covers

@@ -204,7 +204,8 @@ mod tests {
             })
         }));
         let both = encode_page(&two, Some((223_113_616_000_002, 63)), false);
-        assert_eq!(both.len(), one.len() + 1 + 1 + 3 + 1 + 64 * 3);
+        // (and the row count, now 128, takes a second byte)
+        assert_eq!(both.len(), one.len() + 1 + (1 + 1 + 3 + 1) + 64 * 3);
         assert_eq!(&both[..4], MAGIC);
     }
 

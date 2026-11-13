@@ -14,11 +14,22 @@
 //! 4. It re-adds the cover events of the last 30 days (members are deterministic, so the ones
 //!    the consumer already wrote are unchanged), then runs the tip check.
 //!
-//! Re-running it is safe: the second run replays the same entries and changes nothing.
+//! `board_expanded` events are replayed into the log too (TIMELAPSE, spec §4.3). A log written
+//! by a server from before that existed holds draws but no expansions; the replay's are added,
+//! never dropped, and a live expansion the replay does not reproduce stops the run like a
+//! disagreeing draw does.
+//!
+//! When it succeeds it writes the **genesis marker** (`draw_history:genesis`: the deploy block
+//! and the side there): the log now starts at the first paint, and `GET /api/history/head`
+//! says `complete: true`. When it rewrote the stream it also bumps `draw_history:epoch`, which
+//! is part of every cacheable history page URL.
+//!
+//! Re-running it is safe: the second run replays the same entries, finds the log already equal
+//! to them and rewrites nothing.
 
 use std::time::Duration;
 
-use common::history::{self, Cover, HistoryEntry, Replay, TipReport};
+use common::history::{self, Cover, Expansion, HistoryEntry, LogRow, Replay, TipReport};
 use common::{keys, QueuedEvent, SEQ_PER_BLOCK};
 use redis::aio::ConnectionManager;
 
@@ -68,6 +79,10 @@ pub struct BackfillReport {
     pub events: usize,
     /// Entries the replay produced (deploy block through the tip).
     pub replayed_entries: usize,
+    /// `board_expanded` entries the replay produced.
+    pub replayed_expansions: usize,
+    /// True when the stream was rebuilt; false when it already equalled the replay.
+    pub rewritten: bool,
     /// Entries the consumer had already logged at or below the tip; all matched the replay.
     pub overlap_entries: usize,
     /// Live entries above the replay, copied across by the merge.
@@ -81,7 +96,8 @@ pub struct BackfillReport {
 
 /// Copy the live entries newer than the backfill's last one into it, then rename it over the
 /// live key. Atomic: the consumer's next `XADD` lands either before (and is copied) or after
-/// (on the renamed stream, whose last id is now the largest).
+/// (on the renamed stream, whose last id is now the largest). The epoch and the genesis marker
+/// move in the same script, so a reader never sees the new log under the old epoch.
 const MERGE: &str = r"
 local last = redis.call('XREVRANGE', KEYS[2], '+', '-', 'COUNT', 1)
 if #last == 0 then return -1 end
@@ -90,6 +106,8 @@ for _, row in ipairs(rows) do
   redis.call('XADD', KEYS[2], row[1], unpack(row[2]))
 end
 redis.call('RENAME', KEYS[2], KEYS[1])
+redis.call('INCR', KEYS[3])
+redis.call('HSET', KEYS[4], 'start_block', ARGV[1], 'initial_side', ARGV[2])
 return #rows
 ";
 
@@ -101,11 +119,13 @@ fn key(e: &HistoryEntry) -> (u64, u32) {
 }
 
 /// Replay `events` (deploy block through `through_position`) and merge the result into
-/// `draw_history`. See the module docs; `now_ms` sets the 30-day cover window.
+/// `draw_history`. See the module docs; `start_block` and `initial_side` are the deploy block and
+/// the side there (they become the genesis marker); `now_ms` sets the 30-day cover window.
 pub async fn backfill(
     con: &mut ConnectionManager,
     events: &[QueuedEvent],
     through_position: u64,
+    start_block: u64,
     initial_side: u32,
     now_ms: u64,
 ) -> anyhow::Result<BackfillReport> {
@@ -118,10 +138,12 @@ pub async fn backfill(
 
     let mut replay = Replay::new(initial_side);
     let mut entries: Vec<HistoryEntry> = Vec::new();
+    let mut rows: Vec<LogRow> = Vec::new();
     let mut covers: Vec<Cover> = Vec::new();
     let mut skipped = Vec::new();
     for event in &ordered {
         let out = replay.apply(event);
+        rows.extend(out.rows());
         entries.extend(out.entries);
         covers.extend(out.covers);
         skipped.extend(
@@ -132,7 +154,8 @@ pub async fn backfill(
     }
 
     // What the consumer already wrote, up to the tip, must be exactly the replay's tail.
-    let (live, _) = history::read_log(con, keys::DRAW_HISTORY).await?;
+    let (live_rows, _) = history::read_rows(con, keys::DRAW_HISTORY).await?;
+    let live = history::draws(&live_rows);
     let live_to_tip: Vec<&HistoryEntry> = live
         .iter()
         .filter(|e| e.position <= through_position)
@@ -156,25 +179,58 @@ pub async fn backfill(
             );
         }
     }
+    // Expansions: the live log may lack some (a server from before they were logged wrote
+    // none), but any it holds must be one the replay produced.
+    let replayed_expansions = history::expansions(&rows);
+    let live_expansions: Vec<Expansion> = history::expansions(&live_rows)
+        .into_iter()
+        .filter(|e| e.position <= through_position)
+        .collect();
+    if let Some(stray) = live_expansions
+        .iter()
+        .find(|e| !replayed_expansions.contains(e))
+    {
+        anyhow::bail!(
+            "the live log holds {stray:?}, which the replay does not produce; nothing written"
+        );
+    }
 
-    if !entries.is_empty() {
+    // Already equal to the replay (a second run): leave the stream and its epoch alone.
+    let rewritten = !rows.is_empty()
+        && (live_to_tip.len() != entries.len() || live_expansions != replayed_expansions);
+    if rewritten {
         let _: () = redis::cmd("DEL")
             .arg(keys::DRAW_HISTORY_BACKFILL)
             .query_async(con)
             .await?;
-        for chunk in entries.chunks(CHUNK) {
+        for chunk in rows.chunks(CHUNK) {
             let mut pipe = redis::pipe();
-            for entry in chunk {
-                entry.xadd(&mut pipe, keys::DRAW_HISTORY_BACKFILL);
+            for row in chunk {
+                row.xadd(&mut pipe, keys::DRAW_HISTORY_BACKFILL);
             }
             pipe.query_async::<()>(con).await?;
         }
         let copied: i64 = redis::Script::new(MERGE)
             .key(keys::DRAW_HISTORY)
             .key(keys::DRAW_HISTORY_BACKFILL)
+            .key(keys::DRAW_HISTORY_EPOCH)
+            .key(keys::DRAW_HISTORY_GENESIS)
+            .arg(start_block)
+            .arg(initial_side)
             .invoke_async(con)
             .await?;
-        tracing::info!(target: "indexer", "backfilled {} entries, kept {copied} newer live ones", entries.len());
+        tracing::info!(target: "indexer", "backfilled {} entries and {} expansions, kept {copied} newer live ones", entries.len(), replayed_expansions.len());
+    } else {
+        // Nothing to rewrite, and the comparison above passed: the log does start at the
+        // deploy block. Say so.
+        let _: () = redis::cmd("HSET")
+            .arg(keys::DRAW_HISTORY_GENESIS)
+            .arg("start_block")
+            .arg(start_block)
+            .arg("initial_side")
+            .arg(initial_side)
+            .query_async(con)
+            .await?;
     }
 
     let recent: Vec<Cover> = covers
@@ -191,6 +247,8 @@ pub async fn backfill(
     Ok(BackfillReport {
         events: ordered.len(),
         replayed_entries: entries.len(),
+        replayed_expansions: replayed_expansions.len(),
+        rewritten,
         overlap_entries: live_to_tip.len(),
         newer_entries,
         covers: recent.len(),

@@ -233,7 +233,7 @@ async fn backfill_fills_the_log_from_the_deploy_block_and_keeps_newer_live_entri
     let to_tip = fetch_events(&chain(now), BOARD, 1_000, tip, 1, Duration::ZERO)
         .await
         .unwrap();
-    let report = backfill(&mut con, &to_tip, tip, 64, now).await.unwrap();
+    let report = backfill(&mut con, &to_tip, tip, 1_000, 64, now).await.unwrap();
     assert_eq!(report.events, 3);
     assert_eq!(report.replayed_entries, 7);
     assert_eq!(report.overlap_entries, 3, "t3's three entries, checked");
@@ -271,7 +271,7 @@ async fn backfill_fills_the_log_from_the_deploy_block_and_keeps_newer_live_entri
     assert!(history::tip_check(&mut con, 10).await.unwrap().matches());
 
     // A second run changes nothing.
-    let again = backfill(&mut con, &to_tip, tip, 64, now).await.unwrap();
+    let again = backfill(&mut con, &to_tip, tip, 1_000, 64, now).await.unwrap();
     assert!(again.tip.matches());
     assert_eq!(log(&mut con).await.len(), 9);
 }
@@ -290,7 +290,7 @@ async fn backfill_into_an_empty_log_and_refuses_a_replay_that_disagrees() {
     // No log at all (a mirror that predates HISTORY).
     let _: () = con.del(keys::DRAW_HISTORY).await.unwrap();
     let tip = events[3].position();
-    let report = backfill(&mut con, &events, tip, 64, now).await.unwrap();
+    let report = backfill(&mut con, &events, tip, 1_000, 64, now).await.unwrap();
     assert_eq!(report.overlap_entries, 0);
     assert!(report.tip.matches(), "{:?}", report.tip.differences);
     assert_eq!(log(&mut con).await, complete);
@@ -301,7 +301,7 @@ async fn backfill_into_an_empty_log_and_refuses_a_replay_that_disagrees() {
         .filter(|e| e.block_height != 1_003)
         .cloned()
         .collect();
-    let err = backfill(&mut con, &missing_t3, tip, 64, now)
+    let err = backfill(&mut con, &missing_t3, tip, 1_000, 64, now)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("disagrees"), "{err}");
