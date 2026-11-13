@@ -60,9 +60,9 @@ the config is ever lost, re-running the command above restores it; nothing in th
 - **The hostname is the machine's Tailscale name.** Renaming the Mini in the admin console changes
   the URL, and the deployed bundle would need a rebuild. Keep the name.
 - **One machine, no failover.** If the Mini is off or asleep the wall falls back to chain polling,
-  which is slow but correct. Sleep is already disabled (`pmset -g custom`: `sleep 0`). It is **not**
-  set to restart after a power cut (`autorestart 0`), so an outage that trips the power needs a human
-  to press the button.
+  which is slow but correct. Sleep is disabled (`pmset -g custom`: `sleep 0`) and, since 13 Nov,
+  `autorestart 1` is set too, so the Mini comes back by itself after a power cut. `sudo pmset -a
+  autorestart 1` is the command; `pmset -g custom` is the proof (`autorestart 1` under AC Power).
 - **Bandwidth is Funnel's**, i.e. Tailscale's ingress, not the home uplink's port forwarding. Nothing
   is exposed on the router and no ports are open.
 - **Only this path is public.** The Valkey instance, the indexer and the testing stack stay on
