@@ -46,7 +46,8 @@ pub async fn reply_to(
 ) -> redis::RedisResult<String> {
     let (command, argument) = split_command(text);
     if command == "/stop" {
-        let accounts = telegram::unlink_chat(con, chat).await?;
+        let mut accounts = telegram::unlink_chat(con, chat).await?;
+        accounts.sort();
         return Ok(if accounts.is_empty() {
             "No account is linked to this chat, so there is nothing to stop.".into()
         } else {
