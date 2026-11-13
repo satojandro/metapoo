@@ -1,5 +1,5 @@
 # Meta Poo board server: a port of fastnear/berry-fast's backend (indexer + server + common).
 # Spec: docs/implementation/2026-11-07-board-server-berry-fast-port.md
 [workspace]
-members = ["common", "indexer", "server"]
+members = ["common", "indexer", "server", "telegram-bot"]
 resolver = "2"
