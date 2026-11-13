@@ -1,3 +1,5 @@
 target/
 valkey-data/
 .env
+.env.launch
+valkey-launch-data/
