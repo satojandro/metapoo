@@ -50,11 +50,20 @@ pub const VIEWER_ARRIVED_MS: &str = "viewer_arrived_ms";
 /// applied order. **Never trimmed** (no `MAXLEN`): `draw_events` above is a catch-up buffer
 /// trimmed to `CATCHUP_RETENTION_MS` (2 h by default); this is the record a timelapse replays.
 /// Entry id `<position>-<index>` (the event's `QueuedEvent::position()`, then the tile's place
-/// in the event); fields `block`, `at_ms`, `x`, `y`, `color`, `by`, `free`. See `history.rs`.
+/// in the event); fields `block`, `at_ms`, `x`, `y`, `color`, `by`, `free`. A `board_expanded` is
+/// an entry of its own: id `<position>-0`, fields `kind = expand`, `block`, `at_ms`, `from`,
+/// `to`. See `history.rs`.
 pub const DRAW_HISTORY: &str = "draw_history";
 /// Where the backfill builds the replayed log before merging it in and renaming it over
 /// [`DRAW_HISTORY`].
 pub const DRAW_HISTORY_BACKFILL: &str = "draw_history:backfill";
+/// TIMELAPSE (spec §4.3): a counter the backfill bumps whenever it rewrites [`DRAW_HISTORY`].
+/// It is part of every cacheable `GET /api/history` URL, so a page cached before a backfill is
+/// never served as part of the log after it. Absent = 0.
+pub const DRAW_HISTORY_EPOCH: &str = "draw_history:epoch";
+/// Hash `{start_block, initial_side}`, written by the backfill once the log is certified to
+/// start at the deploy block. Absent, the log starts where the consumer began writing it.
+pub const DRAW_HISTORY_GENESIS: &str = "draw_history:genesis";
 
 /// AWAY-A (spec §1.2): prefix of one sorted set per account whose tiles were covered,
 /// `covers:<account>`, scored by `at_ms`, trimmed to 30 days. See `history.rs`.
