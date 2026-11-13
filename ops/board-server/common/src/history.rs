@@ -100,6 +100,140 @@ impl HistoryEntry {
     }
 }
 
+/// One `board_expanded`, as the log stores it (TIMELAPSE, spec §4.3: the wall grows, and a
+/// replay needs to know when).
+///
+/// It is a second **kind** of entry in the same stream, so it sits in applied order with the
+/// draws. Id `<position>-0` (an expansion is its own event, so the position is its alone);
+/// fields `kind = expand`, `block`, `at_ms`, `from`, `to`. Draw entries carry no `kind` field
+/// and are unchanged, so a stream written before this existed reads exactly as before, and a
+/// reader that only knows draws ([`HistoryEntry::from_stream`]) skips these.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Expansion {
+    pub position: u64,
+    pub block: u64,
+    /// Block time: the contract's event carries no time of its own.
+    pub at_ms: u64,
+    pub from: u32,
+    pub to: u32,
+}
+
+/// The `kind` field of an [`Expansion`] entry.
+pub const KIND_EXPAND: &str = "expand";
+
+impl Expansion {
+    pub fn of(event: &QueuedEvent, from: u32, to: u32) -> Self {
+        Self {
+            position: event.position(),
+            block: event.block_height,
+            at_ms: event.block_timestamp_ms,
+            from,
+            to,
+        }
+    }
+
+    pub fn stream_id(&self) -> String {
+        format!("{}-0", self.position)
+    }
+
+    pub fn fields(&self) -> [(&'static str, String); 5] {
+        [
+            ("kind", KIND_EXPAND.to_string()),
+            ("block", self.block.to_string()),
+            ("at_ms", self.at_ms.to_string()),
+            ("from", self.from.to_string()),
+            ("to", self.to.to_string()),
+        ]
+    }
+
+    pub fn from_stream(id: &str, fields: &HashMap<String, String>) -> Option<Self> {
+        if fields.get("kind").map(String::as_str) != Some(KIND_EXPAND) {
+            return None;
+        }
+        let (position, _index) = id.split_once('-')?;
+        let num = |name: &str| fields.get(name)?.parse::<u64>().ok();
+        Some(Self {
+            position: position.parse().ok()?,
+            block: num("block")?,
+            at_ms: num("at_ms")?,
+            from: u32::try_from(num("from")?).ok()?,
+            to: u32::try_from(num("to")?).ok()?,
+        })
+    }
+
+    pub fn xadd(&self, pipe: &mut redis::Pipeline, key: &str) {
+        let cmd = pipe.cmd("XADD").arg(key).arg(self.stream_id());
+        for (field, value) in self.fields() {
+            cmd.arg(field).arg(value);
+        }
+        cmd.ignore();
+    }
+}
+
+/// Any entry of the log, in stream order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LogRow {
+    Draw(HistoryEntry),
+    Expand(Expansion),
+}
+
+impl LogRow {
+    /// Parse one `XRANGE` row of either kind. `None` for anything this module did not write.
+    pub fn from_stream(id: &str, fields: &HashMap<String, String>) -> Option<Self> {
+        if fields.contains_key("kind") {
+            return Expansion::from_stream(id, fields).map(Self::Expand);
+        }
+        HistoryEntry::from_stream(id, fields).map(Self::Draw)
+    }
+
+    /// `(position, index)`: the stream id, and the order of the log.
+    pub fn key(&self) -> (u64, u32) {
+        match self {
+            Self::Draw(e) => (e.position, e.index),
+            Self::Expand(e) => (e.position, 0),
+        }
+    }
+
+    pub fn block(&self) -> u64 {
+        match self {
+            Self::Draw(e) => e.block,
+            Self::Expand(e) => e.block,
+        }
+    }
+
+    pub fn at_ms(&self) -> u64 {
+        match self {
+            Self::Draw(e) => e.at_ms,
+            Self::Expand(e) => e.at_ms,
+        }
+    }
+
+    pub fn xadd(&self, pipe: &mut redis::Pipeline, key: &str) {
+        match self {
+            Self::Draw(e) => e.xadd(pipe, key),
+            Self::Expand(e) => e.xadd(pipe, key),
+        }
+    }
+}
+
+/// Where the log starts, once the backfill has certified it: the deploy block and the side the
+/// board had there (`keys::DRAW_HISTORY_GENESIS`). Absent, the log starts wherever the consumer
+/// began writing it, and a reader must not present it as the whole story.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Genesis {
+    pub start_block: u64,
+    pub initial_side: u32,
+}
+
+impl Genesis {
+    pub fn from_hash(fields: &HashMap<String, String>) -> Option<Self> {
+        Some(Self {
+            start_block: fields.get("start_block")?.parse().ok()?,
+            initial_side: fields.get("initial_side")?.parse().ok()?,
+        })
+    }
+}
+
 /// One tile of `victim`'s that `by` painted over.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cover {
@@ -297,6 +431,20 @@ pub struct Replayed {
     pub entries: Vec<HistoryEntry>,
     pub covers: Vec<Cover>,
     pub skipped: Vec<String>,
+    /// Set when the event was a `board_expanded`.
+    pub expansion: Option<Expansion>,
+}
+
+impl Replayed {
+    /// What this event adds to the log, in stream order.
+    pub fn rows(&self) -> Vec<LogRow> {
+        self.expansion
+            .iter()
+            .cloned()
+            .map(LogRow::Expand)
+            .chain(self.entries.iter().cloned().map(LogRow::Draw))
+            .collect()
+    }
 }
 
 impl Replay {
@@ -343,11 +491,15 @@ impl Replay {
                     entries,
                     covers,
                     skipped: out.skipped,
+                    expansion: None,
                 }
             }
-            BoardEvent::BoardExpanded { to, .. } => {
+            BoardEvent::BoardExpanded { from, to } => {
                 self.board.side = *to;
-                Replayed::default()
+                Replayed {
+                    expansion: Some(Expansion::of(event, *from, *to)),
+                    ..Replayed::default()
+                }
             }
             BoardEvent::StateMigrated { .. } => Replayed::default(),
         }
@@ -415,22 +567,103 @@ pub fn compare_tip(
     out
 }
 
+/// Differences between the log's `board_expanded` entries and the stored side, at most `limit`.
+///
+/// - the entries must chain: each one's `from` is the side the one before it left;
+/// - the last one's `to` is the stored side;
+/// - with a [`Genesis`] (the backfill ran), the chain starts at its `initial_side`, so a board
+///   that grew while an older server was writing the log (which logged no expansions) fails
+///   here until the backfill is run again;
+/// - no draw lies outside the side in force when it was applied, as far as the log can know
+///   it (from the genesis side, else from the first expansion's `from`).
+pub fn compare_side(
+    rows: &[LogRow],
+    stored_side: Option<u32>,
+    genesis: Option<Genesis>,
+    limit: usize,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    let first_from = rows.iter().find_map(|r| match r {
+        LogRow::Expand(e) => Some(e.from),
+        LogRow::Draw(_) => None,
+    });
+    let mut side = genesis.map(|g| g.initial_side).or(first_from);
+    for row in rows {
+        if out.len() >= limit {
+            return out;
+        }
+        match row {
+            LogRow::Expand(e) => {
+                if side.is_some_and(|s| s != e.from) {
+                    out.push(format!(
+                        "board_expanded at block {} goes from {} but the log's side was {}",
+                        e.block,
+                        e.from,
+                        side.unwrap_or_default()
+                    ));
+                }
+                side = Some(e.to);
+            }
+            LogRow::Draw(e) => {
+                if side.is_some_and(|s| e.x >= s || e.y >= s) {
+                    out.push(format!(
+                        "({}, {}) at block {} is outside the log's side {}: a board_expanded is missing from the log",
+                        e.x,
+                        e.y,
+                        e.block,
+                        side.unwrap_or_default()
+                    ));
+                }
+            }
+        }
+    }
+    if let (Some(log), Some(stored)) = (side, stored_side) {
+        if log != stored && out.len() < limit {
+            out.push(format!(
+                "the board's side is {stored} but the log's expansions end at {log}"
+            ));
+        }
+    }
+    out
+}
+
 type StreamRows = Vec<(String, HashMap<String, String>)>;
 
-fn parse_rows(rows: StreamRows) -> Vec<HistoryEntry> {
+fn parse_rows(rows: StreamRows) -> Vec<LogRow> {
     rows.iter()
-        .filter_map(|(id, fields)| HistoryEntry::from_stream(id, fields))
+        .filter_map(|(id, fields)| LogRow::from_stream(id, fields))
+        .collect()
+}
+
+/// The draws among `rows`, in order.
+pub fn draws(rows: &[LogRow]) -> Vec<HistoryEntry> {
+    rows.iter()
+        .filter_map(|r| match r {
+            LogRow::Draw(e) => Some(e.clone()),
+            LogRow::Expand(_) => None,
+        })
+        .collect()
+}
+
+/// The expansions among `rows`, in order.
+pub fn expansions(rows: &[LogRow]) -> Vec<Expansion> {
+    rows.iter()
+        .filter_map(|r| match r {
+            LogRow::Expand(e) => Some(e.clone()),
+            LogRow::Draw(_) => None,
+        })
         .collect()
 }
 
 /// Rows per `XRANGE` page.
 const PAGE: usize = 5_000;
 
-/// The whole stream at `key`, oldest first, read in pages. Also returns the last id read.
-pub async fn read_log(
+/// The whole stream at `key`, both kinds, oldest first, read in pages. Also returns the last
+/// id read.
+pub async fn read_rows(
     con: &mut ConnectionManager,
     key: &str,
-) -> redis::RedisResult<(Vec<HistoryEntry>, Option<String>)> {
+) -> redis::RedisResult<(Vec<LogRow>, Option<String>)> {
     let mut out = Vec::new();
     let mut last: Option<String> = None;
     loop {
@@ -456,15 +689,190 @@ pub async fn read_log(
     }
 }
 
+/// The draws of the stream at `key`, oldest first (expansions left out). Also returns the last
+/// id read.
+pub async fn read_log(
+    con: &mut ConnectionManager,
+    key: &str,
+) -> redis::RedisResult<(Vec<HistoryEntry>, Option<String>)> {
+    let (rows, last) = read_rows(con, key).await?;
+    Ok((draws(&rows), last))
+}
+
+/// One page of the log for `GET /api/history`: at most `limit` stream rows after `after`
+/// (exclusive; `None` = from the start), or from `from_position` (inclusive) when given
+/// instead. One bounded `XRANGE`, read in a `MULTI` with the epoch it belongs to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawPage {
+    pub epoch: u64,
+    pub rows: Vec<LogRow>,
+    /// Id of the last stream row read (parsed or not): the cursor for the next page.
+    pub next: Option<(u64, u32)>,
+    /// The page was full, so there may be more after `next`.
+    pub more: bool,
+}
+
+/// Where a page starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PageStart {
+    /// The very first row.
+    Beginning,
+    /// Exclusive: the row after this stream id.
+    After(u64, u32),
+    /// Inclusive: the first row at or after this event position.
+    FromPosition(u64),
+}
+
+impl PageStart {
+    fn xrange_arg(self) -> String {
+        match self {
+            Self::Beginning => "-".to_string(),
+            Self::After(position, index) => format!("({position}-{index}"),
+            Self::FromPosition(position) => format!("{position}-0"),
+        }
+    }
+}
+
+/// `"<position>-<index>"`, as a cursor.
+pub fn parse_stream_id(id: &str) -> Option<(u64, u32)> {
+    let (position, index) = id.split_once('-')?;
+    Some((position.parse().ok()?, index.parse().ok()?))
+}
+
+/// The log's epoch: a number that names this copy of the log and is part of every cacheable
+/// page URL. It is the wall-clock ms at which the copy was first read or last rewritten, not a
+/// counter, so a mirror that is wiped and rebuilt gets a new one and can never be confused
+/// with pages cached from the copy before it. Set on first use (`SET … NX`).
+pub async fn read_epoch(con: &mut ConnectionManager, now_ms: u64) -> redis::RedisResult<u64> {
+    let (epoch,): (u64,) = redis::pipe()
+        .atomic()
+        .cmd("SET")
+        .arg(keys::DRAW_HISTORY_EPOCH)
+        .arg(now_ms)
+        .arg("NX")
+        .ignore()
+        .get(keys::DRAW_HISTORY_EPOCH)
+        .query_async(con)
+        .await?;
+    Ok(epoch)
+}
+
+pub async fn read_page(
+    con: &mut ConnectionManager,
+    start: PageStart,
+    limit: usize,
+    now_ms: u64,
+) -> redis::RedisResult<RawPage> {
+    let (epoch, rows): (u64, StreamRows) = redis::pipe()
+        .atomic()
+        .cmd("SET")
+        .arg(keys::DRAW_HISTORY_EPOCH)
+        .arg(now_ms)
+        .arg("NX")
+        .ignore()
+        .get(keys::DRAW_HISTORY_EPOCH)
+        .cmd("XRANGE")
+        .arg(keys::DRAW_HISTORY)
+        .arg(start.xrange_arg())
+        .arg("+")
+        .arg("COUNT")
+        .arg(limit)
+        .query_async(con)
+        .await?;
+    let next = rows.last().and_then(|(id, _)| parse_stream_id(id));
+    let more = rows.len() >= limit;
+    Ok(RawPage {
+        epoch,
+        rows: parse_rows(rows),
+        next,
+        more,
+    })
+}
+
+/// `GET /api/history/head`: what the log holds, without reading it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Head {
+    /// Names this copy of the log ([`read_epoch`]); changes whenever the backfill rewrites it.
+    /// Part of every cacheable page URL.
+    pub epoch: u64,
+    /// True once the backfill has certified that the log starts at the deploy block.
+    pub complete: bool,
+    pub start_block: Option<u64>,
+    pub initial_side: Option<u32>,
+    /// Stream rows (tiles painted plus expansions).
+    pub entries: u64,
+    pub first: Option<Moment>,
+    pub last: Option<Moment>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Moment {
+    pub block: u64,
+    pub at_ms: u64,
+}
+
+fn moment(rows: StreamRows) -> Option<Moment> {
+    parse_rows(rows).first().map(|r| Moment {
+        block: r.block(),
+        at_ms: r.at_ms(),
+    })
+}
+
+/// Five O(1) reads (and the epoch's first-use `SET … NX`) in one `MULTI`.
+pub async fn read_head(con: &mut ConnectionManager, now_ms: u64) -> redis::RedisResult<Head> {
+    type Snapshot = (u64, HashMap<String, String>, u64, StreamRows, StreamRows);
+    let (epoch, genesis, entries, first, last): Snapshot = redis::pipe()
+        .atomic()
+        .cmd("SET")
+        .arg(keys::DRAW_HISTORY_EPOCH)
+        .arg(now_ms)
+        .arg("NX")
+        .ignore()
+        .get(keys::DRAW_HISTORY_EPOCH)
+        .hgetall(keys::DRAW_HISTORY_GENESIS)
+        .cmd("XLEN")
+        .arg(keys::DRAW_HISTORY)
+        .cmd("XRANGE")
+        .arg(keys::DRAW_HISTORY)
+        .arg("-")
+        .arg("+")
+        .arg("COUNT")
+        .arg(1)
+        .cmd("XREVRANGE")
+        .arg(keys::DRAW_HISTORY)
+        .arg("+")
+        .arg("-")
+        .arg("COUNT")
+        .arg(1)
+        .query_async(con)
+        .await?;
+    let genesis = Genesis::from_hash(&genesis);
+    Ok(Head {
+        epoch,
+        complete: genesis.is_some(),
+        start_block: genesis.map(|g| g.start_block),
+        initial_side: genesis.map(|g| g.initial_side),
+        entries,
+        first: moment(first),
+        last: moment(last),
+    })
+}
+
 /// The result of the tip check.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TipReport {
+    /// Draw entries (tiles painted).
     pub entries: usize,
+    /// `board_expanded` entries.
+    pub expansions: usize,
     /// Block of the log's first and last entries.
     pub first_block: Option<u64>,
     pub last_block: Option<u64>,
     pub last_applied_position: Option<u64>,
-    /// Empty when the log's tile state equals the stored blob.
+    /// Set once the backfill has certified the log from the deploy block.
+    pub genesis: Option<Genesis>,
+    /// Empty when the log's tile state equals the stored blob and its expansions end at the
+    /// stored side.
     pub differences: Vec<String>,
 }
 
@@ -474,33 +882,40 @@ impl TipReport {
     }
 }
 
-/// Spec §4.2: the log's tile state at the tip must equal the live blob.
+/// Spec §4.2: the log's tile state at the tip must equal the live blob; and (TIMELAPSE) its
+/// expansions must end at the stored side.
 ///
 /// Reads the log in pages, then reads the board, the names and the log's newest entries in
 /// one `MULTI`, so a draw the consumer applies meanwhile is either in both or in neither.
 pub async fn tip_check(con: &mut ConnectionManager, limit: usize) -> redis::RedisResult<TipReport> {
-    let (mut entries, last) = read_log(con, keys::DRAW_HISTORY).await?;
+    let (mut rows, last) = read_rows(con, keys::DRAW_HISTORY).await?;
     let start = last.map_or_else(|| "-".to_string(), |id| format!("({id}"));
     type Snapshot = (
         Vec<u8>,
         Vec<u8>,
         HashMap<u32, String>,
         Option<u64>,
+        Option<u32>,
+        HashMap<String, String>,
         StreamRows,
     );
-    let (blob, free_bits, names, applied, tail): Snapshot = redis::pipe()
+    let (blob, free_bits, names, applied, side, genesis, tail): Snapshot = redis::pipe()
         .atomic()
         .get(keys::REGION_KEY)
         .get(keys::FREE_BITS_KEY)
         .hgetall(keys::ID_TO_ACCOUNT)
         .get(keys::LAST_APPLIED_POSITION)
+        .get(keys::BOARD_SIDE)
+        .hgetall(keys::DRAW_HISTORY_GENESIS)
         .cmd("XRANGE")
         .arg(keys::DRAW_HISTORY)
         .arg(start)
         .arg("+")
         .query_async(con)
         .await?;
-    entries.extend(parse_rows(tail));
+    rows.extend(parse_rows(tail));
+    let entries = draws(&rows);
+    let genesis = Genesis::from_hash(&genesis);
     // A board nothing has painted yet has no blob; compare it as all blank.
     let blob = if blob.is_empty() {
         vec![0; REGION_BLOB_SIZE]
@@ -512,12 +927,21 @@ pub async fn tip_check(con: &mut ConnectionManager, limit: usize) -> redis::Redi
     } else {
         free_bits
     };
+    let mut differences = compare_tip(&entries, &blob, &free_bits, &names, limit);
+    differences.extend(compare_side(
+        &rows,
+        side,
+        genesis,
+        limit.saturating_sub(differences.len()),
+    ));
     Ok(TipReport {
         entries: entries.len(),
-        first_block: entries.first().map(|e| e.block),
-        last_block: entries.last().map(|e| e.block),
+        expansions: rows.len() - entries.len(),
+        first_block: rows.first().map(LogRow::block),
+        last_block: rows.last().map(LogRow::block),
         last_applied_position: applied,
-        differences: compare_tip(&entries, &blob, &free_bits, &names, limit),
+        genesis,
+        differences,
     })
 }
 
@@ -640,7 +1064,18 @@ mod tests {
         assert_eq!(off.skipped.len(), 1);
         let mut grow = draw(2, 0, "owner.near", &[]);
         grow.event = BoardEvent::BoardExpanded { from: 64, to: 128 };
-        assert!(replay.apply(&grow).entries.is_empty());
+        let grown = replay.apply(&grow);
+        assert!(grown.entries.is_empty());
+        assert_eq!(
+            grown.rows(),
+            vec![LogRow::Expand(Expansion {
+                position: 2_000_000,
+                block: 2,
+                at_ms: 2_000,
+                from: 64,
+                to: 128
+            })]
+        );
         assert_eq!(
             replay
                 .apply(&draw(3, 0, "a.near", &[(100, 100, 1, false)]))
@@ -785,6 +1220,140 @@ mod tests {
             1,
             "capped"
         );
+    }
+
+    fn fields_of<const N: usize>(fields: [(&'static str, String); N]) -> HashMap<String, String> {
+        fields
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect()
+    }
+
+    #[test]
+    fn an_expansion_round_trips_and_a_draw_only_reader_skips_it() {
+        let e = Expansion {
+            position: 223_200_000_000_001,
+            block: 223_200_000,
+            at_ms: 1_762_000_500_000,
+            from: 64,
+            to: 96,
+        };
+        assert_eq!(e.stream_id(), "223200000000001-0");
+        let fields = fields_of(e.fields());
+        assert_eq!(fields["kind"], "expand");
+        assert_eq!(
+            LogRow::from_stream(&e.stream_id(), &fields),
+            Some(LogRow::Expand(e.clone()))
+        );
+        // The reader that shipped with HISTORY: an expansion is not a draw, so it is skipped
+        // rather than misread.
+        assert_eq!(HistoryEntry::from_stream(&e.stream_id(), &fields), None);
+        // An unknown kind from some later version is skipped too, not read as a draw.
+        let mut other = fields.clone();
+        other.insert("kind".into(), "something-new".into());
+        assert_eq!(LogRow::from_stream(&e.stream_id(), &other), None);
+    }
+
+    #[test]
+    fn an_entry_written_before_expansions_existed_still_parses_as_a_draw() {
+        // Exactly the seven fields the HISTORY consumer wrote: no `kind`.
+        let fields: HashMap<String, String> = [
+            ("block", "100"),
+            ("at_ms", "5000"),
+            ("x", "1"),
+            ("y", "2"),
+            ("color", "3"),
+            ("by", "bob.near"),
+            ("free", "0"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let Some(LogRow::Draw(e)) = LogRow::from_stream("100000000-4", &fields) else {
+            panic!("an old draw entry must still parse")
+        };
+        assert_eq!(
+            (e.position, e.index, e.x, e.y, e.color),
+            (100_000_000, 4, 1, 2, 3)
+        );
+    }
+
+    fn paint_at(block: u64, x: u32, y: u32) -> LogRow {
+        LogRow::Draw(HistoryEntry {
+            position: block * 1_000_000,
+            index: 0,
+            block,
+            at_ms: block * 1000,
+            x,
+            y,
+            color: 1,
+            by: "a.near".into(),
+            free: false,
+        })
+    }
+
+    fn grow_at(block: u64, from: u32, to: u32) -> LogRow {
+        LogRow::Expand(Expansion {
+            position: block * 1_000_000,
+            block,
+            at_ms: block * 1000,
+            from,
+            to,
+        })
+    }
+
+    #[test]
+    fn the_side_check_follows_the_expansions_to_the_stored_side() {
+        let genesis = Some(Genesis {
+            start_block: 1,
+            initial_side: 64,
+        });
+        let log = [
+            paint_at(1, 3, 3),
+            grow_at(2, 64, 96),
+            paint_at(3, 90, 90),
+            grow_at(4, 96, 128),
+            paint_at(5, 120, 5),
+        ];
+        assert!(compare_side(&log, Some(128), genesis, 10).is_empty());
+        // No genesis (the backfill has not run): the chain is still checked from its first link.
+        assert!(compare_side(&log, Some(128), None, 10).is_empty());
+
+        // The board grew but the log never heard (an older server wrote it).
+        let stale = compare_side(&log[..3], Some(128), genesis, 10);
+        assert_eq!(stale.len(), 1, "{stale:?}");
+        assert!(stale[0].contains("side is 128"));
+
+        // A draw beyond the side in force, and a link that does not chain.
+        let missing = [paint_at(1, 3, 3), paint_at(3, 90, 90)];
+        let d = compare_side(&missing, Some(96), genesis, 10);
+        assert_eq!(d.len(), 2, "{d:?}");
+        assert!(d[0].starts_with("(90, 90)"));
+        let unchained = [grow_at(2, 64, 96), grow_at(4, 64, 128)];
+        assert_eq!(compare_side(&unchained, Some(128), genesis, 10).len(), 1);
+        // A log with no expansions and no genesis claims nothing about the side.
+        assert!(compare_side(&missing, Some(96), None, 10).is_empty());
+        assert_eq!(
+            compare_side(&missing, Some(96), genesis, 1).len(),
+            1,
+            "capped"
+        );
+    }
+
+    #[test]
+    fn page_starts_and_cursors() {
+        assert_eq!(PageStart::Beginning.xrange_arg(), "-");
+        assert_eq!(
+            PageStart::After(100_000_000, 7).xrange_arg(),
+            "(100000000-7"
+        );
+        assert_eq!(
+            PageStart::FromPosition(100_000_000).xrange_arg(),
+            "100000000-0"
+        );
+        assert_eq!(parse_stream_id("100000000-7"), Some((100_000_000, 7)));
+        assert_eq!(parse_stream_id("100000000"), None);
+        assert_eq!(parse_stream_id("a-b"), None);
     }
 
     #[test]

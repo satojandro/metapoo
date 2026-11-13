@@ -146,6 +146,18 @@ without being traced.
 you also toggle with `hidden` will keep it visible. Restate the hidden case
 (`.paint-unlock[hidden] { display:none; }`) or use a class instead.
 
+**`style.css` styles every `<canvas>` on the site as the live wall.** The bare `canvas { … }` rule
+gives any canvas `background: var(--wall-empty)` and `pointer-events: none`. A second canvas (the
+`/timelapse` stage) had its transparent pixels filled with the wall's empty colour, and nothing in
+its own stylesheet said why. Seen only in a screenshot; no unit test can catch it. Scope a new
+canvas's rules above that one (`.tl-stage .tl-canvas`) and reset what you do not want.
+
+**A cache key that can repeat is not a cache key.** `/api/history` pages are served `immutable`
+under an epoch in the URL. The first version made the epoch a counter starting at 0, so a wiped and
+rebuilt mirror would have reused epoch 0 for different bytes, in every browser cache and in the
+server's own page cache (a test that flushed Valkey between cases found it). It is now the
+wall-clock ms at which that copy of the log was first read or last rewritten.
+
 **Vite externalises bare `util`/`process` imports instead of failing the build.** They only
 break at runtime. Treat that build warning as a real defect, not noise.
 

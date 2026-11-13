@@ -65,3 +65,4 @@
   color: var(--mp-soft);
 }
 .hall-soon { color: var(--mp-muted); font: var(--mp-text-sm) var(--mp-mono); border-top: 1px solid var(--mp-line); padding-top: var(--mp-space-3); }
+.hall-soon a { color: var(--mp-near); }

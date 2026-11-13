@@ -12,6 +12,7 @@ import { mountAgentsPage } from "../app/agents-page";
 import { mountToiletPage } from "../app/toilet-page";
 import { mountStakePage } from "../app/stake-page";
 import { mountHallPage } from "../app/hall-page";
+import { mountTimelapsePage } from "../app/timelapse-page";
 
 export function registerDefaultPages(): void {
   registerPageMount("home", mountWallPage);
@@ -19,6 +20,7 @@ export function registerDefaultPages(): void {
   registerPageMount("how", (root, ctx) => mountHowItWorksPage(root, ctx));
   registerPageMount("agents", (root, ctx) => mountAgentsPage(root, ctx));
   registerPageMount("hall", (root, ctx) => mountHallPage(root, ctx));
+  registerPageMount("timelapse", (root, ctx) => mountTimelapsePage(root, ctx));
   registerPageMount("toilet", (root, ctx) => mountToiletPage(root, ctx));
   registerPageMount("stake", (root, ctx) => mountStakePage(root, ctx));
   registerPageMount("money", (root, ctx) => mountRevenuePage(root, ctx));
