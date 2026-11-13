@@ -153,6 +153,10 @@
 }
 @media (max-width: 560px) {
   .hiw-name-try, .hiw-name-honest { padding: var(--mp-space-4); }
-  .hiw-name-hint { min-height: 4.3em; }
+  .hiw-name-hint { min-height: 3em; }
   .hiw-name-cta .mp-btn { width: 100%; justify-content: center; }
+}
+@media (max-width: 420px) {
+  .hiw-name-facts > div { grid-template-columns: 5.2rem minmax(0, 1fr); }
+  .hiw-name-mock { padding: var(--mp-space-3); }
 }
