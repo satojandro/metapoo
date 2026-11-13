@@ -29,8 +29,8 @@ SPONSOR → the rest.
 | AWAY-A | **built** (PR #116), server and web | deploy the board server change; set `VITE_BOARD_SERVER_URL`; run the §1.2 "done when" test on mainnet |
 | SPONSOR | **decided, ready to build** (§2.4) | build |
 | NAMES | **decided, ready to build** (§3.4); verify Meteor steps first | verify, then build |
-| BOARD-HOST | **new**, decided in principle (§1.5) | owner picks the host |
-| AWAY-B | decided (§1.3): off the Mini, no email | after BOARD-HOST |
+| BOARD-HOST | **decided** (§1.5): new small Hetzner VPS, separate from the validator | owner creates the VPS and a subdomain; next session writes the runbook |
+| AWAY-B | decided (§1.3): bot on the BOARD-HOST box, Telegram only | after BOARD-HOST |
 | TIMELAPSE | unblocked by HISTORY | after the backfill has run |
 | AGENTS-GALLERY | not started, no decision needed | — |
 | AGENTS-MARKER | **parked** (§5.3) | nothing until the owner asks |
@@ -101,26 +101,32 @@ email alerts instead, since Privy does hold an email for them.
 - **Not on the Mac mini.** Neither the bot nor the board server is hosted there (see §1.5).
 - **No email**, for Privy sign-ins either: two alert channels make two different experiences.
   Telegram only.
-- **Hosting the bot on Vercel works**: the bot runs in webhook mode (Telegram calls a Vercel
-  function; no long-running process), the `account ↔ chat id` mapping lives in a hosted
-  key-value store (e.g. Upstash Redis from the Vercel marketplace), and a Vercel cron
-  (every 15–60 min) asks the board server's `GET /api/account-covers` for each linked account
-  and sends at most one message per hour. The bot token and store credentials are Vercel secrets.
+- **The bot runs on the board server's new box (§1.5)**, as one more container in
+  `ops/board-server/docker-compose.yml`: Telegram long polling (no webhook, no public endpoint of
+  its own), reading cover events straight from Valkey and storing `account ↔ chat id` there.
+  At most one message per account per hour. The bot token is in the box's `.env`, never in git.
 
 ### 1.5 BOARD-HOST — move the board server off the Mac mini (new, 13 Nov)
 
-The owner does not want the board server on the Mini. **Vercel cannot host it as it is**: it is
-a long-running Rust process (indexer + WebSocket fan-out) with a Valkey database, and Vercel
-functions are short-lived and keep no state. Options, owner to pick:
+**Owner decision, 13 Nov: a new, separate small Hetzner VPS** (about €4–6/month, smallest
+shared-CPU size), running the existing `docker-compose.yml` plus the Telegram bot (§1.3).
 
-- **A container host** (Fly.io, Railway or Render): runs the existing `ops/board-server`
-  `docker-compose.yml` nearly unchanged; Valkey as a managed add-on or a volume. Fixes the
-  ephemeral-tunnel problem with a stable URL. Roughly $5–20/month. **Recommended.**
-- **A rewrite onto Vercel + hosted Redis**: drops the WebSocket (polling instead) and needs the
-  indexer as a cron. Large, and the live wall gets worse. Not recommended.
+- **Not Vercel:** the board server runs non-stop (the indexer follows the chain within about a
+  second; the server holds a WebSocket per open wall; Valkey keeps state). Vercel functions are
+  short-lived and stateless, so it would need a rewrite and a less live wall.
+- **Not the owner's existing Hetzner box:** it runs a NEAR **validator**. A public web service
+  beside validator keys widens the attack surface, and resource contention could cost missed
+  blocks. Keep them on separate machines.
 
-Whichever host: AOF on (see PR #116 "Open for the owner"), run `board-history backfill` there,
-and set `VITE_BOARD_SERVER_URL` in Vercel to the new stable URL.
+Setup for the next session to write as a runbook (`ops/board-server/README.md`):
+1. Docker + Compose; firewall open on 22, 80, 443 only (the server already binds `127.0.0.1:3000`).
+2. Caddy in front for HTTPS (automatic certificates), on a subdomain, proxying `/` and `/ws`.
+3. Valkey: AOF on (`appendonly yes`, set before first start on a fresh data dir), and a
+   `maxmemory` with an alert. `draw_history` lives in RAM and grows with every paint.
+4. `.env` from `.env.example`; confirm `INDEX_MODE=txindex`; then
+   `docker compose run --rm indexer board-history backfill` and `board-history check`.
+5. Set `VITE_BOARD_SERVER_URL` in Vercel to the new URL; retire the Mini's tunnel.
+6. Backups: a nightly copy of the Valkey data dir off the box (Hetzner snapshots or object storage).
 
 ### 1.6 Not planned
 
@@ -383,8 +389,8 @@ For whoever merges this (AGENT.md: pull requests do not edit `docs/backlog.md`):
 | id | work | status | size |
 |---|---|---|---|
 | **AWAY-A** | Server-backed "while you were away" card | built, PR #116; mainnet check after deploy | M |
-| **AWAY-B** | Telegram alerts | spec §1.3, decided: Vercel webhook bot, no email; after BOARD-HOST | M |
-| **BOARD-HOST** | Move the board server off the Mac mini | spec §1.5, owner picks the host | M |
+| **AWAY-B** | Telegram alerts | spec §1.3, decided: bot beside the board server, no email; after BOARD-HOST | M |
+| **BOARD-HOST** | Move the board server off the Mac mini | spec §1.5, decided: new Hetzner VPS | M |
 | **SPONSOR** | Starter drip for Privy sign-ins | spec §2.4, decided: 2 NEAR, Vercel, welcome popup | M |
 | **NAMES** | "Get a name" guide (Meteor only) and own-id link | spec §3.4, decided; verify Meteor steps | S |
 | **HALL-0** | Hall of Fame page and snapshot tool | built, PR #116; needs three snapshots | S |
