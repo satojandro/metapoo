@@ -8,6 +8,7 @@ import { createSiteFooter } from "./site-footer";
 import { mountToiletClaim, toiletConfigured } from "./toilet-claim";
 import { hallInMenu } from "./hall";
 import type { ParsedRoute } from "./routes";
+import { mountTelegramAlerts } from "./telegram-alerts-panel";
 import { mountWalletChrome, type WalletChromeDispose } from "./wallet-chrome";
 import { wireWalletDetailsClose } from "./wallet-details-close";
 import type { AppServices } from "./services";
@@ -167,6 +168,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     <section id="paint-wallet-panel" aria-label="Paint and wallet balances"></section>
     <section id="toilet-wallet-panel" aria-label="Your TOILET" hidden></section>
     <section id="wallet-move-funds" aria-label="Move funds out"></section>
+    <section id="telegram-alerts-panel" aria-label="Telegram alerts" hidden></section>
     <nav class="wallet-links" aria-label="More about the board">
       <a href="/money">Where the money goes →</a>
       <a href="/toilet">What TOILET is for →</a>
@@ -222,6 +224,11 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     walletPanel.querySelector<HTMLElement>("#paint-wallet-panel")!, services,
   );
 
+  // AWAY-B: stays hidden unless a board server and a bot username are configured.
+  const telegramDispose = mountTelegramAlerts(
+    walletPanel.querySelector<HTMLElement>("#telegram-alerts-panel")!, services,
+  );
+
   const toiletHost = walletPanel.querySelector<HTMLElement>("#toilet-wallet-panel")!;
   const toiletDispose = toiletConfigured() ? mountToiletClaim(toiletHost, services) : () => {};
   toiletHost.hidden = !toiletConfigured();
@@ -264,6 +271,7 @@ export function mountShell(host: HTMLElement, services: AppServices): ShellHandl
     dispose() {
       paintWalletDispose();
       toiletDispose();
+      telegramDispose();
       detailsClose.dispose();
       walletDispose();
       host.replaceChildren();

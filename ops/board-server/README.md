@@ -187,6 +187,102 @@ TIMELAPSE, spec §4.3).
   served from memory. There is no compression middleware here; in production the `Caddyfile`
 compresses every `application/octet-stream` and JSON response (zstd or gzip).
 
+## Telegram alerts
+
+AWAY-B (return-and-growth spec §1.3). A player links their NEAR account to a Telegram chat and
+gets "9 of your tiles were covered by X. [Open the wall]", at most once an hour. It is a fourth
+container, `telegram-bot`, in the compose **profile `telegram`**: a plain `docker compose up`
+does not start it, and with `TELEGRAM_BOT_TOKEN` empty the server serves no `/api/telegram/*`
+route, so nothing changes until the bot exists.
+
+**How a link is made.** The bot has no public endpoint (it long-polls `getUpdates`), so the
+page talks to the **server**, which is the one place the wallet's signature is verified:
+
+1. Wallet panel → "Get alerts on Telegram". The page `POST`s `/api/telegram/challenge` and
+   shows a one-time code (ten minutes, one use) and `https://t.me/<bot>?start=<code>`.
+2. The player taps the link; the bot records their chat on the code.
+3. The wallet signs the challenge text (NEP-413: no transaction, no fee) and the page `POST`s
+   it to `/api/telegram/link`. The server checks the code, the ed25519 signature over the
+   exact NEP-413 payload (stored text, stored nonce, this server's recipient), and asks the
+   chain (`view_access_key`) that the key is a **full-access** key of that account. A
+   function-call key, such as the painting key, is refused.
+
+Steps 2 and 3 work in either order; the second one writes `account → chat id`.
+
+**What is stored**, all under `telegram:*` in Valkey: `telegram:links` (account → chat id) and
+`telegram:chat:<id>` (its reverse) are the only personal data. No route returns a chat id. No
+route tells a caller whether an account is linked unless it holds that account's *status
+token*, a random value the server issues after a verified signature and the page keeps in
+localStorage (the server keeps its SHA-256). `/stop` in the chat, "Stop Telegram alerts" in
+the wallet panel (signed, like linking), or the player blocking the bot (Telegram answers 403)
+deletes the link, the cursor and the tokens.
+
+**Alerts.** The bot reads `covers:<account>` (see "History and covers") from a cursor kept per
+account in `telegram:alert_state`. The cursor is a position in the set, not a time, and is
+written after Telegram accepts the message, so a restart resumes exactly where it stopped. A
+new link starts at the moment of linking: it never reports the 30 days already in the set.
+Covers wait two minutes to collect a whole stroke, then one message goes out, and no more for
+that account for an hour. Messages carry tile counts and account names, never balances.
+Covers reach Valkey only when the indexer polls, so with nobody watching the wall an alert
+waits until someone opens it (see "What it costs").
+
+**What it costs.** Telegram: one `getUpdates` every 25 s while idle (about 144 an hour, free)
+and one `sendMessage` per alert. FastNEAR: one `view_access_key` per link or unlink attempt
+that carries a valid signature, capped at 60 a minute; nothing otherwise. Valkey: one small
+read per linked account every 15 s.
+
+### Set it up
+
+1. **Create the bot.** In Telegram, message [@BotFather](https://t.me/BotFather): `/newbot`,
+   give it a name and a username ending in `bot`. BotFather answers with a token like
+   `123456789:AA…`. Optional but worth doing: `/setdescription` ("Tells you when your Meta Poo
+   tiles are covered") and `/setcommands` with `stop - Turn alerts off`. Do **not** set a
+   webhook: long polling and a webhook cannot both be on.
+2. **Configure the box.** In `ops/board-server/.env` (never in git):
+
+   | variable | value |
+   |---|---|
+   | `TELEGRAM_BOT_TOKEN` | the token from BotFather |
+   | `WALL_URL` | the wall's public address, e.g. `https://<site>/wall`. The alert button opens it, and its host name is the NEP-413 `recipient` the wallet shows |
+   | `NEAR_RPC_URL`, `NEAR_RPC_API_KEY` | optional; default is FastNEAR's public RPC for `CHAIN_ID` |
+   | `COMPOSE_PROFILES=telegram` | optional; makes a plain `docker compose up -d` include the bot |
+
+3. **Start it.** `docker compose --profile telegram up -d --build`. The **server** must be
+   restarted too (the same command does it): it reads `TELEGRAM_BOT_TOKEN` at start to decide
+   whether to serve the link routes.
+4. **Tell the page.** Set `VITE_TELEGRAM_BOT=<username without @>` in Vercel beside
+   `VITE_BOARD_SERVER_URL`, and redeploy. Until both are set the wallet panel shows nothing.
+
+### Check it works
+
+```bash
+docker compose logs telegram-bot | grep "signed in"      # signed in to Telegram as @<your bot>
+curl -s -X POST localhost:3000/api/telegram/challenge -H 'content-type: application/json' \
+  -d '{"account":"alice.near","action":"link"}'            # {"code":"…","message":"…","recipient":"<site host>",…}
+```
+
+Then the real path, which no test in this repo can make (they use a fake Telegram and a fake
+chain):
+
+1. In Telegram, send the bot `/start`. It explains how to link.
+2. On the site, connect a NEAR wallet (not Google/email), open the wallet panel, "Get alerts on
+   Telegram", tap "Open @bot", press Start in Telegram, then "Approve in wallet". The panel
+   says "Alerts are on" and the bot says "Linked."
+3. From a second account, paint over one of the first account's tiles, with the wall open.
+   Within about three minutes the bot sends "One of your tiles was covered by …" with an
+   "Open the wall" button that opens the wall at that tile. Paint over another: nothing more
+   arrives for an hour.
+4. Send `/stop`: the bot confirms, `docker compose exec valkey valkey-cli hgetall telegram:links`
+   is empty, and the wallet panel offers "Get alerts on Telegram" again after a reload.
+
+If the log says `409 from getUpdates`, a webhook is set or a second copy is running with the
+same token (`curl https://api.telegram.org/bot<token>/deleteWebhook` clears a webhook). If it
+says Telegram refuses the token, the token in `.env` is wrong. The token is in the URL of every
+Bot API call; the bot strips URLs from the errors it logs.
+
+**Not available to Google/email (Privy) sign-ins:** that wallet declares it cannot sign
+messages, so the panel says so and offers no control.
+
 ## Run
 
 ```bash

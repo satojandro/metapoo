@@ -30,6 +30,8 @@ interface ImportMetaEnv {
   readonly VITE_NEAR_RPC_URL?: string;
   readonly VITE_NEAR_READ_FALLBACK_URL?: string;
   readonly VITE_BOARD_SERVER_URL?: string;
+  /** Telegram alerts bot username, no `@`. Empty hides the control. */
+  readonly VITE_TELEGRAM_BOT?: string;
   readonly VITE_SPONSORSHIP_ENABLED?: string;
   readonly VITE_TOILET_ID?: string;
   readonly VITE_BETA_GUIDE_URL?: string;

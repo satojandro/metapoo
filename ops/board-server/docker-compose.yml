@@ -30,3 +30,17 @@ services:
       - "127.0.0.1:3000:3000"
     depends_on: [valkey]
     restart: unless-stopped
+
+  # AWAY-B: the Telegram alerts bot. Long polling only: no port, no public endpoint.
+  # Not started by a plain `docker compose up`: it is in the `telegram` profile, so the stack
+  # is untouched until the bot exists. Start it with `docker compose --profile telegram up -d`
+  # (or put COMPOSE_PROFILES=telegram in .env). README: "Telegram alerts".
+  telegram-bot:
+    build: { context: ../.., dockerfile: ops/board-server/Dockerfile }
+    command: telegram-bot
+    profiles: [telegram]
+    env_file: .env
+    environment:
+      VALKEY_URL: redis://valkey:6379
+    depends_on: [valkey]
+    restart: unless-stopped

@@ -11,4 +11,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY --from=build /src/ops/board-server/target/release/indexer /usr/local/bin/indexer
 COPY --from=build /src/ops/board-server/target/release/server /usr/local/bin/server
 COPY --from=build /src/ops/board-server/target/release/board-history /usr/local/bin/board-history
+COPY --from=build /src/ops/board-server/target/release/telegram-bot /usr/local/bin/telegram-bot
 CMD ["server"]

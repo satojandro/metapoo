@@ -1,0 +1,10 @@
+/* AWAY-B: "Telegram alerts" in the wallet panel. */
+.telegram-alerts { display: grid; gap: var(--mp-space-2); }
+/* display:grid beats the [hidden] attribute (docs/learning/traps.md, Browser). */
+.telegram-alerts[hidden] { display: none; }
+.telegram-alerts-h { margin: 0; font-size: var(--mp-text-h3); font-weight: 800; }
+.telegram-alerts-status { margin: 0; color: var(--mp-muted); font-size: var(--mp-text-body); }
+.telegram-alerts-steps { margin: 0; padding-left: 1.2em; display: grid; gap: var(--mp-space-2); font-size: var(--mp-text-body); }
+.telegram-alerts-code { font-weight: 800; letter-spacing: 0.08em; user-select: all; }
+.telegram-alerts-open { display: inline-block; text-decoration: none; }
+.telegram-alerts-actions { display: flex; flex-wrap: wrap; gap: var(--mp-space-2); }
