@@ -78,6 +78,7 @@ fn app(con: redis::aio::ConnectionManager, board: Arc<RwLock<BoardState>>) -> ax
         consumer: server::consumer::Health::default(),
         viewers: Arc::new(AtomicUsize::new(0)),
         last_hint_ms: Arc::new(AtomicU64::new(0)),
+        last_reader_ms: Arc::new(AtomicU64::new(0)),
     })
 }
 

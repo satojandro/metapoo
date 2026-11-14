@@ -342,3 +342,16 @@ times the attached gas. Until one is captured, do not use this event to size the
 fee from every receipt: the transaction outcome alone reads about 10x low (0.000032 NEAR for a paint
 that burned 0.00068 in total). Either way, act on the chain's refusal: the reserve in
 `signAndSendStrokeLocally` did not predict it.
+
+## Deploying code
+
+**A code-only deploy over state written by an older struct makes every read panic: `Cannot deserialize
+the contract state`, and `get_state_version` does not warn you.** Borsh is positional; new code cannot
+read state that predates a field that was added since. Deploying current `main`'s wasm onto
+`board3.metapoo-player1.testnet` (state from an `ASD1Leb…` build) broke reads in one transaction, and
+the version read 2 on both sides of the break. The signal is **which commit the live code was built
+from**: check `git log <that-commit>..HEAD -- contracts/paid-board/src/lib.rs`. Empty means the layouts
+match. Before deploying, keep the currently-deployed artifact on disk — the rollback is a second
+`deployContract` with it, and without the file the board is unrecoverable. Also note `upgrade()` is not
+a generic upgrade: it always runs `migrate`, which rejects state already at v2. See
+`docs/payments/testnet-rehearsal-free-first-paints-2026-11-14.md`.

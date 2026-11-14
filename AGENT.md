@@ -1,5 +1,19 @@
 # Agent entry point
 
+**GitHub is the source of truth. A checkout is a cache.** Before you trust, deploy or document
+anything from a working tree, `git fetch` and compare against `origin/main`. Uncommitted files, a
+detached HEAD or a worktree nobody has touched in three days is not project state — and it has
+already cost us twice:
+
+- The first launch deployment was cut from a working copy detached 129 commits behind `main`, so
+  production shipped a wallet picker and sign-in window that had been redesigned weeks earlier.
+- The deploy that followed, from `main`, reverted `web/public/skill.md` to the *testing* board id,
+  because that correction had only ever existed as an uncommitted file in that same working copy.
+
+So: **deployment config and public copy belong in commits on `main` before you deploy**, and
+**deploy from a checkout of `main`**, never from a detached tree. If something is only local, it
+does not exist; commit it (or push it to an `archive/…` branch) first.
+
 Read these before changing anything, in order:
 
 1. **`docs/learning/traps.md`** — mistakes that have already cost this project time. Several

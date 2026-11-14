@@ -34,7 +34,6 @@ interface ImportMetaEnv {
   readonly VITE_TELEGRAM_BOT?: string;
   readonly VITE_SPONSORSHIP_ENABLED?: string;
   readonly VITE_TOILET_ID?: string;
-  readonly VITE_BETA_BANNER?: string;
   readonly VITE_BETA_GUIDE_URL?: string;
   readonly VITE_BETA_REPORT_URL?: string;
   /** "true" shows the Get a name guide and links. Off until the Meteor steps are device-checked. */

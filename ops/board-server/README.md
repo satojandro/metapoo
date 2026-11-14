@@ -25,7 +25,7 @@ Measured against mainnet on 7 Nov:
 
 | situation | indexer requests |
 |---|---|
-| nobody watching (no WebSocket open) | **0** |
+| nobody watching, nobody reading | **0** |
 | someone watching, nothing painted | 2 per poll; at `POLL_MS=30000`, **240/hour** |
 | a tab paints | its `POST /api/hint` makes the indexer poll within ~1 s, then every 2 s for up to 12 s until the paint shows: ≤ 12 requests |
 | new paint found | + 1 per 20 new transactions |
@@ -37,6 +37,17 @@ the RPC key's dashboard. The wall closes its socket when its tab is hidden or id
 
 A viewer who arrives after a quiet spell gets a catch-up poll at once. It reads only the
 board's transactions since the watermark, however long the gap.
+
+**An HTTP read counts as a viewer.** The socket was the only thing raising the viewers flag, and
+the wall pauses its socket when a tab is idle or hidden — so between visits the flag lapsed, the
+indexer (correctly) stopped, and the first visitor back met a mirror twenty minutes behind. Their
+trust check failed and the wall walked the chain: the expensive path this design exists to avoid,
+and a deadlock, because the refresh that fixes it only begins once somebody counts as watching.
+Now `/api/regions`, `/api/region/…`, `/api/stats/accounts`, `/api/account/{id}` and
+`/api/account-covers` refresh the flag themselves (at most one Valkey write per
+`READER_TOUCH_MS`), and the first read after a quiet spell sets `viewer_arrived_ms`, so the
+catch-up starts within a second of a page load. `/api/health` is deliberately excluded: it is a
+probe, and counting it would let an abandoned tab keep the indexer polling forever.
 
 - **`common/`**: the 6-byte-per-pixel region blob, the `mpoo_board` event parser, and
   `BoardState::apply_draw`. It is pure code, and it is where the tests for the board rules live.
@@ -275,6 +286,24 @@ messages, so the panel says so and offers no control.
 cp .env.example .env    # board id, deploy block, side
 docker compose up -d --build
 ```
+
+The public host — a Tailscale Funnel in front of the launch stack, why it replaced the Cloudflare
+quick tunnel, and how to restore it — is [`docs/ops/board-server-public-host.md`](../../docs/ops/board-server-public-host.md).
+
+**Two stacks, two image tags.** `docker-compose.yml` (testing board) runs
+`metapoo-board-server:latest`; `docker-compose.launch.yml` (the launch board, host port 3002) runs
+`metapoo-board-server:launch`. Rebuilding one cannot move the other onto new code at its next
+restart. The image is built from the **repository root** — the Dockerfile's context is the repo,
+not this directory:
+
+```bash
+git -C <repo> status --short          # build from a checkout of main, never a detached tree
+docker build -f ops/board-server/Dockerfile -t metapoo-board-server:launch .
+```
+
+After an upgrade that adds endpoints the wall already calls, run the one-off backfill (below)
+before anyone connects a wallet: `GET /api/account-covers` answers `{"count":0,…}` on an empty
+draw log, which reads as "nothing was covered" rather than "unknown".
 
 The first run needs `START_BLOCK_HEIGHT`. For the mainnet testing board that is
 `223113576`, the block that included the deploy tx. With it, the server rebuilds the wall from

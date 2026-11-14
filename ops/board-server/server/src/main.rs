@@ -90,6 +90,7 @@ async fn main() -> anyhow::Result<()> {
         consumer: consumer_health,
         viewers,
         last_hint_ms: Arc::new(AtomicU64::new(0)),
+        last_reader_ms: Arc::new(AtomicU64::new(0)),
     });
     let app = match telegram {
         Some(routes) => app.merge(routes),
