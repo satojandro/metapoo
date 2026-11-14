@@ -7,7 +7,8 @@
  */
 
 import { PALETTE } from "@shared/palette.ts";
-import { CONTRACT_ID, INTENTS_FUNDING_ENABLED, PAGE_NETWORK, RPC_URL } from "../config";
+import { CONTRACT_ID, INTENTS_FUNDING_ENABLED, NAMES_GUIDE_ENABLED, PAGE_NETWORK, RPC_URL } from "../config";
+import { isConnectedPrivyWallet } from "../wallet";
 import { shortAccount } from "../shared/short-account";
 import type { PageContext, PageDispose } from "./page-registry";
 import { MPOO_SPLIT, NEAR_SPLIT, createRpcView } from "./revenue-panel";
@@ -17,6 +18,8 @@ import {
   type HowItWorksSnapshot, type PracticeCell, type PracticePhase,
 } from "./how-it-works";
 import { STORY, practiceSeed, type StoryPixel } from "./how-it-works-story";
+import { createNameGuide, nameSuffix } from "./how-it-works-names";
+import { METEOR, VERIFIED_ON_DEVICE, type MeteorGuide } from "./meteor-name-steps";
 import "./how-it-works.css";
 
 export interface HowItWorksDeps {
@@ -30,6 +33,12 @@ export interface HowItWorksDeps {
   pollMs: number;
   /** Paying from another chain (Intents) is switched on for this build. */
   crossChainFunding: boolean;
+  /** NAMES: the "Get a name" section. Off unless `VITE_NAMES_GUIDE=true`. */
+  namesGuide: boolean;
+  /** Whether the current sign-in is Privy. */
+  isPrivy: () => Promise<boolean>;
+  /** The Meteor steps and whether the owner has checked them on a device. */
+  nameSteps: { guide: MeteorGuide; verified: boolean };
 }
 
 function defaultDeps(): HowItWorksDeps {
@@ -43,6 +52,9 @@ function defaultDeps(): HowItWorksDeps {
     reducedMotion: typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
     pollMs: 60_000,
     crossChainFunding: INTENTS_FUNDING_ENABLED,
+    namesGuide: NAMES_GUIDE_ENABLED,
+    isPrivy: () => isConnectedPrivyWallet(),
+    nameSteps: { guide: METEOR, verified: VERIFIED_ON_DEVICE },
   };
 }
 
@@ -278,7 +290,7 @@ export function liveValues(s: HowItWorksSnapshot): Record<string, string | null>
   };
 }
 
-export function mountHowItWorksPage(root: HTMLElement, _ctx: PageContext, overrides: Partial<HowItWorksDeps> = {}): PageDispose {
+export function mountHowItWorksPage(root: HTMLElement, ctx: PageContext, overrides: Partial<HowItWorksDeps> = {}): PageDispose {
   const deps: HowItWorksDeps = { ...defaultDeps(), ...overrides };
   root.insertAdjacentHTML("beforeend", TEMPLATE);
   const page = root.querySelector<HTMLElement>(".hiw")!;
@@ -672,6 +684,23 @@ export function mountHowItWorksPage(root: HTMLElement, _ctx: PageContext, overri
   }
   listen(spend, "input", renderSpend);
   renderSpend();
+
+  // NAMES: builds nothing unless the flag is on. Placed before the anchor scroll below, so
+  // /how-it-works#hiw-name lands on it.
+  const wallet = ctx.services.wallet;
+  const nameGuide = createNameGuide({
+    enabled: deps.namesGuide,
+    account: () => wallet.getSession().accountId,
+    subscribe: (listener) => wallet.subscribe(() => listener()),
+    isPrivy: deps.isPrivy,
+    suffix: nameSuffix(deps.network),
+    guide: deps.nameSteps.guide,
+    verified: deps.nameSteps.verified,
+  });
+  if (nameGuide) {
+    q("#hiw-stall").after(nameGuide.element);
+    cleanups.push(() => nameGuide.dispose());
+  }
 
   /* ——— Start ——— */
   applyLive();

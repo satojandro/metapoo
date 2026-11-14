@@ -186,6 +186,8 @@ pub async fn apply(
                 ));
             }
             next.side = *to;
+            // TIMELAPSE: the wall grew. Logged in order with the draws, in this transaction.
+            history::Expansion::of(event, *from, *to).xadd(&mut pipe, keys::DRAW_HISTORY);
             Some(serde_json::json!({
                 "type": "board_expanded",
                 "from": from,

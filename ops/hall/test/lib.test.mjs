@@ -14,6 +14,7 @@ import {
   gridFromRegionBlob,
   parseCrop,
   rasterize,
+  stillDir,
 } from "../lib.mjs";
 
 const PALETTE = [
@@ -106,4 +107,27 @@ test("the entry skeleton centres the camera on the crop and leaves the human fie
   assert.equal(entry.y, 22);
   assert.equal(entry.title, "TODO");
   assert.deepEqual(entry.painters, ["TODO"]);
+});
+
+test("a Hall entry has no prompt field", () => {
+  const entry = entrySkeleton({ id: "a", block: 9, crop: { x: 0, y: 0, w: 8, h: 8 }, image: "/hall/a.png", date: "2026-11-13" });
+  assert.equal("prompt" in entry, false);
+  assert.equal(stillDir(), "web/public/hall");
+});
+
+test("--gallery writes into the agent gallery's directory and leaves the prompt as TODO", () => {
+  assert.equal(stillDir(true), "web/public/agents-gallery");
+  const entry = entrySkeleton({
+    id: "a",
+    block: 9,
+    crop: { x: 10, y: 20, w: 8, h: 4 },
+    image: "/agents-gallery/a.png",
+    date: "2026-11-13",
+    gallery: true,
+  });
+  assert.equal(entry.prompt, "TODO");
+  assert.equal(entry.title, "TODO");
+  assert.deepEqual(entry.painters, ["TODO"]);
+  assert.equal(entry.image, "/agents-gallery/a.png");
+  assert.equal(entry.x, 14);
 });

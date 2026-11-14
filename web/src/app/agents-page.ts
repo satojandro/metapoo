@@ -12,6 +12,8 @@ import { CONTRACT_ID, PAGE_NETWORK, RPC_URL } from "../config";
 import type { PageContext, PageDispose } from "./page-registry";
 import { createRpcView } from "./revenue-panel";
 import { agentPrompts, EMPTY_COSTS, EXAMPLE_TILES, loadAgentsCosts, priceLines, type AgentsCosts, type View } from "./agents";
+import { AGENT_GALLERY, type AgentPiece } from "./agents-gallery";
+import { hallCard } from "./hall-page";
 import "./agents.css";
 
 export interface AgentsPageDeps {
@@ -23,6 +25,8 @@ export interface AgentsPageDeps {
   board: string;
   /** Where "Built something that paints?" points. */
   issuesUrl: string;
+  /** Curated pieces agents painted (spec §5.2). Empty until someone tells us about one. */
+  gallery: readonly AgentPiece[];
 }
 
 function defaultDeps(): AgentsPageDeps {
@@ -35,6 +39,7 @@ function defaultDeps(): AgentsPageDeps {
     network: PAGE_NETWORK,
     board: CONTRACT_ID,
     issuesUrl: "https://github.com/satojandro/metapoo/issues",
+    gallery: AGENT_GALLERY,
   };
 }
 
@@ -93,6 +98,14 @@ const TEMPLATE = `
     <p>Send NEAR to the agent's account from any wallet or exchange, or from another chain through NEAR Intents. Managed agent wallets such as the NEAR Intents Agent API can also hold the key and enforce limits you set — they are betas with their own warnings, including losing funds, so read them first.</p>
   </section>
 
+  <section class="agents-gallery" aria-labelledby="agents-gallery-h" data-agents-gallery>
+    <h3 id="agents-gallery-h">Painted by agents</h3>
+    <p class="agents-gallery-lede" data-agents-gallery-lede>Each piece hangs with the prompt that made it. Copy one and see what yours does with it. Chosen by hand, on the owner's word: the chain cannot tell an agent from a person.</p>
+    <ol class="hall-grid agents-gallery-grid" data-agents-gallery-grid></ol>
+    <p class="agents-status" role="status" aria-live="polite" data-agents-gallery-status></p>
+    <p class="agents-gallery-empty" data-agents-gallery-empty hidden><strong>Nothing hung yet.</strong> The first pieces will hang here, each with the prompt that made it. <a href="#" data-agents-issues>Built something that paints? Tell us ↗</a></p>
+  </section>
+
   <footer class="agents-foot">
     <a href="/skill.md">/skill.md</a>
     <a href="/llms.txt">/llms.txt</a>
@@ -100,6 +113,53 @@ const TEMPLATE = `
     <a href="#" data-agents-issues>Built something that paints? Tell us ↗</a>
   </footer>
 </article>`;
+
+/** A prompt on the page with its own Copy button. */
+interface Copyable {
+  button: HTMLButtonElement;
+  /** The element showing the text, selected for a manual copy when the clipboard is denied. */
+  textEl: HTMLElement;
+  /** Exactly what lands on the clipboard. */
+  text: string;
+  label: string;
+  /** Where "copied" is announced: the live region nearest the button. */
+  status: HTMLElement;
+}
+
+/**
+ * One gallery piece: the Hall's card, plus the prompt and its Copy button.
+ * The prompt is somebody else's words: it goes in as text, never as HTML, and a
+ * long one scrolls inside its box (agents.css) instead of stretching the card.
+ */
+function galleryCard(piece: AgentPiece, status: HTMLElement): { item: HTMLLIElement; copyable: Copyable } {
+  const item = hallCard(piece, "h4");
+  item.classList.add("agents-piece");
+  item.dataset.agentsPiece = piece.id;
+  const title = item.querySelector("h4")!;
+  title.id = `agents-piece-${piece.id}-h`;
+
+  const block = document.createElement("div");
+  block.className = "agents-piece-prompt";
+  const label = document.createElement("p");
+  label.className = "agents-piece-label";
+  label.id = `agents-piece-${piece.id}-l`;
+  label.textContent = "The prompt";
+  const pre = document.createElement("pre");
+  pre.className = "agents-prompt";
+  pre.tabIndex = 0;
+  pre.setAttribute("aria-labelledby", `${label.id} ${title.id}`);
+  pre.textContent = piece.prompt;
+  const button = document.createElement("button");
+  button.className = "agents-copy";
+  button.type = "button";
+  button.dataset.agentsCopyPiece = piece.id;
+  button.textContent = "Copy";
+  button.setAttribute("aria-describedby", `${label.id} ${title.id}`);
+  block.append(label, button, pre);
+
+  item.querySelector(".hall-link")!.before(block);
+  return { item, copyable: { button, textEl: pre, text: piece.prompt, label: piece.title, status } };
+}
 
 export function mountAgentsPage(root: HTMLElement, _ctx: PageContext, overrides: Partial<AgentsPageDeps> = {}): PageDispose {
   const deps: AgentsPageDeps = { ...defaultDeps(), ...overrides };
@@ -142,8 +202,32 @@ export function mountAgentsPage(root: HTMLElement, _ctx: PageContext, overrides:
   }
   boardEl.textContent = deps.configured ? deps.board : "not configured";
 
-  const issues = q<HTMLAnchorElement>("[data-agents-issues]");
-  issues.href = deps.issuesUrl;
+  for (const issues of page.querySelectorAll<HTMLAnchorElement>("[data-agents-issues]")) issues.href = deps.issuesUrl;
+
+  // The gallery (spec §5.2). With nothing to show there is no grid, only the invitation.
+  const galleryGrid = q<HTMLOListElement>("[data-agents-gallery-grid]");
+  const galleryStatus = q("[data-agents-gallery-status]");
+  const hasPieces = deps.gallery.length > 0;
+  q("[data-agents-gallery-empty]").hidden = hasPieces;
+  if (!hasPieces) {
+    galleryGrid.remove();
+    galleryStatus.remove();
+    q("[data-agents-gallery-lede]").remove();
+  }
+
+  /** Everything on the page with a Copy button: the starter prompts, then the gallery's. */
+  const copyables: Copyable[] = prompts.map((p) => ({
+    button: list.querySelector<HTMLButtonElement>(`[data-agents-copy="${p.id}"]`)!,
+    textEl: list.querySelector<HTMLPreElement>(`#agents-prompt-${p.id}`)!,
+    text: p.text,
+    label: p.label,
+    status,
+  }));
+  for (const piece of deps.gallery) {
+    const { item, copyable } = galleryCard(piece, galleryStatus);
+    galleryGrid.append(item);
+    copyables.push(copyable);
+  }
 
   let resetTimer: number | undefined;
   const cleanups: Array<() => void> = [];
@@ -152,35 +236,34 @@ export function mountAgentsPage(root: HTMLElement, _ctx: PageContext, overrides:
     cleanups.push(() => el.removeEventListener(type, fn));
   };
 
-  const buttons = [...list.querySelectorAll<HTMLButtonElement>("[data-agents-copy]")];
-  const setCopied = (copyBtn: HTMLButtonElement, note: string) => {
-    for (const b of buttons) b.textContent = "Copy";
-    copyBtn.textContent = "Copied";
-    status.textContent = note;
+  const setCopied = (c: Copyable) => {
+    for (const other of copyables) {
+      other.button.textContent = "Copy";
+      other.status.textContent = "";
+    }
+    c.button.textContent = "Copied";
+    c.status.textContent = `"${c.label}" copied. Paste it in your chat.`;
     window.clearTimeout(resetTimer);
     resetTimer = window.setTimeout(() => {
-      copyBtn.textContent = "Copy";
-      status.textContent = "";
+      c.button.textContent = "Copy";
+      c.status.textContent = "";
     }, 2000);
   };
 
-  for (const copyBtn of buttons) listen(copyBtn, "click", (() => {
-    const p = prompts.find((x) => x.id === copyBtn.dataset.agentsCopy)!;
-    const promptEl = list.querySelector<HTMLPreElement>(`#agents-prompt-${p.id}`)!;
-    const prompt = p.text;
-    const done = () => setCopied(copyBtn, `"${p.label}" copied. Paste it in your chat.`);
+  for (const c of copyables) listen(c.button, "click", (() => {
+    const done = () => setCopied(c);
     const failed = () => {
       // Clipboard denied (insecure context, permission): leave the text selected
       // so a human can copy it by hand, and say so.
       const range = document.createRange();
-      range.selectNodeContents(promptEl);
+      range.selectNodeContents(c.textEl);
       const sel = window.getSelection();
       sel?.removeAllRanges();
       sel?.addRange(range);
-      status.textContent = `Press ⌘C / Ctrl-C to copy the "${p.label}" prompt.`;
+      c.status.textContent = `Press ⌘C / Ctrl-C to copy the "${c.label}" prompt.`;
     };
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(prompt).then(done, failed);
+      navigator.clipboard.writeText(c.text).then(done, failed);
     } else {
       failed();
     }

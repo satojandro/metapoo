@@ -45,10 +45,10 @@ function ctx(): PageContext {
   };
 }
 
-function mount(entries: HallEntry[]) {
+function mount(entries: HallEntry[], timelapseHasData: () => Promise<boolean> = async () => false) {
   const root = document.createElement("div");
   document.body.append(root);
-  const dispose = mountHallPage(root, ctx(), { entries });
+  const dispose = mountHallPage(root, ctx(), { entries, timelapseHasData });
   cleanup.push(() => {
     dispose();
     root.remove();
@@ -126,9 +126,41 @@ describe("mountHallPage", () => {
     expect(root.querySelector<HTMLElement>("[data-hall-grid]")!.hidden).toBe(true);
   });
 
-  it("teases the timelapse at the foot instead of giving it a page", () => {
+  it("teases the timelapse at the foot, as text, while there is no recording to play", async () => {
     const { root } = mount([]);
+    await Promise.resolve();
     expect(root.querySelector(".hall-soon")!.textContent).toMatch(/timelapse is coming soon/i);
+    expect(root.querySelector(".hall-soon a")).toBeNull();
+    // A check that fails is "no", not a broken page.
+    const failing = mount([], async () => {
+      throw new Error("board server down");
+    });
+    await new Promise((r) => setTimeout(r));
+    expect(failing.root.querySelector(".hall-soon")!.textContent).toMatch(/coming soon/i);
+    expect(failing.root.querySelector(".hall-soon a")).toBeNull();
+  });
+
+  it("links the foot line to /timelapse once the recording has something in it", async () => {
+    const { root } = mount([], async () => true);
+    await new Promise((r) => setTimeout(r));
+    const link = root.querySelector<HTMLAnchorElement>(".hall-soon a")!;
+    expect(link.getAttribute("href")).toBe("/timelapse");
+    expect(root.querySelector(".hall-soon")!.textContent).not.toMatch(/coming soon/i);
+  });
+
+  it("keeps the timelapse out of the menu either way", () => {
+    for (const withHall of [true, false]) expect(navItems(withHall).map((i) => i.href)).not.toContain("/timelapse");
+    expect(matchRoute("/timelapse").pageId).toBe("timelapse");
+    expect(pageTitle("timelapse")).toBe("Timelapse · Meta Poo");
+  });
+
+  it("does not touch the page if the answer arrives after it was left", async () => {
+    let answer!: (has: boolean) => void;
+    const { root, dispose } = mount([], () => new Promise<boolean>((resolve) => (answer = resolve)));
+    dispose();
+    answer(true);
+    await new Promise((r) => setTimeout(r));
+    expect(root.querySelector("a[href='/timelapse']")).toBeNull();
   });
 
   it("removes itself on dispose", () => {

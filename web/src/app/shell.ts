@@ -65,6 +65,8 @@ export const PAGE_NAMES: Readonly<Record<PageId, string>> = {
   toilet: NAV_LABELS.get("toilet")!,
   stake: NAV_LABELS.get("stake")!,
   money: NAV_LABELS.get("money")!,
+  // Not in the menu (owner, spec §4.4): the Hall of Fame links to it.
+  timelapse: "Timelapse",
   admin: "Board settings",
   "not-found": "Nothing painted here",
 };

@@ -34,6 +34,8 @@ interface ImportMetaEnv {
   readonly VITE_TOILET_ID?: string;
   readonly VITE_BETA_GUIDE_URL?: string;
   readonly VITE_BETA_REPORT_URL?: string;
+  /** "true" shows the Get a name guide and links. Off until the Meteor steps are device-checked. */
+  readonly VITE_NAMES_GUIDE?: string;
   /**
    * TOILET's Dexscreener pair URL. Empty hides the footer's TOILET chart entry:
    * no TOILET pool is indexed yet, and a search page is not a market.

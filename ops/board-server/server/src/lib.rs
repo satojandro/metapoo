@@ -3,5 +3,6 @@
 pub mod api;
 pub mod board;
 pub mod consumer;
+pub mod history_api;
 pub use common::valkey;
 pub mod ws;

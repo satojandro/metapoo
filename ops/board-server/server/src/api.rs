@@ -48,11 +48,8 @@ async fn note_reader(state: &AppState) {
     state.last_reader_ms.store(now, Ordering::Relaxed);
     let mut con = state.valkey.clone();
     let mut pipe = redis::pipe();
-    pipe.set(
-        keys::VIEWERS_UNTIL_MS,
-        now + common::demand::VIEWER_TTL_MS,
-    )
-    .ignore();
+    pipe.set(keys::VIEWERS_UNTIL_MS, now + common::demand::VIEWER_TTL_MS)
+        .ignore();
     if arrived {
         pipe.set(keys::VIEWER_ARRIVED_MS, now).ignore();
     }
@@ -75,6 +72,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/hint", post(hint))
         .route("/ws", get(ws_upgrade))
+        // TIMELAPSE: /api/history/head and /api/history (history_api.rs).
+        .merge(crate::history_api::routes())
         .with_state(state)
 }
 

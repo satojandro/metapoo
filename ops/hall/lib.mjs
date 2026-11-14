@@ -161,10 +161,19 @@ export function encodePng({ width, height, rgb }, text = {}) {
 }
 
 /**
- * The `hall.json` entry this still belongs to, with the fields only a human can fill
- * (title, painters) left as TODO. The camera link centres the crop.
+ * Where a still goes, relative to the repo root. The Hall of Fame and the agent
+ * gallery (`--gallery`, spec §5.2) each keep their own directory under web/public.
  */
-export function entrySkeleton({ id, block, crop, image, date }) {
+export function stillDir(gallery = false) {
+  return gallery ? "web/public/agents-gallery" : "web/public/hall";
+}
+
+/**
+ * The `hall.json` entry this still belongs to, with the fields only a human can fill
+ * (title, painters) left as TODO. The camera link centres the crop. With `gallery`
+ * it is an `agents-gallery.json` entry: the same shape plus `prompt`, also TODO.
+ */
+export function entrySkeleton({ id, block, crop, image, date, gallery = false }) {
   return {
     id,
     title: "TODO",
@@ -175,5 +184,6 @@ export function entrySkeleton({ id, block, crop, image, date }) {
     y: crop.y + Math.floor(crop.h / 2),
     zoom: 12,
     image,
+    ...(gallery ? { prompt: "TODO" } : {}),
   };
 }
