@@ -55,6 +55,21 @@ is why the proxy targets a host port rather than the container's own port.
 `--bg` writes the config into the daemon's state, so it survives reboots and Tailscale updates. If
 the config is ever lost, re-running the command above restores it; nothing in the web deploy changes.
 
+## What the web deploy needs
+
+Two things on the Vercel side, both outside this repo's build:
+
+1. **`VITE_BOARD_SERVER_URL=https://claudios-mac-mini.taila56fc2.ts.net`** in the Production environment.
+   Vite inlines it at build time, so it only takes effect on the next build — and a build without it ships a
+   site that renders the wall from chain polling and shows `/timelapse`'s "not connected to a board server"
+   state. Check the served bundle rather than the dashboard:
+   `curl -s https://metapoo-testnet.vercel.app/ | grep -oE '/assets/app-[^"]+\.js'` then grep that file for
+   `ts.net`.
+2. **The host in `web/vercel.json`'s CSP `connect-src`** (it is there since 14 Nov, both `https://` and
+   `wss://`). The policy is `Content-Security-Policy-Report-Only` today, so a missing host breaks nothing —
+   it fills the report stream and then breaks `/timelapse` and the wall's WebSocket the day the policy is
+   promoted to enforcing. Any new board host needs this line edited, not just the env var.
+
 ## Operational facts
 
 - **The hostname is the machine's Tailscale name.** Renaming the Mini in the admin console changes
