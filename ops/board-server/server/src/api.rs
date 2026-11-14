@@ -48,11 +48,8 @@ async fn note_reader(state: &AppState) {
     state.last_reader_ms.store(now, Ordering::Relaxed);
     let mut con = state.valkey.clone();
     let mut pipe = redis::pipe();
-    pipe.set(
-        keys::VIEWERS_UNTIL_MS,
-        now + common::demand::VIEWER_TTL_MS,
-    )
-    .ignore();
+    pipe.set(keys::VIEWERS_UNTIL_MS, now + common::demand::VIEWER_TTL_MS)
+        .ignore();
     if arrived {
         pipe.set(keys::VIEWER_ARRIVED_MS, now).ignore();
     }
