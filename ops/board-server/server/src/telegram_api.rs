@@ -500,7 +500,9 @@ mod tests {
 
     #[test]
     fn the_rpc_answer_is_read_as_full_access_function_call_missing_or_unknown() {
-        // Shapes as nearcore answers `query` / `view_access_key`.
+        // Shapes as rpc.mainnet.fastnear.com answered `view_access_key` on 14 Nov 2026 for a
+        // full-access key, a function-call key and a key that is not on the account (which
+        // came back as `result.error`, not as a JSON-RPC error).
         let full = json!({"jsonrpc":"2.0","id":"x","result":{
             "block_hash":"h","block_height":1,"nonce":7,"permission":"FullAccess"}});
         assert_eq!(permission_from_rpc(&full), Ok(KeyPermission::FullAccess));
