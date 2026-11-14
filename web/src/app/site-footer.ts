@@ -90,10 +90,10 @@ export function createSiteFooter(options: SiteFooterOptions = {}): HTMLElement {
   nav.setAttribute("aria-label", "Meta Poo on other platforms");
   nav.append(...links.map(linkElement));
   if (guide) {
-    nav.append(extraLink("guide", "Guide", guide, "Opens the beta guide in a new tab"));
+    nav.append(extraLink("guide", "Guide", guide, "Opens the guide in a new tab"));
   }
   // Always present: the repository and its issue tracker are public constants, so this
-  // is never a dead link, and "report a problem" is the one footer entry a beta needs.
+  // is never a dead link, and "report a problem" is the one footer entry a live board still needs.
   nav.append(
     extraLink(
       "report",

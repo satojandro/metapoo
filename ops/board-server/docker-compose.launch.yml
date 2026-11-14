@@ -1,0 +1,35 @@
+# Second, independent stack: the LAUNCH board (board.meta-poo-stall.near).
+# The first stack (docker-compose.yml) keeps serving the testing board.
+# Its own Valkey data dir and AOF, its own host port, its own .env.launch.
+#
+# The image is pinned to its own tag, not `:latest`: the testing stack keeps `:latest`, so a
+# `docker compose up` on either one cannot silently move the other onto new code.
+services:
+  valkey:
+    image: valkey/valkey:8
+    volumes:
+      - ./valkey-launch-data:/data
+      - ./valkey-launch.conf:/usr/local/etc/valkey/valkey.conf:ro
+    command: valkey-server /usr/local/etc/valkey/valkey.conf
+    restart: unless-stopped
+
+  indexer:
+    image: metapoo-board-server:launch
+    command: indexer
+    env_file: .env.launch
+    environment:
+      VALKEY_URL: redis://valkey:6379
+    depends_on: [valkey]
+    restart: unless-stopped
+
+  server:
+    image: metapoo-board-server:launch
+    command: server
+    env_file: .env.launch
+    environment:
+      VALKEY_URL: redis://valkey:6379
+      LISTEN_ADDR: 0.0.0.0:3000
+    ports:
+      - "127.0.0.1:3002:3000"
+    depends_on: [valkey]
+    restart: unless-stopped

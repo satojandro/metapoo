@@ -211,9 +211,10 @@ Owner decision: 25 per account, only until the first board is full.
 - Before the latch, painting an **empty** cell costs 0 credits if the account has used fewer than 25
   free first paints. In a stroke, free paints apply to empty cells first, in order. The rest of the
   stroke pays normally.
-- The account must be registered (0.01 NEAR). That is the sybil cost. At 25 cells per account it's
-  0.0004 NEAR per free cell, and the reason to farm them is removed in the TOILET round, when free
-  cells stop earning.
+- The account need not be registered: a wallet can paint its free 25 before it ever pays the 0.01 NEAR
+  registration or buys a credit (owner decision, 14 Nov — the buy-first prompt was the friction). Free
+  cells still earn no TOILET, so farming them buys an account coloured cells and nothing else; the
+  remaining cost to a farmer is gas per account, bounded by the latch ending the offer at the first fill.
 - New per-account record in a **new** map (prefix `a`, never `c`):
   `AccountExtra { free_first_used: u8, has_purchased: bool, happy_hour_window: u32, happy_hour_used: u16 }`.
   Absent means all zeros.

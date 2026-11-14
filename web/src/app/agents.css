@@ -89,14 +89,6 @@
 .agents-cost span { color: var(--mp-soft); font-size: var(--mp-text-body); }
 .agents-cost b { font: var(--mp-text-figure) / 1 var(--mp-mono); color: var(--mp-fg); }
 .agents-cost-note { color: var(--mp-muted); font-size: var(--mp-text-sm); }
-.agents-beta {
-  border: 1px solid var(--mp-bad);
-  border-radius: var(--mp-radius-md);
-  padding: var(--mp-space-3) var(--mp-space-4);
-  color: var(--mp-fg);
-  font-size: var(--mp-text-body);
-}
-.agents-beta strong { color: var(--mp-bad); letter-spacing: .08em; text-transform: uppercase; font-family: var(--mp-mono); }
 
 /* Safety */
 .agents-safe { display: grid; gap: var(--mp-space-3); }

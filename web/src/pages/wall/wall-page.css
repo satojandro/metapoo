@@ -6,14 +6,12 @@
  */
 
 .wall-page {
-  /* The wall is a square sized by the window: the height left under the header
-     (and the beta banner, when one is shown), or the width left beside the panel,
-     whichever is smaller. The panel matches its height, so the whole composition
-     fits one screen and sits centred. */
+  /* The wall is a square sized by the window: the height left under the header,
+     or the width left beside the panel, whichever is smaller. The panel matches its
+     height, so the whole composition fits one screen and sits centred. */
   --wall-panel-w: 380px;
   --wall-gap: var(--mp-space-6);
-  /* The strip under the wall takes its height out of the wall's (owner, 7 Nov:
-     removing the beta banner later gives it back). It now carries two rows: the
+  /* The strip under the wall takes its height out of the wall's. It carries two rows: the
      freshness / network line and the pulse. The budget is their sum — the pulse rule
      below subtracts the freshness row, so the pulse keeps the 46px it always had.
      Anything less and the wall gives up less than the strip occupies, so the
@@ -21,7 +19,7 @@
   --wall-foot-h: 24px;
   --wall-pulse-h: 70px;
   --wall-size: max(320px, min(
-    calc(100dvh - 140px - var(--beta-banner-h, 0px) - var(--wall-pulse-h)),
+    calc(100dvh - 140px - var(--wall-pulse-h)),
     calc(min(100vw, 1600px) - 72px - var(--wall-panel-w) - var(--wall-gap) - 16px)
   ));
   --wall-overlay: color-mix(in srgb, var(--mp-bg) 90%, transparent);

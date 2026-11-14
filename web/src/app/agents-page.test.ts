@@ -127,10 +127,13 @@ describe("mountAgentsPage", () => {
     expect(q("[data-needs='tile']").hidden).toBe(false);
   });
 
-  it("carries the beta warning, because the NEAR is real", async () => {
+  it("carries no testing-round warning, because there is no round to warn about", async () => {
     const { root } = await mount();
-    expect(root.textContent).toMatch(/mainnet testing round/i);
-    expect(root.textContent).toMatch(/worth nothing/i);
+    // Purged 13 Nov: the board is live, so nothing may tell a reader it will be paused
+    // or that its TOILET will be worth nothing.
+    expect(root.textContent).not.toMatch(/testing round/i);
+    expect(root.textContent).not.toMatch(/worth nothing/i);
+    expect(root.textContent).not.toMatch(/\bbeta\b/i);
   });
 
   it("hides prices it could not read instead of guessing", async () => {

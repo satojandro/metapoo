@@ -56,6 +56,33 @@ pub fn should_poll(s: Signals, poll_ms: u64) -> bool {
     watched && (arrived || s.last_poll_ms == 0 || since_poll >= poll_ms)
 }
 
+/// How often an HTTP read refreshes the viewers flag. One Valkey write per window, so a busy
+/// page cannot turn reads into a write pump.
+pub const READER_TOUCH_MS: u64 = 10_000;
+
+/// An HTTP read is a viewer too.
+///
+/// Returns `None` when the flag was refreshed too recently to bother, else `Some(arrived)`,
+/// where `arrived` says this reader is the first after a quiet spell and the indexer should
+/// catch up now rather than at the next interval.
+///
+/// Why this exists: the socket was the only thing that raised the viewers flag, and the wall
+/// pauses its socket when the tab is idle or hidden. A mirror the indexer may not refresh makes
+/// the wall's trust check fail, and the wall then walks the chain — the expensive path this
+/// design exists to avoid. A read is proof that somebody is looking.
+pub fn reader_touch(now_ms: u64, last_touch_ms: u64) -> Option<bool> {
+    // Nothing refreshed the flag yet in this process: treat the first read as an arrival.
+    if last_touch_ms == 0 {
+        return Some(true);
+    }
+    let quiet = now_ms.saturating_sub(last_touch_ms);
+    if quiet < READER_TOUCH_MS {
+        None
+    } else {
+        Some(quiet >= VIEWER_TTL_MS)
+    }
+}
+
 /// Should the server accept a hint now, given when it last accepted one?
 pub fn accept_hint(now_ms: u64, last_hint_ms: u64) -> bool {
     last_hint_ms == 0 || now_ms.saturating_sub(last_hint_ms) >= HINT_MIN_GAP_MS
@@ -66,6 +93,17 @@ mod tests {
     use super::*;
 
     const POLL: u64 = 30_000;
+
+    #[test]
+    fn a_read_counts_as_a_viewer_but_not_as_a_write_pump() {
+        // Two reads inside the window: the second writes nothing.
+        assert_eq!(reader_touch(1_000, 0), Some(true));
+        assert_eq!(reader_touch(1_000 + READER_TOUCH_MS - 1, 1_000), None);
+        // Past the window but inside the viewers TTL: keep the flag up, no catch-up needed.
+        assert_eq!(reader_touch(1_000 + READER_TOUCH_MS, 1_000), Some(false));
+        // After a quiet spell: refresh the flag and ask the indexer to catch up now.
+        assert_eq!(reader_touch(1_000 + VIEWER_TTL_MS, 1_000), Some(true));
+    }
 
     fn at(now_ms: u64) -> Signals {
         Signals {

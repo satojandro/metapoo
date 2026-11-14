@@ -34,17 +34,6 @@ summary { cursor: pointer; }
 .flow-state { font: 10px var(--mp-mono); color: var(--mp-muted); }
 .compact-status { font-size: var(--mp-text-xs); }
 
-/* Beta-round notice (app/beta-banner.ts): always above the header, never dismissible. */
-.beta-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--mp-space-3); margin: var(--mp-space-3) 0 0; padding: var(--mp-space-2) var(--mp-space-3); background: var(--mp-bad); color: var(--mp-on-tag); border-radius: var(--mp-radius-md); font-size: var(--mp-text-xs); line-height: 1.35; }
-.beta-banner-tag { flex: 0 0 auto; padding: 2px 7px; background: var(--mp-on-tag); color: var(--mp-bad); border-radius: var(--mp-radius-sm); font: 700 10px var(--mp-mono); letter-spacing: 1px; text-transform: uppercase; }
-.beta-banner-text { flex: 1 1 260px; min-width: 0; }
-.beta-banner-short { display: none; }
-.beta-banner-links { display: flex; flex-wrap: wrap; gap: 4px var(--mp-space-3); }
-.beta-banner-link { color: var(--mp-on-tag); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
-.beta-banner-link:focus-visible { outline: 2px solid var(--mp-on-tag); outline-offset: 2px; }
-/* The wall sizes itself to the viewport; leave room for the notice. */
-.app-shell.has-beta-banner { --beta-banner-h: 46px; }
-
 /* One wallet control: Connect, or the account name that opens the wallet panel. */
 .wallet-details { position: relative; font-size: var(--mp-text-xs); }
 .wallet-details[hidden] { display: none; }
@@ -265,15 +254,6 @@ summary { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .action { transition: none; } }
 
 @media (max-width: 600px) {
-  .beta-banner { margin-top: var(--mp-space-2); padding: 6px 10px; }
-  /* Visually hidden, still read aloud: the short copy is aria-hidden. */
-  .beta-banner-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .beta-banner-short { display: inline; }
-  /* One tight block on a phone: the wall needs the height (owner, 7 Nov). */
-  .beta-banner { gap: 2px var(--mp-space-2); line-height: 1.3; }
-  .beta-banner-tag { padding: 1px 5px; font-size: 9px; }
-  .beta-banner-text { flex-basis: 180px; }
-  .beta-banner-links { gap: 2px var(--mp-space-2); font-size: 10px; }
   /* The strapline repeats the banner's job of saying what this is; the wall says it. */
   .brand .lede { display: none; }
 }

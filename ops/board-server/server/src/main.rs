@@ -88,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
         consumer: consumer_health,
         viewers,
         last_hint_ms: Arc::new(AtomicU64::new(0)),
+        last_reader_ms: Arc::new(AtomicU64::new(0)),
     })
     .layer(CorsLayer::permissive());
     let listener = tokio::net::TcpListener::bind(&listen_addr).await?;
