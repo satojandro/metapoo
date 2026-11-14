@@ -187,7 +187,9 @@ pub fn decode_page(bytes: &[u8]) -> Option<Decoded> {
             let end = at.checked_add(n.checked_mul(3)?)?;
             let tiles = bytes
                 .get(at..end)?
-                .chunks_exact(3)
+                .as_chunks::<3>()
+                .0
+                .iter()
                 .map(|t| (t[0], t[1], t[2]))
                 .collect();
             at = end;
