@@ -57,18 +57,34 @@ the config is ever lost, re-running the command above restores it; nothing in th
 
 ## What the web deploy needs
 
-Two things on the Vercel side, both outside this repo's build:
+The site reaches the board server **through a same-origin Vercel rewrite**, not cross-origin. A
+public page fetching a tailnet host directly is blocked by Chromium's Local Network Access check
+(`Failed to fetch`, no response), even though `curl` from the same machine is a clean 200 — measured
+14 Nov on Chrome 145, on `/timelapse` and on the wall's `/api/regions`.
 
-1. **`VITE_BOARD_SERVER_URL=https://claudios-mac-mini.taila56fc2.ts.net`** in the Production environment.
-   Vite inlines it at build time, so it only takes effect on the next build — and a build without it ships a
-   site that renders the wall from chain polling and shows `/timelapse`'s "not connected to a board server"
-   state. Check the served bundle rather than the dashboard:
-   `curl -s https://metapoo-testnet.vercel.app/ | grep -oE '/assets/app-[^"]+\.js'` then grep that file for
-   `ts.net`.
-2. **The host in `web/vercel.json`'s CSP `connect-src`** (it is there since 14 Nov, both `https://` and
-   `wss://`). The policy is `Content-Security-Policy-Report-Only` today, so a missing host breaks nothing —
-   it fills the report stream and then breaks `/timelapse` and the wall's WebSocket the day the policy is
-   promoted to enforcing. Any new board host needs this line edited, not just the env var.
+```
+browser ──► https://metapoo-testnet.vercel.app/api/*   (vercel.json rewrite)
+                        │ proxy
+                        ▼
+            https://claudios-mac-mini.taila56fc2.ts.net/api/*
+```
+
+So two settings, both outside the build:
+
+1. **`VITE_BOARD_SERVER_URL=https://metapoo-testnet.vercel.app`** (the site's own origin, *not* the
+   funnel) in the Production environment. Vite inlines it at build time, so it only takes effect on
+   the next build. Check the served bundle, not the dashboard:
+   `curl -s https://metapoo-testnet.vercel.app/ | grep -oE '/assets/app-[^"]+\.js'` then grep that
+   file for `VITE_BOARD_SERVER_URL`. **Pull the env into `web/.vercel/`, not to `/tmp`** — `vercel
+   build` reads `.vercel/.env.production.local`, and pulling elsewhere silently builds the old value.
+2. **`web/vercel.json`** carries the `/api/:path*` rewrite *before* the SPA catch-all, plus the host in
+   CSP `connect-src` for completeness.
+
+**Known gap: the WebSocket.** Vercel rewrites do not proxy `wss://`, so the wall's live push still
+points at the funnel and will not connect from the public site. The wall falls back to polling
+through the proxied `/api`, which works. Fixing live push means either putting the wall's socket on
+a host that is same-origin by construction, or moving the board server somewhere the browser may
+reach directly — which is the BOARD-HOST question.
 
 ## Operational facts
 
