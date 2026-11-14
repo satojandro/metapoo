@@ -250,6 +250,9 @@ read per linked account every 15 s.
 3. **Start it.** `docker compose --profile telegram up -d --build`. The **server** must be
    restarted too (the same command does it): it reads `TELEGRAM_BOT_TOKEN` at start to decide
    whether to serve the link routes.
+   **On the launch stack** (the Mac mini, `docker-compose.launch.yml`) the same values go in
+   `.env.launch`, the image is rebuilt with the `:launch` tag first (see "Run"), and the
+   command is `docker compose -f docker-compose.launch.yml --profile telegram up -d`.
 4. **Tell the page.** Set `VITE_TELEGRAM_BOT=<username without @>` in Vercel beside
    `VITE_BOARD_SERVER_URL`, and redeploy. Until both are set the wallet panel shows nothing.
 
