@@ -122,8 +122,10 @@ probe, and counting it would let an abandoned tab keep the indexer polling forev
 Both are written in the consumer's `MULTI`/`EXEC` with the board, so they cannot disagree
 with it. They are as durable as the board itself: `valkey.conf` snapshots (RDB) every 60 s, so
 a Valkey crash can lose up to a minute of board, log and `last_processed_block` **together**,
-and the indexer re-queues that minute. Turning on AOF would narrow that window for all three;
-it is not done here.
+and the indexer re-queues that minute. On the production box `valkey.prod.conf` turns AOF on
+(`appendonly yes`, fsync every second), which narrows that window to about a second for all
+three. AOF must be on before Valkey first starts on a data dir: see
+[`DEPLOY-HETZNER.md`](DEPLOY-HETZNER.md), section 7.
 
 **Backfill, once.** The log starts when this version is deployed. To fill it from the deploy
 block (spec §4.2), with the server and indexer running:
@@ -182,7 +184,8 @@ TIMELAPSE, spec §4.3).
   tiles is 2 requests and ~7 KB; 100,000 is 7 requests and ~330 KB; 1,000,000 is 52 requests
   and ~3.3 MB, all but the last cacheable for good. Per request Valkey does one
   `XRANGE … COUNT 20000` at most, and a full page is packed once per server process and then
-  served from memory. There is no compression middleware here; a proxy in front may add gzip.
+  served from memory. There is no compression middleware here; in production the `Caddyfile`
+compresses every `application/octet-stream` and JSON response (zstd or gzip).
 
 ## Run
 
@@ -208,6 +211,11 @@ docker build -f ops/board-server/Dockerfile -t metapoo-board-server:launch .
 After an upgrade that adds endpoints the wall already calls, run the one-off backfill (below)
 before anyone connects a wallet: `GET /api/account-covers` answers `{"count":0,…}` on an empty
 draw log, which reads as "nothing was covered" rather than "unknown".
+
+**Moving to a cloud box (deferred by the owner on 14 Nov, not cancelled):
+[`DEPLOY-HETZNER.md`](DEPLOY-HETZNER.md)** is the runbook for that day: the box, firewall, Caddy (`docker-compose.prod.yml`), Valkey persistence and memory,
+cut-over, alerts, backups and restore. The commands above are for a laptop or the Mini and
+are unchanged by it.
 
 The first run needs `START_BLOCK_HEIGHT`. For the mainnet testing board that is
 `223113576`, the block that included the deploy tx. With it, the server rebuilds the wall from

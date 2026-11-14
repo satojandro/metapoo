@@ -1,0 +1,11 @@
+# Nightly Valkey backup (DEPLOY-HETZNER.md, "Backups").
+# Assumes the deploy user and the checkout at /home/deploy/metapoo; edit both lines if not.
+[Unit]
+Description=Meta Poo board server: Valkey backup
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/metapoo/ops/board-server
+ExecStart=/home/deploy/metapoo/ops/board-server/scripts/backup-valkey.sh

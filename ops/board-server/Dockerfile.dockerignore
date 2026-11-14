@@ -1,0 +1,13 @@
+# Build context for ops/board-server/Dockerfile (BuildKit reads <Dockerfile>.dockerignore).
+# The context is the repo root. Without this, `COPY ops/board-server` takes .env (secrets in
+# an image layer), target/, and valkey-data/, whose files Valkey writes 0600 as its own
+# user: a non-root `docker compose build` then fails reading the context.
+*
+!shared/board.json
+!ops/board-server
+ops/board-server/target
+ops/board-server/valkey-data*
+ops/board-server/backups
+ops/board-server/.env
+ops/board-server/ops.env
+ops/board-server/.alert-state

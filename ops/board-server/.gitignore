@@ -3,3 +3,7 @@ valkey-data/
 .env
 .env.launch
 valkey-launch-data/
+ops.env
+backups/
+valkey-data.*/
+.alert-state/
