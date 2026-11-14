@@ -327,6 +327,8 @@ struct SignedBody {
 }
 
 /// Steps 1–3 of the module comment. `Ok` carries the account and the challenge it proved.
+// The refusal is the HTTP response itself, built once and returned as it is.
+#[allow(clippy::result_large_err)]
 async fn verified(
     state: &TelegramState,
     headers: &HeaderMap,
