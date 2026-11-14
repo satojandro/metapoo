@@ -1,0 +1,17 @@
+[package]
+name = "telegram-bot"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+common = { path = "../common" }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+dotenvy = "0.15"

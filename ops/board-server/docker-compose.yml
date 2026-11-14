@@ -1,5 +1,6 @@
 # Valkey + indexer + server on one small machine, as Berry Fast runs. Put HTTPS in front of
 # :3000 (WebSocket at /ws). Values in .env (see .env.example).
+# Production adds Caddy and Valkey limits with docker-compose.prod.yml (DEPLOY-HETZNER.md).
 services:
   valkey:
     image: valkey/valkey:8
@@ -27,5 +28,19 @@ services:
       LISTEN_ADDR: 0.0.0.0:3000
     ports:
       - "127.0.0.1:3000:3000"
+    depends_on: [valkey]
+    restart: unless-stopped
+
+  # AWAY-B: the Telegram alerts bot. Long polling only: no port, no public endpoint.
+  # Not started by a plain `docker compose up`: it is in the `telegram` profile, so the stack
+  # is untouched until the bot exists. Start it with `docker compose --profile telegram up -d`
+  # (or put COMPOSE_PROFILES=telegram in .env). README: "Telegram alerts".
+  telegram-bot:
+    build: { context: ../.., dockerfile: ops/board-server/Dockerfile }
+    command: telegram-bot
+    profiles: [telegram]
+    env_file: .env
+    environment:
+      VALKEY_URL: redis://valkey:6379
     depends_on: [valkey]
     restart: unless-stopped

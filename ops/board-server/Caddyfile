@@ -1,0 +1,19 @@
+# HTTPS in front of the board server (docker-compose.prod.yml, DEPLOY-HETZNER.md).
+# BOARD_HOSTNAME comes from .env. Caddy gets and renews the certificate by itself; that needs
+# the hostname's DNS to point at this box and ports 80 and 443 to be reachable.
+{$BOARD_HOSTNAME} {
+	# The region blobs are application/octet-stream and mostly repeated bytes; Caddy's default
+	# list of compressible types leaves them out.
+	encode {
+		zstd
+		gzip
+		match {
+			header Content-Type application/octet-stream*
+			header Content-Type application/json*
+		}
+	}
+
+	# Everything goes to the server: /api/* and the WebSocket at /ws (reverse_proxy passes
+	# the Upgrade through). CORS headers are the server's own (CorsLayer::permissive).
+	reverse_proxy server:3000
+}

@@ -33,3 +33,17 @@ services:
       - "127.0.0.1:3002:3000"
     depends_on: [valkey]
     restart: unless-stopped
+
+  # AWAY-B: the Telegram alerts bot for the launch board. Long polling only: no port, no
+  # public endpoint. In the `telegram` profile, so this stack is untouched until the bot
+  # exists: `docker compose -f docker-compose.launch.yml --profile telegram up -d`.
+  # Token and WALL_URL go in .env.launch. README: "Telegram alerts".
+  telegram-bot:
+    image: metapoo-board-server:launch
+    command: telegram-bot
+    profiles: [telegram]
+    env_file: .env.launch
+    environment:
+      VALKEY_URL: redis://valkey:6379
+    depends_on: [valkey]
+    restart: unless-stopped

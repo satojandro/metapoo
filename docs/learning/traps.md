@@ -232,6 +232,21 @@ whole history.
 chain polling. Report how far the mirror has been *checked*: with nothing queued, that is the
 indexer's watermark.
 
+**Valkey with `appendonly yes` ignores `dump.rdb`.** Started with AOF on over a data dir that holds
+only an RDB (a restored backup, a dir copied from another machine, or an existing deploy whose config
+just gained `appendonly yes`), Valkey 8.1 comes up **empty**, writes an empty AOF, and the next
+snapshot overwrites the RDB. Checked on 13 Nov. Load the RDB with AOF off, then
+`CONFIG SET appendonly yes` and wait for the rewrite: `ops/board-server/scripts/restore-valkey.sh`
+does exactly that. Never copy a `dump.rdb` into a production data dir by hand.
+
+**`board-history check` exits 0 on an empty mirror.** An empty log equals an empty board. Read its
+output (`start: certified …`, an entry count above 0) before calling a deploy checked.
+
+**A compose build context is the whole repo unless something says otherwise.** `COPY ops/board-server`
+took `.env` into an image layer and `valkey-data/`, whose files Valkey writes 0600 as its own user, so
+a non-root build fails once the stack has run. `ops/board-server/Dockerfile.dockerignore` now limits
+the context; keep it in step with anything new that lands beside the Dockerfile.
+
 ---
 
 ## Contract state

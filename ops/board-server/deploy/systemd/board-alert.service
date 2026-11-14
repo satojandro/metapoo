@@ -1,0 +1,12 @@
+# Health check for the board server (DEPLOY-HETZNER.md, "Alerts").
+# Install: sudo cp deploy/systemd/board-*.service deploy/systemd/board-*.timer /etc/systemd/system/
+# Assumes the deploy user and the checkout at /home/deploy/metapoo; edit both lines if not.
+[Unit]
+Description=Meta Poo board server: health check and alert
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/metapoo/ops/board-server
+ExecStart=/home/deploy/metapoo/ops/board-server/scripts/health-alert.sh
